@@ -1,0 +1,37 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+**The "Index All" Protocol**
+
+Purpose: This protocol ensures that all project documentation remains accurate, up to date, and consistently maintained. The AI agent is responsible for systematically scanning the codebase, updating documentation files, and tracking progress to ensure no folders are overlooked. By maintaining a structured approach, developers can easily access function details, dependencies, and considerations for modification.  
+
+**Phase One - Initial Codebase Mapping and Checklist Creation**  
+
+The AI agent begins by scanning the entire codebase to generate a list of all folders and subfolders. You can complete this by following complete_directory_search.md knowledge base document found in `.docs\knowledge_base\complete_directory_search.md`
+
+Create a checklist document in \docs\context\checklist\[index_all][date][hh:mm] that includes each folder requiring updates. As each folder’s __ai__.md file is updated, the AI agent marks it as completed in the checklist to maintain accountability. No directories should be skipped, and progress should be consistently tracked throughout the process.  
+
+**Phase Two - File-by-File Documentation Update**  
+
+For each folder in the project, the AI agent iterates through each file within the folder. It identifies and extracts all functions in the file, determining their dependencies, including imports, database calls, API interactions, and other modules they interact with. The AI agent documents the function’s purpose, expected inputs and outputs, and any special considerations for modification, including security concerns, performance impacts, or edge cases.  
+
+The folder’s __ai__.md file is updated immediately after processing each individual file to prevent the context window from becoming too large. Each __ai__.md file must maintain a clear and structured format, ensuring developers can easily retrieve relevant information. 
+
+At the top of each __ai__.md file, the AI agent adds a note indicating the last update timestamp in the format Last Update: [date][hour][minute] to ensure clarity on when the file was last reviewed and modified. All changes must be logged in _change.logs, annotating the progress and completion of the documentation update process.  
+
+**Phase Three - Final Updates and Documentation Logging**  
+
+The AI agent ensures all directories have been fully updated and cross-checks with the checklist in \docs\context\checklist\[index_all][date][hh:mm] before marking the task as completed. If any inconsistencies, missing documentation, or unclear dependencies are found, the AI agent flags them for further investigation and notes them in _change.logs.  
+
+Once all folders have been processed and verified, the AI agent submits a final confirmation log entry marking the completion of the full documentation update pass.
+
+`
+`
+`
+`
+`
+`
+`
+`

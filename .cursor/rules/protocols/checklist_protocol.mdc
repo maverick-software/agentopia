@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Take inventory of the mentioned code or feature, and development a checklist a future developer can follow to troubleshoot and repair.
+We need bulletproof solutions, so if something needs to be broken apart, like a file that is too long, make mention of it to the user.

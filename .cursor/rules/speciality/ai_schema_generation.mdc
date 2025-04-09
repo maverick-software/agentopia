@@ -1,0 +1,49 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# AI Schema Generation Rules
+
+## Overview
+This rule file defines the standards for AI-generated database schemas in the Financial Analyst Software.
+
+## Boolean Values
+- All boolean values in AI-generated schemas MUST be represented as lowercase strings:
+  - Use: `"primary_key": true` or `"nullable": false`
+  - Avoid: `"primary_key": 1`, `"nullable": "False"`, etc.
+
+## Schema Validation
+- All AI-generated schemas must pass validation before database creation
+- The validation process checks:
+  - Structure integrity (tables, columns)
+  - Data type consistency
+  - Boolean value formatting
+  - Foreign key references
+
+## Feedback Loop
+- When validation fails, errors must be sent back to the AI for correction
+- Maximum 3 correction attempts before requesting user intervention
+- Clear error messages should be provided to both AI and users
+
+## Schema Format
+```json
+{
+    "schema": {
+        "table_name": {
+            "columns": {
+                "column_name": {
+                    "type": "SQL_TYPE",
+                    "primary_key": true,  // Use true/false (lowercase)
+                    "nullable": false,    // Use true/false (lowercase)
+                    "foreign_key": false, // Use true/false (lowercase)
+                    "references": {
+                        "table": "referenced_table",
+                        "column": "referenced_column"
+                    }
+                }
+            }
+        }
+    }
+}
+``` 

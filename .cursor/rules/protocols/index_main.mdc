@@ -1,0 +1,136 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Index Main Protocol  
+
+Purpose:  
+This protocol directs the AI agent to maintain an up-to-date /index.md file that provides an overview of the entire project. This document must allow any developer to quickly understand the project's purpose, structure, key functions, dependencies, and changes. The AI agent is responsible for automatically generating a structured summary of the project and ensuring its accuracy.  
+
+### Phase 1: Data Collection and Organization  
+
+**Phase 1(a): Generate Project Summary**  
+The AI agent must create and update the project summary section inside /index.md. This section should:  
+
+- Provide a brief explanation of the project's purpose and functionality.  
+- List the main technologies, frameworks, and programming languages used.  
+- Highlight key features and components of the system.  
+- Mention recent updates and improvements by summarizing new features and bug fixes found in \docs\features\ and \docs\bugs\.  
+
+Example Summary AI Agent Must Generate:  
+
+Project Summary:  
+This project is a web-based AI-powered platform that automates knowledge management and document generation. It is built using Python, FastAPI, and OpenAI’s API, with a React-based frontend. The system allows users to store, retrieve, and update structured documentation dynamically.  
+
+Recent updates include an improved AI documentation generator and enhanced search capabilities, as detailed in \docs\features\. Several performance optimizations were made to the data indexing process, with resolved issues documented in \docs\bugs\.  
+
+**Phase 1(b): Collect Folder and File Structure**  
+The AI agent must ensure that /index.md dynamically tracks the current project directory structure.  
+
+Instructions for AI Agent:  
+- Scan all project directories and ensure /index.md lists all folders and files.  
+- Generate a roll-up summary for each folder describing its contents and purpose.  
+- Extract information from __ai__.md files inside each folder and incorporate it into /index.md.  
+
+Example Format AI Agent Must Use:  
+
+- /src/ - Contains core application logic and helper utilities.  
+  - /api.py - Handles API requests and routing.  
+  - /database/ - Manages data models and queries.  
+    - /models.py - Defines database schemas.  
+    - /queries.py - Contains query functions.  
+    - /__ai__.md - Documents all models and queries.  
+
+### Phase 2: Documenting Key Components  
+
+**Phase 2(a): Identify Major Functions and Entry Points**  
+The AI agent must list only major functions and the primary entry points of the system inside /index.md.  
+
+Instructions for AI Agent:  
+- Identify and list only the most important functions that define the system’s behavior.  
+- Document all primary entry points, such as API endpoints, main execution files, and CLI commands.  
+- Extract function details from __ai__.md files. If missing, analyze inline comments and docstrings.  
+
+Example Format AI Agent Must Use:  
+
+Major Functions:  
+
+Function: process_transaction(order_id: str) -> dict  
+Description: Handles the core transaction processing logic, validating payments and updating the order database.  
+
+Function: generate_report(user_id: str) -> str  
+Description: Compiles user activity data into a summary report, retrieving data from multiple sources.  
+
+Program Entry Points:  
+
+Main Application File: /src/main.py  
+Description: Initializes the backend API, loads dependencies, and connects to the database.  
+
+API Endpoints:  
+- POST /api/orders - Handles new order submissions  
+- GET /api/orders/{order_id} - Retrieves order details  
+- POST /api/payments - Processes a payment transaction  
+
+Initialization Flow:  
+1. Load environment variables and configurations  
+2. Connect to the database  
+3. Register API routes  
+4. Start the application server  
+
+**Phase 2(b): Track Dependencies and Package Management**  
+The AI agent must ensure that /index.md lists all external dependencies and their purposes.  
+
+Instructions for AI Agent:  
+- Scan requirements.txt or package.json for dependencies.  
+- Ensure each dependency has a version number and a description.  
+
+Example Format AI Agent Must Use:  
+
+Dependency: numpy  
+Version: >=1.20.0, <2.0.0  
+Purpose: Handles numerical computations and data structures.  
+
+Dependency: fastapi  
+Version: ~=0.95.0  
+Purpose: API framework for serving AI-generated content.  
+
+**Phase 2(c): Maintain Testing and Validation Information**  
+The AI agent must include a testing section in /index.md, ensuring developers know how testing is handled.  
+
+Instructions for AI Agent:  
+- Include a brief summary of how tests are structured and executed.  
+- Link to .cursor\rules\protocols\testing.mdc for detailed testing SOPs.  
+- List major test categories, such as unit tests, integration tests, and performance benchmarks.  
+
+Example Summary AI Agent Must Generate:  
+
+Testing Overview:  
+The project includes unit tests for API endpoints and database operations. Automated tests are executed using pytest, while performance tests run via locust. See .cursor\rules\protocols\testing.mdc for details.  
+
+### Phase 3: Final Review and Synchronization  
+
+**Phase 3(a): Synchronize with Development Updates**  
+The AI agent must ensure that /index.md reflects the latest changes in the project.  
+
+Instructions for AI Agent:  
+- Pull new feature notes from \docs\features\ and summarize them in /index.md.  
+- Extract bug fix details from \docs\bugs\ and update /index.md.  
+- Ensure the latest refactoring efforts are included, following .cursor\rules\specialty\problem_solving.mdc and .cursor\rules\specialty\big_picture_protocol.mdc.  
+
+**Phase 3(b): Perform Final Review and Create Knowledge Base Documentation**  
+Before finalizing updates to /index.md, the AI agent must:  
+
+- Verify all information for accuracy.  
+- Ensure __ai__.md files have been processed and integrated.  
+- Check for missing or outdated entries and flag them for review.  
+- Generate a knowledge base entry following .cursor\rules\protocols\knowledge_base.mdc.  
+
+Final Knowledge Base Entry Format:  
+- What was updated  
+- Why the update was made  
+- How it improves the project  
+- Any related documentation or resources  
+
+Final Rule:  
+The AI agent must continuously update /index.md, ensuring that it accurately reflects the current state of the project. The document should always provide a clear and structured overview, enabling developers to quickly understand the system, its components, and recent changes.

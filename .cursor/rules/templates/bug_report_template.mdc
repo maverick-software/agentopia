@@ -1,0 +1,55 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Bug Report  
+
+Report ID: [bug_report][date][time]  
+Date: [YYYY-MM-DD]  
+Time: [HH:MM:SS]  
+Reported By: [Developer/Tester Name]  
+System/Module Affected: [Specify system, module, or feature]  
+Test Case: [Name of test case that failed]  
+Test File: [Path to the test file]  
+
+Error Details  
+
+Error Message: [Copy-paste the error message or traceback]  
+Stack Trace:  
+[Paste the stack trace here]  
+
+Expected Behavior: [Describe what was supposed to happen]  
+Actual Behavior: [Describe what actually happened]  
+
+Reproduction Steps  
+
+1. [Step 1: How to reproduce the issue]  
+2. [Step 2: Further actions taken]  
+3. [Step 3: Expected vs actual results]  
+
+Logs and Screenshots  
+
+Logs: [Attach or paste relevant logs]  
+Screenshots: [Attach any relevant screenshots]  
+
+Initial Troubleshooting  
+
+Was the test re-run? [Yes/No]  
+Did the issue persist? [Yes/No]  
+Potential Causes: [List any suspected reasons]  
+Attempts to Fix: [Describe any debugging or fixes attempted]  
+
+Related Documentation  
+
+Troubleshooting Guide: troubleshooting.mdc  
+Problem Solving Reference: problem_solving.mdc  
+Best Practices: best_practices.mdc  
+Main Documentation: main.mdc  
+
+Next Steps  
+
+Assigned To: [Developer or team responsible]  
+Priority Level: [Low/Medium/High/Critical]  
+Target Fix Date: [Planned resolution date]  
+Status: [Open/In Progress/Resolved]

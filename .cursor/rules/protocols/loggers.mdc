@@ -1,0 +1,48 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: The Console Log Management Rules ensure structured logging, session tracking, and automated cleanup.
+globs: 
+alwaysApply: false
+---
+Console Log Management Rules  
+
+1. Initial Console Log Setup  
+
+All console logs must be stored in the directory docs/console/logs/.  
+Each console log file must follow the naming format of hour, minute, second, date, and console logs to ensure easy session tracking.  
+Console logs must be compiled per session, ensuring each session has a dedicated log file.  
+
+2. Console Log Format and Structure  
+
+All console logs must follow a standardized log entry format including date, time, log level, module or component, and message.  
+Log levels must follow a structured hierarchy including debug for detailed diagnostic logs, info for general operational logs, warning for non-critical issues that require attention, error for failures that need immediate resolution, and critical for severe failures affecting system stability.  
+
+3. Change Logs File Structure for Console Logs  
+
+Each console log directory must contain a change logs file.  
+The change logs file tracks changes made to files and functions related to the console logging system.  
+Entries must follow a structured format including date, time, developer or agent name, and description of changes.  
+
+4. Console Log Expansion as the System Grows  
+
+When new features or processes require additional console log categories, determine if new session structures are necessary.  
+If a new logging type is required, create a new subdirectory under /console/logs/.  
+Ensure all new console logs follow the existing structured format.  
+Update the change logs to document the addition of new log categories and files.  
+
+5. Integration with AI Agent  
+
+The AI agent must monitor the system for new console log sessions and automatically handle log file creation.  
+If a new feature or function is detected, the AI should insert appropriate logging statements in the system to capture necessary console output.  
+The agent must maintain a record of changes to the console logging system in the console logging change log.  
+
+6. Console Log Maintenance and Cleanup  
+
+Implement log rotation to prevent excessive file growth.  
+Console logs older than thirty days must be automatically removed based on system retention policies.  
+A maximum of three hundred log files should be stored in the /console/logs/ directory at any given time.  
+If the directory exceeds the limit, the oldest files should be deleted first to maintain storage efficiency.

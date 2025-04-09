@@ -1,0 +1,152 @@
+---
+description: Primary rules file containing core development guidelines.
+globs: 
+alwaysApply: false
+---
+# Main Rules for Financial Analyst Software
+
+# The Golden Rule
+
+The right set of questions always comes before finding the correct answer. Rather than making assumptions, ask yourself smart questions about the problem first. Then, answer the question, then ask the next logical question. This is they key to success.
+
+If you cannot find the right question based on your own knowledge, use the web research and forums to find the question.
+
+## Core Principles
+
+# Upon the start of any new conversation, the first thing you do is gain complete contextual understanding of your codebase. Review your rules, the @compliance.mdc @best_practices.mdc @index.md . Grep the codebase, and explore each folders __ai__.md and _change.logs to understand. Take notes in a contextual_understanding document and place it in docs\context\[scan_date_time].md file.
+# Reference your rules guides based what you are doing
+# Troubleshooting - Review rules at .\cursor\rules\other\troubleshooting.mdc
+# New Features - Review rules at .\cursor\rules\other\new_features.mdc
+
+## Rule Structure
+.\.cursor\rules\
+├── main.mdc                   # Primary rules file containing core development guidelines.
+├── general/                   # Contains various general-purpose rule files.
+│   ├── best_practices.mdc     # AI agent development best practices and coding SOP.
+│   ├── database.mdc           # Guidelines for database architecture, indexing, and queries.
+│   ├── documentation.mdc      # Standards for writing and maintaining project documentation.
+│   ├── environment.mdc        # Rules for setting up, managing, and automating environments.
+│   ├── gui.mdc                # UI/UX design principles and accessibility best practices.
+│   ├── new_features.mdc       # Workflow for adding and integrating new features.
+│   ├── testing.mdc            # Best practices for automated and manual testing strategies.
+│   ├── troubleshooting.mdc    # Systematic debugging and problem-resolution guidelines.
+├── specialty/                 # Contains rules for specific or rare development cases.
+│   ├── other_rules.mdc        # Miscellaneous or specialized rules that do not fit into other categories.
+
+```
+
+## Code Style Guidelines
+1. Python Version and Features
+   - Use Python 3.8+ features and syntax
+   - Leverage modern Python features
+
+2. Style Standards
+   - Follow PEP 8 style guide
+   - Use type hints for parameters and returns
+   - Include comprehensive docstrings
+   - Keep functions focused and single-purpose
+   - Use meaningful names for variables and functions
+
+3. Programming Paradigms
+   - Use Object-oriented Programming (OOP) where appropriate
+   - Create reusable API classes and objects
+   - Design modular and extensible components
+
+## File Organization
+1. Structure Rules
+   - Keep related functionality together
+   - Use `__init__.py` files for public interfaces
+   - Maintain clear separation of concerns
+   - Keep files under 500 lines when possible
+
+2. Module Guidelines
+   - Group related classes and functions
+   - Expose clear public interfaces
+   - Hide implementation details
+
+## Testing Requirements
+1. Test Coverage
+   - Write unit tests for new functionality
+   - Maintain >80% code coverage
+   - Use pytest framework
+   - Include positive and negative cases
+
+2. Test Organization
+   - Mirror project structure in tests
+   - Use clear test names
+   - Document test purposes
+
+## Documentation Standards
+1. Code Documentation
+   - Keep documentation current
+   - Include examples in docstrings
+   - Document complex algorithms
+   - Maintain README files
+
+2. Documentation Format
+   ```python
+   def function_name(param1: type, param2: type) -> return_type:
+       """
+       Brief description of function.
+
+       Args:
+           param1: Description of param1
+           param2: Description of param2
+
+       Returns:
+           Description of return value
+
+       Raises:
+           ExceptionType: Description of when this exception occurs
+       """
+       pass
+   ```
+
+## Security Guidelines
+1. Data Protection
+   - Never commit sensitive data
+   - Use environment variables
+   - Validate all user inputs
+
+2. Secure Coding
+   - Follow secure coding practices
+   - Regular security audits
+   - Update dependencies
+
+## Performance Standards
+1. Optimization
+   - Optimize database queries
+   - Use appropriate data structures
+   - Profile code for bottlenecks
+
+2. Resource Management
+   - Consider memory usage
+   - Optimize large data operations
+   - Monitor performance metrics
+
+## Version Control
+1. Commit Standards
+   - Write clear commit messages
+   - Keep commits focused
+   - Follow branching strategy
+   - Review code before merging
+
+2. Commit Message Format
+   ```
+   type(scope): subject
+
+   body
+
+   footer
+   ```
+
+## Dependency Management
+1. Requirements
+   - Keep requirements.txt updated
+   - Use specific version numbers
+   - Document dependency purposes
+
+2. Security
+   - Regular security updates
+   - Vulnerability scanning
+   - Dependency audits 

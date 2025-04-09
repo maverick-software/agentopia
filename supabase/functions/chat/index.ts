@@ -1,0 +1,280 @@
+import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
+import OpenAI from 'npm:openai@4.28.0';
+import { RateLimiter } from 'npm:limiter@3.0.0';
+import { PineconeClient } from 'npm:@pinecone-database/pinecone@2.0.0';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface VectorSearchResult {
+  id: string;
+  score: number;
+  metadata: {
+    text: string;
+    source?: string;
+    timestamp?: string;
+  };
+}
+
+// Rate limiter: 30 requests per minute
+const limiter = new RateLimiter({
+  tokensPerInterval: 30,
+  interval: 'minute',
+});
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: Deno.env.get('OPENAI_API_KEY'),
+});
+
+// Initialize Supabase client
+const supabaseClient = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  {
+    auth: { persistSession: false },
+  }
+);
+
+// Initialize Pinecone client
+const pinecone = new PineconeClient();
+
+async function getVectorSearchResults(message: string, agentId: string): Promise<string | null> {
+  try {
+    const { data: connection, error: connectionError } = await supabaseClient
+      .from('agent_datastores')
+      .select(`
+        datastore_id,
+        datastores:datastore_id (
+          id,
+          type,
+          config,
+          similarity_metric,
+          similarity_threshold,
+          max_results
+        )
+      `)
+      .eq('agent_id', agentId)
+      .eq('datastores.type', 'pinecone')
+      .single();
+
+    if (connectionError) {
+      console.error('Vector store connection error:', {
+        error: connectionError,
+        message: connectionError.message,
+        details: connectionError.details
+      });
+      return null;
+    }
+
+    if (!connection?.datastores) {
+      return null;
+    }
+
+    const datastore = connection.datastores;
+
+    // Generate embedding
+    const embedding = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: message,
+      encoding_format: 'float',
+    });
+
+    // Initialize Pinecone
+    await pinecone.init({
+      apiKey: datastore.config.apiKey,
+      environment: datastore.config.region,
+    });
+
+    const index = pinecone.Index(datastore.config.indexName);
+
+    // Query vector store
+    const results = await index.query({
+      vector: embedding.data[0].embedding,
+      topK: datastore.max_results,
+      includeMetadata: true,
+      includeValues: false,
+    });
+
+    if (!results.matches?.length) {
+      return null;
+    }
+
+    // Filter and format results
+    const relevantResults = results.matches
+      .filter(match => match.score >= datastore.similarity_threshold)
+      .map((match) => {
+        const metadata = match.metadata as VectorSearchResult['metadata'];
+        return {
+          text: metadata.text,
+          score: match.score,
+          source: metadata.source,
+          timestamp: metadata.timestamp,
+        };
+      });
+
+    if (!relevantResults.length) {
+      return null;
+    }
+
+    // Format context message
+    const memories = relevantResults
+      .map(result => {
+        let memory = `Memory (similarity: ${(result.score * 100).toFixed(1)}%):\n${result.text}`;
+        if (result.source) {
+          memory += `\nSource: ${result.source}`;
+        }
+        if (result.timestamp) {
+          memory += `\nTimestamp: ${result.timestamp}`;
+        }
+        return memory;
+      })
+      .join('\n\n');
+
+    return `Here are some relevant memories that might help with your response:\n\n${memories}\n\nPlease consider these memories when formulating your response, but maintain a natural conversation flow.`;
+  } catch (error) {
+    console.error('Vector search error:', {
+      error,
+      message: error.message,
+      name: error.name,
+      stack: error.stack
+    });
+    return null;
+  }
+}
+
+Deno.serve(async (req) => {
+  // Handle CORS
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Validate OpenAI API key
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiKey) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    // Check rate limit
+    const remainingRequests = await limiter.removeTokens(1);
+    if (remainingRequests < 0) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'Retry-After': '60',
+          },
+        }
+      );
+    }
+
+    const { messages, agentId } = await req.json();
+
+    if (!messages?.length || !agentId) {
+      throw new Error('Missing required parameters');
+    }
+
+    // Get agent data
+    const { data: agent, error: agentError } = await supabaseClient
+      .from('agents')
+      .select('id, name, personality, system_instructions, assistant_instructions')
+      .eq('id', agentId)
+      .single();
+
+    if (agentError) {
+      console.error('Error fetching agent:', {
+        error: agentError,
+        message: agentError.message,
+        details: agentError.details
+      });
+      throw new Error('Failed to fetch agent data');
+    }
+
+    if (!agent) {
+      throw new Error('Agent not found');
+    }
+
+    // Get relevant context
+    const latestUserMessage = messages[messages.length - 1];
+    const memories = latestUserMessage.role === 'user'
+      ? await getVectorSearchResults(latestUserMessage.content, agentId)
+      : null;
+
+    // Prepare messages
+    const systemMessage: ChatMessage = {
+      role: 'system',
+      content: `${agent.system_instructions || ''}\n\nYou are ${agent.name}, an AI agent with the following personality: ${agent.personality}\n\n${agent.assistant_instructions || ''}`
+    };
+
+    const chatMessages = [systemMessage, ...messages];
+    if (memories) {
+      chatMessages.push({
+        role: 'system',
+        content: memories
+      });
+    }
+
+    // Create chat completion stream
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: chatMessages,
+      temperature: 0.7,
+      max_tokens: 500,
+      stream: true,
+      presence_penalty: 0.6,
+      frequency_penalty: 0.5
+    });
+
+    // Transform stream
+    const transformStream = new TransformStream({
+      async transform(chunk, controller) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          controller.enqueue(new TextEncoder().encode(content));
+        }
+      }
+    });
+
+    return new Response(stream.toReadableStream().pipeThrough(transformStream), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+  } catch (error) {
+    console.error('Chat error:', {
+      error,
+      message: error.message,
+      name: error.name,
+      stack: error.stack
+    });
+
+    return new Response(
+      JSON.stringify({ 
+        error: error.message || 'An error occurred',
+        timestamp: new Date().toISOString()
+      }), 
+      {
+        status: error.status || 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  }
+});

@@ -1,0 +1,246 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Analysis Component Rules
+
+## Data Processing Standards
+1. Core Requirements
+   - Use pandas for data manipulation
+   - Implement efficient data structures
+   - Handle missing data appropriately
+   - Validate input data formats
+
+2. Implementation Example
+   ```python
+   import pandas as pd
+   import numpy as np
+   
+   def process_financial_data(data: pd.DataFrame) -> pd.DataFrame:
+       """
+       Process financial data with proper validation and handling.
+       
+       Args:
+           data: Raw financial data
+           
+       Returns:
+           Processed financial data
+           
+       Raises:
+           ValueError: If data format is invalid
+       """
+       # Validate input
+       if not isinstance(data, pd.DataFrame):
+           raise ValueError("Input must be a pandas DataFrame")
+           
+       # Handle missing data
+       data = data.fillna({
+           'amount': 0,
+           'category': 'Unknown',
+           'description': ''
+       })
+       
+       # Process data
+       return data
+   ```
+
+## AI Integration Guidelines
+1. OpenAI Integration
+   - Use OpenAI API for categorization
+   - Implement proper error handling
+   - Cache API responses
+   - Document model limitations
+
+2. API Usage Example
+   ```python
+   from typing import Dict, Any
+   import openai
+   
+   def categorize_transaction(description: str) -> str:
+       """
+       Categorize a transaction using OpenAI API.
+       
+       Args:
+           description: Transaction description
+           
+       Returns:
+           Predicted category
+           
+       Raises:
+           OpenAIError: If API call fails
+       """
+       try:
+           response = openai.Completion.create(
+               model="gpt-4o",
+               prompt=f"Categorize this transaction: {description}"
+           )
+           return response.choices[0].text.strip()
+       except openai.error.OpenAIError as e:
+           logger.error(f"API error: {e}")
+           raise
+   ```
+
+## Performance Requirements
+1. Optimization Rules
+   - Optimize processing algorithms
+   - Use appropriate data structures
+   - Implement batch processing
+   - Profile operations
+
+2. Implementation Guidelines
+   ```python
+   from typing import List
+   
+   def batch_process(items: List[Dict], batch_size: int = 100):
+       """Process items in batches for better performance."""
+       for i in range(0, len(items), batch_size):
+           batch = items[i:i + batch_size]
+           process_batch(batch)
+   ```
+
+## Accuracy Standards
+1. Validation Requirements
+   - Validate analysis results
+   - Implement cross-validation
+   - Document assumptions
+   - Provide confidence scores
+
+2. Validation Example
+   ```python
+   def validate_analysis(results: pd.DataFrame) -> float:
+       """
+       Validate analysis results and return confidence score.
+       
+       Returns:
+           float: Confidence score between 0 and 1
+       """
+       # Implement validation logic
+       return confidence_score
+   ```
+
+## Testing Requirements
+1. Test Categories
+   - Unit tests for functions
+   - Edge case testing
+   - Data format testing
+   - Accuracy validation
+
+2. Test Example
+   ```python
+   def test_transaction_categorization():
+       """Test transaction categorization accuracy."""
+       test_cases = [
+           ("AMZN*DIGITAL", "Shopping"),
+           ("UBER*TRIP", "Transportation"),
+           ("TRADER*JOES", "Groceries")
+       ]
+       for desc, expected in test_cases:
+           assert categorize_transaction(desc) == expected
+   ```
+
+## Documentation Standards
+1. Required Documentation
+   - Analysis algorithms
+   - Usage examples
+   - Data requirements
+   - Assumptions and limitations
+
+2. Documentation Format
+   ```python
+   def analyze_spending_patterns(
+       transactions: pd.DataFrame,
+       period: str = 'monthly'
+   ) -> Dict[str, Any]:
+       """
+       Analyze spending patterns in transaction data.
+       
+       Args:
+           transactions: DataFrame with columns:
+               - date (datetime)
+               - amount (float)
+               - category (str)
+           period: Analysis period ('daily', 'weekly', 'monthly')
+           
+       Returns:
+           Dict containing:
+               - patterns: Dict of spending patterns
+               - trends: List of identified trends
+               - anomalies: List of anomalies
+               
+       Raises:
+           ValueError: If data format is invalid
+       """
+   ```
+
+## Error Handling Guidelines
+1. Error Management
+   - Handle processing errors
+   - Implement error recovery
+   - Log analysis errors
+   - Provide clear messages
+
+2. Implementation Example
+   ```python
+   import logging
+   
+   logger = logging.getLogger(__name__)
+   
+   def safe_analysis(data: pd.DataFrame) -> Dict[str, Any]:
+       """Perform analysis with proper error handling."""
+       try:
+           results = analyze_data(data)
+           return results
+       except ValueError as e:
+           logger.error(f"Invalid data: {e}")
+           raise
+       except Exception as e:
+           logger.error(f"Analysis failed: {e}")
+           return {'error': str(e)}
+   ```
+
+## Security Requirements
+1. Data Protection
+   - Validate input data
+   - Sanitize output data
+   - Protect sensitive info
+   - Follow privacy rules
+
+2. Implementation Example
+   ```python
+   def sanitize_data(data: pd.DataFrame) -> pd.DataFrame:
+       """
+       Sanitize sensitive data before processing.
+       
+       - Mask account numbers
+       - Remove PII
+       - Encrypt sensitive fields
+       """
+       return sanitized_data
+   ```
+
+## Reporting Standards
+1. Report Requirements
+   - Clear, concise reports
+   - Data visualizations
+   - Actionable insights
+   - Document generation
+
+2. Implementation Example
+   ```python
+   def generate_report(
+       analysis_results: Dict[str, Any],
+       include_viz: bool = True
+   ) -> str:
+       """
+       Generate analysis report with visualizations.
+       
+       Args:
+           analysis_results: Analysis results
+           include_viz: Whether to include visualizations
+           
+       Returns:
+           Generated report in markdown format
+       """
+       return report
+   ``` 

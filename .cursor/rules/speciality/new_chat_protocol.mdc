@@ -1,0 +1,53 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+New Chat Protocol  
+
+**IMPORTANT: USE CORRECT DATE AND TIME STAMP. GET DATE FROM COMPUTER SYSTEM VIA THE COMMAND SHELL USING echo %DATE% %TIME%** *for AI Agents, it is cmd /c echo %DATE% %TIME%*
+
+### **Phase One - Context Protocol Setup**  
+
+1. Locate and read the checklist template in `\docs\context\checklists\`
+2. Before you start, copy the checklist template and create a new one \.docs\context\checklists\[checklist][date].
+3. Locate and read the most recent context document in `\docs\context\[most_recent_context_doc]` to understand prior investigations, decisions, and discussions.  
+4. Update your checklist as you move through your priorities.
+
+### **Phase Two - Detailed System Analysis**  
+
+1. Read the `README.md` file to gain a high-level understanding of the project’s purpose, architecture, and key components. 
+2. Read `\docs\index.md` to understand the system’s structure, relationships between files, and the primary functions within the project.  
+3. Identify and analyze **core files** that define the system’s key operations, dependencies, and interactions with external systems.  
+4. Examine the **database schema** and **data relationships** to understand how data is stored, retrieved, and manipulated. This includes reviewing database models, migration files, and any SQL queries used within the project.  
+5. Check for **API endpoints**, and **Entry Points** if applicable, to determine how the system communicates with external services or clients.  
+
+### **Phase Three - Problem Identification and Next Steps**  
+
+**IMPORTANT: USE CORRECT DATE AND TIME STAMP. GET DATE FROM COMPUTER SYSTEM VIA THE COMMAND SHELL USING `echo %DATE% %TIME%*`**
+
+1. Review `\docs\console\logs\` for system errors, warnings, and anomalies that might indicate operational issues.  
+2. Check `\docs\bugs\` to identify **reported bugs, unresolved issues, and past debugging efforts**.  
+3. Summarize findings in a **structured overview** that includes:  
+   - The **project’s structure and key components**  
+   - Any **discrepancies or inconsistencies** found  
+   - **Potential problem areas** and **known issues**  
+   - Recommendations for **next steps**  
+4. Develop a **context document** summarizing all findings. The document should be created in `\docs\context\[ai_context][date][hh:mm:ss]` **use system time via cmd echo %DATE% %TIME%** and must include:  
+   - The date and time of the investigation  
+   - A summary of key observations  
+   - Any inconsistencies or issues detected  
+   - Areas requiring further investigation
+   - Entry points for the application
+5. Delete all previous context documents and context checklists
+6. Provide a summary of your understanding of the software and entry points.
+`
+`
+`
+`
+`
+`
+`
+`
+`
+`
