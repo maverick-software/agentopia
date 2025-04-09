@@ -1,12 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import OpenAI from 'npm:openai@4.28.0';
 import { RateLimiter } from 'npm:limiter@3.0.0';
-import { PineconeClient } from 'npm:@pinecone-database/pinecone@2.0.0';
+import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 interface ChatMessage {
@@ -44,8 +44,8 @@ const supabaseClient = createClient(
   }
 );
 
-// Initialize Pinecone client
-const pinecone = new PineconeClient();
+// Initialize Pinecone correctly:
+const pinecone = new Pinecone();
 
 async function getVectorSearchResults(message: string, agentId: string): Promise<string | null> {
   try {
@@ -152,109 +152,137 @@ async function getVectorSearchResults(message: string, agentId: string): Promise
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Validate OpenAI API key
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) {
-      throw new Error('OpenAI API key not configured');
-    }
-
-    // Check rate limit
-    const remainingRequests = await limiter.removeTokens(1);
-    if (remainingRequests < 0) {
-      return new Response(
-        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
-        {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
-            'Retry-After': '60',
-          },
-        }
-      );
-    }
-
-    const { messages, agentId } = await req.json();
-
-    if (!messages?.length || !agentId) {
-      throw new Error('Missing required parameters');
-    }
-
-    // Get agent data
-    const { data: agent, error: agentError } = await supabaseClient
-      .from('agents')
-      .select('id, name, personality, system_instructions, assistant_instructions')
-      .eq('id', agentId)
-      .single();
-
-    if (agentError) {
-      console.error('Error fetching agent:', {
-        error: agentError,
-        message: agentError.message,
-        details: agentError.details
-      });
-      throw new Error('Failed to fetch agent data');
-    }
-
-    if (!agent) {
-      throw new Error('Agent not found');
-    }
-
-    // Get relevant context
-    const latestUserMessage = messages[messages.length - 1];
-    const memories = latestUserMessage.role === 'user'
-      ? await getVectorSearchResults(latestUserMessage.content, agentId)
-      : null;
-
-    // Prepare messages
-    const systemMessage: ChatMessage = {
-      role: 'system',
-      content: `${agent.system_instructions || ''}\n\nYou are ${agent.name}, an AI agent with the following personality: ${agent.personality}\n\n${agent.assistant_instructions || ''}`
-    };
-
-    const chatMessages = [systemMessage, ...messages];
-    if (memories) {
-      chatMessages.push({
-        role: 'system',
-        content: memories
-      });
-    }
-
-    // Create chat completion stream
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: chatMessages,
-      temperature: 0.7,
-      max_tokens: 500,
-      stream: true,
-      presence_penalty: 0.6,
-      frequency_penalty: 0.5
-    });
-
-    // Transform stream
-    const transformStream = new TransformStream({
-      async transform(chunk, controller) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
-          controller.enqueue(new TextEncoder().encode(content));
-        }
+    // Handle Health Check GET request
+    if (req.method === 'GET') {
+      // Basic health check - can add more checks later if needed (e.g., OpenAI connectivity)
+      const url = new URL(req.url);
+      if (url.pathname.endsWith('/health')) { // Check if it's the health endpoint
+        return new Response(JSON.stringify({ status: 'healthy' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
       }
+      // If GET but not health, return 404 or 405
+      return new Response(JSON.stringify({ error: 'Not Found' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 404,
+      });
+    }
+
+    // Handle Chat POST request
+    if (req.method === 'POST') {
+      // Validate OpenAI API key
+      const openaiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openaiKey) {
+        throw new Error('OpenAI API key not configured');
+      }
+
+      // Check rate limit
+      const remainingRequests = await limiter.removeTokens(1);
+      if (remainingRequests < 0) {
+        return new Response(
+          JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+          {
+            status: 429,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'Retry-After': '60',
+            },
+          }
+        );
+      }
+
+      const { messages, agentId } = await req.json();
+
+      if (!messages?.length || !agentId) {
+        throw new Error('Missing required parameters');
+      }
+
+      // Get agent data
+      const { data: agent, error: agentError } = await supabaseClient
+        .from('agents')
+        .select('id, name, personality, system_instructions, assistant_instructions')
+        .eq('id', agentId)
+        .single();
+
+      if (agentError) {
+        console.error('Error fetching agent:', {
+          error: agentError,
+          message: agentError.message,
+          details: agentError.details
+        });
+        throw new Error('Failed to fetch agent data');
+      }
+
+      if (!agent) {
+        throw new Error('Agent not found');
+      }
+
+      // Get relevant context
+      const latestUserMessage = messages[messages.length - 1];
+      const memories = latestUserMessage.role === 'user'
+        ? await getVectorSearchResults(latestUserMessage.content, agentId)
+        : null;
+
+      // Prepare messages
+      const systemMessage: ChatMessage = {
+        role: 'system',
+        content: `${agent.system_instructions || ''}\n\nYou are ${agent.name}, an AI agent with the following personality: ${agent.personality}\n\n${agent.assistant_instructions || ''}`
+      };
+
+      const chatMessages = [systemMessage, ...messages];
+      if (memories) {
+        chatMessages.push({
+          role: 'system',
+          content: memories
+        });
+      }
+
+      // Create chat completion stream
+      const stream = await openai.chat.completions.create({
+        model: 'gpt-4-turbo-preview',
+        messages: chatMessages,
+        temperature: 0.7,
+        max_tokens: 500,
+        stream: true,
+        presence_penalty: 0.6,
+        frequency_penalty: 0.5
+      });
+
+      // Transform stream
+      const transformStream = new TransformStream({
+        async transform(chunk, controller) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          if (content) {
+            controller.enqueue(new TextEncoder().encode(content));
+          }
+        }
+      });
+
+      // Make sure stream response includes CORS headers
+      return new Response(stream.toReadableStream().pipeThrough(transformStream), {
+        headers: {
+          ...corsHeaders, // Ensure CORS headers are on the actual response too
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // Handle other methods
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 405, // Method Not Allowed
     });
 
-    return new Response(stream.toReadableStream().pipeThrough(transformStream), {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
   } catch (error) {
     console.error('Chat error:', {
       error,
@@ -271,7 +299,7 @@ Deno.serve(async (req) => {
       {
         status: error.status || 500,
         headers: {
-          ...corsHeaders,
+          ...corsHeaders, // Ensure CORS headers are on error responses
           'Content-Type': 'application/json',
         },
       }

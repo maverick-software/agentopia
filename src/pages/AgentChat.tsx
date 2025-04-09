@@ -2,22 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useDatabase } from '../contexts/DatabaseContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
 import type { Message, Agent } from '../types';
 
-interface ConnectionStatus {
-  database: boolean;
-  openai: boolean;
-  loading: boolean;
-  databaseError: string | null;
-  openaiError: string | null;
-}
-
 export function AgentChat() {
   const { user } = useAuth();
-  const { isConnected: isDatabaseConnected } = useDatabase();
   const { id } = useParams();
   const navigate = useNavigate();
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -28,13 +18,6 @@ export function AgentChat() {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
-    database: false,
-    openai: false,
-    loading: true,
-    databaseError: null,
-    openaiError: null
-  });
   const fetchAgentAttempts = useRef(0);
   const MAX_FETCH_ATTEMPTS = 5;
 
@@ -43,97 +26,6 @@ export function AgentChat() {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, []);
-
-  // Check OpenAI connection
-  const checkOpenAIConnection = useCallback(async () => {
-    try {
-      // Get the current session and access token
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
-
-      if (!accessToken) {
-        console.error('No access token found for health check');
-        return {
-          isConnected: false,
-          error: 'Authentication error: User not logged in?'
-        };
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat/health`, {
-        headers: {
-          // Use the access token for authorization
-          'Authorization': `Bearer ${accessToken}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        console.error('OpenAI health check failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error
-        });
-        return {
-          isConnected: false,
-          error: `OpenAI service error: ${response.statusText}`
-        };
-      }
-
-      const data = await response.json();
-      return {
-        isConnected: data.status === 'healthy',
-        error: data.status !== 'healthy' ? 'OpenAI service is not healthy' : null
-      };
-    } catch (err) {
-      console.error('OpenAI health check error:', {
-        error: err,
-        message: err.message,
-        name: err.name,
-        stack: err.stack
-      });
-      return {
-        isConnected: false,
-        error: `OpenAI service error: ${err.message}`
-      };
-    }
-  }, []);
-
-  // Check connections periodically
-  useEffect(() => {
-    let mounted = true;
-    let interval: NodeJS.Timeout;
-
-    const checkConnections = async () => {
-      if (!mounted) return;
-
-      setConnectionStatus(prev => ({ ...prev, loading: true }));
-      
-      // Check OpenAI connection independently
-      const openaiStatus = await checkOpenAIConnection();
-      
-      if (!mounted) return;
-
-      setConnectionStatus({
-        database: isDatabaseConnected,
-        openai: openaiStatus.isConnected,
-        loading: false,
-        databaseError: !isDatabaseConnected ? 'Database connection failed' : null,
-        openaiError: openaiStatus.error
-      });
-    };
-
-    // Initial check
-    checkConnections();
-
-    // Set up periodic checks
-    interval = setInterval(checkConnections, 30000); // Check every 30 seconds
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [isDatabaseConnected, checkOpenAIConnection]);
 
   // Fetch Agent Effect
   const fetchAgent = useCallback(async (isInitialCall = true) => {
@@ -312,44 +204,6 @@ export function AgentChat() {
     }
   }, [input, agent, messages, scrollToBottom]);
 
-  const ConnectionStatusIndicator = () => (
-    <div className="bg-gray-800 rounded-lg p-4 mb-4">
-      <h2 className="text-lg font-semibold mb-3">System Status</h2>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span>Database Connection</span>
-          {connectionStatus.loading ? (
-            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-          ) : connectionStatus.database ? (
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-red-500" />
-          )}
-        </div>
-        {connectionStatus.databaseError && (
-          <div className="text-sm text-red-400 ml-6">
-            {connectionStatus.databaseError}
-          </div>
-        )}
-        <div className="flex items-center justify-between">
-          <span>OpenAI Service</span>
-          {connectionStatus.loading ? (
-            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-          ) : connectionStatus.openai ? (
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-red-500" />
-          )}
-        </div>
-        {connectionStatus.openaiError && (
-          <div className="text-sm text-red-400 ml-6">
-            {connectionStatus.openaiError}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -372,8 +226,6 @@ export function AgentChat() {
         </h1>
       </div>
 
-      <ConnectionStatusIndicator />
-
       {error && (
         <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md mb-4">
           {error}
@@ -394,11 +246,11 @@ export function AgentChat() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type your message..."
           className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-          disabled={sending || !connectionStatus.database || !connectionStatus.openai}
+          disabled={sending}
         />
         <button
           type="submit"
-          disabled={!input.trim() || sending || !connectionStatus.database || !connectionStatus.openai}
+          disabled={!input.trim() || sending}
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[48px] transition-colors"
         >
           {sending ? (
