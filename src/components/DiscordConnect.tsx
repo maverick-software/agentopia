@@ -17,6 +17,16 @@ interface DiscordConnectProps {
   className?: string;
 }
 
+/**
+ * DiscordConnect component handles the integration with Discord.
+ * It allows users to connect using a bot token and select a server and channel.
+ * 
+ * @param {string} agentId - The ID of the agent to connect.
+ * @param {function} onChannelSelect - Callback function when a channel is selected.
+ * @param {boolean} isConnected - Indicates if the connection to Discord is established.
+ * @param {string} [className] - Optional additional class names for styling.
+ * @returns {JSX.Element} The rendered component.
+ */
 export function DiscordConnect({ agentId, onChannelSelect, isConnected, className = '' }: DiscordConnectProps) {
   const [botToken, setBotToken] = useState('');
   const [guilds, setGuilds] = useState<DiscordGuild[]>([]);
@@ -25,6 +35,12 @@ export function DiscordConnect({ agentId, onChannelSelect, isConnected, classNam
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Handles the connection to Discord using the provided bot token.
+   * Fetches the list of guilds upon successful connection.
+   * 
+   * @throws Will throw an error if the connection fails.
+   */
   const handleConnect = async () => {
     if (!botToken.trim()) {
       setError('Please enter a bot token');
@@ -63,6 +79,11 @@ export function DiscordConnect({ agentId, onChannelSelect, isConnected, classNam
     }
   };
 
+  /**
+   * Handles the selection of a channel and triggers the callback.
+   * 
+   * @param {string} channelId - The ID of the selected channel.
+   */
   const handleChannelSelect = (channelId: string) => {
     setSelectedChannel(channelId);
     onChannelSelect(channelId);

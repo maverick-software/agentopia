@@ -35,6 +35,8 @@ export function AgentChat() {
     databaseError: null,
     openaiError: null
   });
+  const fetchAgentAttempts = useRef(0);
+  const MAX_FETCH_ATTEMPTS = 5;
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -133,55 +135,53 @@ export function AgentChat() {
     };
   }, [isDatabaseConnected, checkOpenAIConnection]);
 
-  useEffect(() => {
-    let mounted = true;
+  // Fetch Agent Effect
+  const fetchAgent = useCallback(async (isInitialCall = true) => {
+    if (!id || !user) return;
 
-    const fetchAgent = async () => {
-      if (!id || !user) return;
+    let currentAttempt = fetchAgentAttempts.current + 1;
+    if (isInitialCall) { currentAttempt = 1; fetchAgentAttempts.current = 0; }
+    fetchAgentAttempts.current = currentAttempt;
 
-      try {
-        setError(null);
-        const { data, error: fetchError } = await supabase
-          .from('agents')
-          .select('*')
-          .eq('id', id)
-          .eq('user_id', user.id)
-          .single();
+    if (currentAttempt > MAX_FETCH_ATTEMPTS) {
+      console.warn(`Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for agent ${id} in chat. Aborting.`);
+      setError(`Failed to load agent details after ${MAX_FETCH_ATTEMPTS} attempts.`);
+      setLoading(false);
+      return;
+    }
+    console.log(`Fetching agent ${id} for chat... Attempt ${currentAttempt}`);
 
-        if (fetchError) {
-          console.error('Error fetching agent:', {
-            error: fetchError,
-            message: fetchError.message,
-            details: fetchError.details
-          });
-          throw new Error(fetchError.message);
-        }
+    try {
+      setError(null);
+      setLoading(true);
 
-        if (!data) {
-          throw new Error('Agent not found');
-        }
+      const { data, error: fetchError } = await supabase
+        .from('agents')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
 
-        if (mounted) {
-          setAgent(data);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('Error in fetchAgent:', err);
-        if (mounted) {
-          setError(err.message || 'Failed to load agent. Please try again.');
-          setLoading(false);
-        }
+      if (fetchError) throw fetchError;
+      if (!data) throw new Error('Agent not found or access denied');
+
+      setAgent(data);
+      setLoading(false);
+      if (isInitialCall) fetchAgentAttempts.current = 0; // Reset on success
+    } catch (err: any) {
+      console.error('Error in fetchAgent:', err);
+      if (currentAttempt < MAX_FETCH_ATTEMPTS) {
+        const delay = 2000;
+        setTimeout(() => fetchAgent(false), delay); // Retry
+        const message = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(`Failed to load agent details. Retrying... (${currentAttempt}/${MAX_FETCH_ATTEMPTS}): ${message}`);
+      } else {
+        const message = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(`Failed to load agent details after ${MAX_FETCH_ATTEMPTS} attempts: ${message}`);
+        console.error('Max fetch attempts reached for agent in chat after error.');
+        setLoading(false);
       }
-    };
-
-    fetchAgent();
-
-    return () => {
-      mounted = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
+    }
   }, [id, user]);
 
   useEffect(() => {
@@ -189,6 +189,17 @@ export function AgentChat() {
       scrollToBottom();
     }
   }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    fetchAgentAttempts.current = 0; // Reset before initial sequence
+    fetchAgent(true); // Trigger initial call
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort(); // Keep chat abort logic
+      }
+    };
+  }, [id, user, fetchAgent]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();

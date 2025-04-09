@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, Database, MessageSquare, Activity } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -23,55 +23,64 @@ export function Dashboard() {
     loading: true
   });
   const [error, setError] = useState<string | null>(null);
+  const totalFetchAttempts = useRef(0);
+  const MAX_TOTAL_FETCH_ATTEMPTS = 5;
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (!user) return;
+  const fetchStats = useCallback(async (isInitialCall = true) => {
+    if (!user) return;
 
-      try {
-        setError(null);
+    let currentAttempt = totalFetchAttempts.current + 1;
+    if (isInitialCall) { currentAttempt = 1; totalFetchAttempts.current = 0; }
+    totalFetchAttempts.current = currentAttempt;
 
-        // Fetch agents count with error logging
-        const { data: agents, error: agentsError } = await supabase
-          .from('agents')
-          .select('id, active, discord_channel')
-          .eq('user_id', user.id);
+    if (currentAttempt > MAX_TOTAL_FETCH_ATTEMPTS) {
+      console.warn(`Max fetch attempts (${MAX_TOTAL_FETCH_ATTEMPTS}) reached for dashboard stats. Aborting.`);
+      setError(`Failed to load dashboard stats after ${MAX_TOTAL_FETCH_ATTEMPTS} attempts.`);
+      setStats(prev => ({ ...prev, loading: false }));
+      return;
+    }
+    console.log(`Fetching dashboard stats... Attempt ${currentAttempt}`);
 
-        if (agentsError) {
-          console.error('Error fetching agents:', agentsError);
-          throw agentsError;
-        }
+    try {
+      setError(null);
+      setStats(prev => ({ ...prev, loading: true }));
 
-        // Fetch datastores count with error logging
-        const { count: datastoresCount, error: datastoresError } = await supabase
-          .from('datastores')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id);
+      const { data: agents, error: agentsError } = await supabase
+        .from('agents')
+        .select('id, active, discord_channel')
+        .eq('user_id', user.id);
 
-        if (datastoresError) {
-          console.error('Error fetching datastores:', datastoresError);
-          throw datastoresError;
-        }
+      if (agentsError) throw agentsError;
 
-        // Calculate stats
-        const activeAgentsCount = agents?.filter(agent => agent.active).length ?? 0;
-        const totalAgentsCount = agents?.length ?? 0;
-        const discordChannelsCount = agents?.filter(agent => agent.discord_channel).length ?? 0;
+      const { count: datastoresCount, error: datastoresError } = await supabase
+        .from('datastores')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
 
-        setStats({
-          activeAgents: activeAgentsCount,
-          totalAgents: totalAgentsCount,
-          datastores: datastoresCount ?? 0,
-          discordChannels: discordChannelsCount,
-          interactions: 0,
-          loading: false
-        });
-      } catch (err) {
-        console.error('Error fetching dashboard stats:', err);
-        
-        // Provide more specific error messages based on the error type
-        let errorMessage = 'Failed to load dashboard statistics. ';
-        
+      if (datastoresError) throw datastoresError;
+
+      const activeAgentsCount = agents?.filter(agent => agent.active).length ?? 0;
+      const totalAgentsCount = agents?.length ?? 0;
+      const discordChannelsCount = agents?.filter(agent => agent.discord_channel).length ?? 0;
+
+      setStats({
+        activeAgents: activeAgentsCount,
+        totalAgents: totalAgentsCount,
+        datastores: datastoresCount ?? 0,
+        discordChannels: discordChannelsCount,
+        interactions: 0,
+        loading: false
+      });
+      if (isInitialCall) totalFetchAttempts.current = 0;
+
+    } catch (err: any) {
+      console.error('Error fetching dashboard stats:', err);
+      if (currentAttempt < MAX_TOTAL_FETCH_ATTEMPTS) {
+        const delay = 2000;
+        setTimeout(() => fetchStats(false), delay);
+        setError(`Failed to load stats. Retrying... (${currentAttempt}/${MAX_TOTAL_FETCH_ATTEMPTS})`);
+      } else {
+        let errorMessage = `Failed to load dashboard statistics after ${MAX_TOTAL_FETCH_ATTEMPTS} attempts. `;
         if (err instanceof Error) {
           if (err.message.includes('Failed to fetch')) {
             errorMessage += 'Unable to connect to the database. Please check your internet connection and try again.';
@@ -82,14 +91,17 @@ export function Dashboard() {
           }
           console.error('Error stack:', err.stack);
         }
-
         setError(errorMessage);
         setStats(prev => ({ ...prev, loading: false }));
+        console.error('Max fetch attempts reached for dashboard stats after error.');
       }
-    };
-
-    fetchStats();
+    }
   }, [user]);
+
+  useEffect(() => {
+    totalFetchAttempts.current = 0;
+    fetchStats(true);
+  }, [user, fetchStats]);
 
   if (!user) {
     return (

@@ -107,11 +107,11 @@ export const isSupabaseConnected = async () => {
       },
       {
         numOfAttempts: 3,
-        startingDelay: 1000,
-        maxDelay: 5000,
+        startingDelay: 2500,
+        maxDelay: 10000,
         timeMultiple: 2,
         retry: (e, attemptNumber) => {
-          console.warn(`Connection attempt ${attemptNumber} failed:`, {
+          console.warn(`Supabase connection test attempt ${attemptNumber} failed:`, {
             error: e,
             message: e.message,
             name: e.name

@@ -1,0 +1,4 @@
+## Change Log - Components Directory
+
+- **2023-10-05**: Added `__ai__.md` file to document the purpose and structure of the components directory.
+- **2023-10-05**: Enhanced documentation in `DiscordConnect.tsx` with docstrings and inline comments. 

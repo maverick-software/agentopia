@@ -14,22 +14,36 @@ export function Agents() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const fetchAttempts = useRef(0);
-  const maxRetries = 3;
+  const totalFetchAttempts = useRef(0);
+  const MAX_TOTAL_FETCH_ATTEMPTS = 5;
 
-  const fetchAgents = useCallback(async () => {
+  const fetchAgents = useCallback(async (isInitialCall = true) => {
     if (!user) return;
-    
+
+    let currentAttempt = totalFetchAttempts.current + 1;
+    if (isInitialCall) {
+      currentAttempt = 1;
+      totalFetchAttempts.current = 0;
+    }
+    totalFetchAttempts.current = currentAttempt;
+
+    if (currentAttempt > MAX_TOTAL_FETCH_ATTEMPTS) {
+      console.warn(`Max fetch attempts (${MAX_TOTAL_FETCH_ATTEMPTS}) reached for agents. Aborting.`);
+      setError(`Failed to load agents after ${MAX_TOTAL_FETCH_ATTEMPTS} attempts.`);
+      setLoading(false);
+      setIsRetrying(false);
+      return;
+    }
+    console.log(`Fetching agents... Attempt ${currentAttempt}`);
+
     try {
       setError(null);
+      setLoading(true);
       setIsRetrying(true);
-      
-      // Check Supabase connection first
+
       const isConnected = await isSupabaseConnected();
-      if (!isConnected) {
-        throw new Error('Unable to connect to the database. Please check your connection.');
-      }
-      
+      if (!isConnected) throw new Error('Unable to connect to the database.');
+
       const { data, error: fetchError } = await supabase
         .from('agents')
         .select('*')
@@ -37,35 +51,40 @@ export function Agents() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      
-      // Keep the loading state true briefly to ensure smooth animation
+
       await new Promise(resolve => setTimeout(resolve, 300));
-      
       setAgents(data || []);
-      fetchAttempts.current = 0;
-    } catch (err) {
-      console.error('Error fetching agents:', err);
-      
-      if (fetchAttempts.current < maxRetries) {
-        fetchAttempts.current += 1;
-        const delay = Math.min(2000 * Math.pow(2, fetchAttempts.current), 8000);
-        setTimeout(fetchAgents, delay);
-        setError(`Connection error. Retrying... (${fetchAttempts.current}/${maxRetries})`);
-      } else {
-        setError('Unable to load agents. Please check your connection and try again.');
-      }
-    } finally {
       setLoading(false);
       setIsRetrying(false);
+      if (isInitialCall) totalFetchAttempts.current = 0;
+
+    } catch (err: any) {
+      console.error('Error fetching agents:', err);
+      if (currentAttempt < MAX_TOTAL_FETCH_ATTEMPTS) {
+        const delay = 2000;
+        console.log(`Agent fetch failed, retrying in ${delay}ms (Attempt ${currentAttempt + 1})`);
+        setTimeout(() => fetchAgents(false), delay);
+        const message = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(`Failed to load agents. Retrying... (${currentAttempt}/${MAX_TOTAL_FETCH_ATTEMPTS}): ${message}`);
+      } else {
+        const message = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(`Failed to load agents after ${MAX_TOTAL_FETCH_ATTEMPTS} attempts: ${message}`);
+        console.error('Max fetch attempts reached for agents after error.');
+        setLoading(false);
+        setIsRetrying(false);
+      }
     }
   }, [user]);
 
   useEffect(() => {
     if (user) {
-      fetchAgents();
+      totalFetchAttempts.current = 0;
+      fetchAgents(true);
     } else {
       setAgents([]);
       setLoading(false);
+      setError(null);
+      setIsRetrying(false);
     }
   }, [user, fetchAgents]);
 
@@ -212,8 +231,8 @@ export function Agents() {
         <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center justify-between">
           <span>{error}</span>
           <button
-            onClick={fetchAgents}
-            disabled={isRetrying}
+            onClick={() => fetchAgents(true)}
+            disabled={isRetrying || loading}
             className="flex items-center px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isRetrying ? 'animate-spin' : ''}`} />

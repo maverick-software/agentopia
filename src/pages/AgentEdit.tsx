@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Database, Check } from 'lucide-react';
 import MonacoEditor from 'react-monaco-editor';
@@ -61,6 +61,10 @@ export function AgentEdit() {
   const [loadingDatastores, setLoadingDatastores] = useState(false);
   const [connectingDatastores, setConnectingDatastores] = useState(false);
 
+  const fetchAgentAttempts = useRef(0);
+  const fetchDatastoresAttempts = useRef(0);
+  const MAX_FETCH_ATTEMPTS = 5;
+
   // Reset success message after 3 seconds
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -72,44 +76,46 @@ export function AgentEdit() {
     return () => clearTimeout(timeout);
   }, [saveSuccess]);
 
-  // Fetch datastores on component mount if editing
-  useEffect(() => {
-    if (isEditing) {
-      fetchDatastores();
-    }
-  }, [isEditing]);
+  // Fetch Agent Data Effect
+  const fetchAgent = useCallback(async (agentId: string, isInitialCall = true) => {
+    if (!user?.id) return;
 
-  const fetchAgent = async (agentId: string) => {
+    let currentAttempt = fetchAgentAttempts.current + 1;
+    if (isInitialCall) { currentAttempt = 1; fetchAgentAttempts.current = 0; }
+    fetchAgentAttempts.current = currentAttempt;
+
+    if (currentAttempt > MAX_FETCH_ATTEMPTS) {
+      console.warn(`Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for agent ${agentId}. Aborting.`);
+      setError(`Failed to load agent after ${MAX_FETCH_ATTEMPTS} attempts.`);
+      setLoading(false);
+      return;
+    }
+    console.log(`Fetching agent ${agentId}... Attempt ${currentAttempt}`);
+
     try {
       setLoading(true);
       setError(null);
 
-      // First fetch the agent data
       const { data: agentData, error: agentError } = await supabase
         .from('agents')
         .select('*')
         .eq('id', agentId)
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .single();
 
       if (agentError) throw new Error(agentError.message);
-      if (!agentData) throw new Error('Agent not found');
+      if (!agentData) throw new Error('Agent not found or access denied');
 
       setFormData(agentData);
+      setLoading(false); // Stop loading on success
 
-      // Then fetch the associated datastores
+      // Fetch associated datastores (nested call, no separate retry for simplicity here)
       const { data: connections, error: connectionsError } = await supabase
         .from('agent_datastores')
-        .select(`
-          datastore_id,
-          datastores:datastore_id (
-            id,
-            type
-          )
-        `)
+        .select(`datastore_id, datastores:datastore_id (id, type)`)
         .eq('agent_id', agentId);
-
-      if (connectionsError) throw new Error(connectionsError.message);
+      
+      if (connectionsError) throw new Error(connectionsError.message); // Or handle more gracefully
 
       if (connections) {
         const vectorStore = connections.find(c => c.datastores?.type === 'pinecone');
@@ -120,34 +126,82 @@ export function AgentEdit() {
           knowledge: knowledgeStore?.datastore_id
         });
       }
-    } catch (err) {
-      console.error('Error fetching agent:', err);
-      setError('Failed to load agent. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const fetchDatastores = async () => {
+      // Reset attempts on SUCCESS
+      if (isInitialCall) fetchAgentAttempts.current = 0;
+
+    } catch (err: any) {
+      console.error('Error fetching agent:', err);
+      if (currentAttempt < MAX_FETCH_ATTEMPTS) {
+        const delay = 2000;
+        setTimeout(() => fetchAgent(agentId, false), delay); // Retry
+        setError(`Failed to load agent. Retrying... (${currentAttempt}/${MAX_FETCH_ATTEMPTS})`);
+      } else {
+        setError(`Failed to load agent after ${MAX_FETCH_ATTEMPTS} attempts.`);
+        console.error('Max fetch attempts reached for agent after error.');
+        setLoading(false);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isEditing && id) {
+      fetchAgentAttempts.current = 0; // Reset before initial sequence
+      fetchAgent(id, true);
+    }
+  }, [id, isEditing, user, fetchAgent]);
+
+  // Fetch Datastores List Effect
+  const fetchDatastores = useCallback(async (isInitialCall = true) => {
+    if (!user?.id) return;
+
+    let currentAttempt = fetchDatastoresAttempts.current + 1;
+    if (isInitialCall) { currentAttempt = 1; fetchDatastoresAttempts.current = 0; }
+    fetchDatastoresAttempts.current = currentAttempt;
+
+    if (currentAttempt > MAX_FETCH_ATTEMPTS) {
+       console.warn(`Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for datastores list. Aborting.`);
+       setError('Failed to load datastore list for selection.'); 
+       setLoadingDatastores(false);
+       return;
+    }
+    console.log(`Fetching datastores list... Attempt ${currentAttempt}`);
+
     try {
       setLoadingDatastores(true);
       setError(null);
 
       const { data, error: fetchError } = await supabase
         .from('datastores')
-        .select('*')
-        .eq('user_id', user?.id);
+        .select('id, name, type')
+        .eq('user_id', user.id);
 
       if (fetchError) throw fetchError;
 
       setDatastores(data || []);
-    } catch (err) {
-      console.error('Error fetching datastores:', err);
-      setError('Failed to load datastores. Please try again.');
-    } finally {
-      setLoadingDatastores(false);
+      setLoadingDatastores(false); // Stop loading on success
+      if (isInitialCall) fetchDatastoresAttempts.current = 0; // Reset on success
+
+    } catch (err: any) {
+      console.error('Error fetching datastores list:', err);
+      if (currentAttempt < MAX_FETCH_ATTEMPTS) {
+        const delay = 2000;
+        setTimeout(() => fetchDatastores(false), delay); // Retry
+        setError(`Failed to load datastore list. Retrying... (${currentAttempt}/${MAX_FETCH_ATTEMPTS})`);
+      } else {
+        setError(`Failed to load datastore list after ${MAX_FETCH_ATTEMPTS} attempts.`);
+        console.error('Max fetch attempts reached for datastore list after error.');
+        setLoadingDatastores(false);
+      }
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (showDatastoreModal && datastores.length === 0 && !loadingDatastores) {
+      fetchDatastoresAttempts.current = 0; // Reset before initial sequence
+      fetchDatastores(true);
+    }
+  }, [showDatastoreModal, datastores.length, loadingDatastores, user, fetchDatastores]);
 
   const handleConnectDatastores = async () => {
     if (!id || !user?.id) return;
@@ -195,12 +249,6 @@ export function AgentEdit() {
       setConnectingDatastores(false);
     }
   };
-
-  useEffect(() => {
-    if (isEditing && id) {
-      fetchAgent(id);
-    }
-  }, [id, isEditing]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

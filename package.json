@@ -10,20 +10,20 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.7",
     "@pinecone-database/pinecone": "^2.0.0",
+    "@supabase/supabase-js": "^2.39.7",
+    "eventsource-parser": "^1.1.2",
+    "exponential-backoff": "^3.1.1",
+    "limiter": "3.0.0",
     "lucide-react": "^0.344.0",
+    "openai": "^4.28.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.22.3",
     "react-monaco-editor": "^0.55.0",
-    "react-window": "^1.8.10",
+    "react-router-dom": "^6.22.3",
     "react-virtualized-auto-sizer": "^1.0.24",
-    "use-debounce": "^10.0.0",
-    "eventsource-parser": "^1.1.2",
-    "limiter": "3.0.0",
-    "exponential-backoff": "^3.1.1",
-    "openai": "^4.28.0"
+    "react-window": "^1.8.10",
+    "use-debounce": "^10.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

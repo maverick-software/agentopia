@@ -1,0 +1,5 @@
+## 2025-04-09 - Refactor AuthContext for Singleton Client
+- Removed redundant `createClient` call in `AuthContext.tsx`.
+- Updated `AuthProvider` to import and use the shared `supabaseClient` instance from `src/lib/supabase.ts`.
+- Added mount checks in `useEffect` callbacks to prevent state updates after unmount.
+- *Goal: Resolve "Multiple GoTrueClient instances" warning and stabilize auth state.* 

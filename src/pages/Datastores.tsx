@@ -1,29 +1,47 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, Edit2, Database, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Datastore } from '../types';
+import type { Datastore as DatastoreType } from '../types';
+
+type ExtendedDatastore = DatastoreType & {
+  agent_datastores?: Array<{ agent_id: string }>;
+};
 
 export function Datastores() {
   const { user } = useAuth();
-  const [datastores, setDatastores] = useState<Datastore[]>([]);
+  const [datastores, setDatastores] = useState<ExtendedDatastore[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingDatastore, setEditingDatastore] = useState<Datastore | null>(null);
+  const [editingDatastore, setEditingDatastore] = useState<ExtendedDatastore | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const totalFetchAttempts = useRef(0);
+  const MAX_TOTAL_FETCH_ATTEMPTS = 5;
 
-  const fetchDatastores = useCallback(async () => {
+  const fetchDatastores = useCallback(async (isInitialCall = true) => {
     if (!user) return;
+
+    let currentAttempt = totalFetchAttempts.current + 1;
+    if (isInitialCall) {
+      currentAttempt = 1;
+      totalFetchAttempts.current = 0;
+    }
+    totalFetchAttempts.current = currentAttempt;
+
+    if (currentAttempt > MAX_TOTAL_FETCH_ATTEMPTS) {
+      console.warn(`Max fetch attempts (${MAX_TOTAL_FETCH_ATTEMPTS}) reached for datastores. Aborting.`);
+      setError(`Failed to load datastores after ${MAX_TOTAL_FETCH_ATTEMPTS} attempts.`);
+      setLoading(false);
+      return;
+    }
+    console.log(`Fetching datastores... Attempt ${currentAttempt}`);
 
     try {
       setError(null);
-      if (isInitialLoad) {
-        setLoading(true);
-      }
+      setLoading(true);
 
       const { data, error: fetchError } = await supabase
         .from('datastores')
@@ -31,36 +49,38 @@ export function Datastores() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (fetchError) {
-        console.error('Supabase fetch error:', {
-          message: fetchError.message,
-          code: fetchError.code,
-          details: fetchError.details
-        });
-        throw new Error(fetchError.message || 'Failed to fetch datastores');
-      }
+      if (fetchError) { throw fetchError; }
 
-      // Add a small delay to ensure smooth transition
       await new Promise(resolve => setTimeout(resolve, 300));
-
       setDatastores(data || []);
-    } catch (err) {
-      console.error('Error fetching datastores:', {
-        error: err,
-        message: err.message,
-        name: err.name,
-        stack: err.stack
-      });
-      setError(err.message || 'Failed to load datastores. Please check your network connection and try again.');
-    } finally {
       setLoading(false);
-      setIsInitialLoad(false);
+      if (isInitialCall) totalFetchAttempts.current = 0;
+
+    } catch (err: any) {
+      console.error('Error fetching datastores:', err);
+      if (currentAttempt < MAX_TOTAL_FETCH_ATTEMPTS) {
+        const delay = 2000;
+        console.log(`Datastore fetch failed, retrying in ${delay}ms (Attempt ${currentAttempt + 1})`);
+        setTimeout(() => fetchDatastores(false), delay);
+        const message = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(`Failed to load datastores. Retrying... (${currentAttempt}/${MAX_TOTAL_FETCH_ATTEMPTS}): ${message}`);
+      } else {
+        const message = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(`Failed to load datastores after ${MAX_TOTAL_FETCH_ATTEMPTS} attempts: ${message}`);
+        console.error('Max fetch attempts reached after error.');
+        setLoading(false);
+      }
     }
-  }, [user, isInitialLoad]);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
-      fetchDatastores();
+      totalFetchAttempts.current = 0;
+      fetchDatastores(true);
+    } else {
+      setDatastores([]);
+      setLoading(false);
+      setError(null);
     }
   }, [user, fetchDatastores]);
 
@@ -96,7 +116,7 @@ export function Datastores() {
     }
   };
 
-  const handleCreateOrUpdate = async (formData: Partial<Datastore>) => {
+  const handleCreateOrUpdate = async (formData: Partial<ExtendedDatastore>) => {
     if (!user?.id) {
       setError('You must be logged in to perform this action.');
       return;
@@ -106,12 +126,10 @@ export function Datastores() {
       setIsSaving(true);
       setError(null);
 
-      // Validate required fields
       if (!formData.name?.trim()) throw new Error('Name is required');
       if (!formData.description?.trim()) throw new Error('Description is required');
       if (!formData.type) throw new Error('Type is required');
       
-      // Validate config based on type
       if (formData.type === 'pinecone') {
         if (!formData.config?.apiKey) throw new Error('API Key is required');
         if (!formData.config?.region) throw new Error('Region is required');
@@ -203,18 +221,18 @@ export function Datastores() {
         <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center justify-between">
           <span>{error}</span>
           <button
-            onClick={fetchDatastores}
+            onClick={() => fetchDatastores(true)}
+            disabled={loading}
             className="flex items-center px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-md transition-colors"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Try Again
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading && error?.includes('Retrying') ? 'animate-spin' : ''}`} />
+            {loading && error?.includes('Retrying') ? 'Retrying...' : 'Try Again'}
           </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
-          // Skeleton loading state
           Array.from({ length: 3 }).map((_, index) => (
             <div
               key={`skeleton-${index}`}
@@ -323,7 +341,7 @@ export function Datastores() {
                 )}
               </div>
 
-              {datastore.agent_datastores?.length > 0 && (
+              {datastore.agent_datastores && datastore.agent_datastores.length > 0 && (
                 <div className="pt-4 border-t border-gray-700">
                   <div className="text-sm text-gray-400">
                     Connected to {datastore.agent_datastores.length} agent{datastore.agent_datastores.length !== 1 ? 's' : ''}
@@ -335,7 +353,6 @@ export function Datastores() {
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
@@ -363,7 +380,6 @@ export function Datastores() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
       {(showCreateModal || editingDatastore) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <DatastoreForm
@@ -382,14 +398,14 @@ export function Datastores() {
 }
 
 interface DatastoreFormProps {
-  datastore?: Datastore | null;
-  onSubmit: (data: Partial<Datastore>) => Promise<void>;
+  datastore?: ExtendedDatastore | null;
+  onSubmit: (data: Partial<ExtendedDatastore>) => Promise<void>;
   onCancel: () => void;
   isSaving: boolean;
 }
 
 function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFormProps) {
-  const [formData, setFormData] = useState<Partial<Datastore>>({
+  const [formData, setFormData] = useState<Partial<ExtendedDatastore>>({
     name: datastore?.name || '',
     description: datastore?.description || '',
     type: datastore?.type || 'pinecone',
@@ -462,7 +478,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
             onChange={(e) => setFormData({
               ...formData,
               type: e.target.value as 'pinecone' | 'getzep',
-              config: {} // Reset config when type changes
+              config: {}
             })}
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             disabled={isSaving}

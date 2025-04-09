@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { createClient, User, AuthError } from '@supabase/supabase-js';
+import { User, AuthError } from '@supabase/supabase-js';
+import { supabase as supabaseClient } from '../lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -18,30 +19,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase credentials are not properly configured. Please check your environment variables.');
-  }
-
-  // Initialize Supabase client
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
   useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
+    let isMounted = true;
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (isMounted) {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
     });
 
-    // Listen for changes on auth state
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (isMounted) {
+        setUser(session?.user ?? null);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleAuthError = (error: AuthError) => {
@@ -65,14 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       clearError();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
-    } catch (err) {
-      if (err instanceof Error) {
-        handleAuthError(err as AuthError);
-      } else {
-        setError('An unexpected error occurred. Please try again.');
-      }
+    } catch (err: any) {
+      handleAuthError(err as AuthError);
       throw err;
     }
   };
@@ -80,20 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string) => {
     try {
       clearError();
-      const { error } = await supabase.auth.signUp({ 
+      const { error } = await supabaseClient.auth.signUp({ 
         email, 
         password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/login`
-        }
+        options: { emailRedirectTo: `${window.location.origin}/login` }
       });
       if (error) throw error;
-    } catch (err) {
-      if (err instanceof Error) {
-        handleAuthError(err as AuthError);
-      } else {
-        setError('An unexpected error occurred. Please try again.');
-      }
+    } catch (err: any) {
+      handleAuthError(err as AuthError);
       throw err;
     }
   };
@@ -101,19 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       clearError();
-      const { error } = await supabase.auth.signOut();
+      const { error } = await supabaseClient.auth.signOut();
       if (error) throw error;
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('An error occurred while signing out.');
-      }
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : 'An error occurred during sign out.');
       throw err;
     }
   };
 
-  // Show loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">

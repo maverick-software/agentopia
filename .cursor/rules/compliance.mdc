@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: Primary rules file containing core development guidelines.
 globs: 
 alwaysApply: false
