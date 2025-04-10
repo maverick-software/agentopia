@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
@@ -221,53 +221,53 @@ export function AgentChat() {
   }
 
   return (
-    <div className="flex flex-col flex-1 h-full max-w-4xl w-full mx-auto p-6">
+    <div className="flex flex-col h-[calc(100vh-10rem)]">
+      <div className="flex items-center space-x-4 mb-6">
+        <button
+          onClick={() => navigate('/agents')}
+          className="text-gray-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <h1 className="text-2xl font-bold">
+          {loading ? 'Loading...' : agent ? `Chat with ${agent.name}` : 'Chat'}
+        </h1>
+      </div>
+
       {error && (
-        <div className="mb-4">
-          <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md">
-            {error}
-          </div>
+        <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md mb-4">
+          {error}
         </div>
       )}
 
-      <div 
-        className={`flex-1 overflow-y-auto mb-4 ${
-          messages.length === 0 ? 'flex flex-col items-center justify-center' : 'space-y-4'
-        }`}
-      >
-        {messages.length === 0 && !loading && agent ? (
-          <div className="text-center">
-            <h2 className="text-3xl font-semibold text-gray-400">{agent.name}</h2>
-          </div>
-        ) : (
-          messages.map((message, index) => (
-            <ChatMessage key={`${message.role}-${index}`} message={message} />
-          ))
-        )}
-        {loading && messages.length === 0 && <Loader2 className="h-8 w-8 animate-spin text-gray-500" />}
+      <div className="flex-1 bg-gray-800 rounded-lg p-4 overflow-y-auto mb-4 space-y-4">
+        {messages.map((message, index) => (
+          <ChatMessage key={`${message.role}-${index}`} message={message} />
+        ))}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="sticky bottom-0 bg-gray-900 pt-2 pb-2">
-        <form onSubmit={handleSubmit} className="flex space-x-4">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={agent ? `Message ${agent.name}...` : "Type your message..."}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-            disabled={sending || loading || !agent}
-          />
-          <button
-            type="submit"
-            className="bg-indigo-600 text-white rounded-lg px-4 py-2 flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            disabled={sending || loading || !agent || !input.trim()}
-            aria-label="Send message"
-          >
-            {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-          </button>
-        </form>
-      </div>
+      <form onSubmit={handleSubmit} className="flex space-x-4">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type your message..."
+          className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+          disabled={sending}
+        />
+        <button
+          type="submit"
+          disabled={!input.trim() || sending}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[48px] transition-colors"
+        >
+          {sending ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Send className="w-5 h-5" />
+          )}
+        </button>
+      </form>
     </div>
   );
 }

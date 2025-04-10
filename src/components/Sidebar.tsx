@@ -1,8 +1,15 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { 
-  Users, Database, Brain, Activity, Settings
+  Users, Database, Brain, Activity, Settings,
+  LogOut, Bot
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+
+// Define props interface
+interface SidebarProps {
+  isCollapsed: boolean;
+}
 
 const navItems = [
   { to: '/agents', icon: Users, label: 'Agents' },
@@ -12,27 +19,82 @@ const navItems = [
   { to: '/settings', icon: Settings, label: 'Settings' }
 ];
 
-export function Sidebar() {
+// Accept props
+export function Sidebar({ isCollapsed }: SidebarProps) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    }
+  };
+
   return (
-    <nav className="w-64 bg-gray-800 min-h-screen p-4">
-      <div className="space-y-2">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center space-x-3 px-4 py-3 rounded-md transition-colors ${
-                isActive 
-                  ? 'bg-indigo-600 text-white' 
-                  : 'text-gray-300 hover:bg-gray-700'
-              }`
-            }
+    <nav 
+      className={`flex flex-col bg-gray-800 min-h-screen transition-all duration-300 ease-in-out ${
+        isCollapsed ? 'w-16 p-2' : 'w-64 p-4'
+      }`}
+    >
+      <div className="flex-1">
+        <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
+          <Bot size={isCollapsed ? 28 : 24} className="text-indigo-400" />
+          <span 
+            className={`ml-2 text-xl font-bold transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}
           >
-            <Icon className="w-5 h-5" />
-            <span className="font-medium">{label}</span>
-          </NavLink>
-        ))}
+            Agentopia
+          </span>
+        </div>
+        
+        <div className="space-y-2">
+          {navItems.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              title={isCollapsed ? label : undefined}
+              className={({ isActive }) =>
+                `flex items-center space-x-3 rounded-md transition-colors ${
+                  isCollapsed ? 'px-2 justify-center py-3' : 'px-4 py-3'
+                } ${
+                  isActive 
+                    ? 'bg-indigo-600 text-white' 
+                    : 'text-gray-300 hover:bg-gray-700'
+                }`
+              }
+            >
+              <Icon className="w-5 h-5" />
+              <span className={`font-medium transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>{label}</span>
+            </NavLink>
+          ))}
+        </div>
       </div>
+
+      {user && (
+        <div className="mt-auto border-t border-gray-700 pt-4">
+          <div 
+            className={`flex items-center mb-3 transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}
+          >
+            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center mr-3">
+              <span className="text-xs font-medium text-white">{user.email?.charAt(0).toUpperCase()}</span>
+            </div>
+            <span className="text-sm text-gray-300 truncate" title={user.email || 'User'}>{user.email}</span>
+          </div>
+          
+          <button
+            onClick={handleSignOut}
+            title={isCollapsed ? "Sign Out" : undefined}
+            className={`flex items-center w-full px-4 py-3 rounded-md transition-colors text-gray-300 hover:bg-red-600/80 hover:text-white ${
+              isCollapsed ? 'justify-center px-2' : 'space-x-3 px-4'
+            }`}
+          >
+            <LogOut className="w-5 h-5" />
+            <span className={`font-medium transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>Sign Out</span>
+          </button>
+        </div>
+      )}
     </nav>
   );
 }

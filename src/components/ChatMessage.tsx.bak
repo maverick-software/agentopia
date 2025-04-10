@@ -25,14 +25,14 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
   return (
     <div
       className={`flex ${
-        message.role === 'user' ? 'justify-end mr-4' : 'justify-start'
+        message.role === 'user' ? 'justify-end' : 'justify-start'
       }`}
     >
       <div
-        className={`relative group max-w-2xl rounded-lg p-3 text-sm prose prose-sm prose-invert break-words ${
+        className={`relative group max-w-[70%] rounded-lg p-3 text-sm prose prose-sm prose-invert break-words ${
           message.role === 'user'
             ? 'bg-indigo-600 text-white'
-            : 'bg-gray-600 text-gray-200'
+            : 'bg-gray-700 text-gray-200'
         }`}
       >
         <ReactMarkdown
