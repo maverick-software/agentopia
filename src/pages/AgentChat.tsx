@@ -83,15 +83,21 @@ export function AgentChat() {
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
-    fetchAgentAttempts.current = 0; // Reset before initial sequence
-    fetchAgent(true); // Trigger initial call
-
+    console.log('Agent fetch effect triggered.');
+    if (id && user) {
+      fetchAgentAttempts.current = 0; 
+      fetchAgent(true); 
+    }
+    
+    // Cleanup function
     return () => {
+      console.log('AgentChat component unmounting or id/user changed. Aborting requests.');
       if (abortControllerRef.current) {
-        abortControllerRef.current.abort(); // Keep chat abort logic
+        abortControllerRef.current.abort(); 
       }
     };
-  }, [id, user, fetchAgent]);
+  // Dependencies ONLY id and user - fetchAgent is stable based on these
+  }, [id, user]); 
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,22 +171,24 @@ export function AgentChat() {
       setMessages(prev => [...prev, assistantMessage]);
 
       const decoder = new TextDecoder();
-      let buffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
 
         setMessages(prev => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage.role === 'assistant') {
-            lastMessage.content = buffer;
-          }
-          return newMessages;
+          // Map to a new array to ensure immutability for React.memo
+          return prev.map((msg, index) => {
+            // If this is the last message and it's the assistant message we are updating
+            if (index === prev.length - 1 && msg.role === 'assistant') {
+              // Return a *new* message object with the appended content
+              return { ...msg, content: msg.content + chunk }; 
+            }
+            // Otherwise, return the original message object
+            return msg;
+          });
         });
       }
 

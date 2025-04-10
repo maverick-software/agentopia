@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { User, AuthError } from '@supabase/supabase-js';
 import { supabase as supabaseClient } from '../lib/supabase';
 
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const handleAuthError = (error: AuthError) => {
+  const handleAuthError = useCallback((error: AuthError) => {
     switch (error.message) {
       case 'Invalid login credentials':
         setError('Invalid email or password. Please check your credentials and try again.');
@@ -54,11 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       default:
         setError(error.message);
     }
-  };
+  }, []);
 
-  const clearError = () => setError(null);
+  const clearError = useCallback(() => setError(null), []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     try {
       clearError();
       const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
@@ -67,9 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       handleAuthError(err as AuthError);
       throw err;
     }
-  };
+  }, [clearError, handleAuthError]);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string) => {
     try {
       clearError();
       const { error } = await supabaseClient.auth.signUp({ 
@@ -82,9 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       handleAuthError(err as AuthError);
       throw err;
     }
-  };
+  }, [clearError, handleAuthError]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       clearError();
       const { error } = await supabaseClient.auth.signOut();
@@ -93,7 +93,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError(err instanceof Error ? err.message : 'An error occurred during sign out.');
       throw err;
     }
-  };
+  }, [clearError]);
+
+  const value = useMemo(() => ({
+    user,
+    signIn,
+    signUp,
+    signOut,
+    loading,
+    error,
+    clearError
+  }), [user, loading, error, signIn, signUp, signOut, clearError]);
 
   if (loading) {
     return (
@@ -104,15 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      signIn, 
-      signUp, 
-      signOut, 
-      loading,
-      error,
-      clearError
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

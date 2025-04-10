@@ -44,9 +44,6 @@ const supabaseClient = createClient(
   }
 );
 
-// Initialize Pinecone correctly:
-const pinecone = new Pinecone();
-
 async function getVectorSearchResults(message: string, agentId: string): Promise<string | null> {
   try {
     const { data: connection, error: connectionError } = await supabaseClient
@@ -81,6 +78,12 @@ async function getVectorSearchResults(message: string, agentId: string): Promise
 
     const datastore = connection.datastores;
 
+    // Validate necessary config fields exist
+    if (!datastore.config?.apiKey || !datastore.config?.region || !datastore.config?.indexName) {
+        console.error('Incomplete Pinecone configuration found in datastore:', datastore.id);
+        return null;
+    }
+
     // Generate embedding
     const embedding = await openai.embeddings.create({
       model: 'text-embedding-3-small',
@@ -88,13 +91,15 @@ async function getVectorSearchResults(message: string, agentId: string): Promise
       encoding_format: 'float',
     });
 
-    // Initialize Pinecone
-    await pinecone.init({
-      apiKey: datastore.config.apiKey,
-      environment: datastore.config.region,
+    // Instantiate Pinecone client with ONLY required fields
+    const pinecone = new Pinecone({
+      apiKey: datastore.config.apiKey, 
+      environment: datastore.config.region 
     });
 
-    const index = pinecone.Index(datastore.config.indexName);
+    // Get index name separately
+    const indexName = datastore.config.indexName;
+    const index = pinecone.Index(indexName);
 
     // Query vector store
     const results = await index.query({
@@ -177,104 +182,166 @@ Deno.serve(async (req) => {
 
     // Handle Chat POST request
     if (req.method === 'POST') {
-      // Validate OpenAI API key
-      const openaiKey = Deno.env.get('OPENAI_API_KEY');
-      if (!openaiKey) {
-        throw new Error('OpenAI API key not configured');
-      }
+      try {
+        console.log('Chat POST request received');
+        // Validate OpenAI API key
+        const openaiKey = Deno.env.get('OPENAI_API_KEY');
+        if (!openaiKey) {
+          throw new Error('OpenAI API key not configured');
+        }
 
-      // Check rate limit
-      const remainingRequests = await limiter.removeTokens(1);
-      if (remainingRequests < 0) {
+        // Check rate limit
+        const remainingRequests = await limiter.removeTokens(1);
+        if (remainingRequests < 0) {
+          return new Response(
+            JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+            {
+              status: 429,
+              headers: {
+                ...corsHeaders,
+                'Content-Type': 'application/json',
+                'Retry-After': '60',
+              },
+            }
+          );
+        }
+
+        const { messages, agentId } = await req.json();
+
+        if (!messages?.length || !agentId) {
+          throw new Error('Missing required parameters');
+        }
+
+        // Get agent data
+        const { data: agent, error: agentError } = await supabaseClient
+          .from('agents')
+          .select('id, name, personality, system_instructions, assistant_instructions')
+          .eq('id', agentId)
+          .single();
+
+        if (agentError) {
+          console.error('Error fetching agent:', {
+            error: agentError,
+            message: agentError.message,
+            details: agentError.details
+          });
+          throw new Error('Failed to fetch agent data');
+        }
+
+        if (!agent) {
+          throw new Error('Agent not found');
+        }
+        console.log(`Found agent: ${agent.id}`);
+
+        // Get relevant context
+        const latestUserMessage = messages[messages.length - 1];
+        const memories = latestUserMessage.role === 'user'
+          ? await getVectorSearchResults(latestUserMessage.content, agentId)
+          : null;
+        console.log(`Memories fetched: ${memories ? 'Yes' : 'No'}`);
+
+        // Prepare messages
+        const systemMessage: ChatMessage = {
+          role: 'system',
+          content: `${agent.system_instructions || ''}\n\nYou are ${agent.name}, an AI agent with the following personality: ${agent.personality}\n\n${agent.assistant_instructions || ''}`
+        };
+
+        const chatMessages = [systemMessage, ...messages];
+        if (memories) {
+          chatMessages.push({
+            role: 'system',
+            content: memories
+          });
+        }
+        console.log(`Prepared ${chatMessages.length} messages for OpenAI.`);
+        // Optional: Log the full prompt if not too large/sensitive
+        // console.log('Sending messages:', JSON.stringify(chatMessages)); 
+
+        // Create chat completion stream
+        console.log('Calling OpenAI chat.completions.create...');
+        const stream = await openai.chat.completions.create({
+          model: 'gpt-4-turbo-preview',
+          messages: chatMessages,
+          temperature: 0.7,
+          max_tokens: 500,
+          stream: true,
+          presence_penalty: 0.6,
+          frequency_penalty: 0.5
+        });
+        console.log('Received stream from OpenAI');
+
+        // Create a ReadableStream to pipe the OpenAI stream chunks
+        const encoder = new TextEncoder();
+        const readableStream = new ReadableStream({
+          async start(controller) {
+            console.log("ReadableStream started, iterating OpenAI stream...");
+            try {
+              for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content || '';
+                // console.log('Received chunk content:', content); // Optional: log chunk content
+                if (content) {
+                  controller.enqueue(encoder.encode(content));
+                }
+                // Check if the stream is finished (OpenAI includes this in newer versions sometimes)
+                if (chunk.choices[0]?.finish_reason) {
+                    console.log('OpenAI stream finished with reason:', chunk.choices[0].finish_reason);
+                    break; // Exit loop once finished
+                }
+              }
+              console.log("OpenAI stream iteration finished.");
+            } catch (error) {
+              console.error('Error during OpenAI stream iteration:', error);
+              controller.error(error); // Signal error to the stream consumer
+            } finally {
+              try {
+                controller.close(); // Ensure the stream is closed
+                console.log("ReadableStream closed.");
+              } catch (closeError) {
+                console.error('Error closing stream controller:', closeError); 
+              }
+            }
+          },
+          cancel(reason) {
+            console.log('ReadableStream cancelled:', reason);
+            // If the stream is cancelled (e.g., client disconnects), 
+            // you might want to signal cancellation to the OpenAI request if possible,
+            // though the SDK might not support this directly for ongoing streams.
+          }
+        });
+
+        // Return the stream as the response with appropriate headers
+        console.log("Returning response with custom ReadableStream.");
+        return new Response(readableStream, { 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          } 
+        });
+
+      } catch (error) {
+        // Log the detailed error within the main catch block
+        console.error('Chat processing error:', { 
+          error,
+          message: error.message,
+          name: error.name,
+          stack: error.stack 
+        });
         return new Response(
-          JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+          JSON.stringify({ 
+            error: error.message || 'An error occurred',
+            timestamp: new Date().toISOString()
+          }), 
           {
-            status: 429,
+            status: error.status || 500,
             headers: {
-              ...corsHeaders,
+              ...corsHeaders, // Ensure CORS headers are on error responses
               'Content-Type': 'application/json',
-              'Retry-After': '60',
             },
           }
         );
       }
-
-      const { messages, agentId } = await req.json();
-
-      if (!messages?.length || !agentId) {
-        throw new Error('Missing required parameters');
-      }
-
-      // Get agent data
-      const { data: agent, error: agentError } = await supabaseClient
-        .from('agents')
-        .select('id, name, personality, system_instructions, assistant_instructions')
-        .eq('id', agentId)
-        .single();
-
-      if (agentError) {
-        console.error('Error fetching agent:', {
-          error: agentError,
-          message: agentError.message,
-          details: agentError.details
-        });
-        throw new Error('Failed to fetch agent data');
-      }
-
-      if (!agent) {
-        throw new Error('Agent not found');
-      }
-
-      // Get relevant context
-      const latestUserMessage = messages[messages.length - 1];
-      const memories = latestUserMessage.role === 'user'
-        ? await getVectorSearchResults(latestUserMessage.content, agentId)
-        : null;
-
-      // Prepare messages
-      const systemMessage: ChatMessage = {
-        role: 'system',
-        content: `${agent.system_instructions || ''}\n\nYou are ${agent.name}, an AI agent with the following personality: ${agent.personality}\n\n${agent.assistant_instructions || ''}`
-      };
-
-      const chatMessages = [systemMessage, ...messages];
-      if (memories) {
-        chatMessages.push({
-          role: 'system',
-          content: memories
-        });
-      }
-
-      // Create chat completion stream
-      const stream = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
-        messages: chatMessages,
-        temperature: 0.7,
-        max_tokens: 500,
-        stream: true,
-        presence_penalty: 0.6,
-        frequency_penalty: 0.5
-      });
-
-      // Transform stream
-      const transformStream = new TransformStream({
-        async transform(chunk, controller) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          if (content) {
-            controller.enqueue(new TextEncoder().encode(content));
-          }
-        }
-      });
-
-      // Make sure stream response includes CORS headers
-      return new Response(stream.toReadableStream().pipeThrough(transformStream), {
-        headers: {
-          ...corsHeaders, // Ensure CORS headers are on the actual response too
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      });
     }
 
     // Handle other methods
