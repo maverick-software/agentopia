@@ -234,65 +234,69 @@ export function AgentEdit() {
     }
   }, [showDatastoreModal, datastores.length, loadingDatastores, user, fetchDatastores]);
 
-  // Fetch MCP Configurations Effect
-  useEffect(() => {
-    if (id && user?.id) {
-      fetchMcpConfigurations();
-    }
-  }, [id, user, fetchMcpConfigurations]); // Dependency fetchMcpConfigurations added
-
   // *** NEW MCP API Call Functions ***
 
   // Fetch existing MCP configurations for the agent
   const fetchMcpConfigurations = useCallback(async () => {
     if (!id || !user?.id) return;
     console.log(`[AgentEdit:${id}] Fetching MCP configurations...`);
-    setLoading(true);
+    setLoading(true); // Use general loading state for now
     setError(null);
     try {
-      const { data, error } = await supabase
-        .from('mcp_configurations')
-        .select(`
-          id,
-          name,
-          is_active,
-          priority,
-          timeout_ms,
-          max_retries,
-          retry_backoff_ms,
-          server:mcp_servers (
-            id,
-            endpoint_url,
-            vault_api_key_id,
-            capabilities
-          )
-        `)
-        .eq('agent_id', id);
+      // Fetch the MCP configuration record linked to this agent_id
+      const { data: configData, error: configError } = await supabase
+        .from('mcp_configurations') // Query the configurations table directly
+        .select('id, is_enabled')    // Select the config ID and enabled status
+        .eq('agent_id', id)        // Filter by the current agent's ID
+        .maybeSingle();             // Use maybeSingle as an agent might not have a config yet
 
-      if (error) throw error;
+      if (configError) throw new Error(`Error fetching MCP configuration: ${configError.message}`);
 
-      const mappedConfigs: MCPServerConfig[] = (data || []).map((c: any) => ({
-        id: c.server.id,
-        config_id: c.id,
-        name: c.name,
-        endpoint_url: c.server.endpoint_url,
-        vault_api_key_id: c.server.vault_api_key_id,
-        timeout_ms: c.timeout_ms,
-        max_retries: c.max_retries,
-        retry_backoff_ms: c.retry_backoff_ms,
-        priority: c.priority,
-        is_active: c.is_active,
-        capabilities: c.server.capabilities,
-      }));
-      setMcpServers(mappedConfigs);
-      console.log(`[AgentEdit:${id}] Successfully fetched ${mappedConfigs.length} MCP configurations.`);
+      if (!configData) {
+        // No configuration found for this agent
+        console.log(`[AgentEdit:${id}] No MCP configuration found for this agent.`);
+        setMcpEnabled(false);
+        setMcpServers([]);
+        setLoading(false);
+        return; 
+      }
+
+      // We found a configuration record
+      const configId = configData.id;
+      setMcpEnabled(configData.is_enabled ?? false);
+      console.log(`[AgentEdit:${id}] Found MCP configuration (ID: ${configId}, Enabled: ${configData.is_enabled}). Fetching servers...`);
+
+      // Fetch the associated servers for this configuration ID
+      const { data: serversData, error: serversError } = await supabase
+        .from('mcp_servers')
+        .select('*') // Select all fields for editing
+        .eq('config_id', configId);
+
+      if (serversError) throw new Error(`Error fetching MCP servers: ${serversError.message}`);
+
+      // NOTE: We are selecting '*' which includes vault_api_key_id.
+      // Ensure this ID is NEVER sent back to the server during update/test/discover
+      // unless specifically intended for a secure backend operation.
+      // The frontend should generally treat the key itself as opaque.
+      console.log(`[AgentEdit:${id}] Fetched ${serversData?.length || 0} MCP servers.`);
+      setMcpServers(serversData || []);
+
     } catch (err: any) {
-      console.error(`[AgentEdit:${id}] Error fetching MCP configurations:`, err);
-      setError('Failed to load MCP configurations.');
+      console.error('[AgentEdit] Error fetching MCP configurations:', err);
+      setError(`Failed to load MCP configurations: ${err.message}`);
+      setMcpEnabled(false);
+      setMcpServers([]);
     } finally {
       setLoading(false);
     }
-  }, [id, user]);
+  }, [id, user]); // Removed supabase from deps as it's stable
+
+  // Fetch MCP Configurations Effect
+  useEffect(() => {
+    if (id && user?.id) {
+      fetchMcpConfigurations();
+    }
+  }, [id, user, fetchMcpConfigurations]); // Dependency fetchMcpConfigurations added
 
   // Add a new MCP Server and Configuration
   const addMcpServer = async (configData: Partial<MCPServerConfig>) => {
