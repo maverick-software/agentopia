@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, Trash2, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, Trash2, Loader2, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -79,9 +79,8 @@ export function AgentEdit() {
   const [loadingDatastores, setLoadingDatastores] = useState(false);
   const [connectingDatastores, setConnectingDatastores] = useState(false);
 
-  // NEW State for MCP Section
-  const [mcpEnabled, setMcpEnabled] = useState(false);
-  const [mcpSectionExpanded, setMcpSectionExpanded] = useState(false);
+  // NEW State for MCP Section - removed mcpEnabled 
+  const [mcpSectionExpanded, setMcpSectionExpanded] = useState(true);
 
   // NEW State for MCP Server Management
   const [mcpServers, setMcpServers] = useState<MCPServerConfig[]>([]);
@@ -91,6 +90,8 @@ export function AgentEdit() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testConnectionResult, setTestConnectionResult] = useState<TestConnectionResult | null>(null);
   const [discoveredCapabilities, setDiscoveredCapabilities] = useState<MCPServerCapabilities | null>(null);
+
+  const [showAssistantModal, setShowAssistantModal] = useState(false);
 
   const fetchAgentAttempts = useRef(0);
   const fetchDatastoresAttempts = useRef(0);
@@ -246,7 +247,7 @@ export function AgentEdit() {
       // Fetch the MCP configuration record linked to this agent_id
       const { data: configData, error: configError } = await supabase
         .from('mcp_configurations') // Query the configurations table directly
-        .select('id, is_enabled')    // Select the config ID and enabled status
+        .select('id')    // Only select the config ID, not the enabled status
         .eq('agent_id', id)        // Filter by the current agent's ID
         .maybeSingle();             // Use maybeSingle as an agent might not have a config yet
 
@@ -255,7 +256,6 @@ export function AgentEdit() {
       if (!configData) {
         // No configuration found for this agent
         console.log(`[AgentEdit:${id}] No MCP configuration found for this agent.`);
-        setMcpEnabled(false);
         setMcpServers([]);
         setLoading(false);
         return; 
@@ -263,8 +263,7 @@ export function AgentEdit() {
 
       // We found a configuration record
       const configId = configData.id;
-      setMcpEnabled(configData.is_enabled ?? false);
-      console.log(`[AgentEdit:${id}] Found MCP configuration (ID: ${configId}, Enabled: ${configData.is_enabled}). Fetching servers...`);
+      console.log(`[AgentEdit:${id}] Found MCP configuration (ID: ${configId}). Fetching servers...`);
 
       // Fetch the associated servers for this configuration ID
       const { data: serversData, error: serversError } = await supabase
@@ -284,7 +283,6 @@ export function AgentEdit() {
     } catch (err: any) {
       console.error('[AgentEdit] Error fetching MCP configurations:', err);
       setError(`Failed to load MCP configurations: ${err.message}`);
-      setMcpEnabled(false);
       setMcpServers([]);
     } finally {
       setLoading(false);
@@ -334,6 +332,7 @@ export function AgentEdit() {
           timeout_ms: configData.timeout_ms,
           max_retries: configData.max_retries,
           retry_backoff_ms: configData.retry_backoff_ms,
+          is_enabled: true, // Always enabled
         })
         .select()
         .single();
@@ -394,6 +393,7 @@ export function AgentEdit() {
           timeout_ms: configData.timeout_ms,
           max_retries: configData.max_retries,
           retry_backoff_ms: configData.retry_backoff_ms,
+          is_enabled: true, // Always enabled
           updated_at: new Date().toISOString(),
         })
         .eq('id', configId)
@@ -632,8 +632,8 @@ export function AgentEdit() {
       }
 
       // Placeholder for MCP config save
-      console.log("TODO: Save MCP Config - Enabled:", mcpEnabled);
-      // Fetch/Upsert mcp_configurations record
+      console.log("TODO: Save MCP Config");
+      // Fetch/Upsert mcp_configurations record with is_enabled always true
       // Delete/Insert/Update mcp_servers records based on UI state
 
       setSaveSuccess(true);
@@ -789,235 +789,191 @@ export function AgentEdit() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Basic Information */}
-          <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+          <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Name
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter agent name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Description
-              </label>
-              <textarea
-                required
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter agent description"
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Personality Template
-              </label>
-              <select
-                required
-                value={formData.personality}
-                onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select a template</option>
-                {personalityTemplates.map(template => (
-                  <option key={template.id} value={template.name}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Discord Configuration */}
-          <div className="bg-gray-800 rounded-lg p-6 space-y-4">
-            <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
-            
-            <DiscordConnect
-              agentId={id || ''}
-              onChannelSelect={(channelId) => setFormData({ 
-                ...formData, 
-                discord_channel: channelId 
-              })}
-              isConnected={Boolean(formData.discord_bot_key && formData.discord_channel)}
-            />
-          </div>
-        </div>
-
-        {/* System Instructions */}
-        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
-          <h2 className="text-xl font-semibold mb-4">System Instructions</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Define the core behavior and capabilities of your AI agent. These instructions set the foundation for how the agent will interact and process information.
-          </p>
-          <div className="h-64 border border-gray-700 rounded-lg overflow-hidden">
-            <MonacoEditor
-              language="markdown"
-              theme="vs-dark"
-              value={formData.system_instructions}
-              onChange={(value) => setFormData({ ...formData, system_instructions: value })}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                wrappingIndent: 'indent',
-                automaticLayout: true,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Assistant Instructions */}
-        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
-          <h2 className="text-xl font-semibold mb-4">Assistant Instructions</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Specify additional context and instructions for the assistant, including any relevant information from datastores or specific behavioral guidelines.
-          </p>
-          <div className="h-64 border border-gray-700 rounded-lg overflow-hidden">
-            <MonacoEditor
-              language="markdown"
-              theme="vs-dark"
-              value={formData.assistant_instructions}
-              onChange={(value) => setFormData({ ...formData, assistant_instructions: value })}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                wrappingIndent: 'indent',
-                automaticLayout: true,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* MCP Connections Section */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <button
-            onClick={() => setMcpSectionExpanded(!mcpSectionExpanded)}
-            className="flex justify-between items-center w-full text-left mb-4"
-          >
-            <h2 className="text-xl font-semibold">MCP Connections / External Tools</h2>
-            {mcpSectionExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-          </button>
-
-          {mcpSectionExpanded && (
-            <div className="space-y-6 pt-4 border-t border-gray-700">
-              {/* Master Enable Toggle */}
-              <div className="flex items-center justify-between bg-gray-700 p-4 rounded-md">
-                <label htmlFor="mcp-enabled" className="font-medium text-gray-200">
-                  Enable MCP Client Functionality
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Name
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setMcpEnabled(!mcpEnabled)}
-                  className={`${mcpEnabled ? 'bg-indigo-600' : 'bg-gray-600'}
-                    relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
-                    transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800`}
-                  role="switch"
-                  aria-checked={mcpEnabled}
-                  id="mcp-enabled"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`${mcpEnabled ? 'translate-x-5' : 'translate-x-0'}
-                      pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
-                  />
-                </button>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter agent name"
+                />
               </div>
 
-              {mcpEnabled ? (
-                <div className="space-y-4">
-                  {/* Server List Table */}
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-700">
-                      <thead className="bg-gray-750">
-                        <tr>
-                          <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Name</th>
-                          <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Endpoint</th>
-                          <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Priority</th>
-                          <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Active</th>
-                          <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-gray-800 divide-y divide-gray-700">
-                        {mcpServers.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
-                              No MCP servers configured.
-                            </td>
-                          </tr>
-                        )}
-                        {mcpServers.map((server) => (
-                          <tr key={server.id} className="hover:bg-gray-750">
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-200">{server.name}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs">{server.endpoint_url}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400">{server.priority}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm">
-                              {server.is_active ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-300">
-                                  Yes
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-300">
-                                  No
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenMcpModal(server)}
-                                className="text-indigo-400 hover:text-indigo-300"
-                                title="Edit Server"
-                              >
-                                <Edit className="h-4 w-4 inline" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteMcpServer(server.config_id!)}
-                                className="text-red-500 hover:text-red-400"
-                                title="Delete Server"
-                              >
-                                <Trash2 className="h-4 w-4 inline" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* Add Server Button */}
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenMcpModal(null)}
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
-                    >
-                      <Plus className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
-                      Add MCP Server
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 text-center py-4">
-                  Enable MCP Client functionality to configure server connections.
-                </p>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Description
+                </label>
+                <textarea
+                  required
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter agent description"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Personality Template
+                </label>
+                <select
+                  required
+                  value={formData.personality}
+                  onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select a template</option>
+                  {personalityTemplates.map(template => (
+                    <option key={template.id} value={template.name}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
+
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                System Instructions
+              </label>
+              <p className="text-xs text-gray-400 mb-2">
+                Define the core behavior and capabilities of your AI agent. These instructions set the foundation for how the agent will interact and process information.
+              </p>
+              <div className="h-48 border border-gray-700 rounded-lg overflow-hidden">
+                <MonacoEditor
+                  language="markdown"
+                  theme="vs-dark"
+                  value={formData.system_instructions}
+                  onChange={(value) => setFormData({ ...formData, system_instructions: value })}
+                  options={{
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    wrappingIndent: 'indent',
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Assistant Instructions
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowAssistantModal(true)}
+                className="w-full flex items-center justify-center px-4 py-2 border border-indigo-500 text-indigo-400 rounded-md hover:bg-indigo-600/20 transition-colors"
+              >
+                <Edit className="w-5 h-5 mr-2" />
+                Edit Assistant Instructions
+              </button>
+            </div>
+          </div>
+
+          {/* Right Column - Contains Discord and MCP */}
+          <div className="space-y-6">
+            {/* Discord Configuration */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
+              
+              <DiscordConnect
+                agentId={id || ''}
+                onChannelSelect={(channelId) => setFormData({ 
+                  ...formData, 
+                  discord_channel: channelId 
+                })}
+                isConnected={Boolean(formData.discord_bot_key && formData.discord_channel)}
+              />
+            </div>
+            
+            {/* MCP Connections Section */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4">MCP Connections / External Tools</h2>
+              
+              {/* Server List Table */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-gray-750">
+                    <tr>
+                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Name</th>
+                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Endpoint</th>
+                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Priority</th>
+                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Active</th>
+                      <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {mcpServers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
+                          No MCP servers configured.
+                        </td>
+                      </tr>
+                    )}
+                    {mcpServers.map((server) => (
+                      <tr key={server.id} className="hover:bg-gray-750">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-200">{server.name}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs">{server.endpoint_url}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400">{server.priority}</td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm">
+                          {server.is_active ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-300">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-300">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMcpModal(server)}
+                            className="text-indigo-400 hover:text-indigo-300"
+                            title="Edit Server"
+                          >
+                            <Edit className="h-4 w-4 inline" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMcpServer(server.config_id!)}
+                            className="text-red-500 hover:text-red-400"
+                            title="Delete Server"
+                          >
+                            <Trash2 className="h-4 w-4 inline" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Add Server Button */}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => handleOpenMcpModal(null)}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
+                >
+                  <Plus className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                  Add MCP Server
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-        {/* End MCP Connections Section */}
       </form>
 
       {/* Datastore Connection Modal */}
@@ -1243,6 +1199,52 @@ export function AgentEdit() {
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assistant Instructions Modal */}
+      {showAssistantModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-3xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Assistant Instructions</h2>
+              <button
+                onClick={() => setShowAssistantModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-400 mb-4">
+              Specify additional context and instructions for the assistant, including any relevant information from datastores or specific behavioral guidelines.
+            </p>
+            
+            <div className="h-96 border border-gray-700 rounded-lg overflow-hidden mb-6">
+              <MonacoEditor
+                language="markdown"
+                theme="vs-dark"
+                value={formData.assistant_instructions}
+                onChange={(value) => setFormData({ ...formData, assistant_instructions: value })}
+                options={{
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                  wrappingIndent: 'indent',
+                  automaticLayout: true,
+                }}
+              />
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowAssistantModal(false)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
