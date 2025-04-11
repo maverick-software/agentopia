@@ -4,9 +4,17 @@ import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, T
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Agent, Datastore } from '../types';
+import type { Agent as AgentType, Datastore } from '../types';
 import { DiscordConnect } from '../components/DiscordConnect';
-import { MCPServerConfig, MCPServerCapabilities } from '../lib/mcp/types';
+import { useAgentMcp } from '../hooks/useAgentMcp';
+import { AgentMcpSection } from '../components/AgentMcpSection';
+
+interface DiscordConnection {
+  guildId: string;
+  channelId: string;
+  guildName?: string;
+  channelName?: string;
+}
 
 interface Agent {
   id: string;
@@ -14,8 +22,8 @@ interface Agent {
   description: string;
   personality: string;
   active: boolean;
-  discord_channel?: string;
-  discord_bot_key?: string;
+  discord_connections?: DiscordConnection[];
+  discord_bot_token_encrypted?: string;
   system_instructions?: string;
   assistant_instructions?: string;
   created_at?: string;
@@ -32,23 +40,6 @@ const personalityTemplates = [
   { id: 'custom', name: 'Custom Template', description: 'Create your own personality template' },
 ];
 
-const DEFAULT_NEW_SERVER_CONFIG: Partial<MCPServerConfig> = {
-  name: '',
-  endpoint_url: '',
-  vault_api_key_id: null,
-  timeout_ms: 5000,
-  max_retries: 3,
-  retry_backoff_ms: 1000,
-  priority: 0,
-  is_active: true,
-};
-
-interface TestConnectionResult {
-    success: boolean;
-    message: string;
-    capabilities?: MCPServerCapabilities | null;
-}
-
 export function AgentEdit() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -63,8 +54,8 @@ export function AgentEdit() {
     name: '',
     description: '',
     personality: '',
-    discord_channel: '',
-    discord_bot_key: '',
+    discord_connections: [],
+    discord_bot_token_encrypted: '',
     system_instructions: '',
     assistant_instructions: '',
     active: true
@@ -79,25 +70,30 @@ export function AgentEdit() {
   const [loadingDatastores, setLoadingDatastores] = useState(false);
   const [connectingDatastores, setConnectingDatastores] = useState(false);
 
-  // NEW State for MCP Section - removed mcpEnabled 
-  const [mcpSectionExpanded, setMcpSectionExpanded] = useState(true);
-
-  // NEW State for MCP Server Management
-  const [mcpServers, setMcpServers] = useState<MCPServerConfig[]>([]);
-  const [showMcpModal, setShowMcpModal] = useState(false);
-  const [editingServer, setEditingServer] = useState<MCPServerConfig | null>(null);
-  const [mcpFormData, setMcpFormData] = useState<Partial<MCPServerConfig>>(DEFAULT_NEW_SERVER_CONFIG);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [testConnectionResult, setTestConnectionResult] = useState<TestConnectionResult | null>(null);
-  const [discoveredCapabilities, setDiscoveredCapabilities] = useState<MCPServerCapabilities | null>(null);
-
   const [showAssistantModal, setShowAssistantModal] = useState(false);
+  const [showSystemModal, setShowSystemModal] = useState(false);
+
+  // Discord state variables
+  const [botToken, setBotToken] = useState('');
+  const [discordLoading, setDiscordLoading] = useState(false);
+  const [discordDisconnecting, setDiscordDisconnecting] = useState(false);
+  const [discordGuilds, setDiscordGuilds] = useState<any[]>([]);
+  const [fetchingGuilds, setFetchingGuilds] = useState(false);
 
   const fetchAgentAttempts = useRef(0);
   const fetchDatastoresAttempts = useRef(0);
   const MAX_FETCH_ATTEMPTS = 5;
 
-  // Reset success message after 3 seconds
+  const {
+    mcpServers, 
+    loading: mcpLoading,
+    error: mcpError,
+    addMcpServer,
+    updateMcpServer,
+    deleteMcpServer,
+    testMcpConnection 
+  } = useAgentMcp(id);
+
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     if (saveSuccess) {
@@ -108,7 +104,6 @@ export function AgentEdit() {
     return () => clearTimeout(timeout);
   }, [saveSuccess]);
 
-  // Fetch Agent Data Effect
   const fetchAgent = useCallback(async (agentId: string, isInitialCall = true) => {
     if (!user?.id) return;
 
@@ -128,6 +123,7 @@ export function AgentEdit() {
       setLoading(true);
       setError(null);
 
+      // Fetch agent data
       const { data: agentData, error: agentError } = await supabase
         .from('agents')
         .select('*')
@@ -138,35 +134,37 @@ export function AgentEdit() {
       if (agentError) throw new Error(agentError.message);
       if (!agentData) throw new Error('Agent not found or access denied');
 
-      setFormData(agentData);
-      setLoading(false); // Stop loading on success
-
-      // Fetch associated datastores (nested call, no separate retry for simplicity here)
-      const { data: connections, error: connectionsError } = await supabase
-        .from('agent_datastores')
-        .select(`datastore_id, datastores:datastore_id (id, type)`)
+      // Fetch Discord connections for this agent
+      const { data: discordConnections, error: discordError } = await supabase
+        .from('agent_discord_connections')
+        .select('guild_id, channel_id')
         .eq('agent_id', agentId);
-      
-      if (connectionsError) throw new Error(connectionsError.message); // Or handle more gracefully
 
-      if (connections) {
-        const vectorStore = connections.find(c => c.datastores?.type === 'pinecone');
-        const knowledgeStore = connections.find(c => c.datastores?.type === 'getzep');
+      if (discordError) throw new Error(discordError.message);
 
-        setSelectedDatastores({
-          vector: vectorStore?.datastore_id,
-          knowledge: knowledgeStore?.datastore_id
-        });
+      // Convert to DiscordConnection format
+      const formattedConnections: DiscordConnection[] = (discordConnections || []).map(conn => ({
+        guildId: conn.guild_id,
+        channelId: conn.channel_id
+      }));
+
+      setFormData({
+        ...agentData,
+        discord_connections: formattedConnections || [],
+      });
+
+      // If we have a Discord token, fetch guilds to get names
+      if (agentData.discord_bot_token_encrypted && formattedConnections.length > 0) {
+        fetchDiscordGuilds();
       }
 
-      // Reset attempts on SUCCESS
-      if (isInitialCall) fetchAgentAttempts.current = 0;
+      setLoading(false);
 
     } catch (err: any) {
       console.error('Error fetching agent:', err);
       if (currentAttempt < MAX_FETCH_ATTEMPTS) {
         const delay = 2000;
-        setTimeout(() => fetchAgent(agentId, false), delay); // Retry
+        setTimeout(() => fetchAgent(agentId, false), delay);
         setError(`Failed to load agent. Retrying... (${currentAttempt}/${MAX_FETCH_ATTEMPTS})`);
       } else {
         setError(`Failed to load agent after ${MAX_FETCH_ATTEMPTS} attempts.`);
@@ -178,12 +176,11 @@ export function AgentEdit() {
 
   useEffect(() => {
     if (isEditing && id) {
-      fetchAgentAttempts.current = 0; // Reset before initial sequence
+      fetchAgentAttempts.current = 0;
       fetchAgent(id, true);
     }
   }, [id, isEditing, user, fetchAgent]);
 
-  // Fetch Datastores List Effect
   const fetchDatastores = useCallback(async (isInitialCall = true) => {
     if (!user?.id) return;
 
@@ -210,15 +207,15 @@ export function AgentEdit() {
 
       if (fetchError) throw fetchError;
 
-      setDatastores(data || []);
-      setLoadingDatastores(false); // Stop loading on success
-      if (isInitialCall) fetchDatastoresAttempts.current = 0; // Reset on success
+      setDatastores((data || []) as Datastore[]);
+      setLoadingDatastores(false);
+      if (isInitialCall) fetchDatastoresAttempts.current = 0;
 
     } catch (err: any) {
       console.error('Error fetching datastores list:', err);
       if (currentAttempt < MAX_FETCH_ATTEMPTS) {
         const delay = 2000;
-        setTimeout(() => fetchDatastores(false), delay); // Retry
+        setTimeout(() => fetchDatastores(false), delay);
         setError(`Failed to load datastore list. Retrying... (${currentAttempt}/${MAX_FETCH_ATTEMPTS})`);
       } else {
         setError(`Failed to load datastore list after ${MAX_FETCH_ATTEMPTS} attempts.`);
@@ -230,321 +227,57 @@ export function AgentEdit() {
 
   useEffect(() => {
     if (showDatastoreModal && datastores.length === 0 && !loadingDatastores) {
-      fetchDatastoresAttempts.current = 0; // Reset before initial sequence
+      fetchDatastoresAttempts.current = 0;
       fetchDatastores(true);
     }
   }, [showDatastoreModal, datastores.length, loadingDatastores, user, fetchDatastores]);
 
-  // *** NEW MCP API Call Functions ***
+  const handleDiscordDisconnectBot = () => {
+    // Call the Edge Function to disconnect the bot
+    disconnectDiscordBot();
+  };
 
-  // Fetch existing MCP configurations for the agent
-  const fetchMcpConfigurations = useCallback(async () => {
-    if (!id || !user?.id) return;
-    console.log(`[AgentEdit:${id}] Fetching MCP configurations...`);
-    setLoading(true); // Use general loading state for now
-    setError(null);
-    try {
-      // Fetch the MCP configuration record linked to this agent_id
-      const { data: configData, error: configError } = await supabase
-        .from('mcp_configurations') // Query the configurations table directly
-        .select('id')    // Only select the config ID, not the enabled status
-        .eq('agent_id', id)        // Filter by the current agent's ID
-        .maybeSingle();             // Use maybeSingle as an agent might not have a config yet
+  const handleAddDiscordChannel = (connection: DiscordConnection) => {
+    setFormData(prevData => {
+      const exists = (prevData.discord_connections ?? []).some(
+        (c) => c.channelId === connection.channelId
+      );
+      if (exists) return prevData;
 
-      if (configError) throw new Error(`Error fetching MCP configuration: ${configError.message}`);
-
-      if (!configData) {
-        // No configuration found for this agent
-        console.log(`[AgentEdit:${id}] No MCP configuration found for this agent.`);
-        setMcpServers([]);
-        setLoading(false);
-        return; 
-      }
-
-      // We found a configuration record
-      const configId = configData.id;
-      console.log(`[AgentEdit:${id}] Found MCP configuration (ID: ${configId}). Fetching servers...`);
-
-      // Fetch the associated servers for this configuration ID
-      const { data: serversData, error: serversError } = await supabase
-        .from('mcp_servers')
-        .select('*') // Select all fields for editing
-        .eq('config_id', configId);
-
-      if (serversError) throw new Error(`Error fetching MCP servers: ${serversError.message}`);
-
-      // NOTE: We are selecting '*' which includes vault_api_key_id.
-      // Ensure this ID is NEVER sent back to the server during update/test/discover
-      // unless specifically intended for a secure backend operation.
-      // The frontend should generally treat the key itself as opaque.
-      console.log(`[AgentEdit:${id}] Fetched ${serversData?.length || 0} MCP servers.`);
-      setMcpServers(serversData || []);
-
-    } catch (err: any) {
-      console.error('[AgentEdit] Error fetching MCP configurations:', err);
-      setError(`Failed to load MCP configurations: ${err.message}`);
-      setMcpServers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [id, user]); // Removed supabase from deps as it's stable
-
-  // Fetch MCP Configurations Effect
-  useEffect(() => {
-    if (id && user?.id) {
-      fetchMcpConfigurations();
-    }
-  }, [id, user, fetchMcpConfigurations]); // Dependency fetchMcpConfigurations added
-
-  // Add a new MCP Server and Configuration
-  const addMcpServer = async (configData: Partial<MCPServerConfig>) => {
-    if (!id || !user?.id) throw new Error("Agent ID or User ID missing");
-    console.log(`[AgentEdit:${id}] Attempting to add MCP server:`, configData.name);
-    setSaving(true);
-    setError(null);
-    try {
-      // 1. Insert into mcp_servers
-      console.log(`[AgentEdit:${id}] Inserting into mcp_servers...`);
-      const { data: serverData, error: serverError } = await supabase
-        .from('mcp_servers')
-        .insert({
-          endpoint_url: configData.endpoint_url,
-          vault_api_key_id: configData.vault_api_key_id || null,
-          // capabilities will be filled by discovery/test later
-        })
-        .select()
-        .single();
-
-      if (serverError) throw serverError;
-      if (!serverData) throw new Error("Failed to create server entry.");
-      console.log(`[AgentEdit:${id}] Server entry created (ID: ${serverData.id}). Inserting into mcp_configurations...`);
-
-      // 2. Insert into mcp_configurations
-      const { data: configEntry, error: configError } = await supabase
-        .from('mcp_configurations')
-        .insert({
-          agent_id: id,
-          user_id: user.id,
-          server_id: serverData.id,
-          name: configData.name,
-          is_active: configData.is_active,
-          priority: configData.priority,
-          timeout_ms: configData.timeout_ms,
-          max_retries: configData.max_retries,
-          retry_backoff_ms: configData.retry_backoff_ms,
-          is_enabled: true, // Always enabled
-        })
-        .select()
-        .single();
-
-      if (configError) throw configError;
-      if (!configEntry) throw new Error("Failed to create configuration entry.");
-      console.log(`[AgentEdit:${id}] Configuration entry created (ID: ${configEntry.id}). Updating local state.`);
-
-      // Add to local state
-      const newServer: MCPServerConfig = {
-        ...DEFAULT_NEW_SERVER_CONFIG, // Apply defaults
-        ...configData, // Apply form data
-        id: serverData.id,
-        config_id: configEntry.id,
-        capabilities: null, // Initially null
+      return {
+        ...prevData,
+        discord_connections: [...(prevData.discord_connections ?? []), connection],
       };
-      setMcpServers(prev => [...prev, newServer]);
-      setSaveSuccess(true);
-      console.log(`[AgentEdit:${id}] Successfully added MCP server: ${configData.name}`);
-
-    } catch (err: any) {
-      console.error(`[AgentEdit:${id}] Error adding MCP server configuration:`, err);
-      setError(`Failed to add MCP server: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
-  // Update an existing MCP Server Configuration
-  const updateMcpServer = async (configId: number, serverId: number, configData: Partial<MCPServerConfig>) => {
-    if (!id || !user?.id) throw new Error("Agent ID or User ID missing");
-    console.log(`[AgentEdit:${id}] Attempting to update MCP config ID: ${configId} (Server ID: ${serverId})`);
-    setSaving(true);
-    setError(null);
-    try {
-      // 1. Update mcp_servers
-      console.log(`[AgentEdit:${id}] Updating mcp_servers (ID: ${serverId})...`);
-      const { error: serverError } = await supabase
-        .from('mcp_servers')
-        .update({
-          endpoint_url: configData.endpoint_url,
-          vault_api_key_id: configData.vault_api_key_id || null,
-          // Note: capabilities are typically updated by discovery/test, not manually here
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', serverId);
-
-      if (serverError) throw serverError;
-      console.log(`[AgentEdit:${id}] Server entry updated. Updating mcp_configurations (ID: ${configId})...`);
-
-      // 2. Update mcp_configurations
-      const { error: configError } = await supabase
-        .from('mcp_configurations')
-        .update({
-          name: configData.name,
-          is_active: configData.is_active,
-          priority: configData.priority,
-          timeout_ms: configData.timeout_ms,
-          max_retries: configData.max_retries,
-          retry_backoff_ms: configData.retry_backoff_ms,
-          is_enabled: true, // Always enabled
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', configId)
-        .eq('agent_id', id); // Ensure ownership
-
-      if (configError) throw configError;
-      console.log(`[AgentEdit:${id}] Configuration entry updated. Updating local state.`);
-
-      // Update local state
-      setMcpServers(prev => prev.map(s => s.config_id === configId ? { ...s, ...configData, id: serverId } : s));
-      setSaveSuccess(true);
-      console.log(`[AgentEdit:${id}] Successfully updated MCP config ID: ${configId}`);
-
-    } catch (err: any) {
-      console.error(`[AgentEdit:${id}] Error updating MCP server configuration:`, err);
-      setError(`Failed to update MCP server: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
+  const handleRemoveDiscordChannel = (channelIdToRemove: string) => {
+    setFormData(prevData => ({
+      ...prevData,
+      discord_connections: (prevData.discord_connections ?? []).filter(
+        (c) => c.channelId !== channelIdToRemove
+      ),
+    }));
   };
 
-  // Delete an MCP Configuration
-  const deleteMcpConfiguration = async (configId: number) => {
-     if (!id || !user?.id) return;
-    console.log(`[AgentEdit:${id}] Attempting to delete MCP config ID: ${configId}`);
-    setSaving(true);
-    setError(null);
-    try {
-        // We rely on RLS and potentially database cascade rules or triggers
-        // to handle the deletion of the mcp_servers entry if it's no longer referenced.
-        // Directly deleting from mcp_configurations based on configId and agent_id.
-        const { error } = await supabase
-            .from('mcp_configurations')
-            .delete()
-            .eq('id', configId)
-            .eq('agent_id', id);
-
-        if (error) throw error;
-
-        setMcpServers(prev => prev.filter(s => s.config_id !== configId));
-        setSaveSuccess(true);
-        console.log(`[AgentEdit:${id}] Successfully deleted MCP config ID: ${configId}`);
-
-    } catch (err: any) {
-        console.error(`[AgentEdit:${id}] Error deleting MCP configuration:`, err);
-        setError(`Failed to delete MCP configuration: ${err.message}`);
-    } finally {
-        setSaving(false);
-    }
+  // Checklist Step 1.9: Implement Remove Guild handler
+  const handleRemoveDiscordGuild = (guildIdToRemove: string) => {
+    setFormData(prevData => ({
+      ...prevData,
+      discord_connections: (prevData.discord_connections ?? []).filter(
+        (c) => c.guildId !== guildIdToRemove
+      ),
+    }));
+    // Note: This only removes frontend state. 
+    // Actual persistence happens on main save.
+    // No separate backend call needed here usually.
   };
 
-  // Call the /test function
-  const testMcpConnection = async (serverConfig: Partial<MCPServerConfig>): Promise<TestConnectionResult | null> => {
-    console.log(`[AgentEdit:${id}] Attempting to test MCP connection for: ${serverConfig.endpoint_url}`);
-    setIsTestingConnection(true);
-    setTestConnectionResult(null);
-    setError(null);
-    try {
-      console.log(`[AgentEdit:${id}] Invoking mcp-server-utils function (/test)...`);
-      
-      // IMPORTANT: Create a config object for the function call *without* sensitive IDs
-      const configForTest = {
-          id: serverConfig.id,
-          config_id: serverConfig.config_id,
-          name: serverConfig.name,
-          endpoint_url: serverConfig.endpoint_url,
-          timeout_ms: serverConfig.timeout_ms,
-          max_retries: serverConfig.max_retries,
-          retry_backoff_ms: serverConfig.retry_backoff_ms,
-          priority: serverConfig.priority,
-          // DO NOT SEND vault_api_key_id or api_key from frontend
-      };
-
-      const { data, error } = await supabase.functions.invoke('mcp-server-utils', {
-        // Pass the cleaned config
-        body: { serverConfig: configForTest }, 
-      });
-
-      if (error) throw error;
-      if (!data) throw new Error("No response data from /test function.");
-      console.log(`[AgentEdit:${id}] Received test connection result:`, data);
-
-      setTestConnectionResult(data as TestConnectionResult);
-      if (data.success && data.capabilities) {
-        console.log(`[AgentEdit:${id}] Test successful, updating capabilities in state.`);
-        setDiscoveredCapabilities(data.capabilities);
-        if (serverConfig.id) {
-          setMcpServers(prev => prev.map(s => s.id === serverConfig.id ? { ...s, capabilities: data.capabilities } : s));
-        }
-      }
-      return data as TestConnectionResult;
-    } catch (err: any) {
-      console.error(`[AgentEdit:${id}] Error testing MCP connection:`, err);
-      const errorMessage = `Failed to test connection: ${err.message || 'Unknown error'}`;
-      setError(errorMessage);
-      setTestConnectionResult({ success: false, message: errorMessage });
-      return null;
-    } finally {
-      setIsTestingConnection(false);
-    }
+  // Update temporary function to use our new method
+  const handleTempConnectSuccess = (token: string) => {
+    // Connect the Discord bot using our new Edge Function
+    connectDiscordBot(token);
   };
-
-  // Call the /discover function
-  const discoverMcpCapabilities = async (serverConfig: Partial<MCPServerConfig>) => {
-    console.log(`[AgentEdit:${id}] Attempting to discover MCP capabilities for: ${serverConfig.endpoint_url}`);
-    setIsTestingConnection(true);
-    setDiscoveredCapabilities(null);
-    setError(null);
-    try {
-      console.log(`[AgentEdit:${id}] Invoking mcp-server-utils function (/discover)...`);
-      
-      // IMPORTANT: Create a config object for the function call *without* sensitive IDs
-      const configForDiscovery = {
-          id: serverConfig.id,
-          config_id: serverConfig.config_id,
-          name: serverConfig.name,
-          endpoint_url: serverConfig.endpoint_url,
-          timeout_ms: serverConfig.timeout_ms,
-          max_retries: serverConfig.max_retries,
-          retry_backoff_ms: serverConfig.retry_backoff_ms,
-          priority: serverConfig.priority,
-          // DO NOT SEND vault_api_key_id or api_key from frontend
-      };
-
-      const { data, error } = await supabase.functions.invoke('mcp-server-utils/discover', {
-         // Pass the cleaned config
-        body: { serverConfig: configForDiscovery },
-      });
-      
-      if (error) throw error;
-      if (!data || !data.success || !data.capabilities) {
-        throw new Error(data?.message || "Discovery failed or did not return capabilities.");
-      }
-      console.log(`[AgentEdit:${id}] Received discovered capabilities:`, data.capabilities);
-
-      setDiscoveredCapabilities(data.capabilities);
-      if (serverConfig.id) {
-        console.log(`[AgentEdit:${id}] Updating capabilities in local server list state.`);
-        setMcpServers(prev => prev.map(s => s.id === serverConfig.id ? { ...s, capabilities: data.capabilities } : s));
-      }
-      setError(null);
-
-    } catch (err: any) {
-      console.error(`[AgentEdit:${id}] Error discovering MCP capabilities:`, err);
-      setError(`Failed to discover capabilities: ${err.message}`);
-    } finally {
-      setIsTestingConnection(false);
-    }
-  };
-
-  // *** End NEW MCP API Call Functions ***
 
   const handleConnectDatastores = async () => {
     if (!id || !user?.id) return;
@@ -553,7 +286,6 @@ export function AgentEdit() {
       setConnectingDatastores(true);
       setError(null);
 
-      // Remove existing connections
       const { error: deleteError } = await supabase
         .from('agent_datastores')
         .delete()
@@ -561,7 +293,6 @@ export function AgentEdit() {
 
       if (deleteError) throw deleteError;
 
-      // Add new connections
       const connections = [];
       if (selectedDatastores.vector) {
         connections.push({
@@ -593,6 +324,127 @@ export function AgentEdit() {
     }
   };
 
+  // Function to connect Discord bot token
+  const connectDiscordBot = async (token: string) => {
+    if (!id || !token.trim()) {
+      setError('Agent ID and bot token are required');
+      return;
+    }
+
+    setDiscordLoading(true);
+    setError(null);
+    try {
+      // Call the discord-connect Edge Function
+      const { data, error } = await supabase.functions.invoke('discord-connect', {
+        body: { agentId: id, botToken: token },
+      });
+      
+      if (error) throw new Error(error.message || 'Failed to connect Discord bot');
+      
+      console.log('Discord bot connected successfully');
+      // Update local state
+      setFormData(prevData => ({
+        ...prevData,
+        discord_token_encrypted: 'connected', // Just a placeholder to show it's connected
+      }));
+      
+      // Fetch guilds and channels after successful connection
+      await fetchDiscordGuilds();
+      
+    } catch (err: any) {
+      console.error('Discord connection error:', err);
+      setError(err.message || 'Failed to connect to Discord');
+    } finally {
+      setDiscordLoading(false);
+      setBotToken(''); // Clear token for security
+    }
+  };
+
+  // Function to disconnect Discord bot
+  const disconnectDiscordBot = async () => {
+    if (!id) return;
+    
+    setDiscordDisconnecting(true);
+    setError(null);
+    try {
+      // Call the discord-disconnect Edge Function
+      const { data, error } = await supabase.functions.invoke('discord-disconnect', {
+        body: { agentId: id },
+      });
+      
+      if (error) throw new Error(error.message || 'Failed to disconnect Discord bot');
+      
+      console.log('Discord bot disconnected successfully');
+      // Update local state
+      setFormData(prevData => ({
+        ...prevData,
+        discord_token_encrypted: '',
+        discord_connections: [],
+      }));
+      
+      // Clear guilds data
+      setDiscordGuilds([]);
+      
+    } catch (err: any) {
+      console.error('Discord disconnection error:', err);
+      setError(err.message || 'Failed to disconnect Discord bot');
+    } finally {
+      setDiscordDisconnecting(false);
+    }
+  };
+
+  // Function to fetch Discord guilds and channels
+  const fetchDiscordGuilds = async () => {
+    if (!id) return;
+    
+    setFetchingGuilds(true);
+    setError(null);
+    try {
+      // Construct the function URL with the query parameter
+      const functionName = 'discord-get-bot-guilds';
+      const queryParams = new URLSearchParams({ agentId: id });
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; // Get base URL from env
+      if (!supabaseUrl) throw new Error('Supabase URL not configured in environment variables.');
+      const invokeUrl = `${supabaseUrl}/functions/v1/${functionName}?${queryParams.toString()}`;
+
+      // Call the discord-get-bot-guilds Edge Function using fetch
+      // We need to use fetch directly to control the URL with query params
+      // supabase.functions.invoke doesn't easily support adding query params
+      const response = await fetch(invokeUrl, {
+         method: 'GET', // Or POST if your function requires it, but GET seems appropriate
+         headers: {
+          // Include Authorization header if needed based on function/RLS setup
+          'Authorization': `Bearer ${ (await supabase.auth.getSession()).data.session?.access_token }`, 
+          'Content-Type': 'application/json' 
+        }
+      });
+
+      if (!response.ok) {
+         const errorBody = await response.text();
+         throw new Error(`Failed to fetch Discord guilds (${response.status}): ${errorBody}`);
+      }
+
+      const data = await response.json();
+
+      // Original invoke call - replaced by fetch
+      // const { data, error } = await supabase.functions.invoke('discord-get-bot-guilds', {
+      //   headers: {
+      //     'agentId': id // This was incorrect
+      //   }
+      // });
+      // if (error) throw new Error(error.message || 'Failed to fetch Discord guilds');
+      
+      console.log('Discord guilds fetched successfully:', data);
+      setDiscordGuilds(data || []);
+      
+    } catch (err: any) {
+      console.error('Discord guilds fetch error:', err);
+      setError(err.message || 'Failed to fetch Discord guilds and channels');
+    } finally {
+      setFetchingGuilds(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -603,15 +455,18 @@ export function AgentEdit() {
         throw new Error('User not authenticated');
       }
 
-      const agentData = {
-        ...formData,
+      const { discord_connections, ...agentData } = formData;
+      const agentSaveData = {
+        ...agentData,
         user_id: user.id,
       };
 
+      // Create or update the agent
+      let agentId = id;
       if (isEditing) {
         const { error: updateError } = await supabase
           .from('agents')
-          .update(agentData)
+          .update(agentSaveData)
           .eq('id', id)
           .eq('user_id', user.id);
 
@@ -619,22 +474,68 @@ export function AgentEdit() {
       } else {
         const { data, error: insertError } = await supabase
           .from('agents')
-          .insert([agentData])
+          .insert([agentSaveData])
           .select()
           .single();
 
         if (insertError) throw new Error(insertError.message);
         
-        // If creating new agent, update the URL to edit mode
         if (data) {
+          agentId = data.id;
+          // Navigate to the edit page for the new agent
           navigate(`/agents/${data.id}`, { replace: true });
         }
       }
 
-      // Placeholder for MCP config save
-      console.log("TODO: Save MCP Config");
-      // Fetch/Upsert mcp_configurations record with is_enabled always true
-      // Delete/Insert/Update mcp_servers records based on UI state
+      // Only handle Discord connections if we have an agent ID
+      if (agentId && discord_connections?.length) {
+        // First, fetch existing connections
+        const { data: existingConnections, error: fetchError } = await supabase
+          .from('agent_discord_connections')
+          .select('id, channel_id')
+          .eq('agent_id', agentId);
+        
+        if (fetchError) throw new Error(fetchError.message);
+        
+        // Get the list of channel IDs we need to create
+        const existingChannelIds = (existingConnections || []).map(conn => conn.channel_id);
+        const selectedChannelIds = discord_connections.map(conn => conn.channelId);
+        
+        // Determine connections to create and delete
+        const channelsToCreate = discord_connections.filter(
+          conn => !existingChannelIds.includes(conn.channelId)
+        );
+        const connectionsToDelete = (existingConnections || []).filter(
+          conn => !selectedChannelIds.includes(conn.channel_id)
+        );
+        
+        // Create any new connections
+        if (channelsToCreate.length > 0) {
+          const newConnectionsData = channelsToCreate.map(conn => ({
+            agent_id: agentId,
+            guild_id: conn.guildId,
+            channel_id: conn.channelId
+          }));
+          
+          const { error: insertError } = await supabase
+            .from('agent_discord_connections')
+            .insert(newConnectionsData);
+            
+          if (insertError) throw new Error(insertError.message);
+        }
+        
+        // Delete any removed connections
+        if (connectionsToDelete.length > 0) {
+          const idsToDelete = connectionsToDelete.map(conn => conn.id);
+          
+          const { error: deleteError } = await supabase
+            .from('agent_discord_connections')
+            .delete()
+            .in('id', idsToDelete);
+            
+          if (deleteError) throw new Error(deleteError.message);
+        }
+      }
 
       setSaveSuccess(true);
     } catch (err) {
@@ -644,72 +545,6 @@ export function AgentEdit() {
       setSaving(false);
     }
   };
-
-  // --- MCP Modal Handlers ---
-  const handleOpenMcpModal = (server: MCPServerConfig | null) => {
-    if (server) {
-      setEditingServer(server);
-      setMcpFormData(server);
-      setDiscoveredCapabilities(server.capabilities || null);
-    } else {
-      setEditingServer(null);
-      setMcpFormData(DEFAULT_NEW_SERVER_CONFIG);
-      setDiscoveredCapabilities(null);
-    }
-    setTestConnectionResult(null); // Clear previous test results
-    setShowMcpModal(true);
-  };
-
-  const handleCloseMcpModal = () => {
-    setShowMcpModal(false);
-    setEditingServer(null);
-    setMcpFormData(DEFAULT_NEW_SERVER_CONFIG);
-    setTestConnectionResult(null);
-    setDiscoveredCapabilities(null);
-    setError(null); // Clear any modal-specific errors
-  };
-
-  const handleMcpFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    const checked = (e.target as HTMLInputElement).checked;
-
-    setMcpFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : (type === 'number' ? Number(value) : value),
-    }));
-  };
-
-  // UPDATED: Uses addMcpServer or updateMcpServer
-  const handleSaveMcpServer = async () => {
-    if (editingServer) {
-      await updateMcpServer(editingServer.config_id!, editingServer.id!, mcpFormData);
-    } else {
-      await addMcpServer(mcpFormData);
-    }
-    // Close modal only if there wasn't an error during save
-    if (!error) {
-      handleCloseMcpModal();
-    }
-  };
-
-  // UPDATED: Uses deleteMcpConfiguration
-  const handleDeleteMcpServer = async (configId: number) => {
-    if (window.confirm('Are you sure you want to delete this MCP configuration?')) {
-      await deleteMcpConfiguration(configId);
-    }
-  };
-
-  // UPDATED: Uses testMcpConnection
-  const handleTestConnection = async () => {
-    await testMcpConnection(mcpFormData);
-    // Result and capabilities are set within testMcpConnection
-  };
-
-  // TODO: Potentially add a separate handler/button for discoverMcpCapabilities if needed
-  // const handleDiscoverCapabilities = async () => {
-  //   await discoverMcpCapabilities(mcpFormData);
-  // };
-  // --- End MCP Modal Handlers ---
 
   if (!user) {
     return (
@@ -788,7 +623,6 @@ export function AgentEdit() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Basic Information */}
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
             
@@ -841,142 +675,68 @@ export function AgentEdit() {
               </div>
             </div>
 
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                System Instructions
-              </label>
-              <p className="text-xs text-gray-400 mb-2">
-                Define the core behavior and capabilities of your AI agent. These instructions set the foundation for how the agent will interact and process information.
+            <div className="mt-6 space-y-4">
+              <h3 className="text-lg font-medium text-gray-200">Agent Instructions</h3>
+              <p className="text-sm text-gray-400">
+                Configure the agent's core behavior (System Instructions) and provide additional context or specific guidelines (Assistant Instructions) via the editors below.
               </p>
-              <div className="h-48 border border-gray-700 rounded-lg overflow-hidden">
-                <MonacoEditor
-                  language="markdown"
-                  theme="vs-dark"
-                  value={formData.system_instructions}
-                  onChange={(value) => setFormData({ ...formData, system_instructions: value })}
-                  options={{
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                    wrappingIndent: 'indent',
-                    automaticLayout: true,
-                  }}
-                />
+              <div className="flex space-x-4">
+                <button
+                  type="button"
+                  onClick={() => setShowSystemModal(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
+                >
+                  <Edit className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                  Edit System Instructions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAssistantModal(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
+                >
+                  <Edit className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
+                  Edit Assistant Instructions
+                </button>
               </div>
-            </div>
-
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Assistant Instructions
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowAssistantModal(true)}
-                className="w-full flex items-center justify-center px-4 py-2 border border-indigo-500 text-indigo-400 rounded-md hover:bg-indigo-600/20 transition-colors"
-              >
-                <Edit className="w-5 h-5 mr-2" />
-                Edit Assistant Instructions
-              </button>
             </div>
           </div>
 
-          {/* Right Column - Contains Discord and MCP */}
           <div className="space-y-6">
-            {/* Discord Configuration */}
             <div className="bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
               
               <DiscordConnect
                 agentId={id || ''}
-                onChannelSelect={(channelId) => setFormData({ 
-                  ...formData, 
-                  discord_channel: channelId 
-                })}
-                isConnected={Boolean(formData.discord_bot_key && formData.discord_channel)}
+                isConnected={Boolean(formData.discord_bot_token_encrypted)}
+                connections={formData.discord_connections ?? []}
+                onAddChannel={handleAddDiscordChannel}
+                onRemoveChannel={handleRemoveDiscordChannel}
+                onRemoveGuild={handleRemoveDiscordGuild}
+                onDisconnectBot={handleDiscordDisconnectBot}
+                onConnectSuccess={handleTempConnectSuccess}
+                guilds={discordGuilds}
+                loading={discordLoading}
+                disconnecting={discordDisconnecting}
+                fetchingGuilds={fetchingGuilds}
+                onFetchGuilds={fetchDiscordGuilds}
+                botToken={botToken}
+                onBotTokenChange={(token: string) => setBotToken(token)}
               />
             </div>
             
-            {/* MCP Connections Section */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">MCP Connections / External Tools</h2>
-              
-              {/* Server List Table */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                  <thead className="bg-gray-750">
-                    <tr>
-                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Name</th>
-                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Endpoint</th>
-                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Priority</th>
-                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Active</th>
-                      <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {mcpServers.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
-                          No MCP servers configured.
-                        </td>
-                      </tr>
-                    )}
-                    {mcpServers.map((server) => (
-                      <tr key={server.id} className="hover:bg-gray-750">
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-200">{server.name}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs">{server.endpoint_url}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400">{server.priority}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm">
-                          {server.is_active ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-300">
-                              Yes
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-300">
-                              No
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenMcpModal(server)}
-                            className="text-indigo-400 hover:text-indigo-300"
-                            title="Edit Server"
-                          >
-                            <Edit className="h-4 w-4 inline" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMcpServer(server.config_id!)}
-                            className="text-red-500 hover:text-red-400"
-                            title="Delete Server"
-                          >
-                            <Trash2 className="h-4 w-4 inline" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Add Server Button */}
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => handleOpenMcpModal(null)}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
-                >
-                  <Plus className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
-                  Add MCP Server
-                </button>
-              </div>
-            </div>
+            <AgentMcpSection 
+              mcpServers={mcpServers}
+              onAddServer={addMcpServer}
+              onUpdateServer={updateMcpServer}
+              onDeleteServer={deleteMcpServer}
+              onTestConnection={testMcpConnection}
+              loading={mcpLoading}
+              error={mcpError}
+            />
           </div>
         </div>
       </form>
 
-      {/* Datastore Connection Modal */}
       {showDatastoreModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl">
@@ -994,7 +754,6 @@ export function AgentEdit() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Vector Datastore Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Vector Datastore (Pinecone)
@@ -1017,7 +776,6 @@ export function AgentEdit() {
                   </select>
                 </div>
 
-                {/* Knowledge Graph Datastore Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Knowledge Graph (GetZep)
@@ -1063,148 +821,51 @@ export function AgentEdit() {
         </div>
       )}
 
-      {/* MCP Server Configuration Modal */}
-      {showMcpModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 transition-opacity duration-300">
-          <div className="flex items-end sm:items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            {/* Background overlay, show/hide based on modal state. */}
-            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-              <div className="absolute inset-0 bg-gray-800 opacity-75"></div>
+      {showSystemModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-3xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">System Instructions</h2>
+              <button
+                onClick={() => setShowSystemModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
-
-            {/* This element is to trick the browser into centering the modal contents. */}
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-            {/* Modal panel, show/hide based on modal state. */}
-            <div className="inline-block align-bottom bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <h3 className="text-lg leading-6 font-medium text-gray-100 mb-4" id="modal-title">
-                      {editingServer ? 'Edit MCP Server' : 'Add MCP Server'}
-                    </h3>
-                    <div className="mt-2 space-y-4">
-                      {/* Form Fields */}
-                      <div>
-                        <label htmlFor="mcp-name" className="block text-sm font-medium text-gray-300 mb-1">Name</label>
-                        <input
-                          type="text"
-                          name="name"
-                          id="mcp-name"
-                          value={mcpFormData.name || ''}
-                          onChange={handleMcpFormChange}
-                          required
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="mcp-endpoint" className="block text-sm font-medium text-gray-300 mb-1">Endpoint URL</label>
-                        <input
-                          type="url"
-                          name="endpoint_url"
-                          id="mcp-endpoint"
-                          value={mcpFormData.endpoint_url || ''}
-                          onChange={handleMcpFormChange}
-                          required
-                          placeholder="https://your-mcp-server.com/api"
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="mcp-apikey" className="block text-sm font-medium text-gray-300 mb-1">API Key (Stored in Vault)</label>
-                        <input
-                          type="password" /* Use password type */
-                          name="api_key_input" /* Use a different name for input to avoid direct state binding */
-                          id="mcp-apikey"
-                          placeholder={editingServer ? "Key set (********)" : "Enter key to store in Vault"} // Indicate if set
-                          onChange={(e) => {
-                             // TODO: Handle API Key input - likely store separately before vaulting
-                             // For now, this input doesn't directly map to vault_api_key_id
-                             console.log("API Key input changed (not saved directly):");
-                          }}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                         <p className="mt-1 text-xs text-gray-400">Enter a new key to update the one stored securely in the Vault. Leave blank to keep existing key.</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="mcp-timeout" className="block text-sm font-medium text-gray-300 mb-1">Timeout (ms)</label>
-                            <input type="number" name="timeout_ms" id="mcp-timeout" value={mcpFormData.timeout_ms ?? 5000} onChange={handleMcpFormChange} min="0" required className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
-                         <div>
-                            <label htmlFor="mcp-maxretries" className="block text-sm font-medium text-gray-300 mb-1">Max Retries</label>
-                            <input type="number" name="max_retries" id="mcp-maxretries" value={mcpFormData.max_retries ?? 3} onChange={handleMcpFormChange} min="0" required className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
-                         <div>
-                            <label htmlFor="mcp-backoff" className="block text-sm font-medium text-gray-300 mb-1">Backoff (ms)</label>
-                            <input type="number" name="retry_backoff_ms" id="mcp-backoff" value={mcpFormData.retry_backoff_ms ?? 1000} onChange={handleMcpFormChange} min="0" required className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
-                         <div>
-                            <label htmlFor="mcp-priority" className="block text-sm font-medium text-gray-300 mb-1">Priority</label>
-                            <input type="number" name="priority" id="mcp-priority" value={mcpFormData.priority ?? 0} onChange={handleMcpFormChange} required className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
-                      </div>
-                       <div className="flex items-center">
-                            <input id="mcp-active" name="is_active" type="checkbox" checked={mcpFormData.is_active ?? true} onChange={handleMcpFormChange} className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-500 rounded bg-gray-700" />
-                            <label htmlFor="mcp-active" className="ml-2 block text-sm text-gray-300">Active</label>
-                        </div>
-
-                      {/* Test Connection Result */}
-                      {testConnectionResult && (
-                        <div className={`flex items-center p-3 rounded-md text-sm ${testConnectionResult.success ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'}`}>
-                            {testConnectionResult.success ? <CheckCircle className="h-5 w-5 mr-2" /> : <AlertTriangle className="h-5 w-5 mr-2" />}
-                            {testConnectionResult.message}
-                        </div>
-                      )}
-
-                      {/* Discovered Capabilities Display */}
-                      {discoveredCapabilities && (
-                          <div className="mt-4 p-3 bg-gray-700 rounded-md">
-                              <h4 className="text-sm font-medium text-gray-300 mb-2">Discovered Server Capabilities:</h4>
-                              <pre className="text-xs text-gray-400 whitespace-pre-wrap break-all bg-gray-800 p-2 rounded">
-                                  {JSON.stringify(discoveredCapabilities, null, 2)}
-                              </pre>
-                          </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse items-center">
-                 <button
-                  type="button"
-                  onClick={handleSaveMcpServer}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-700 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Save Server
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={isTestingConnection}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-500 shadow-sm px-4 py-2 bg-gray-600 text-base font-medium text-gray-200 hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-700 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                >
-                  {isTestingConnection ? (
-                      <><Loader2 className="animate-spin h-5 w-5 mr-2" /> Testing...</>
-                  ) : (
-                     'Test Connection'
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCloseMcpModal}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-600 shadow-sm px-4 py-2 bg-gray-700 text-base font-medium text-gray-300 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-700 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
+            
+            <p className="text-sm text-gray-400 mb-4">
+              Define the core behavior and capabilities of your AI agent. These instructions set the foundation for how the agent will interact and process information.
+            </p>
+            
+            <div className="h-96 border border-gray-700 rounded-lg overflow-hidden mb-6">
+              <MonacoEditor
+                language="markdown"
+                theme="vs-dark"
+                value={formData.system_instructions}
+                onChange={(value) => setFormData({ ...formData, system_instructions: value })}
+                options={{
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                  wrappingIndent: 'indent',
+                  automaticLayout: true,
+                }}
+              />
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowSystemModal(false)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Assistant Instructions Modal */}
       {showAssistantModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-3xl">

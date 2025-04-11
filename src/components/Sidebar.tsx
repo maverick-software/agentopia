@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
+  LayoutDashboard,
   Users, Database, Brain, Activity, Settings,
   LogOut, Bot, PanelLeftClose, PanelRightClose
 } from 'lucide-react';
@@ -15,6 +16,7 @@ interface SidebarProps {
 }
 
 const navItems = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/agents', icon: Users, label: 'Agents' },
   { to: '/datastores', icon: Database, label: 'Datastores' },
   { to: '/mcp', icon: Brain, label: 'MCP' },
