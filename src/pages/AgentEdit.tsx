@@ -728,8 +728,8 @@ export function AgentEdit() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="p-6 overflow-x-hidden">
+      <div className="flex justify-between items-center mb-6">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigate('/agents')}
@@ -781,7 +781,7 @@ export function AgentEdit() {
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md">
+        <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md mb-6">
           {error}
         </div>
       )}
