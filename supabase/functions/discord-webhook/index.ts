@@ -38,16 +38,34 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Find agent by channel ID
-    const { data: agent, error: agentError } = await supabaseClient
-      .from('agents')
-      .select('*')
-      .eq('discord_channel', data.channel_id)
-      .single();
+    // Find the connection record for the incoming channel ID
+    console.log(`[discord-webhook] Looking for agent connection for channel: ${data.channel_id}`);
+    const { data: connectionData, error: connectionError } = await supabaseClient
+      .from('agent_discord_connections')
+      .select(`
+        agent_id,
+        agents (*)
+      `)
+      .eq('channel_id', data.channel_id)
+      .maybeSingle(); // Use maybeSingle as a channel might not be connected
 
-    if (agentError || !agent) {
-      throw new Error('Agent not found for this channel');
+    if (connectionError) {
+        console.error(`[discord-webhook] Error fetching agent connection for channel ${data.channel_id}:`, connectionError);
+        throw new Error(`Database error checking channel connection: ${connectionError.message}`);
     }
+
+    if (!connectionData || !connectionData.agents) {
+      // It's normal for messages to come from channels not connected to an agent.
+      // Log this and exit gracefully.
+      console.log(`[discord-webhook] No active agent found for channel ${data.channel_id}. Ignoring message.`);
+      return new Response(JSON.stringify({ success: true, message: 'No agent for this channel' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+      });
+    }
+    
+    // Extract the agent data from the nested structure
+    const agent = connectionData.agents;
+    console.log(`[discord-webhook] Found agent ${agent.id} (${agent.name}) connected to channel ${data.channel_id}`);
 
     // Don't respond to bot messages
     if (data.author.bot) {
