@@ -244,18 +244,29 @@ export function DiscordConnect({
 
   // Helper to group connections by guild
   const groupedConnections = useMemo(() => {
+    // Ensure guilds data is available for name lookup
+    const guildMap = new Map(guilds.map(g => [g.id, { name: g.name, channels: new Map(g.channels.map(c => [c.id, c.name])) }]));
+
     return connections.reduce((acc, conn) => {
       const guildId = conn.guildId;
       if (!acc[guildId]) {
-        // Try to find guild name from fetched guilds or use stored name
-        const guildInfo = guilds.find(g => g.id === guildId);
-        const name = conn.guildName || guildInfo?.name || guildId;
+        // Lookup guild name from the fetched guilds data
+        const guildInfo = guildMap.get(guildId);
+        const name = guildInfo?.name || guildId; // Use ID as fallback
         acc[guildId] = { guildId: guildId, name: name, channels: [] };
       }
-      acc[guildId].channels.push(conn);
+      // Enrich the connection object with looked-up names before pushing
+      const guildInfo = guildMap.get(guildId);
+      const channelName = guildInfo?.channels.get(conn.channelId) || conn.channelId; // Use ID as fallback
+      
+      acc[guildId].channels.push({
+          ...conn, // Keep original guildId, channelId
+          guildName: guildInfo?.name || guildId, // Add looked-up guild name
+          channelName: channelName // Add looked-up channel name
+      });
       return acc;
     }, {} as Record<string, { guildId: string; name: string; channels: DiscordConnection[] }>);
-  }, [connections, guilds]);
+  }, [connections, guilds]); // Depend on both connections from DB and guilds from API
 
   // Step 2.4.2 / 2.4.3: Update Add Server handler & implement selection logic
   const handleAddServerClick = () => {
@@ -459,15 +470,14 @@ export function DiscordConnect({
               {/* List Connected Channels for this Guild */}
               <div>
                 <h4 className="text-md font-medium text-gray-300 mb-2">Connected Channels</h4>
-                {connections.filter(c => c.guildId === modalGuildId).length === 0 ? (
+                {(groupedConnections[modalGuildId]?.channels ?? []).length === 0 ? (
                    <p className="text-sm text-gray-500 italic">No channels connected for this server yet.</p>
                 ) : (
                   <ul className="space-y-1 max-h-40 overflow-y-auto pr-2">
-                    {connections
-                      .filter(c => c.guildId === modalGuildId)
+                    {(groupedConnections[modalGuildId]?.channels ?? [])
                       .map(conn => (
                         <li key={conn.channelId} className="flex items-center justify-between bg-gray-700/60 px-3 py-1.5 rounded">
-                          <span className="text-sm text-gray-200 truncate">#{conn.channelName || conn.channelId}</span>
+                          <span className="text-sm text-gray-200 truncate">#{conn.channelName}</span>
                           <button 
                             onClick={() => onRemoveChannel(conn.channelId)}
                             className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"

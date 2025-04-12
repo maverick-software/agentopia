@@ -16,39 +16,11 @@ interface DiscordGuild {
   channels: DiscordChannel[];
 }
 
-// Placeholder for your decryption function - **IMPLEMENT THIS**
-// It should take the encrypted base64 string and return the decrypted token
-// Use environment variables for the secret key
-async function decryptToken(encryptedToken: string): Promise<string> {
-  console.warn("decryptToken function needs to be implemented using environment variables for the key!");
-  // Example using Web Crypto API (AES-GCM) - Adapt as needed!
-  // This is a simplified example and requires proper IV handling and key management.
-  /*
-  try {
-    const encryptionKey = Deno.env.get('DISCORD_BOT_TOKEN_ENCRYPTION_KEY');
-    if (!encryptionKey) throw new Error('Encryption key not set in environment variables.');
-
-    // Key needs to be imported correctly based on how it was generated/stored
-    // const key = await crypto.subtle.importKey(...) 
-
-    // Assuming the encrypted string contains IV + ciphertext, properly encoded
-    // const iv = ... // Extract IV
-    // const ciphertext = ... // Extract ciphertext
-
-    // const decrypted = await crypto.subtle.decrypt(
-    //   { name: 'AES-GCM', iv: iv },
-    //   key,
-    //   ciphertext
-    // );
-    // return new TextDecoder().decode(decrypted);
-  } catch (error) {
-    console.error('Decryption failed:', error);
-    throw new Error('Failed to decrypt bot token.');
-  }
-  */
-  // ** TEMPORARY - Replace with actual decryption **
-  // This assumes the stored value is NOT encrypted for testing ONLY
-   return atob(encryptedToken); // Very insecure if used in production!
+// TEMPORARY - Use only while encryption is not implemented in discord-connect
+async function decryptToken(supposedlyEncryptedToken: string): Promise<string> {
+  console.warn("decryptToken function is NOT decrypting; returning raw value. Implement encryption in discord-connect.");
+  // Simply return the raw token since discord-connect isn't encrypting yet
+  return supposedlyEncryptedToken;
 }
 
 serve(async (req) => {
@@ -65,65 +37,70 @@ serve(async (req) => {
       throw new Error('agentId query parameter is required.');
     }
 
-    // 2. Create Supabase client
+    // 2. Create Supabase client using Service Role Key to bypass RLS
     const supabase = createClient(
-      // Supabase API URL - env var recommended
       Deno.env.get('SUPABASE_URL') ?? '',
-      // Supabase API ANON KEY - env var recommended
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      // Create client with Auth context of the user that called the function?
-      // Or use service role key if function needs broader permissions?
-      // Using anon key for now, assuming RLS allows reading the token.
-      // { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Use Service Role Key
     );
 
-    // 3. Fetch encrypted token
+    // 3. Fetch the token
     const { data: agentData, error: agentError } = await supabase
       .from('agents')
-      .select('discord_bot_token_encrypted')
+      .select('discord_bot_key') // Use correct column name
       .eq('id', agentId)
       .maybeSingle(); // Use maybeSingle in case agent not found
 
     if (agentError) throw agentError;
-    if (!agentData?.discord_bot_token_encrypted) {
-      console.log(`No encrypted bot token found for agent ${agentId}`);
-      // Return empty array if no token is configured
+    if (!agentData?.discord_bot_key) {
+      console.log(`No bot token found in discord_bot_key for agent ${agentId}`);
       return new Response(JSON.stringify([]), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200, 
       });
     }
 
-    // 4. Decrypt token (Replace placeholder)
-    const decryptedToken = await decryptToken(agentData.discord_bot_token_encrypted);
+    // 4. Use the token (no decryption needed for now)
+    const botToken = agentData.discord_bot_key; 
+    console.log(`[discord-get-bot-guilds] Using token (last 5 chars): ...${botToken.slice(-5)} to fetch guilds.`);
 
     // 5. Call Discord API - Get Guilds
     const discordApiBase = 'https://discord.com/api/v10';
+    console.log(`[discord-get-bot-guilds] Fetching from: ${discordApiBase}/users/@me/guilds`);
     const guildsResponse = await fetch(`${discordApiBase}/users/@me/guilds`, {
       headers: {
-        Authorization: `Bot ${decryptedToken}`,
+        Authorization: `Bot ${botToken}`,
       },
     });
 
+    const responseStatus = guildsResponse.status;
+    const responseText = await guildsResponse.text();
+    console.log(`[discord-get-bot-guilds] Discord API response status: ${responseStatus}`);
+    console.log(`[discord-get-bot-guilds] Discord API response body: ${responseText}`);
+
     if (!guildsResponse.ok) {
-      const errorBody = await guildsResponse.text();
-      console.error(`Discord API error (${guildsResponse.status}): ${errorBody}`);
+      console.error(`Discord API error (${responseStatus}): ${responseText}`); 
       throw new Error(`Failed to fetch guilds from Discord: ${guildsResponse.statusText}`);
     }
 
-    const guilds: any[] = await guildsResponse.json();
-
-    // 6. Fetch Channels for each Guild (Optional but needed for UI)
+    let guilds: any[] = [];
+    try {
+        guilds = JSON.parse(responseText);
+        console.log(`[discord-get-bot-guilds] Parsed guilds successfully:`, guilds);
+    } catch (parseError) {
+        console.error(`[discord-get-bot-guilds] Failed to parse Discord API response JSON:`, parseError);
+        throw new Error(`Failed to parse guilds response from Discord.`);
+    }
+    
+    // 6. Fetch Channels for each Guild (rest of the original logic...)
     const guildsWithChannels: DiscordGuild[] = [];
     for (const guild of guilds) {
         try {
             const channelsResponse = await fetch(`${discordApiBase}/guilds/${guild.id}/channels`, {
-                headers: { Authorization: `Bot ${decryptedToken}` },
+                headers: { Authorization: `Bot ${botToken}` },
             });
 
             if (!channelsResponse.ok) {
                 console.warn(`Failed to fetch channels for guild ${guild.id} (${guild.name}). Status: ${channelsResponse.status}`);
-                // Skip this guild or add with empty channels? Let's add with empty for now.
                  guildsWithChannels.push({
                     id: guild.id,
                     name: guild.name,
@@ -133,7 +110,6 @@ serve(async (req) => {
             }
 
             const channels: DiscordChannel[] = (await channelsResponse.json())
-                // Filter for standard text channels (type 0) - Adjust if other types needed
                 .filter((ch: any) => ch.type === 0) 
                 .map((ch: any) => ({ id: ch.id, name: ch.name }));
 
@@ -144,7 +120,6 @@ serve(async (req) => {
             });
         } catch (channelError) {
              console.warn(`Error processing channels for guild ${guild.id} (${guild.name}):`, channelError);
-             // Add guild with empty channels if channel fetch fails
              guildsWithChannels.push({
                 id: guild.id,
                 name: guild.name,
@@ -152,12 +127,13 @@ serve(async (req) => {
             });
         }
     }
-
+    
     // 7. Return formatted data
     return new Response(JSON.stringify(guildsWithChannels), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    })
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+    });
+
   } catch (error) {
     console.error("Error in discord-get-bot-guilds function:", error);
     return new Response(JSON.stringify({ error: error.message }), {

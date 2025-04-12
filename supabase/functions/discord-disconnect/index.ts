@@ -41,10 +41,10 @@ serve(async (req) => {
     )
 
     // Transaction: Update agent and delete connections
-    // 1. Set discord_bot_token_encrypted to NULL in agents table
+    // 1. Set discord_bot_key to NULL in agents table
     const { error: updateAgentError } = await supabaseAdmin
       .from('agents')
-      .update({ discord_bot_token_encrypted: null })
+      .update({ discord_bot_key: null })
       .eq('id', agentId)
 
     if (updateAgentError) {

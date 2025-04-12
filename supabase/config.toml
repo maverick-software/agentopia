@@ -26,11 +26,11 @@ verify_enabled = true
 [auth.mfa.phone]
 enroll_enabled = false
 
-[auth.rate_limit.email_sent]
-limit = 1
-interval = "1m0s"
-max_frequency = "1m0s"
-otp_length = 6
-otp_expiry = 86400
+# [auth.rate_limit.email_sent]
+# limit = 1
+# interval = "1m0s"
+# max_frequency = "1m0s"
+# otp_length = 6
+# otp_expiry = 86400
 
 [auth.email.template]

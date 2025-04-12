@@ -2,8 +2,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import OpenAI from 'npm:openai@4.28.0';
 import { RateLimiter } from 'npm:limiter@3.0.0';
 import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
-import { MCPManager } from '../../src/lib/mcp/manager.ts';
-import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults } from '../../src/lib/mcp/types.ts';
+import { MCPManager } from './manager.ts';
+import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults } from './types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

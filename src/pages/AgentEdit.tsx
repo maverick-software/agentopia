@@ -8,6 +8,7 @@ import type { Agent as AgentType, Datastore } from '../types';
 import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
+import { useDebouncedCallback } from 'use-debounce';
 
 interface DiscordConnection {
   guildId: string;
@@ -23,7 +24,7 @@ interface Agent {
   personality: string;
   active: boolean;
   discord_connections?: DiscordConnection[];
-  discord_bot_token_encrypted?: string;
+  discord_bot_key?: string;
   system_instructions?: string;
   assistant_instructions?: string;
   created_at?: string;
@@ -55,7 +56,7 @@ export function AgentEdit() {
     description: '',
     personality: '',
     discord_connections: [],
-    discord_bot_token_encrypted: '',
+    discord_bot_key: '',
     system_instructions: '',
     assistant_instructions: '',
     active: true
@@ -94,6 +95,48 @@ export function AgentEdit() {
     testMcpConnection 
   } = useAgentMcp(id);
 
+  const fetchDiscordGuildsLogic = async () => {
+    if (!id) return;
+    
+    setFetchingGuilds(true);
+    try {
+      const functionName = 'discord-get-bot-guilds';
+      const queryParams = new URLSearchParams({ agentId: id });
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) throw new Error('Supabase URL not configured in environment variables.');
+      const invokeUrl = `${supabaseUrl}/functions/v1/${functionName}?${queryParams.toString()}`;
+
+      const response = await fetch(invokeUrl, {
+         method: 'GET',
+         headers: {
+          'Authorization': `Bearer ${ (await supabase.auth.getSession()).data.session?.access_token }`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+         const errorBody = await response.text();
+         throw new Error(`Failed to fetch Discord guilds (${response.status}): ${errorBody}`);
+      }
+
+      const data = await response.json();
+      console.log('Discord guilds fetched successfully (debounced):', data);
+      setDiscordGuilds(data || []);
+      
+    } catch (err: any) {
+      console.error('Discord guilds fetch error (debounced):', err);
+      if (err.message.includes('Failed to fetch Discord guilds')) {
+        setError(err.message || 'Failed to fetch Discord guilds and channels');
+      } else {
+        console.error('Non-guild-fetch error during debounced fetch:', err);
+      }
+    } finally {
+      setFetchingGuilds(false);
+    }
+  };
+
+  const debouncedFetchDiscordGuilds = useDebouncedCallback(fetchDiscordGuildsLogic, 500);
+
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     if (saveSuccess) {
@@ -131,6 +174,8 @@ export function AgentEdit() {
         .eq('user_id', user.id)
         .single();
 
+      console.log('[fetchAgent] Received agent data from Supabase:', agentData);
+
       if (agentError) throw new Error(agentError.message);
       if (!agentData) throw new Error('Agent not found or access denied');
 
@@ -148,14 +193,18 @@ export function AgentEdit() {
         channelId: conn.channel_id
       }));
 
+      console.log('[fetchAgent] Setting form data with agent data:', agentData);
       setFormData({
         ...agentData,
         discord_connections: formattedConnections || [],
       });
 
-      // If we have a Discord token, fetch guilds to get names
-      if (agentData.discord_bot_token_encrypted && formattedConnections.length > 0) {
-        fetchDiscordGuilds();
+      // If we have a Discord token, always fetch guilds to get names
+      if (agentData.discord_bot_key) {
+        console.log('[fetchAgent] discord_bot_key found, calling debouncedFetchDiscordGuilds.');
+        debouncedFetchDiscordGuilds();
+      } else {
+        console.log('[fetchAgent] discord_bot_key NOT found.');
       }
 
       setLoading(false);
@@ -172,7 +221,7 @@ export function AgentEdit() {
         setLoading(false);
       }
     }
-  }, [user]);
+  }, [user, debouncedFetchDiscordGuilds]);
 
   useEffect(() => {
     if (isEditing && id) {
@@ -342,21 +391,18 @@ export function AgentEdit() {
       if (error) throw new Error(error.message || 'Failed to connect Discord bot');
       
       console.log('Discord bot connected successfully');
-      // Update local state
-      setFormData(prevData => ({
-        ...prevData,
-        discord_token_encrypted: 'connected', // Just a placeholder to show it's connected
-      }));
       
-      // Fetch guilds and channels after successful connection
-      await fetchDiscordGuilds();
+      // Fetch full agent data to sync state and trigger guild fetch via fetchAgent's logic
+      await fetchAgent(id, true);
       
     } catch (err: any) {
       console.error('Discord connection error:', err);
       setError(err.message || 'Failed to connect to Discord');
+      // Optional: Revert UI state if connect failed?
+      // setFormData(prev => ({ ...prev, discord_bot_key: '' })); 
     } finally {
       setDiscordLoading(false);
-      setBotToken(''); // Clear token for security
+      setBotToken(''); // Clear input token for security
     }
   };
 
@@ -378,7 +424,7 @@ export function AgentEdit() {
       // Update local state
       setFormData(prevData => ({
         ...prevData,
-        discord_token_encrypted: '',
+        discord_bot_key: '',
         discord_connections: [],
       }));
       
@@ -390,58 +436,6 @@ export function AgentEdit() {
       setError(err.message || 'Failed to disconnect Discord bot');
     } finally {
       setDiscordDisconnecting(false);
-    }
-  };
-
-  // Function to fetch Discord guilds and channels
-  const fetchDiscordGuilds = async () => {
-    if (!id) return;
-    
-    setFetchingGuilds(true);
-    setError(null);
-    try {
-      // Construct the function URL with the query parameter
-      const functionName = 'discord-get-bot-guilds';
-      const queryParams = new URLSearchParams({ agentId: id });
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; // Get base URL from env
-      if (!supabaseUrl) throw new Error('Supabase URL not configured in environment variables.');
-      const invokeUrl = `${supabaseUrl}/functions/v1/${functionName}?${queryParams.toString()}`;
-
-      // Call the discord-get-bot-guilds Edge Function using fetch
-      // We need to use fetch directly to control the URL with query params
-      // supabase.functions.invoke doesn't easily support adding query params
-      const response = await fetch(invokeUrl, {
-         method: 'GET', // Or POST if your function requires it, but GET seems appropriate
-         headers: {
-          // Include Authorization header if needed based on function/RLS setup
-          'Authorization': `Bearer ${ (await supabase.auth.getSession()).data.session?.access_token }`, 
-          'Content-Type': 'application/json' 
-        }
-      });
-
-      if (!response.ok) {
-         const errorBody = await response.text();
-         throw new Error(`Failed to fetch Discord guilds (${response.status}): ${errorBody}`);
-      }
-
-      const data = await response.json();
-
-      // Original invoke call - replaced by fetch
-      // const { data, error } = await supabase.functions.invoke('discord-get-bot-guilds', {
-      //   headers: {
-      //     'agentId': id // This was incorrect
-      //   }
-      // });
-      // if (error) throw new Error(error.message || 'Failed to fetch Discord guilds');
-      
-      console.log('Discord guilds fetched successfully:', data);
-      setDiscordGuilds(data || []);
-      
-    } catch (err: any) {
-      console.error('Discord guilds fetch error:', err);
-      setError(err.message || 'Failed to fetch Discord guilds and channels');
-    } finally {
-      setFetchingGuilds(false);
     }
   };
 
@@ -707,7 +701,7 @@ export function AgentEdit() {
               
               <DiscordConnect
                 agentId={id || ''}
-                isConnected={Boolean(formData.discord_bot_token_encrypted)}
+                isConnected={Boolean(formData.discord_bot_key)}
                 connections={formData.discord_connections ?? []}
                 onAddChannel={handleAddDiscordChannel}
                 onRemoveChannel={handleRemoveDiscordChannel}
@@ -718,7 +712,7 @@ export function AgentEdit() {
                 loading={discordLoading}
                 disconnecting={discordDisconnecting}
                 fetchingGuilds={fetchingGuilds}
-                onFetchGuilds={fetchDiscordGuilds}
+                onFetchGuilds={debouncedFetchDiscordGuilds}
                 botToken={botToken}
                 onBotTokenChange={(token: string) => setBotToken(token)}
               />

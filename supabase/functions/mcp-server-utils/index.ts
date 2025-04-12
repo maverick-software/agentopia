@@ -6,8 +6,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { MCPServerConfig } from '../../../src/lib/mcp/types.ts'; // Adjust path as needed
-import { MCPClient } from '../../../src/lib/mcp/client.ts'; // Adjust path as needed
+import { MCPServerConfig } from './types.ts'; // Changed path to local
+import { MCPClient } from './client.ts'; // Changed path to local
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

@@ -72,13 +72,25 @@ serve(async (req) => {
     )
 
     // Update the agent record with the encrypted token
-    const { error: updateError } = await supabaseClient
+    console.log(`[discord-connect] Attempting to update agent ${agentId} with token.`);
+    const { data: updateData, error: updateError } = await supabaseClient
       .from('agents')
-      .update({ discord_bot_token_encrypted: encryptedToken })
+      .update({ discord_bot_key: encryptedToken })
       .eq('id', agentId)
+      .select();
+
+    // Log the result of the update
+    console.log(`[discord-connect] Update result for agent ${agentId}:`, { updateData, updateError });
 
     if (updateError) {
+      console.error(`[discord-connect] Database update failed for agent ${agentId}:`, updateError);
       throw new Error(`Failed to update agent: ${updateError.message}`)
+    }
+    
+    if (!updateData || updateData.length === 0) {
+        console.warn(`[discord-connect] Database update did not affect any rows for agent ${agentId}. Does the agent exist?`);
+        // Consider throwing an error here if an update was expected
+        // throw new Error(`Agent with ID ${agentId} not found for update.`);
     }
 
     return new Response(
