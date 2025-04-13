@@ -1,0 +1,23 @@
+{
+  "name": "discord-gateway-client",
+  "version": "1.0.0",
+  "description": "Handles Discord Gateway connection for Agentopia",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [
+    "discord",
+    "gateway",
+    "bot",
+    "agentopia"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
+  }
+} 

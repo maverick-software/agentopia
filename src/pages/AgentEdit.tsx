@@ -4,7 +4,7 @@ import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, T
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Agent as AgentType, Datastore } from '../types';
+import type { Agent as AgentType, Datastore, AgentDiscordConnection } from '../types';
 import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
@@ -17,18 +17,12 @@ interface DiscordConnection {
   channelName?: string;
 }
 
-interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  personality: string;
-  active: boolean;
-  discord_connections?: DiscordConnection[];
-  discord_bot_key?: string;
-  system_instructions?: string;
-  assistant_instructions?: string;
-  created_at?: string;
-  updated_at?: string;
+interface Agent extends AgentType {
+  discord_app_id?: string;
+  discord_public_key?: string;
+  inactivity_timeout_minutes?: number;
+  worker_status?: string;
+  discord_connections?: AgentDiscordConnection[];
 }
 
 const personalityTemplates = [
@@ -51,16 +45,6 @@ export function AgentEdit() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Partial<Agent>>({
-    name: '',
-    description: '',
-    personality: '',
-    discord_connections: [],
-    discord_bot_key: '',
-    system_instructions: '',
-    assistant_instructions: '',
-    active: true
-  });
 
   const [showDatastoreModal, setShowDatastoreModal] = useState(false);
   const [datastores, setDatastores] = useState<Datastore[]>([]);
@@ -74,8 +58,25 @@ export function AgentEdit() {
   const [showAssistantModal, setShowAssistantModal] = useState(false);
   const [showSystemModal, setShowSystemModal] = useState(false);
 
-  // Discord state variables
-  const [botToken, setBotToken] = useState('');
+  const [agentFormData, setAgentFormData] = useState<Partial<AgentType>>({
+    name: '',
+    description: '',
+    personality: '',
+    system_instructions: '',
+    assistant_instructions: '',
+    active: true,
+    discord_app_id: '',
+    discord_public_key: ''
+  });
+
+  const [discordConnectionData, setDiscordConnectionData] = useState<Partial<AgentDiscordConnection>>({
+    id: undefined,
+    guild_id: undefined,
+    inactivity_timeout_minutes: 10,
+    worker_status: 'inactive'
+  });
+  const [discordBotKey, setDiscordBotKey] = useState('');
+
   const [discordLoading, setDiscordLoading] = useState(false);
   const [discordDisconnecting, setDiscordDisconnecting] = useState(false);
   const [discordGuilds, setDiscordGuilds] = useState<any[]>([]);
@@ -95,6 +96,8 @@ export function AgentEdit() {
     testMcpConnection 
   } = useAgentMcp(id);
 
+  // Comment out the entire function for now to stop guild fetching
+  /*
   const fetchDiscordGuildsLogic = async () => {
     if (!id) return;
     
@@ -134,8 +137,15 @@ export function AgentEdit() {
       setFetchingGuilds(false);
     }
   };
+  */
+  // Replace with a dummy function
+  const fetchDiscordGuildsLogic = async () => { 
+      console.log("Guild fetching currently disabled for debugging."); 
+      return Promise.resolve(); 
+  };
 
-  const debouncedFetchDiscordGuilds = useDebouncedCallback(fetchDiscordGuildsLogic, 500);
+  // Debounced version also uses the dummy function
+  const debouncedFetchDiscordGuilds = useDebouncedCallback(fetchDiscordGuildsLogic, 2000);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -147,13 +157,10 @@ export function AgentEdit() {
     return () => clearTimeout(timeout);
   }, [saveSuccess]);
 
-  const fetchAgent = useCallback(async (agentId: string, isInitialCall = true) => {
+  const fetchAgent = useCallback(async (agentId: string) => {
     if (!user?.id) return;
 
     let currentAttempt = fetchAgentAttempts.current + 1;
-    if (isInitialCall) { currentAttempt = 1; fetchAgentAttempts.current = 0; }
-    fetchAgentAttempts.current = currentAttempt;
-
     if (currentAttempt > MAX_FETCH_ATTEMPTS) {
       console.warn(`Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for agent ${agentId}. Aborting.`);
       setError(`Failed to load agent after ${MAX_FETCH_ATTEMPTS} attempts.`);
@@ -166,10 +173,9 @@ export function AgentEdit() {
       setLoading(true);
       setError(null);
 
-      // Fetch agent data
       const { data: agentData, error: agentError } = await supabase
         .from('agents')
-        .select('*')
+        .select('*, discord_app_id, discord_public_key')
         .eq('id', agentId)
         .eq('user_id', user.id)
         .single();
@@ -179,56 +185,62 @@ export function AgentEdit() {
       if (agentError) throw new Error(agentError.message);
       if (!agentData) throw new Error('Agent not found or access denied');
 
-      // Fetch Discord connections for this agent
-      const { data: discordConnections, error: discordError } = await supabase
-        .from('agent_discord_connections')
-        .select('guild_id, channel_id')
-        .eq('agent_id', agentId);
-
-      if (discordError) throw new Error(discordError.message);
-
-      // Convert to DiscordConnection format
-      const formattedConnections: DiscordConnection[] = (discordConnections || []).map(conn => ({
-        guildId: conn.guild_id,
-        channelId: conn.channel_id
-      }));
-
-      console.log('[fetchAgent] Setting form data with agent data:', agentData);
-      setFormData({
+      setAgentFormData({
         ...agentData,
-        discord_connections: formattedConnections || [],
+        system_instructions: agentData.system_instructions || '',
+        assistant_instructions: agentData.assistant_instructions || '',
+        active: agentData.active,
+        discord_app_id: agentData.discord_app_id || '',
+        discord_public_key: agentData.discord_public_key || '',
       });
+      setDiscordBotKey(agentData.discord_bot_key || '');
 
-      // If we have a Discord token, always fetch guilds to get names
-      if (agentData.discord_bot_key) {
-        console.log('[fetchAgent] discord_bot_key found, calling debouncedFetchDiscordGuilds.');
-        debouncedFetchDiscordGuilds();
+      const { data: connectionData, error: connectionError } = await supabase
+        .from('agent_discord_connections')
+        .select('id, guild_id, inactivity_timeout_minutes, worker_status')
+        .eq('agent_id', agentId)
+        .maybeSingle();
+
+      if (connectionError) throw new Error(connectionError.message);
+
+      if (connectionData) {
+        setDiscordConnectionData({
+          id: connectionData.id,
+          guild_id: connectionData.guild_id,
+          inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes || 10,
+          worker_status: connectionData.worker_status || 'inactive',
+        });
       } else {
-        console.log('[fetchAgent] discord_bot_key NOT found.');
+        setDiscordConnectionData({
+          id: undefined,
+          guild_id: undefined,
+          inactivity_timeout_minutes: 10,
+          worker_status: 'inactive'
+        });
       }
 
       setLoading(false);
 
     } catch (err: any) {
-      console.error('Error fetching agent:', err);
-      if (currentAttempt < MAX_FETCH_ATTEMPTS) {
-        const delay = 2000;
-        setTimeout(() => fetchAgent(agentId, false), delay);
-        setError(`Failed to load agent. Retrying... (${currentAttempt}/${MAX_FETCH_ATTEMPTS})`);
-      } else {
-        setError(`Failed to load agent after ${MAX_FETCH_ATTEMPTS} attempts.`);
-        console.error('Max fetch attempts reached for agent after error.');
-        setLoading(false);
-      }
+      console.error('Error fetching agent or connection:', err);
+      setError(`Failed to load agent data: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
-  }, [user, debouncedFetchDiscordGuilds]);
+  }, [user]);
+
+  // Get stable user ID for the effect dependency
+  const userId = user?.id;
 
   useEffect(() => {
-    if (isEditing && id) {
+    console.log("[AgentEdit] useEffect for fetchAgent running. Dependencies:", { id, isEditing, userId });
+    // Use userId in the check as well
+    if (isEditing && id && userId) { 
       fetchAgentAttempts.current = 0;
-      fetchAgent(id, true);
+      fetchAgent(id);
     }
-  }, [id, isEditing, user, fetchAgent]);
+    // Use stable userId in dependency array instead of the whole user object
+  }, [id, isEditing, userId]);
 
   const fetchDatastores = useCallback(async (isInitialCall = true) => {
     if (!user?.id) return;
@@ -282,12 +294,11 @@ export function AgentEdit() {
   }, [showDatastoreModal, datastores.length, loadingDatastores, user, fetchDatastores]);
 
   const handleDiscordDisconnectBot = () => {
-    // Call the Edge Function to disconnect the bot
     disconnectDiscordBot();
   };
 
   const handleAddDiscordChannel = (connection: DiscordConnection) => {
-    setFormData(prevData => {
+    setDiscordConnectionData(prevData => {
       const exists = (prevData.discord_connections ?? []).some(
         (c) => c.channelId === connection.channelId
       );
@@ -301,7 +312,7 @@ export function AgentEdit() {
   };
 
   const handleRemoveDiscordChannel = (channelIdToRemove: string) => {
-    setFormData(prevData => ({
+    setDiscordConnectionData(prevData => ({
       ...prevData,
       discord_connections: (prevData.discord_connections ?? []).filter(
         (c) => c.channelId !== channelIdToRemove
@@ -309,22 +320,16 @@ export function AgentEdit() {
     }));
   };
 
-  // Checklist Step 1.9: Implement Remove Guild handler
   const handleRemoveDiscordGuild = (guildIdToRemove: string) => {
-    setFormData(prevData => ({
+    setDiscordConnectionData(prevData => ({
       ...prevData,
       discord_connections: (prevData.discord_connections ?? []).filter(
         (c) => c.guildId !== guildIdToRemove
       ),
     }));
-    // Note: This only removes frontend state. 
-    // Actual persistence happens on main save.
-    // No separate backend call needed here usually.
   };
 
-  // Update temporary function to use our new method
   const handleTempConnectSuccess = (token: string) => {
-    // Connect the Discord bot using our new Edge Function
     connectDiscordBot(token);
   };
 
@@ -373,7 +378,6 @@ export function AgentEdit() {
     }
   };
 
-  // Function to connect Discord bot token
   const connectDiscordBot = async (token: string) => {
     if (!id || !token.trim()) {
       setError('Agent ID and bot token are required');
@@ -383,162 +387,207 @@ export function AgentEdit() {
     setDiscordLoading(true);
     setError(null);
     try {
-      // Call the discord-connect Edge Function
-      const { data, error } = await supabase.functions.invoke('discord-connect', {
-        body: { agentId: id, botToken: token },
-      });
-      
-      if (error) throw new Error(error.message || 'Failed to connect Discord bot');
-      
-      console.log('Discord bot connected successfully');
-      
-      // Fetch full agent data to sync state and trigger guild fetch via fetchAgent's logic
-      await fetchAgent(id, true);
-      
+      const { error: tokenSaveError } = await supabase
+        .from('agents')
+        .update({ discord_bot_key: token })
+        .eq('id', id)
+        .eq('user_id', user?.id);
+      if (tokenSaveError) throw tokenSaveError;
+
+      setDiscordBotKey(token);
+
+      // REMOVE automatic fetch trigger here
+      // debouncedFetchDiscordGuilds();
+
     } catch (err: any) {
-      console.error('Discord connection error:', err);
-      setError(err.message || 'Failed to connect to Discord');
-      // Optional: Revert UI state if connect failed?
-      // setFormData(prev => ({ ...prev, discord_bot_key: '' })); 
+      console.error("Error connecting bot (saving token):", err);
+      setError(`Failed to save bot token: ${err.message}`);
     } finally {
       setDiscordLoading(false);
-      setBotToken(''); // Clear input token for security
     }
   };
 
-  // Function to disconnect Discord bot
   const disconnectDiscordBot = async () => {
     if (!id) return;
     
     setDiscordDisconnecting(true);
     setError(null);
+    let tokenClearError: any = null;
+    let connectionDeleteError: any = null;
+    
     try {
-      // Call the discord-disconnect Edge Function
-      const { data, error } = await supabase.functions.invoke('discord-disconnect', {
-        body: { agentId: id },
-      });
-      
-      if (error) throw new Error(error.message || 'Failed to disconnect Discord bot');
-      
-      console.log('Discord bot disconnected successfully');
-      // Update local state
-      setFormData(prevData => ({
-        ...prevData,
-        discord_bot_key: '',
-        discord_connections: [],
-      }));
-      
-      // Clear guilds data
-      setDiscordGuilds([]);
-      
+      // 1. Attempt to clear bot token in DB
+      console.log(`Clearing bot token for agent: ${id}`);
+      const { error } = await supabase
+        .from('agents')
+        .update({ discord_bot_key: null })
+        .eq('id', id)
+        .eq('user_id', user?.id);
+      tokenClearError = error;
+      if (tokenClearError) {
+          console.error("Error clearing bot token in DB:", tokenClearError);
+      }
+
+      // 2. Attempt to delete the connection configuration row
+      console.log(`Attempting to delete discord connection details for agent: ${id}`);
+      const { error: delError } = await supabase
+        .from('agent_discord_connections')
+        .delete()
+        .eq('agent_id', id);
+      connectionDeleteError = delError;
+      if (connectionDeleteError) { 
+        console.error("Error deleting connection details from DB:", connectionDeleteError);
+      }
+
     } catch (err: any) {
-      console.error('Discord disconnection error:', err);
-      setError(err.message || 'Failed to disconnect Discord bot');
+      console.error("Unexpected error during disconnect DB operations:", err);
+      setError(`An unexpected error occurred: ${err.message}`);
     } finally {
+      // 3. Re-fetch agent data to update UI state based on actual DB state
+      console.log("Re-fetching agent data after disconnect attempt...");
+      if (id) { // Ensure we still have the agent ID
+        await fetchAgent(id);
+      } else {
+         // If ID was somehow lost, fallback to clearing state manually
+         console.warn("Agent ID missing, clearing state manually.");
+         setDiscordBotKey('');
+         setDiscordGuilds([]);
+         setDiscordConnectionData(prev => ({
+           id: undefined, agent_id: undefined, guild_id: undefined,
+           inactivity_timeout_minutes: 10, worker_status: 'inactive'
+         }));
+      }
+      
+      // Report persistent errors if they occurred
+      if (tokenClearError || connectionDeleteError) {
+          // Keep existing error if one occurred during DB ops, otherwise set new one
+          if (!error) {
+             setError("Failed to fully update database state during disconnect. Please check console logs.");
+          }
+      }
+      
       setDiscordDisconnecting(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user?.id) return;
+
+    setSaving(true);
+    setError(null);
+    setSaveSuccess(false);
+
+    const agentUpdateData: Partial<AgentType> & { discord_app_id?: string, discord_public_key?: string } = {
+      name: agentFormData.name,
+      description: agentFormData.description,
+      personality: agentFormData.personality,
+      system_instructions: agentFormData.system_instructions,
+      assistant_instructions: agentFormData.assistant_instructions,
+      active: agentFormData.active,
+      discord_app_id: agentFormData.discord_app_id,
+      discord_public_key: agentFormData.discord_public_key,
+    };
+
+    const connectionUpdateData: Partial<AgentDiscordConnection> = {
+      inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
+      agent_id: id,
+      guild_id: discordConnectionData.guild_id
+    };
+
     try {
-      setSaving(true);
-      setError(null);
-      
-      if (!user?.id) {
-        throw new Error('User not authenticated');
-      }
-
-      const { discord_connections, ...agentData } = formData;
-      const agentSaveData = {
-        ...agentData,
-        user_id: user.id,
-      };
-
-      // Create or update the agent
       let agentId = id;
-      if (isEditing) {
-        const { error: updateError } = await supabase
+
+      if (isEditing && agentId) {
+        const { error: agentSaveError } = await supabase
           .from('agents')
-          .update(agentSaveData)
-          .eq('id', id)
+          .update(agentUpdateData)
+          .eq('id', agentId)
           .eq('user_id', user.id);
-
-        if (updateError) throw new Error(updateError.message);
+        if (agentSaveError) throw new Error(`Agent save error: ${agentSaveError.message}`);
       } else {
-        const { data, error: insertError } = await supabase
+        const { data: newAgent, error: agentCreateError } = await supabase
           .from('agents')
-          .insert([agentSaveData])
-          .select()
+          .insert({ ...agentUpdateData, user_id: user.id })
+          .select('id')
           .single();
-
-        if (insertError) throw new Error(insertError.message);
-        
-        if (data) {
-          agentId = data.id;
-          // Navigate to the edit page for the new agent
-          navigate(`/agents/${data.id}`, { replace: true });
-        }
+        if (agentCreateError) throw new Error(`Agent create error: ${agentCreateError.message}`);
+        if (!newAgent?.id) throw new Error('Failed to get ID for new agent.');
+        agentId = newAgent.id;
       }
 
-      // Only handle Discord connections if we have an agent ID
-      if (agentId && discord_connections?.length) {
-        // First, fetch existing connections
-        const { data: existingConnections, error: fetchError } = await supabase
-          .from('agent_discord_connections')
-          .select('id, channel_id')
-          .eq('agent_id', agentId);
-        
-        if (fetchError) throw new Error(fetchError.message);
-        
-        // Get the list of channel IDs we need to create
-        const existingChannelIds = (existingConnections || []).map(conn => conn.channel_id);
-        const selectedChannelIds = discord_connections.map(conn => conn.channelId);
-        
-        // Determine connections to create and delete
-        const channelsToCreate = discord_connections.filter(
-          conn => !existingChannelIds.includes(conn.channelId)
-        );
-        const connectionsToDelete = (existingConnections || []).filter(
-          conn => !selectedChannelIds.includes(conn.channel_id)
-        );
-        
-        // Create any new connections
-        if (channelsToCreate.length > 0) {
-          const newConnectionsData = channelsToCreate.map(conn => ({
-            agent_id: agentId,
-            guild_id: conn.guildId,
-            channel_id: conn.channelId
-          }));
-          
-          const { error: insertError } = await supabase
-            .from('agent_discord_connections')
-            .insert(newConnectionsData);
-            
-          if (insertError) throw new Error(insertError.message);
-        }
-        
-        // Delete any removed connections
-        if (connectionsToDelete.length > 0) {
-          const idsToDelete = connectionsToDelete.map(conn => conn.id);
-          
-          const { error: deleteError } = await supabase
-            .from('agent_discord_connections')
-            .delete()
-            .in('id', idsToDelete);
-            
-          if (deleteError) throw new Error(deleteError.message);
-        }
+      connectionUpdateData.agent_id = agentId;
+
+      // Conditionally upsert connection details only if required info is present
+      if (
+        connectionUpdateData.agent_id && 
+        connectionUpdateData.guild_id
+      ) {
+        console.log("Upserting Discord connection details:", connectionUpdateData);
+        const { error: connectionSaveError } = await supabase
+           .from('agent_discord_connections')
+           .upsert(connectionUpdateData, { onConflict: 'agent_id' }); // Adjust onConflict if needed
+           // Use 'id' as conflict target if upserting based on existing connection ID
+           // .upsert(connectionUpdateData, { onConflict: 'id' });
+
+        if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
+      } else {
+          console.log("Skipping Discord connection upsert: Missing required details (App ID, Public Key, or Guild ID).");
+          // Optional: Consider deleting the connection row if it exists but details are missing now?
+          // This might happen if the disconnect failed but UI state was cleared.
+          // If connectionUpdateData.id exists but other details are missing, maybe delete?
+          // if (discordConnectionData.id) { ... delete logic ... }
+      }
+
+      // --- TODO: Trigger Backend Command Registration (WBS 1.3) ---
+      // If connection details were successfully saved and contain app_id/bot_key
+      // IMPORTANT: Need the connection ID from the upsert result or fetch
+      const savedConnectionId = discordConnectionData.id; // Or get from upsert result if possible
+      if (
+          connectionUpdateData.agent_id && 
+          discordBotKey && 
+          agentId && 
+          savedConnectionId // Check if we have the connection ID
+      ) { 
+         console.log("TODO: Call register-agent-commands function with connection ID:", savedConnectionId);
+         // await supabase.functions.invoke('register-agent-commands', {
+         //   body: { connectionId: savedConnectionId },
+         // });
       }
 
       setSaveSuccess(true);
-    } catch (err) {
-      console.error('Error saving agent:', err);
-      setError('Failed to save agent. Please try again.');
+      if (!isEditing && agentId) {
+        navigate(`/agents/${agentId}/edit`);
+      } else {
+        fetchAgent(agentId);
+      }
+
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setError(err.message || 'Failed to save agent data');
     } finally {
       setSaving(false);
     }
   };
+
+  // --- Handlers for DiscordConnect ---
+
+  // Update connection data state when inputs change in DiscordConnect
+  // Remove useCallback for testing
+  const handleDiscordConnectionChange = (field: keyof AgentDiscordConnection, value: any) => {
+      console.log(`[AgentEdit] handleDiscordConnectionChange: field=${String(field)}, value=${value}`);
+      setDiscordConnectionData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDiscordBotKeyChange = useCallback((token: string) => {
+    setDiscordBotKey(token);
+  }, []);
+
+  // This handler now updates the MAIN agent form data state
+  const handleAgentDetailsChange = useCallback((field: keyof AgentType, value: any) => {
+      console.log(`[AgentEdit] handleAgentDetailsChange: field=${String(field)}, value=${value}`);
+      setAgentFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
 
   if (!user) {
     return (
@@ -555,6 +604,8 @@ export function AgentEdit() {
       </div>
     );
   }
+
+  const interactionEndpointUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
 
   return (
     <div className="p-6 overflow-x-hidden">
@@ -628,8 +679,8 @@ export function AgentEdit() {
                 <input
                   type="text"
                   required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={agentFormData.name}
+                  onChange={(e) => setAgentFormData({ ...agentFormData, name: e.target.value })}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Enter agent name"
                 />
@@ -641,8 +692,8 @@ export function AgentEdit() {
                 </label>
                 <textarea
                   required
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  value={agentFormData.description}
+                  onChange={(e) => setAgentFormData({ ...agentFormData, description: e.target.value })}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Enter agent description"
                   rows={3}
@@ -655,8 +706,8 @@ export function AgentEdit() {
                 </label>
                 <select
                   required
-                  value={formData.personality}
-                  onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
+                  value={agentFormData.personality}
+                  onChange={(e) => setAgentFormData({ ...agentFormData, personality: e.target.value })}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select a template</option>
@@ -701,20 +752,24 @@ export function AgentEdit() {
               
               <DiscordConnect
                 agentId={id || ''}
-                isConnected={Boolean(formData.discord_bot_key)}
-                connections={formData.discord_connections ?? []}
-                onAddChannel={handleAddDiscordChannel}
-                onRemoveChannel={handleRemoveDiscordChannel}
-                onRemoveGuild={handleRemoveDiscordGuild}
-                onDisconnectBot={handleDiscordDisconnectBot}
-                onConnectSuccess={handleTempConnectSuccess}
-                guilds={discordGuilds}
+                isConnected={!!discordBotKey}
+                discordAppId={agentFormData.discord_app_id || ''}
+                discordPublicKey={agentFormData.discord_public_key || ''}
+                inactivityTimeoutMinutes={discordConnectionData.inactivity_timeout_minutes || 10}
+                workerStatus={discordConnectionData.worker_status || 'inactive'}
+                interactionEndpointUrl={interactionEndpointUrl}
+                botToken={discordBotKey}
+                onAgentDetailChange={handleAgentDetailsChange}
+                connection={discordConnectionData}
+                onConnectionChange={handleDiscordConnectionChange}
+                onConnect={connectDiscordBot}
+                onDisconnect={disconnectDiscordBot}
                 loading={discordLoading}
                 disconnecting={discordDisconnecting}
                 fetchingGuilds={fetchingGuilds}
-                onFetchGuilds={debouncedFetchDiscordGuilds}
-                botToken={botToken}
-                onBotTokenChange={(token: string) => setBotToken(token)}
+                guilds={discordGuilds}
+                onFetchGuilds={fetchDiscordGuildsLogic}
+                className="mt-4"
               />
             </div>
             
@@ -836,8 +891,8 @@ export function AgentEdit() {
               <MonacoEditor
                 language="markdown"
                 theme="vs-dark"
-                value={formData.system_instructions}
-                onChange={(value) => setFormData({ ...formData, system_instructions: value })}
+                value={agentFormData.system_instructions}
+                onChange={(value) => setAgentFormData({ ...agentFormData, system_instructions: value })}
                 options={{
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,
@@ -881,8 +936,8 @@ export function AgentEdit() {
               <MonacoEditor
                 language="markdown"
                 theme="vs-dark"
-                value={formData.assistant_instructions}
-                onChange={(value) => setFormData({ ...formData, assistant_instructions: value })}
+                value={agentFormData.assistant_instructions}
+                onChange={(value) => setAgentFormData({ ...agentFormData, assistant_instructions: value })}
                 options={{
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,

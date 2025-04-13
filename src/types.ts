@@ -22,11 +22,10 @@ export interface Agent {
 export interface Datastore {
   id: string;
   name: string;
-  description: string;
-  type: 'pinecone' | 'getzep';
-  config: DatastoreConfig;
+  description?: string;
+  type: 'vector' | 'knowledge' | 'file'; 
+  config?: any; // Adjust type as needed
   created_at?: string;
-  updated_at?: string;
 }
 
 export interface DatastoreConfig {
@@ -47,3 +46,30 @@ export interface AgentDatastore {
   datastore_id: string;
   created_at?: string;
 }
+
+export interface AgentDiscordConnection {
+  id?: string;
+  agent_id?: string;
+  guild_id?: string;
+  channel_id?: string | null;
+  discord_app_id?: string;
+  discord_public_key?: string;
+  inactivity_timeout_minutes?: number;
+  worker_status?: 'inactive' | 'activating' | 'active' | 'stopping' | 'error';
+}
+
+// Ensure this type is defined, perhaps in types.ts or here
+// export interface AgentDiscordConnection {
+//   id?: string;
+//   agent_id?: string;
+//   guild_id?: string;
+//   channel_id?: string | null;
+//   discord_app_id?: string;
+//   discord_public_key?: string;
+//   inactivity_timeout_minutes?: number;
+//   worker_status?: 'inactive' | 'activating' | 'active' | 'stopping' | 'error';
+// }
+
+// AgentEdit.tsx modifications done previously
+
+// DiscordConnect.tsx modifications done previously
