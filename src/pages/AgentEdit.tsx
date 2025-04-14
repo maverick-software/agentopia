@@ -758,41 +758,57 @@ export function AgentEdit() {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
-              
-              <DiscordConnect
-                agentId={id || ''}
-                isConnected={!!discordBotKey}
-                discordAppId={agentFormData.discord_app_id || ''}
-                discordPublicKey={agentFormData.discord_public_key || ''}
-                inactivityTimeoutMinutes={discordConnectionData.inactivity_timeout_minutes || 10}
-                workerStatus={discordConnectionData.worker_status || 'inactive'}
-                interactionEndpointUrl={interactionEndpointUrl}
-                botToken={discordBotKey}
-                onAgentDetailChange={handleAgentDetailsChange}
-                connection={discordConnectionData}
-                onConnectionChange={handleDiscordConnectionChange}
-                onConnect={connectDiscordBot}
-                onDisconnect={disconnectDiscordBot}
-                loading={discordLoading}
-                disconnecting={discordDisconnecting}
-                fetchingGuilds={fetchingGuilds}
-                guilds={discordGuilds}
-                onFetchGuilds={fetchDiscordGuildsLogic}
-                className="mt-4"
-              />
-            </div>
+            {/* --- Conditionally Render Discord Section --- */}
+            {id ? (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
+                
+                <DiscordConnect
+                  agentId={id || ''}
+                  isConnected={!!discordBotKey}
+                  discordAppId={agentFormData.discord_app_id || ''}
+                  discordPublicKey={agentFormData.discord_public_key || ''}
+                  connection={discordConnectionData}
+                  onConnectionChange={handleDiscordConnectionChange}
+                  onAgentDetailChange={handleAgentDetailsChange}
+                  interactionEndpointUrl={interactionEndpointUrl}
+                  onConnect={connectDiscordBot}
+                  onDisconnect={disconnectDiscordBot}
+                  loading={discordLoading}
+                  disconnecting={discordDisconnecting}
+                  fetchingGuilds={fetchingGuilds}
+                  className="mt-4"
+                />
+              </div>
+            ) : (
+              <div className="bg-gray-800 rounded-lg p-6 text-center">
+                <h2 className="text-xl font-semibold mb-4 text-gray-500">Discord Configuration</h2>
+                <p className="text-gray-400 mt-4">
+                  Please save the agent before configuring the Discord connection.
+                </p>
+              </div>
+            )}
+            {/* --- End Conditional Discord Section --- */}
             
-            <AgentMcpSection 
-              mcpServers={mcpServers}
-              onAddServer={addMcpServer}
-              onUpdateServer={updateMcpServer}
-              onDeleteServer={deleteMcpServer}
-              onTestConnection={testMcpConnection}
-              loading={mcpLoading}
-              error={mcpError}
-            />
+            {/* MCP Section - Render always if agent exists? Or also hide until save? Hiding for now for consistency */}
+            {id ? (
+              <AgentMcpSection 
+                mcpServers={mcpServers}
+                onAddServer={addMcpServer}
+                onUpdateServer={updateMcpServer}
+                onDeleteServer={deleteMcpServer}
+                onTestConnection={testMcpConnection}
+                loading={mcpLoading}
+                error={mcpError}
+              />
+            ) : (
+              <div className="bg-gray-800 rounded-lg p-6 text-center">
+                 <h2 className="text-xl font-semibold mb-4 text-gray-500">Multi-Compute Protocol (MCP)</h2>
+                 <p className="text-gray-400 mt-4">
+                    Please save the agent before configuring MCP servers.
+                 </p>
+              </div>
+            )}
           </div>
         </div>
       </form>
