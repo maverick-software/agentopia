@@ -43,6 +43,7 @@ export function DiscordConnect({
   const [loading, setLoading] = useState(externalLoading || false);
   const [disconnecting, setDisconnecting] = useState(externalDisconnecting || false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const [localTimeout, setLocalTimeout] = useState(10);
 
@@ -142,6 +143,10 @@ export function DiscordConnect({
     navigator.clipboard.writeText(interactionEndpointUrl)
       .then(() => {
         console.log('Interaction URL copied!');
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
       })
       .catch(err => {
         console.error('Failed to copy URL:', err);
@@ -258,10 +263,11 @@ export function DiscordConnect({
                           <button 
                     type="button" 
                     onClick={handleCopyUrl}
-                    className="p-1 text-gray-400 hover:text-white"
-                    title="Copy URL"
+                    className={`p-1 rounded transition-colors duration-150 ${copied ? 'text-green-500 bg-green-900/50' : 'text-gray-400 hover:text-white hover:bg-gray-600'}`}
+                    title={copied ? "Copied!" : "Copy URL"}
+                    disabled={copied}
                  >
-                    <Copy size={16}/>
+                    {copied ? <Check size={16}/> : <Copy size={16}/>}
                           </button>
              </div>
               </div>
