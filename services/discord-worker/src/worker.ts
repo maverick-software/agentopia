@@ -140,9 +140,9 @@ client.on(Events.MessageCreate, async (message) => {
         if (messageContent) {
             console.log(`Sending message content to agent core for Agent ID: ${AGENT_ID}`);
             try {
-                // Invoke the hypothetical agent core handler function
+                // Invoke the CORRECT agent core handler function
                 const { data: agentResponse, error: agentError } = await supabase.functions.invoke(
-                    'agent-core-handler', // Assumed function name
+                    'chat', // Corrected function name
                     {
                         body: {
                             agentId: AGENT_ID, // Pass the agent ID
