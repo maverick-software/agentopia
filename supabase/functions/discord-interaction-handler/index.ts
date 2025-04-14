@@ -96,7 +96,6 @@ async function handleAutocomplete(interaction: Interaction): Promise<Response> {
     const guildId = interaction.guild_id;
 
     if (!focusedOption || focusedOption.name !== 'agent' || !guildId) {
-        // Not an autocomplete request for the 'agent' option in a guild
         return new Response(JSON.stringify({ choices: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -104,8 +103,6 @@ async function handleAutocomplete(interaction: Interaction): Promise<Response> {
     console.log(`Autocomplete query for guild ${guildId}: "${searchQuery}"`);
 
     try {
-        // Query agents connected to this guild, filtering by name (case-insensitive)
-        // Adjust table/column names as needed
         const { data, error } = await supabaseAdmin
             .from('agent_discord_connections')
             .select(`
@@ -114,23 +111,22 @@ async function handleAutocomplete(interaction: Interaction): Promise<Response> {
             `)
             .eq('guild_id', guildId)
             .ilike('agents.name', `%${searchQuery}%`) // Case-insensitive search on agent name
-            .limit(25); // Discord limits choices to 25
+            .limit(25);
 
         if (error) throw error;
 
         const choices: AutocompleteChoice[] = data?.map(conn => ({
-            name: `${conn.agents.name} (ID: ...${conn.agent_id.slice(-6)})`, // Display name and partial ID
-            value: conn.agent_id // The value sent when selected is the agent_id
+            name: `${conn.agents.name}`, // Just display name (or add ID back if preferred)
+            value: conn.agents.name // Return the NAME as the value
         })) || [];
 
         console.log(`Returning ${choices.length} choices for "${searchQuery}"`);
-        return new Response(JSON.stringify({ type: 8, data: { choices } }), { // type 8 = APPLICATION_COMMAND_AUTOCOMPLETE_RESULT
+        return new Response(JSON.stringify({ type: 8, data: { choices } }), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 
     } catch (error) {
         console.error("Error fetching autocomplete choices:", error);
-        // Don't send error details back in autocomplete
         return new Response(JSON.stringify({ choices: [] }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 }
@@ -163,53 +159,56 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
     console.log(`Handling command '${commandName}' (ID: ${interactionId}) in guild ${guildId}`);
 
     if (commandName === 'activate') {
-        // --- Activate Command Logic --- 
         if (!guildId || !channelId) {
-            // Respond immediately that it must be used in a server channel
             return new Response(JSON.stringify({ type: 4, data: { content: "❌ This command can only be used within a server channel." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
-        // Get the selected agent_id from the options (value from autocomplete)
         const agentOption = interaction.data?.options?.find(opt => opt.name === 'agent');
-        const selectedAgentId = agentOption?.value as string; 
+        const selectedAgentName = agentOption?.value as string; 
 
-        if (!selectedAgentId) {
-            console.error("Agent ID missing from activate command options.", interaction.data?.options);
-            // Respond immediately about missing option
-            return new Response(JSON.stringify({ type: 4, data: { content: "❌ Error: Agent ID was not provided correctly." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        if (!selectedAgentName) {
+            console.error("Agent NAME missing from activate command options.", interaction.data?.options);
+            return new Response(JSON.stringify({ type: 4, data: { content: "❌ Error: Agent name was not provided correctly." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
         
-        // Defer the initial response immediately
-        // This tells Discord we've received the command and are working on it.
-        console.log(`Deferring response for /activate command (Agent: ${selectedAgentId})`);
+        console.log(`Deferring response for /activate command (Agent Name: ${selectedAgentName})`);
         const deferResponse = new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-        // Perform the actual work *after* sending the deferral
-        // Use a try...finally block to ensure followup messages are sent
         let activationSuccess = false;
         let errorMessage = "An unknown error occurred during activation.";
+        let agentIdToSend: string | null = null; // Need agent ID to send to manager
+        
         try {
-            console.log(`Processing /activate for Agent ${selectedAgentId} in Guild ${guildId}...`);
+            console.log(`Processing /activate for Agent Name "${selectedAgentName}" in Guild ${guildId}...`);
 
-            // Fetch connection details AND agent bot token using guild_id AND agent_id
-            // Assumption: An entry MUST exist in agent_discord_connections for this agent/guild pair.
             const { data: connectionData, error: connectionError } = await supabaseAdmin
                 .from('agent_discord_connections')
-                .select(` id, agent_id, inactivity_timeout_minutes, worker_status, agents!inner ( discord_bot_key ) `)
+                .select(`
+                    id, 
+                    agent_id, 
+                    inactivity_timeout_minutes, 
+                    worker_status, 
+                    agents!inner (
+                        id, 
+                        name, 
+                        discord_bot_key 
+                    )
+                `)
                 .eq('guild_id', guildId)
-                .eq('agent_id', selectedAgentId) // Filter by the selected agent
-                .maybeSingle();
+                .eq('agents.name', selectedAgentName) // Filter by agent NAME
+                .maybeSingle(); // Assume name is unique per guild for this lookup
 
             if (connectionError) {
-                console.error("Supabase error fetching connection:", connectionError);
+                console.error("Supabase error fetching connection by name:", connectionError);
                 throw new Error("Database error retrieving connection details.");
             }
             if (!connectionData) {
-                console.warn(`No connection found for Agent ${selectedAgentId} in Guild ${guildId}.`);
-                throw new Error("This agent is not linked to this server. Please check the configuration.");
+                console.warn(`No connection found for Agent Name "${selectedAgentName}" in Guild ${guildId}.`);
+                // Note: If names aren't unique per guild, this might fetch the wrong one or none.
+                throw new Error("This agent name is not linked to this server. Please check the name or configuration.");
             }
             if (!connectionData.agents || !connectionData.agents.discord_bot_key) {
-                console.error(`Bot token missing for Agent ${selectedAgentId}`);
+                console.error(`Bot token missing for Agent ${connectionData.agent_id} (Name: ${selectedAgentName})`);
                 throw new Error("Configuration Error: Bot token is missing for the agent.");
             }
 
@@ -217,19 +216,17 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
             const botToken = connectionData.agents.discord_bot_key;
             const timeoutMinutes = connectionData.inactivity_timeout_minutes || 10;
             const currentStatus = connectionData.worker_status;
+            agentIdToSend = connectionData.agent_id; // Get the actual agent ID here
 
-            console.log(`Connection ID: ${connectionId}, Current Status: ${currentStatus}`);
+            console.log(`Connection ID: ${connectionId}, Agent ID: ${agentIdToSend}, Current Status: ${currentStatus}`);
 
-            // Check if already active or activating
             if (currentStatus === 'active' || currentStatus === 'activating') {
-                console.log(`Agent ${selectedAgentId} is already active or activating.`);
-                activationSuccess = true; // Consider it a success for the message
-                errorMessage = "Agent is already active or being activated."; // Set specific message
-                // No need to proceed further
-                return; // Exit the try block early, finally will send followup
+                console.log(`Agent ${agentIdToSend} (Name: ${selectedAgentName}) is already active or activating.`);
+                activationSuccess = true;
+                errorMessage = "Agent is already active or being activated.";
+                return; // Exit the try block early
             }
             
-            // 1. Update Status to 'activating'
             console.log(`Setting status to 'activating' for connection ${connectionId}`);
             const { error: updateError } = await supabaseAdmin
                 .from('agent_discord_connections')
@@ -237,63 +234,57 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
                 .eq('id', connectionId);
             if (updateError) {
                 console.error("Supabase error updating status to activating:", updateError);
-                // Proceed but log the error, manager call might still work
             }
             
-            // 2. Trigger Worker Start via Manager Service
-            console.log(`Calling manager service at ${managerUrl}/start-worker for Agent ${selectedAgentId}`);
+            console.log(`Calling manager service at ${managerUrl}/start-worker for Agent ID ${agentIdToSend}`);
             const managerResponse = await fetch(`${managerUrl}/start-worker`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    // Use a secret key for simple auth between services
                     'Authorization': `Bearer ${managerSecretKey}` 
                 },
                 body: JSON.stringify({ 
-                    agentId: selectedAgentId, 
-                    botToken: botToken, // Send the token needed for the worker
+                    agentId: agentIdToSend, // Send the actual agent ID
+                    botToken: botToken, 
                     timeoutMinutes: timeoutMinutes,
-                    guildId: guildId, // Send guild context
-                    channelId: channelId, // Send channel context
-                    connectionId: connectionId // Send connection ID for status updates
+                    guildId: guildId, 
+                    channelId: channelId, 
+                    connectionId: connectionId 
                  })
             });
 
             if (!managerResponse.ok) {
                 const managerErrorText = await managerResponse.text();
                 console.error(`Manager service failed (${managerResponse.status}): ${managerErrorText}`);
-                // Attempt to set status back to error
                 await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', connectionId).maybeSingle();
                 throw new Error(`Activation failed: Could not start the agent process (Manager status: ${managerResponse.status}).`);
             }
 
-            console.log(`Manager service successfully triggered worker for Agent ${selectedAgentId}`);
+            console.log(`Manager service successfully triggered worker for Agent ID ${agentIdToSend} (Name: ${selectedAgentName})`);
             activationSuccess = true;
-            errorMessage = `✅ Agent activation initiated! (Timeout: ${timeoutMinutes} mins)`;
+            errorMessage = `✅ Agent '${selectedAgentName}' activation initiated! (Timeout: ${timeoutMinutes} mins)`;
 
         } catch (error) {
-            console.error(`Error during /activate processing for Agent ${selectedAgentId}:`, error);
+            console.error(`Error during /activate processing for Agent Name "${selectedAgentName}":`, error);
             errorMessage = `❌ Activation failed: ${error.message}`;
-            // Attempt to set status to error if connectionId was found
-            const connId = interaction.data?.options?.find(opt => opt.name === 'agent')?.value; // Re-get ID just in case
-            if (connId) { 
-                 // Find the connection ID again just based on agent/guild if needed
-                 const { data: c } = await supabaseAdmin.from('agent_discord_connections').select('id').eq('agent_id', connId).eq('guild_id', guildId).maybeSingle();
-                 if (c?.id) {
-                     await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', c.id).maybeSingle();
-                 }
+            // Attempt to set status to error using the found connectionId if available
+            const connDataForError = await supabaseAdmin
+               .from('agent_discord_connections')
+               .select('id')
+               .eq('guild_id', guildId)
+               .eq('agents.name', selectedAgentName) 
+               .maybeSingle();
+            if (connDataForError?.data?.id) {
+                await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', connDataForError.data.id).maybeSingle();
             }
         } finally {
-            // Always send a follow-up message
             console.log(`Sending followup for interaction ${interactionId}: ${errorMessage}`);
             await sendFollowup(interactionToken, errorMessage);
         }
         
-        // Return the initial defer response we prepared earlier
         return deferResponse;
         
     } else {
-        // --- Handle other commands or unknown command --- 
         console.warn(`Received unhandled command: ${commandName}`);
         return new Response(JSON.stringify({ type: 4, data: { content: `Unknown command: ${commandName}` } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
