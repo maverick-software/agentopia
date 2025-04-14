@@ -518,45 +518,56 @@ export function AgentEdit() {
 
       connectionUpdateData.agent_id = agentId;
 
-      // Conditionally upsert connection details only if required info is present
-      if (
-        connectionUpdateData.agent_id && 
-        connectionUpdateData.guild_id
-      ) {
-        console.log("Upserting Discord connection details:", connectionUpdateData);
-        const { error: connectionSaveError } = await supabase
-           .from('agent_discord_connections')
-           .upsert(connectionUpdateData, { onConflict: 'agent_id' }); // Adjust onConflict if needed
-           // Use 'id' as conflict target if upserting based on existing connection ID
-           // .upsert(connectionUpdateData, { onConflict: 'id' });
+      // 2. Save/Update Discord Connection Details (timeout, status etc.)
+      // ... (Conditional upsert for connection details) ...
+       if (connectionUpdateData.agent_id && connectionUpdateData.guild_id) {
+           console.log("Upserting Discord connection details (timeout/status):");
+           // ... (Supabase upsert call for agent_discord_connections) ...
+           const { error: connectionSaveError } = await supabase
+             .from('agent_discord_connections')
+             .upsert({ 
+                 agent_id: connectionUpdateData.agent_id,
+                 guild_id: connectionUpdateData.guild_id, 
+                 inactivity_timeout_minutes: connectionUpdateData.inactivity_timeout_minutes,
+              }, { onConflict: 'agent_id' }); 
 
-        if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
+           if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
+       } else {
+           console.log("Skipping Discord connection upsert: Missing agent_id or guild_id.");
+       }
+
+      // 3. Trigger Backend Command Registration
+      // Check if we have the necessary details saved/available
+      const appId = agentUpdateData.discord_app_id || agentFormData.discord_app_id;
+      const botKey = discordBotKey; // Get the bot key from state
+      
+      if (agentId && appId && botKey) { 
+         console.log(`Attempting to trigger command registration for agent: ${agentId}`);
+         try {
+           const { data: fnResponse, error: fnError } = await supabase.functions.invoke(
+             'register-agent-commands', 
+             { body: { agentId: agentId } } // Pass agentId in the body
+           );
+
+           if (fnError) {
+             // Log the error but don't necessarily block the whole save success message
+             console.error('Error invoking register-agent-commands function:', fnError);
+             setError(prev => prev ? `${prev}\nFailed to register Discord commands: ${fnError.message}` : `Failed to register Discord commands: ${fnError.message}`);
+           } else {
+             console.log('Successfully invoked register-agent-commands:', fnResponse);
+             // Optionally show a specific success message?
+           }
+         } catch (invokeErr) {
+           console.error('Caught error during function invocation:', invokeErr);
+           setError(prev => prev ? `${prev}\nError registering Discord commands: ${invokeErr.message}` : `Error registering Discord commands: ${invokeErr.message}`);
+         }
       } else {
-          console.log("Skipping Discord connection upsert: Missing required details (App ID, Public Key, or Guild ID).");
-          // Optional: Consider deleting the connection row if it exists but details are missing now?
-          // This might happen if the disconnect failed but UI state was cleared.
-          // If connectionUpdateData.id exists but other details are missing, maybe delete?
-          // if (discordConnectionData.id) { ... delete logic ... }
+        console.warn("Skipping command registration: Missing agentId, App ID, or Bot Token.");
       }
-
-      // --- TODO: Trigger Backend Command Registration (WBS 1.3) ---
-      // If connection details were successfully saved and contain app_id/bot_key
-      // IMPORTANT: Need the connection ID from the upsert result or fetch
-      const savedConnectionId = discordConnectionData.id; // Or get from upsert result if possible
-      if (
-          connectionUpdateData.agent_id && 
-          discordBotKey && 
-          agentId && 
-          savedConnectionId // Check if we have the connection ID
-      ) { 
-         console.log("TODO: Call register-agent-commands function with connection ID:", savedConnectionId);
-         // await supabase.functions.invoke('register-agent-commands', {
-         //   body: { connectionId: savedConnectionId },
-         // });
-      }
-
-      setSaveSuccess(true);
-      if (!isEditing && agentId) {
+      
+      // --- Save Success --- 
+       setSaveSuccess(true);
+       if (!isEditing && agentId) {
         navigate(`/agents/${agentId}/edit`);
       } else {
         fetchAgent(agentId);

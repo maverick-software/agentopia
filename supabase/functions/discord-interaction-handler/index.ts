@@ -135,89 +135,165 @@ async function handleAutocomplete(interaction: Interaction): Promise<Response> {
     }
 }
 
+// Helper function to send followup messages
+async function sendFollowup(interactionToken: string, content: string) {
+  const url = `https://discord.com/api/v10/webhooks/${Deno.env.get("DISCORD_APP_ID")}/${interactionToken}`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content }),
+    });
+    if (!response.ok) {
+      console.error(`Failed to send followup: ${response.status}`, await response.text());
+    }
+  } catch (error) {
+    console.error('Error sending followup message:', error);
+  }
+}
+
 // --- Command Execution Handler ---
 async function handleCommand(interaction: Interaction): Promise<Response> {
     const commandName = interaction.data?.name;
     const guildId = interaction.guild_id;
+    const channelId = interaction.channel_id;
     const interactionToken = interaction.token;
+    const interactionId = interaction.id;
     
+    console.log(`Handling command '${commandName}' (ID: ${interactionId}) in guild ${guildId}`);
+
     if (commandName === 'activate') {
-        if (!guildId) {
-            return new Response(JSON.stringify({ type: 4, data: { content: "Activation must be done in a server." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        // --- Activate Command Logic --- 
+        if (!guildId || !channelId) {
+            // Respond immediately that it must be used in a server channel
+            return new Response(JSON.stringify({ type: 4, data: { content: "❌ This command can only be used within a server channel." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
-        // Get the selected agent_id from the options
+        // Get the selected agent_id from the options (value from autocomplete)
         const agentOption = interaction.data?.options?.find(opt => opt.name === 'agent');
-        const selectedAgentId = agentOption?.value as string; // Value is the agent_id from autocomplete
+        const selectedAgentId = agentOption?.value as string; 
 
         if (!selectedAgentId) {
-            console.error("Agent ID missing from activate command options.");
-            return new Response(JSON.stringify({ type: 4, data: { content: "Error: Agent ID was not provided." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            console.error("Agent ID missing from activate command options.", interaction.data?.options);
+            // Respond immediately about missing option
+            return new Response(JSON.stringify({ type: 4, data: { content: "❌ Error: Agent ID was not provided correctly." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+        
+        // Defer the initial response immediately
+        // This tells Discord we've received the command and are working on it.
+        console.log(`Deferring response for /activate command (Agent: ${selectedAgentId})`);
+        const deferResponse = new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-        console.log(`Handling /activate command for agent ${selectedAgentId} in guild ${guildId}`);
-
-        let botToken: string | null = null;
-        let timeoutMinutes: number = 10;
-        let currentStatus: string | null = 'inactive';
-        let connectionId: string | null = null;
-
+        // Perform the actual work *after* sending the deferral
+        // Use a try...finally block to ensure followup messages are sent
+        let activationSuccess = false;
+        let errorMessage = "An unknown error occurred during activation.";
         try {
-            // Fetch connection details using guild_id AND agent_id
+            console.log(`Processing /activate for Agent ${selectedAgentId} in Guild ${guildId}...`);
+
+            // Fetch connection details AND agent bot token using guild_id AND agent_id
+            // Assumption: An entry MUST exist in agent_discord_connections for this agent/guild pair.
             const { data: connectionData, error: connectionError } = await supabaseAdmin
                 .from('agent_discord_connections')
-                .select(` id, agent_id, inactivity_timeout_minutes, worker_status, agents ( discord_bot_key ) `)
+                .select(` id, agent_id, inactivity_timeout_minutes, worker_status, agents!inner ( discord_bot_key ) `)
                 .eq('guild_id', guildId)
                 .eq('agent_id', selectedAgentId) // Filter by the selected agent
                 .maybeSingle();
 
-            if (connectionError) throw connectionError;
+            if (connectionError) {
+                console.error("Supabase error fetching connection:", connectionError);
+                throw new Error("Database error retrieving connection details.");
+            }
             if (!connectionData) {
-                await sendFollowup(interactionToken, "Could not find a connection for the specified agent in this server.");
-                return new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                console.warn(`No connection found for Agent ${selectedAgentId} in Guild ${guildId}.`);
+                throw new Error("This agent is not linked to this server. Please check the configuration.");
             }
             if (!connectionData.agents || !connectionData.agents.discord_bot_key) {
-                await sendFollowup(interactionToken, "Error retrieving agent details. Bot token might be missing.");
-                return new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                console.error(`Bot token missing for Agent ${selectedAgentId}`);
+                throw new Error("Configuration Error: Bot token is missing for the agent.");
             }
 
-            connectionId = connectionData.id;
-            botToken = connectionData.agents.discord_bot_key;
-            timeoutMinutes = connectionData.inactivity_timeout_minutes || 10;
-            currentStatus = connectionData.worker_status;
+            const connectionId = connectionData.id;
+            const botToken = connectionData.agents.discord_bot_key;
+            const timeoutMinutes = connectionData.inactivity_timeout_minutes || 10;
+            const currentStatus = connectionData.worker_status;
 
+            console.log(`Connection ID: ${connectionId}, Current Status: ${currentStatus}`);
+
+            // Check if already active or activating
             if (currentStatus === 'active' || currentStatus === 'activating') {
-                await sendFollowup(interactionToken, "This agent is already active!");
-                return new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                console.log(`Agent ${selectedAgentId} is already active or activating.`);
+                activationSuccess = true; // Consider it a success for the message
+                errorMessage = "Agent is already active or being activated."; // Set specific message
+                // No need to proceed further
+                return; // Exit the try block early, finally will send followup
             }
             
-            // Trigger Worker Start & Update Status
-            try {
-                await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'activating' }).eq('id', connectionId);
-                const managerResponse = await fetch(`${managerUrl}/start-worker`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${managerSecretKey}` },
-                    body: JSON.stringify({ agentId: selectedAgentId, botToken: botToken, timeoutMinutes: timeoutMinutes })
-                });
-                if (!managerResponse.ok) {
-                    await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', connectionId);
-                    throw new Error("Manager service failed to start worker.");
-                }
-                await sendFollowup(interactionToken, `✅ Activation initiated for agent (Timeout: ${timeoutMinutes} mins).`);
-            } catch (triggerError) {
-                console.error("Error triggering worker:", triggerError);
-                if (connectionId) { await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', connectionId); }
-                await sendFollowup(interactionToken, `❌ Error initiating activation: ${triggerError.message}`);
+            // 1. Update Status to 'activating'
+            console.log(`Setting status to 'activating' for connection ${connectionId}`);
+            const { error: updateError } = await supabaseAdmin
+                .from('agent_discord_connections')
+                .update({ worker_status: 'activating' })
+                .eq('id', connectionId);
+            if (updateError) {
+                console.error("Supabase error updating status to activating:", updateError);
+                // Proceed but log the error, manager call might still work
             }
-            return new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            
+            // 2. Trigger Worker Start via Manager Service
+            console.log(`Calling manager service at ${managerUrl}/start-worker for Agent ${selectedAgentId}`);
+            const managerResponse = await fetch(`${managerUrl}/start-worker`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    // Use a secret key for simple auth between services
+                    'Authorization': `Bearer ${managerSecretKey}` 
+                },
+                body: JSON.stringify({ 
+                    agentId: selectedAgentId, 
+                    botToken: botToken, // Send the token needed for the worker
+                    timeoutMinutes: timeoutMinutes,
+                    guildId: guildId, // Send guild context
+                    channelId: channelId, // Send channel context
+                    connectionId: connectionId // Send connection ID for status updates
+                 })
+            });
 
-        } catch (dbError) {
-            console.error("Database error fetching agent details:", dbError);
-            await sendFollowup(interactionToken, "Database error finding the specified agent.");
-            return new Response(JSON.stringify({ type: 5 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            if (!managerResponse.ok) {
+                const managerErrorText = await managerResponse.text();
+                console.error(`Manager service failed (${managerResponse.status}): ${managerErrorText}`);
+                // Attempt to set status back to error
+                await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', connectionId).maybeSingle();
+                throw new Error(`Activation failed: Could not start the agent process (Manager status: ${managerResponse.status}).`);
+            }
+
+            console.log(`Manager service successfully triggered worker for Agent ${selectedAgentId}`);
+            activationSuccess = true;
+            errorMessage = `✅ Agent activation initiated! (Timeout: ${timeoutMinutes} mins)`;
+
+        } catch (error) {
+            console.error(`Error during /activate processing for Agent ${selectedAgentId}:`, error);
+            errorMessage = `❌ Activation failed: ${error.message}`;
+            // Attempt to set status to error if connectionId was found
+            const connId = interaction.data?.options?.find(opt => opt.name === 'agent')?.value; // Re-get ID just in case
+            if (connId) { 
+                 // Find the connection ID again just based on agent/guild if needed
+                 const { data: c } = await supabaseAdmin.from('agent_discord_connections').select('id').eq('agent_id', connId).eq('guild_id', guildId).maybeSingle();
+                 if (c?.id) {
+                     await supabaseAdmin.from('agent_discord_connections').update({ worker_status: 'error' }).eq('id', c.id).maybeSingle();
+                 }
+            }
+        } finally {
+            // Always send a follow-up message
+            console.log(`Sending followup for interaction ${interactionId}: ${errorMessage}`);
+            await sendFollowup(interactionToken, errorMessage);
         }
+        
+        // Return the initial defer response we prepared earlier
+        return deferResponse;
+        
     } else {
-        // Handle other commands if any
+        // --- Handle other commands or unknown command --- 
         console.warn(`Received unhandled command: ${commandName}`);
         return new Response(JSON.stringify({ type: 4, data: { content: `Unknown command: ${commandName}` } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -268,21 +344,5 @@ serve(async (req) => {
     );
   }
 });
-
-// Helper function to send follow-up messages to interactions
-async function sendFollowup(interactionToken: string, content: string) {
-    const appId = Deno.env.get("DISCORD_APP_ID");
-    if (!appId) { console.error("Cannot send followup: DISCORD_APP_ID not set."); return; }
-    const url = `https://discord.com/api/v10/webhooks/${appId}/${interactionToken}`;
-    console.log(`Sending followup to ${url}: "${content}"`);
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: content }),
-        });
-        if (!response.ok) { console.error(`Error sending followup: ${response.status} ${response.statusText}`, await response.text()); }
-    } catch (error) { console.error("Error sending followup:", error); }
-}
 
 console.log("'discord-interaction-handler' function started."); 
