@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import type { AgentDiscordConnection, Agent } from '../types';
 
 interface DiscordConnectProps {
@@ -18,6 +18,7 @@ interface DiscordConnectProps {
   discordAppId?: string;
   discordPublicKey?: string;
   onAgentDetailChange?: (field: 'discord_app_id' | 'discord_public_key', value: string) => void;
+  onRegenerateSecret?: () => Promise<void>;
 }
 
 export function DiscordConnect({ 
@@ -36,6 +37,7 @@ export function DiscordConnect({
   discordAppId,
   discordPublicKey,
   onAgentDetailChange,
+  onRegenerateSecret,
 }: DiscordConnectProps) {
   
   const [botTokenInput, setBotTokenInput] = useState(''); 
@@ -53,6 +55,8 @@ export function DiscordConnect({
   const [localPublicKey, setLocalPublicKey] = useState('');
   const [isAppIdVisible, setIsAppIdVisible] = useState(false);
   const [isPublicKeyVisible, setIsPublicKeyVisible] = useState(false);
+
+  const [regenerating, setRegenerating] = useState(false);
 
   // Helper to generate mask string
   const generateMask = (length: number) => MASK_CHAR.repeat(length || 10); // Repeat mask char, default 10 if length 0
@@ -121,6 +125,18 @@ export function DiscordConnect({
       .catch(err => {
         console.error('Failed to copy URL:', err);
       });
+  };
+
+  const handleRegenerateClick = async () => {
+    if (!onRegenerateSecret) return;
+    setRegenerating(true);
+    try {
+      await onRegenerateSecret();
+    } catch (e) {
+      console.error("Regeneration failed (error caught in DiscordConnect)", e);
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   const renderWorkerStatus = () => {
@@ -255,6 +271,17 @@ export function DiscordConnect({
                  >
                     {copied ? <Check size={16}/> : <Copy size={16}/>}
                           </button>
+                {connection?.interaction_secret && (
+                  <button 
+                    type="button" 
+                    onClick={handleRegenerateClick}
+                    disabled={regenerating}
+                    className={`p-1 rounded transition-colors duration-150 text-gray-400 hover:text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title="Regenerate Secret"
+                  >
+                    {regenerating ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16}/>}
+                  </button>
+                )}
              </div>
               </div>
 

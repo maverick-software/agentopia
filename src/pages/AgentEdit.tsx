@@ -606,6 +606,49 @@ export function AgentEdit() {
   // Define a dummy handler if DiscordConnect requires the prop (now optional)
   const handleAgentDetailChangeDummy = useCallback(() => { /* No-op */ }, []);
 
+  // --- Handler for Regenerating Secret ---
+  const handleRegenerateSecret = async () => {
+    if (!id || !discordConnectionData.id) { // Need agent ID and connection ID
+      setError("Cannot regenerate secret: Agent or connection details missing.");
+      return;
+    }
+    
+    setSaving(true); // Reuse saving state for loading indicator
+    setError(null);
+    
+    try {
+      // 1. Generate new secret
+      console.log("Regenerating interaction secret using Web Crypto...");
+      const randomBytes = new Uint8Array(32);
+      window.crypto.getRandomValues(randomBytes);
+      const newSecret = bytesToBase64Url(randomBytes);
+      console.log("New Secret (first 10 chars):", newSecret.substring(0, 10));
+
+      // 2. Update database
+      const { error: updateError } = await supabase
+        .from('agent_discord_connections')
+        .update({ interaction_secret: newSecret })
+        .eq('id', discordConnectionData.id) // Update by connection primary key
+        .eq('agent_id', id); // Extra check for safety, RLS should handle ownership
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // 3. Update local state
+      setDiscordConnectionData(prev => ({ ...prev, interaction_secret: newSecret }));
+      console.log("Successfully regenerated and saved new secret.");
+      // Optionally show a temporary success message?
+
+    } catch (err: any) {
+      console.error("Error regenerating secret:", err);
+      setError(`Failed to regenerate secret: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+  // --- End Handler ---
+
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -786,6 +829,7 @@ export function AgentEdit() {
                   loading={discordLoading}
                   disconnecting={discordDisconnecting}
                   fetchingGuilds={fetchingGuilds}
+                  onRegenerateSecret={handleRegenerateSecret}
                   className="mt-4"
                 />
               </div>

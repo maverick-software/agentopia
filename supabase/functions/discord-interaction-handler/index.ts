@@ -62,28 +62,30 @@ const supabaseAdmin = createClient(supabaseUrl ?? '', serviceRoleKey ?? '', {
     },
 });
 
-async function verifySignature(request: Request): Promise<{ isValid: boolean; body: string }> {
-  if (!discordPublicKey) {
-      console.error("Verification skipped: DISCORD_PUBLIC_KEY is not configured.");
-      return { isValid: false, body: "Configuration error" }; 
+async function verifySignature(request: Request, publicKey: string | undefined, rawBody: string): Promise<{ isValid: boolean }> {
+  if (!publicKey) {
+      console.error("Verification skipped: Public key was not provided.");
+      return { isValid: false }; 
   }
 
   const signature = request.headers.get("X-Signature-Ed25519");
   const timestamp = request.headers.get("X-Signature-Timestamp");
-  const body = await request.text();
-
-  if (!signature || !timestamp || !body) {
-    return { isValid: false, body };
+  
+  if (!signature || !timestamp || !rawBody) {
+    return { isValid: false };
   }
 
-  const encoder = new TextEncoder();
-  const isValid = nacl.sign.detached.verify(
-    encoder.encode(timestamp + body),
-    hexToUint8Array(signature),
-    hexToUint8Array(discordPublicKey)
-  );
-
-  return { isValid, body };
+  try {
+      const isValid = nacl.sign.detached.verify(
+        new TextEncoder().encode(timestamp + rawBody),
+        hexToUint8Array(signature),
+        hexToUint8Array(publicKey)
+      );
+      return { isValid };
+  } catch (e) {
+      console.error("Error during signature verification:", e);
+      return { isValid: false };
+  }
 }
 
 // Helper function to convert hex string to Uint8Array
@@ -151,8 +153,12 @@ async function handleAutocomplete(interaction: Interaction): Promise<Response> {
 }
 
 // Helper function to send followup messages
-async function sendFollowup(interactionToken: string, content: string) {
-  const url = `https://discord.com/api/v10/webhooks/${Deno.env.get("DISCORD_APP_ID")}/${interactionToken}`;
+async function sendFollowup(interactionToken: string, content: string, discordAppId: string | undefined) {
+  if (!discordAppId) {
+    console.error('Cannot send followup: Discord App ID is missing.');
+    return;
+  }
+  const url = `https://discord.com/api/v10/webhooks/${discordAppId}/${interactionToken}`;
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -168,7 +174,7 @@ async function sendFollowup(interactionToken: string, content: string) {
 }
 
 // --- Command Execution Handler ---
-async function handleCommand(interaction: Interaction): Promise<Response> {
+async function handleCommand(interaction: Interaction, discordAppId: string | undefined): Promise<Response> {
     const commandName = interaction.data?.name;
     const guildId = interaction.guild_id;
     const channelId = interaction.channel_id;
@@ -277,7 +283,7 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
             if (currentStatus === 'active' || currentStatus === 'activating') {
                  console.log(`Agent ${selectedAgentId} (Name: ${agentName}) is already active or activating.`);
                  errorMessage = "Agent is already active or being activated.";
-                 await sendFollowup(interactionToken, errorMessage);
+                 await sendFollowup(interactionToken, errorMessage, discordAppId);
                  return deferResponse; // Return deferred response
             }
             
@@ -326,7 +332,7 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
             // ... error status update logic ...
         } finally {
             console.log(`Sending followup for interaction ${interactionId}: ${errorMessage}`);
-            await sendFollowup(interactionToken, errorMessage);
+            await sendFollowup(interactionToken, errorMessage, discordAppId);
         }
         
         return deferResponse;
@@ -347,23 +353,95 @@ serve(async (req) => {
 
   console.log(`Received request: ${req.method} ${req.url}`);
 
-  // --- Verify Request Signature (WBS 2.3) ---
-  const { isValid, body: rawBody } = await verifySignature(req.clone()); // Clone request to allow reading body twice
+  // --- Step 1: Preliminary Body Parse for PING Check --- 
+  // We need to check for PING *before* validating signature or fetching secrets
+  // Clone request first as body can only be read once
+  let rawBody: string;
+  let preliminaryInteraction: Interaction | null = null;
+  try {
+    rawBody = await req.clone().text(); // Read body from clone
+    preliminaryInteraction = JSON.parse(rawBody);
+  } catch (e) {
+    console.error("Failed to parse initial request body:", e);
+    return new Response(JSON.stringify({ error: "Bad Request" }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // --- Step 2: Handle PING Immediately --- 
+  if (preliminaryInteraction?.type === 1) {
+    console.log("Constructing PING response...");
+    const pingResponseBody = JSON.stringify({ type: 1 });
+    const pingResponseHeaders = { 'Content-Type': 'application/json' };
+    const pingStatus = 200;
+    
+    // Log the details before sending
+    console.log(`-- PING Response Details --`);
+    console.log(`Status: ${pingStatus}`);
+    console.log(`Headers: ${JSON.stringify(pingResponseHeaders)}`);
+    console.log(`Body: ${pingResponseBody}`);
+    console.log(`--------------------------`);
+    
+    const pingResponse = new Response(pingResponseBody, { 
+        headers: pingResponseHeaders,
+        status: pingStatus
+    });
+    return pingResponse; // Return the constructed response
+  }
+
+  // --- If not a PING, proceed with normal flow ---
+
+  // --- Parse Interaction Secret from URL ---
+  const url = new URL(req.url);
+  const pathSegments = url.pathname.split('/');
+  const interactionSecret = pathSegments.length === 5 && pathSegments[1] === 'functions' && pathSegments[2] === 'v1' && pathSegments[3] === 'discord-interaction-handler' 
+                          ? pathSegments[4] 
+                          : null;
+                          
+  if (!interactionSecret) {
+      console.error("Bad Request: Interaction secret missing or URL format incorrect.", url.pathname);
+      return new Response(JSON.stringify({ error: "Bad Request: Invalid interaction URL." }), { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+  }
+  console.log(`Parsed interaction secret: ${interactionSecret.substring(0, 10)}...`);
+
+  // --- Lookup Connection by Secret ---
+  const { data: connDetails, error: connError } = await supabaseAdmin
+      .from('agent_discord_connections')
+      .select('discord_public_key, discord_app_id, agent_id, guild_id') 
+      .eq('interaction_secret', interactionSecret)
+      .maybeSingle();
+  
+  if (connError || !connDetails) {
+      console.error("Database error looking up connection by secret:", connError);
+      return new Response(JSON.stringify({ error: "Internal Server Error: Failed to validate interaction source." }), { 
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+  }
+  console.log(`Found connection for agent ${connDetails.agent_id} via secret.`);
+
+  // --- Verify Request Signature using fetched key --- 
+  // Pass the already read rawBody to verifySignature to avoid reading twice
+  const { isValid } = await verifySignature(req, connDetails.discord_public_key, rawBody);
   if (!isValid) {
-    console.warn("Invalid request signature received.");
+    console.warn("Invalid request signature received (using key from DB).");
     return new Response("Invalid request signature", { status: 401 });
   }
-  console.log("Request signature verified successfully.");
+  console.log("Request signature verified successfully (using key from DB).");
 
-  // --- Handle Verified Interactions ---
+  // --- Handle Verified Interactions (COMMAND, AUTOCOMPLETE, etc.) ---
+  // Check if preliminaryInteraction is valid before proceeding
+  if (!preliminaryInteraction) {
+      console.error("Internal error: Interaction object became null unexpectedly after PING check.");
+      return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const interaction: Interaction = preliminaryInteraction; // Now assigned safely
   try {
-    const interaction: Interaction = JSON.parse(rawBody);
+    const fetchedAppId = connDetails.discord_app_id;
 
     switch (interaction.type) {
-      case 1: // PING
-        return new Response(JSON.stringify({ type: 1 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       case 2: // APPLICATION_COMMAND
-        return await handleCommand(interaction);
+        return await handleCommand(interaction, fetchedAppId);
       case 4: // APPLICATION_COMMAND_AUTOCOMPLETE
         return await handleAutocomplete(interaction);
       default:
@@ -371,16 +449,15 @@ serve(async (req) => {
         return new Response(JSON.stringify({ type: 4, data: { content: "Unhandled interaction type." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   } catch (error) {
-    console.error("Error processing interaction:", error);
-    // Avoid sending detailed errors back unless necessary
-    return new Response(
-      JSON.stringify({ error: "Failed to process interaction" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+      console.error("Error processing interaction:", error);
+      return new Response(
+        JSON.stringify({ error: "Failed to process interaction" }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
   }
 });
+
+// --- Step 7.5: Remove Env Var Dependencies (Done implicitly by not using them) ---
+// We no longer read DISCORD_PUBLIC_KEY or DISCORD_APP_ID from Deno.env
 
 console.log("'discord-interaction-handler' function started."); 
