@@ -65,15 +65,15 @@ app.post('/start-worker', authenticate, (req: Request, res: Response) => {
 
     // --- Input Validation --- 
     if (!agentId || !botToken || !timeoutMinutes || !connectionId) {
-        return res.status(400).json({ error: 'Missing required fields: agentId, botToken, timeoutMinutes, connectionId' });
+        res.status(400).json({ error: 'Missing required fields: agentId, botToken, timeoutMinutes, connectionId' });
+        return;
     }
 
     // --- Check if worker already running (simple check) --- 
     if (activeWorkers.has(agentId)) {
         console.warn(`Worker for Agent ID ${agentId} is already running.`);
-        // Optionally try to kill/restart or just return success?
-        // For now, return success indicating it's (supposedly) running.
-        return res.status(200).json({ message: `Worker for ${agentId} is already active.` });
+        res.status(200).json({ message: `Worker for ${agentId} is already active.` });
+        return;
     }
 
     // --- Spawn Worker Process --- 
