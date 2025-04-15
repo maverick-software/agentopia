@@ -17,14 +17,6 @@ interface DiscordConnection {
   channelName?: string;
 }
 
-interface Agent extends AgentType {
-  discord_app_id?: string;
-  discord_public_key?: string;
-  inactivity_timeout_minutes?: number;
-  worker_status?: string;
-  discord_connections?: AgentDiscordConnection[];
-}
-
 const personalityTemplates = [
   { id: 'disc-d', name: 'DISC - Dominant', description: 'Direct, results-oriented, strong-willed' },
   { id: 'disc-i', name: 'DISC - Influential', description: 'Outgoing, enthusiastic, optimistic' },
@@ -65,15 +57,16 @@ export function AgentEdit() {
     system_instructions: '',
     assistant_instructions: '',
     active: true,
-    discord_app_id: '',
-    discord_public_key: ''
   });
 
   const [discordConnectionData, setDiscordConnectionData] = useState<Partial<AgentDiscordConnection>>({
     id: undefined,
+    agent_id: undefined,
     guild_id: undefined,
     inactivity_timeout_minutes: 10,
-    worker_status: 'inactive'
+    worker_status: 'inactive',
+    discord_app_id: '',
+    discord_public_key: ''
   });
   const [discordBotKey, setDiscordBotKey] = useState('');
 
@@ -175,7 +168,7 @@ export function AgentEdit() {
 
       const { data: agentData, error: agentError } = await supabase
         .from('agents')
-        .select('*, discord_app_id, discord_public_key')
+        .select('*')
         .eq('id', agentId)
         .eq('user_id', user.id)
         .single();
@@ -190,14 +183,12 @@ export function AgentEdit() {
         system_instructions: agentData.system_instructions || '',
         assistant_instructions: agentData.assistant_instructions || '',
         active: agentData.active,
-        discord_app_id: agentData.discord_app_id || '',
-        discord_public_key: agentData.discord_public_key || '',
       });
       setDiscordBotKey(agentData.discord_bot_key || '');
 
       const { data: connectionData, error: connectionError } = await supabase
         .from('agent_discord_connections')
-        .select('id, guild_id, inactivity_timeout_minutes, worker_status')
+        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
         .eq('agent_id', agentId)
         .maybeSingle();
 
@@ -206,16 +197,22 @@ export function AgentEdit() {
       if (connectionData) {
         setDiscordConnectionData({
           id: connectionData.id,
+          agent_id: agentId,
           guild_id: connectionData.guild_id,
           inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes || 10,
           worker_status: connectionData.worker_status || 'inactive',
+          discord_app_id: connectionData.discord_app_id || '',
+          discord_public_key: connectionData.discord_public_key || ''
         });
       } else {
         setDiscordConnectionData({
           id: undefined,
+          agent_id: agentId,
           guild_id: undefined,
           inactivity_timeout_minutes: 10,
-          worker_status: 'inactive'
+          worker_status: 'inactive',
+          discord_app_id: '',
+          discord_public_key: ''
         });
       }
 
@@ -297,38 +294,6 @@ export function AgentEdit() {
     disconnectDiscordBot();
   };
 
-  const handleAddDiscordChannel = (connection: DiscordConnection) => {
-    setDiscordConnectionData(prevData => {
-      const exists = (prevData.discord_connections ?? []).some(
-        (c) => c.channelId === connection.channelId
-      );
-      if (exists) return prevData;
-
-      return {
-        ...prevData,
-        discord_connections: [...(prevData.discord_connections ?? []), connection],
-      };
-    });
-  };
-
-  const handleRemoveDiscordChannel = (channelIdToRemove: string) => {
-    setDiscordConnectionData(prevData => ({
-      ...prevData,
-      discord_connections: (prevData.discord_connections ?? []).filter(
-        (c) => c.channelId !== channelIdToRemove
-      ),
-    }));
-  };
-
-  const handleRemoveDiscordGuild = (guildIdToRemove: string) => {
-    setDiscordConnectionData(prevData => ({
-      ...prevData,
-      discord_connections: (prevData.discord_connections ?? []).filter(
-        (c) => c.guildId !== guildIdToRemove
-      ),
-    }));
-  };
-
   const handleTempConnectSuccess = (token: string) => {
     connectDiscordBot(token);
   };
@@ -387,21 +352,26 @@ export function AgentEdit() {
     setDiscordLoading(true);
     setError(null);
     try {
-      const { error: tokenSaveError } = await supabase
-        .from('agents')
-        .update({ discord_bot_key: token })
-        .eq('id', id)
-        .eq('user_id', user?.id);
-      if (tokenSaveError) throw tokenSaveError;
+      console.log(`Invoking function to update token for agent ${id}`);
+      const { data: fnResponse, error: fnError } = await supabase.functions.invoke(
+        'update-agent-discord-token',
+        { body: { agentId: id, token: token.trim() } }
+      );
 
-      setDiscordBotKey(token);
+      if (fnError) throw fnError;
+      console.log('Function response:', fnResponse);
 
-      // REMOVE automatic fetch trigger here
-      // debouncedFetchDiscordGuilds();
+      setDiscordBotKey(token.trim());
 
     } catch (err: any) {
-      console.error("Error connecting bot (saving token):", err);
-      setError(`Failed to save bot token: ${err.message}`);
+      console.error("Error connecting bot (calling function):", err);
+      let detailedMessage = err.message;
+      if (err.context?.error_details) {
+          detailedMessage = `${err.message} - ${err.context.error_details}`;
+      } else if (err.details) {
+          detailedMessage = `${err.message} - ${err.details}`;
+      }
+      setError(`Failed to save bot token: ${detailedMessage}`);
     } finally {
       setDiscordLoading(false);
     }
@@ -412,61 +382,49 @@ export function AgentEdit() {
     
     setDiscordDisconnecting(true);
     setError(null);
-    let tokenClearError: any = null;
-    let connectionDeleteError: any = null;
     
     try {
-      // 1. Attempt to clear bot token in DB
-      console.log(`Clearing bot token for agent: ${id}`);
-      const { error } = await supabase
-        .from('agents')
-        .update({ discord_bot_key: null })
-        .eq('id', id)
-        .eq('user_id', user?.id);
-      tokenClearError = error;
-      if (tokenClearError) {
-          console.error("Error clearing bot token in DB:", tokenClearError);
-      }
+      console.log(`Invoking function to clear token for agent ${id}`);
+      const { data: fnResponse, error: fnError } = await supabase.functions.invoke(
+        'update-agent-discord-token', 
+        { body: { agentId: id, token: null } }
+      );
+      if (fnError) throw fnError;
+      console.log('Function response (disconnect):', fnResponse);
 
-      // 2. Attempt to delete the connection configuration row
       console.log(`Attempting to delete discord connection details for agent: ${id}`);
       const { error: delError } = await supabase
         .from('agent_discord_connections')
         .delete()
         .eq('agent_id', id);
-      connectionDeleteError = delError;
-      if (connectionDeleteError) { 
-        console.error("Error deleting connection details from DB:", connectionDeleteError);
+      if (delError) { 
+        console.error("Error deleting connection details from DB:", delError);
+        setError(prev => prev ? `${prev}\nFailed to delete connection details.` : 'Failed to delete connection details.');
       }
 
     } catch (err: any) {
-      console.error("Unexpected error during disconnect DB operations:", err);
-      setError(`An unexpected error occurred: ${err.message}`);
+      console.error("Error during disconnect (calling function or deleting connection):", err);
+       let detailedMessage = err.message;
+       if (err.context?.error_details) {
+           detailedMessage = `${err.message} - ${err.context.error_details}`;
+       } else if (err.details) {
+           detailedMessage = `${err.message} - ${err.details}`;
+       }
+       setError(prev => prev ? `${prev}\nError updating token: ${detailedMessage}` : `Error updating token: ${detailedMessage}`);
     } finally {
-      // 3. Re-fetch agent data to update UI state based on actual DB state
-      console.log("Re-fetching agent data after disconnect attempt...");
-      if (id) { // Ensure we still have the agent ID
-        await fetchAgent(id);
-      } else {
-         // If ID was somehow lost, fallback to clearing state manually
-         console.warn("Agent ID missing, clearing state manually.");
-         setDiscordBotKey('');
-         setDiscordGuilds([]);
-         setDiscordConnectionData(prev => ({
-           id: undefined, agent_id: undefined, guild_id: undefined,
-           inactivity_timeout_minutes: 10, worker_status: 'inactive'
-         }));
-      }
-      
-      // Report persistent errors if they occurred
-      if (tokenClearError || connectionDeleteError) {
-          // Keep existing error if one occurred during DB ops, otherwise set new one
-          if (!error) {
-             setError("Failed to fully update database state during disconnect. Please check console logs.");
-          }
-      }
-      
-      setDiscordDisconnecting(false);
+       console.log("Re-fetching agent data after disconnect attempt...");
+       if (id) { 
+         await fetchAgent(id);
+       } else {
+          console.warn("Agent ID missing, clearing state manually.");
+          setDiscordBotKey('');
+          setDiscordGuilds([]);
+          setDiscordConnectionData(prev => ({
+            id: undefined, agent_id: undefined, guild_id: undefined,
+            inactivity_timeout_minutes: 10, worker_status: 'inactive'
+          }));
+       }
+       setDiscordDisconnecting(false);
     }
   };
 
@@ -478,21 +436,21 @@ export function AgentEdit() {
     setError(null);
     setSaveSuccess(false);
 
-    const agentUpdateData: Partial<AgentType> & { discord_app_id?: string, discord_public_key?: string } = {
+    const agentUpdateData: Partial<AgentType> = {
       name: agentFormData.name,
       description: agentFormData.description,
       personality: agentFormData.personality,
       system_instructions: agentFormData.system_instructions,
       assistant_instructions: agentFormData.assistant_instructions,
       active: agentFormData.active,
-      discord_app_id: agentFormData.discord_app_id,
-      discord_public_key: agentFormData.discord_public_key,
     };
 
     const connectionUpdateData: Partial<AgentDiscordConnection> = {
-      inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
       agent_id: id,
-      guild_id: discordConnectionData.guild_id
+      guild_id: discordConnectionData.guild_id,
+      inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
+      discord_app_id: discordConnectionData.discord_app_id,
+      discord_public_key: discordConnectionData.discord_public_key,
     };
 
     try {
@@ -518,58 +476,53 @@ export function AgentEdit() {
 
       connectionUpdateData.agent_id = agentId;
 
-      // 2. Save/Update Discord Connection Details (timeout, status etc.)
-      // ... (Conditional upsert for connection details) ...
-       if (connectionUpdateData.agent_id && connectionUpdateData.guild_id) {
+      if (connectionUpdateData.agent_id && connectionUpdateData.guild_id && connectionUpdateData.discord_app_id && connectionUpdateData.discord_public_key) {
            console.log("Upserting Discord connection details (timeout/status):");
-           // ... (Supabase upsert call for agent_discord_connections) ...
            const { error: connectionSaveError } = await supabase
              .from('agent_discord_connections')
              .upsert({ 
                  agent_id: connectionUpdateData.agent_id,
                  guild_id: connectionUpdateData.guild_id, 
                  inactivity_timeout_minutes: connectionUpdateData.inactivity_timeout_minutes,
+                 discord_app_id: connectionUpdateData.discord_app_id,
+                 discord_public_key: connectionUpdateData.discord_public_key,
               }, { onConflict: 'agent_id' }); 
 
            if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
        } else {
-           console.log("Skipping Discord connection upsert: Missing agent_id or guild_id.");
+           console.log("Skipping Discord connection upsert: Missing agent_id, App ID, or Public Key.");
        }
 
-      // 3. Trigger Backend Command Registration
-      // Check if we have the necessary details saved/available
-      const appId = agentUpdateData.discord_app_id || agentFormData.discord_app_id;
-      const botKey = discordBotKey; // Get the bot key from state
+      const appId = connectionUpdateData.discord_app_id;
+      const botKey = discordBotKey;
       
       if (agentId && appId && botKey) { 
          console.log(`Attempting to trigger command registration for agent: ${agentId}`);
          try {
            const { data: fnResponse, error: fnError } = await supabase.functions.invoke(
              'register-agent-commands', 
-             { body: { agentId: agentId } } // Pass agentId in the body
+             { body: { agentId: agentId } }
            );
 
            if (fnError) {
-             // Log the error but don't necessarily block the whole save success message
              console.error('Error invoking register-agent-commands function:', fnError);
              setError(prev => prev ? `${prev}\nFailed to register Discord commands: ${fnError.message}` : `Failed to register Discord commands: ${fnError.message}`);
            } else {
              console.log('Successfully invoked register-agent-commands:', fnResponse);
-             // Optionally show a specific success message?
            }
-         } catch (invokeErr) {
+         } catch (invokeErr: unknown) {
            console.error('Caught error during function invocation:', invokeErr);
-           setError(prev => prev ? `${prev}\nError registering Discord commands: ${invokeErr.message}` : `Error registering Discord commands: ${invokeErr.message}`);
+           const message = invokeErr instanceof Error ? invokeErr.message : String(invokeErr);
+           setError(prev => prev ? `${prev}\nError registering Discord commands: ${message}` : `Error registering Discord commands: ${message}`);
          }
       } else {
         console.warn("Skipping command registration: Missing agentId, App ID, or Bot Token.");
       }
       
-      // --- Save Success --- 
-       setSaveSuccess(true);
-       if (!isEditing && agentId) {
+      setSaveSuccess(true);
+      if (!isEditing && agentId) {
         navigate(`/agents/${agentId}/edit`);
-      } else {
+      } else if (agentId) {
         fetchAgent(agentId);
       }
 
@@ -583,10 +536,11 @@ export function AgentEdit() {
 
   // --- Handlers for DiscordConnect ---
 
-  // Update connection data state when inputs change in DiscordConnect
-  // Remove useCallback for testing
   const handleDiscordConnectionChange = (field: keyof AgentDiscordConnection, value: any) => {
       console.log(`[AgentEdit] handleDiscordConnectionChange: field=${String(field)}, value=${value}`);
+      if (field === 'inactivity_timeout_minutes') {
+          value = parseInt(value, 10) || 10;
+      }
       setDiscordConnectionData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -594,11 +548,8 @@ export function AgentEdit() {
     setDiscordBotKey(token);
   }, []);
 
-  // This handler now updates the MAIN agent form data state
-  const handleAgentDetailsChange = useCallback((field: keyof AgentType, value: any) => {
-      console.log(`[AgentEdit] handleAgentDetailsChange: field=${String(field)}, value=${value}`);
-      setAgentFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
+  // Define a dummy handler if DiscordConnect requires the prop but AgentEdit doesn't use it for these fields
+  const handleAgentDetailChangeDummy = useCallback(() => { /* No-op */ }, []);
 
   if (!user) {
     return (
@@ -616,7 +567,11 @@ export function AgentEdit() {
     );
   }
 
-  const interactionEndpointUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
+  const generateInteractionEndpointUrl = (secret?: string): string => {
+      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
+      return baseUrl;
+  };
+  const interactionEndpointUrl = generateInteractionEndpointUrl(/* discordConnectionData.interaction_secret */);
 
   return (
     <div className="p-6 overflow-x-hidden">
@@ -758,7 +713,6 @@ export function AgentEdit() {
           </div>
 
           <div className="space-y-6">
-            {/* --- Conditionally Render Discord Section --- */}
             {id ? (
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
@@ -766,11 +720,11 @@ export function AgentEdit() {
                 <DiscordConnect
                   agentId={id || ''}
                   isConnected={!!discordBotKey}
-                  discordAppId={agentFormData.discord_app_id || ''}
-                  discordPublicKey={agentFormData.discord_public_key || ''}
+                  discordAppId={discordConnectionData.discord_app_id || ''}
+                  discordPublicKey={discordConnectionData.discord_public_key || ''}
                   connection={discordConnectionData}
                   onConnectionChange={handleDiscordConnectionChange}
-                  onAgentDetailChange={handleAgentDetailsChange}
+                  onAgentDetailChange={handleAgentDetailChangeDummy}
                   interactionEndpointUrl={interactionEndpointUrl}
                   onConnect={connectDiscordBot}
                   onDisconnect={disconnectDiscordBot}
@@ -788,9 +742,7 @@ export function AgentEdit() {
                 </p>
               </div>
             )}
-            {/* --- End Conditional Discord Section --- */}
             
-            {/* MCP Section - Render always if agent exists? Or also hide until save? Hiding for now for consistency */}
             {id ? (
               <AgentMcpSection 
                 mcpServers={mcpServers}
@@ -832,7 +784,7 @@ export function AgentEdit() {
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vector Datastore (Pinecone)
+                    Vector Datastore
                   </label>
                   <select
                     value={selectedDatastores.vector || ''}
@@ -844,7 +796,7 @@ export function AgentEdit() {
                   >
                     <option value="">Select a vector datastore</option>
                     {datastores
-                      .filter(ds => ds.type === 'pinecone')
+                      .filter(ds => ds.type === 'vector')
                       .map(ds => (
                         <option key={ds.id} value={ds.id}>{ds.name}</option>
                       ))
@@ -854,7 +806,7 @@ export function AgentEdit() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Knowledge Graph (GetZep)
+                    Knowledge Graph
                   </label>
                   <select
                     value={selectedDatastores.knowledge || ''}
@@ -866,7 +818,7 @@ export function AgentEdit() {
                   >
                     <option value="">Select a knowledge graph datastore</option>
                     {datastores
-                      .filter(ds => ds.type === 'getzep')
+                      .filter(ds => ds.type === 'knowledge')
                       .map(ds => (
                         <option key={ds.id} value={ds.id}>{ds.name}</option>
                       ))
