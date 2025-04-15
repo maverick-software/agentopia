@@ -8,7 +8,7 @@ import nacl from "https://esm.sh/tweetnacl@1.0.3";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { decrypt } from "../_shared/security.ts"; // Try relative path one level up
 
-console.log("Initializing 'discord-interaction-handler' function...");
+console.log("Initializing MINIMAL PING 'discord-interaction-handler' function...");
 
 // --- Types for Discord Interactions (simplified) ---
 interface Interaction {
@@ -345,119 +345,48 @@ async function handleCommand(interaction: Interaction, discordAppId: string | un
 
 // --- Main Server Logic ---
 serve(async (req) => {
-  // --- Handle OPTIONS request for CORS preflight ---
+  // Handle CORS preflight requests (optional, but good practice)
   if (req.method === 'OPTIONS') {
     console.log("Handling OPTIONS request");
-    return new Response("ok", { headers: corsHeaders });
+    // Adjust CORS headers as needed for your specific requirements
+    return new Response("ok", { headers: { 
+        'Access-Control-Allow-Origin': '*', // Be more specific in production
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS' // Only allow POST and OPTIONS
+    } });
   }
 
-  console.log(`Received request: ${req.method} ${req.url}`);
+  console.log(`Minimal Handler Received request: ${req.method} ${req.url}`);
 
-  // --- Step 1: Preliminary Body Parse for PING Check --- 
-  // We need to check for PING *before* validating signature or fetching secrets
-  // Clone request first as body can only be read once
-  let rawBody: string;
-  let preliminaryInteraction: Interaction | null = null;
+  // Try to parse body and check for PING
   try {
-    rawBody = await req.clone().text(); // Read body from clone
-    preliminaryInteraction = JSON.parse(rawBody);
-  } catch (e) {
-    console.error("Failed to parse initial request body:", e);
-    return new Response(JSON.stringify({ error: "Bad Request" }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
-
-  // --- Step 2: Handle PING Immediately --- 
-  if (preliminaryInteraction?.type === 1) {
-    console.log("Constructing PING response...");
-    const pingResponseBody = JSON.stringify({ type: 1 });
-    const pingResponseHeaders = { 'Content-Type': 'application/json' };
-    const pingStatus = 200;
-    
-    // Log the details before sending
-    console.log(`-- PING Response Details --`);
-    console.log(`Status: ${pingStatus}`);
-    console.log(`Headers: ${JSON.stringify(pingResponseHeaders)}`);
-    console.log(`Body: ${pingResponseBody}`);
-    console.log(`--------------------------`);
-    
-    const pingResponse = new Response(pingResponseBody, { 
-        headers: pingResponseHeaders,
-        status: pingStatus
-    });
-    return pingResponse; // Return the constructed response
-  }
-
-  // --- If not a PING, proceed with normal flow ---
-
-  // --- Parse Interaction Secret from URL ---
-  const url = new URL(req.url);
-  const pathSegments = url.pathname.split('/');
-  const interactionSecret = pathSegments.length === 5 && pathSegments[1] === 'functions' && pathSegments[2] === 'v1' && pathSegments[3] === 'discord-interaction-handler' 
-                          ? pathSegments[4] 
-                          : null;
-                          
-  if (!interactionSecret) {
-      console.error("Bad Request: Interaction secret missing or URL format incorrect.", url.pathname);
-      return new Response(JSON.stringify({ error: "Bad Request: Invalid interaction URL." }), { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    // Discord PING requires body parsing even if we don't use the content
+    const body = await req.json(); 
+    if (body?.type === 1) {
+      console.log("Minimal Handler: Responding to PING request.");
+      return new Response(JSON.stringify({ type: 1 }), { 
+          headers: { 'Content-Type': 'application/json' },
+          status: 200 
       });
-  }
-  console.log(`Parsed interaction secret: ${interactionSecret.substring(0, 10)}...`);
-
-  // --- Lookup Connection by Secret ---
-  const { data: connDetails, error: connError } = await supabaseAdmin
-      .from('agent_discord_connections')
-      .select('discord_public_key, discord_app_id, agent_id, guild_id') 
-      .eq('interaction_secret', interactionSecret)
-      .maybeSingle();
-  
-  if (connError || !connDetails) {
-      console.error("Database error looking up connection by secret:", connError);
-      return new Response(JSON.stringify({ error: "Internal Server Error: Failed to validate interaction source." }), { 
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      });
-  }
-  console.log(`Found connection for agent ${connDetails.agent_id} via secret.`);
-
-  // --- Verify Request Signature using fetched key --- 
-  // Pass the already read rawBody to verifySignature to avoid reading twice
-  const { isValid } = await verifySignature(req, connDetails.discord_public_key, rawBody);
-  if (!isValid) {
-    console.warn("Invalid request signature received (using key from DB).");
-    return new Response("Invalid request signature", { status: 401 });
-  }
-  console.log("Request signature verified successfully (using key from DB).");
-
-  // --- Handle Verified Interactions (COMMAND, AUTOCOMPLETE, etc.) ---
-  // Check if preliminaryInteraction is valid before proceeding
-  if (!preliminaryInteraction) {
-      console.error("Internal error: Interaction object became null unexpectedly after PING check.");
-      return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
-  const interaction: Interaction = preliminaryInteraction; // Now assigned safely
-  try {
-    const fetchedAppId = connDetails.discord_app_id;
-
-    switch (interaction.type) {
-      case 2: // APPLICATION_COMMAND
-        return await handleCommand(interaction, fetchedAppId);
-      case 4: // APPLICATION_COMMAND_AUTOCOMPLETE
-        return await handleAutocomplete(interaction);
-      default:
-        console.warn(`Received unhandled interaction type: ${interaction.type}`);
-        return new Response(JSON.stringify({ type: 4, data: { content: "Unhandled interaction type." } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    } else {
+      console.log("Minimal Handler: Received non-PING interaction type:", body?.type);
     }
-  } catch (error) {
-      console.error("Error processing interaction:", error);
-      return new Response(
-        JSON.stringify({ error: "Failed to process interaction" }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+  } catch (e) {
+    // Handle cases where body isn't valid JSON or other errors during parsing
+    console.error("Minimal Handler: Failed to parse request body as JSON or other error:", e);
+    // Return 400 for bad JSON, as Discord expects specific interactions
+    return new Response(JSON.stringify({ error: "Bad Request - Invalid Body" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
+
+  // If it wasn't a PING, return an error (Discord expects specific interaction types)
+  console.log("Minimal Handler: Unhandled interaction type.");
+  return new Response(JSON.stringify({ error: "Unhandled Interaction Type" }), { 
+      status: 400, // Use 400 Bad Request as we didn't handle the type
+      headers: { 'Content-Type': 'application/json' } 
+  });
 });
 
 // --- Step 7.5: Remove Env Var Dependencies (Done implicitly by not using them) ---
 // We no longer read DISCORD_PUBLIC_KEY or DISCORD_APP_ID from Deno.env
 
-console.log("'discord-interaction-handler' function started."); 
+console.log("Minimal PING 'discord-interaction-handler' function started."); 

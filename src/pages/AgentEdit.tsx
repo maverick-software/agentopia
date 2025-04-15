@@ -500,9 +500,16 @@ export function AgentEdit() {
       }
       connectionUpdateData.agent_id = agentId;
 
+      // 2. Save/Update Discord Connection Details
+      
+      // --- Add Logging --- 
+      console.log("[handleSubmit] Checking connectionUpdateData before upsert condition:", connectionUpdateData);
+      // --- End Logging ---
+      
+      // This condition checks if the necessary fields are present
       if (connectionUpdateData.agent_id 
           && connectionUpdateData.discord_app_id 
-          && connectionUpdateData.discord_public_key) {
+          && connectionUpdateData.discord_public_key) { 
            console.log("Preparing Discord connection details for upsert:", connectionUpdateData);
 
            // --- Generate Interaction Secret using Web Crypto API --- 
