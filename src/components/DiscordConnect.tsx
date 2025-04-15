@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bot, Check, Loader2, X, Copy, ExternalLink } from 'lucide-react';
+import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import type { AgentDiscordConnection, Agent } from '../types';
 
 interface DiscordConnectProps {
@@ -47,10 +47,12 @@ export function DiscordConnect({
 
   const [localTimeout, setLocalTimeout] = useState(10);
 
-  // --- Local state for masked inputs ---
+  // --- State for masked inputs ---
   const MASK_CHAR = '•'; // Use a circle character
   const [localAppId, setLocalAppId] = useState('');
   const [localPublicKey, setLocalPublicKey] = useState('');
+  const [isAppIdVisible, setIsAppIdVisible] = useState(false);
+  const [isPublicKeyVisible, setIsPublicKeyVisible] = useState(false);
 
   // Helper to generate mask string
   const generateMask = (length: number) => MASK_CHAR.repeat(length || 10); // Repeat mask char, default 10 if length 0
@@ -58,9 +60,10 @@ export function DiscordConnect({
   // Sync local display state based on props (for initial masking)
   useEffect(() => {
     setLocalTimeout(connection?.inactivity_timeout_minutes || 10);
-    // Generate mask based on prop length
-    setLocalAppId(discordAppId ? generateMask(discordAppId.length) : '');
-    setLocalPublicKey(discordPublicKey ? generateMask(discordPublicKey.length) : '');
+    setLocalAppId(discordAppId || ''); // Store the actual value locally
+    setLocalPublicKey(discordPublicKey || ''); // Store the actual value locally
+    setIsAppIdVisible(false); // Reset visibility on prop change
+    setIsPublicKeyVisible(false); // Reset visibility on prop change
   }, [connection?.inactivity_timeout_minutes, discordAppId, discordPublicKey]);
 
   useEffect(() => {
@@ -91,46 +94,19 @@ export function DiscordConnect({
   const handleInputChange = (field: keyof AgentDiscordConnection, value: any) => {
     console.log(`[DiscordConnect] InputChange: field=${String(field)}, value=${value}`);
     
-    // Update local state for direct input feedback
     if (field === 'discord_app_id') {
-       setLocalAppId(value);
+       setLocalAppId(value); // Update local value directly
     } else if (field === 'discord_public_key') {
-       setLocalPublicKey(value);
+       setLocalPublicKey(value); // Update local value directly
     } else if (field === 'inactivity_timeout_minutes') {
        const numericValue = parseInt(value, 10) || 10;
        setLocalTimeout(numericValue); 
-       value = numericValue; // Pass the parsed value up
+       value = numericValue; 
     }
     
-    // Always call parent handler to update AgentEdit state
-    if ((field === 'discord_app_id' || field === 'discord_public_key') && onConnectionChange) {
-        onConnectionChange(field, value);
+    if (onConnectionChange) {
+        onConnectionChange(field, value); // Propagate change up to AgentEdit
     } 
-  };
-
-  // Handle focus: clear local state if it was masked
-  const handleFocus = (field: 'discord_app_id' | 'discord_public_key') => {
-     // Check if current value is a mask string
-     const isMasked = (value: string) => value.length > 0 && value.split('').every(char => char === MASK_CHAR);
-     
-     if (field === 'discord_app_id' && isMasked(localAppId)) {
-        setLocalAppId(''); // Clear for editing
-     } else if (field === 'discord_public_key' && isMasked(localPublicKey)) {
-        setLocalPublicKey(''); // Clear for editing
-     }
-  };
-
-  // Handle blur: Re-mask ONLY if the field is now empty AND there was an original prop value
-  const handleBlur = (field: 'discord_app_id' | 'discord_public_key') => {
-    if (field === 'discord_app_id') {
-       if (!localAppId && discordAppId) { // If field is empty and original prop had value
-         setLocalAppId(generateMask(discordAppId.length)); // Re-mask with correct length
-       }
-    } else if (field === 'discord_public_key') {
-       if (!localPublicKey && discordPublicKey) { // If field is empty and original prop had value
-         setLocalPublicKey(generateMask(discordPublicKey.length)); // Re-mask with correct length
-       }
-    }
   };
 
   const handleCopyUrl = () => {
@@ -208,31 +184,47 @@ export function DiscordConnect({
         <div className="space-y-4 pt-4 border-t border-gray-600">
           <div>
             <label htmlFor="discordAppId" className="block text-sm font-medium text-gray-300 mb-1">Discord Application ID *</label>
-            <input
-              type="text"
-              id="discordAppId"
-              required
-              value={localAppId}
-              onChange={(e) => handleInputChange('discord_app_id', e.target.value)}
-              onFocus={() => handleFocus('discord_app_id')}
-              onBlur={() => handleBlur('discord_app_id')}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder={discordAppId ? 'Click to edit Application ID' : 'Paste Application ID here'}
-            />
+            <div className="relative">
+              <input
+                type={isAppIdVisible ? "text" : "password"}
+                id="discordAppId"
+                required
+                value={localAppId}
+                onChange={(e) => handleInputChange('discord_app_id', e.target.value)}
+                className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder={'Paste Application ID here'}
+              />
+              <button 
+                type="button" 
+                onClick={() => setIsAppIdVisible(!isAppIdVisible)}
+                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
+                aria-label={isAppIdVisible ? "Hide Application ID" : "Show Application ID"}
+              >
+                {isAppIdVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
           <div>
             <label htmlFor="discordPublicKey" className="block text-sm font-medium text-gray-300 mb-1">Discord Public Key *</label>
-            <input
-              type="text"
-              id="discordPublicKey"
-              required
-              value={localPublicKey}
-              onChange={(e) => handleInputChange('discord_public_key', e.target.value)}
-              onFocus={() => handleFocus('discord_public_key')}
-              onBlur={() => handleBlur('discord_public_key')}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder={discordPublicKey ? 'Click to edit Public Key' : 'Paste Public Key here'}
-            />
+            <div className="relative">
+              <input
+                type={isPublicKeyVisible ? "text" : "password"}
+                id="discordPublicKey"
+                required
+                value={localPublicKey}
+                onChange={(e) => handleInputChange('discord_public_key', e.target.value)}
+                className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder={'Paste Public Key here'}
+              />
+              <button 
+                type="button" 
+                onClick={() => setIsPublicKeyVisible(!isPublicKeyVisible)}
+                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
+                aria-label={isPublicKeyVisible ? "Hide Public Key" : "Show Public Key"}
+              >
+                {isPublicKeyVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             <p className="mt-1 text-xs text-gray-400">
               Find these in the 
               <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline mx-1">

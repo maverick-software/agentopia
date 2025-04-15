@@ -501,7 +501,8 @@ export function AgentEdit() {
       connectionUpdateData.agent_id = agentId;
 
       if (connectionUpdateData.agent_id 
-          && connectionUpdateData.discord_app_id && connectionUpdateData.discord_public_key ) { 
+          && connectionUpdateData.discord_app_id 
+          && connectionUpdateData.discord_public_key) {
            console.log("Preparing Discord connection details for upsert:", connectionUpdateData);
 
            // --- Generate Interaction Secret using Web Crypto API --- 
@@ -543,7 +544,7 @@ export function AgentEdit() {
            // --- End state update ---
            
       } else {
-           console.log("Skipping Discord connection upsert: Missing agent_id, App ID, or Public Key.");
+           console.warn("Skipping Discord connection upsert: Missing agent_id, App ID, or Public Key.");
       }
 
       const appId = connectionUpdateData.discord_app_id;
