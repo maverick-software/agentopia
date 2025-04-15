@@ -519,6 +519,7 @@ export function AgentEdit() {
            const upsertData = {
                agent_id: connectionUpdateData.agent_id,
                guild_id: connectionUpdateData.guild_id || null, // Ensure null if undefined
+               channel_id: connectionUpdateData.channel_id || null, // <<< Ensure null if undefined
                inactivity_timeout_minutes: connectionUpdateData.inactivity_timeout_minutes,
                discord_app_id: connectionUpdateData.discord_app_id,
                discord_public_key: connectionUpdateData.discord_public_key,
