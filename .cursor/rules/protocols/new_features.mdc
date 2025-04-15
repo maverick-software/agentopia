@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: Workflow for adding and integrating new features.
 globs: 
 alwaysApply: false

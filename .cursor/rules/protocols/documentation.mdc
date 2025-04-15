@@ -36,7 +36,7 @@ alwaysApply: false
   - Lists key files and their functions.
   - Provides references for understanding the code within.
 
-- **Maintain `_change.logs` in Every Folder**
+- **Maintain `_change.logs` in the Root Folder**
   - Tracks all modifications within the folder.
   - Logs changes with timestamps and brief descriptions.
 
@@ -64,9 +64,10 @@ alwaysApply: false
     ```
 
 ## 4. Problem-Solving Documentation
-- **Store Research Notes in `.\docs\bugs\`, `.\docs\plans\`, and `.\docs\features\`**
+- **Store Research Notes in `.\docs\bugs\`, `.\docs\plans\`**
   - When debugging or implementing a feature, document findings.
   - Helps with future reference and problem-solving.
+  - Create the roadmap in the `.\docs\plans\roadmap.md`
 
 - **Use Comprehensive Logging Systems**
   - Include logging mechanisms in your plan.
@@ -94,7 +95,6 @@ alwaysApply: false
 - **Keep Knowledgebase Updated**
   - Fixes or features can produce work that can summarrized into a knowledgebase document
   - Follow the "knowledge base protocol" found at `.cursor\rules\protocols\knowledge_base.mdc`
-
 
 ## 6. Developer Rules and Best Practices
 - **Capture Valuable Development Rules**

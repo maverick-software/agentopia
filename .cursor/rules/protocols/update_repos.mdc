@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 Now that your project is finished, it is time to document your results.
 
 1. For every folder you worked in, updating __ai__.md with the new files, folders and functions

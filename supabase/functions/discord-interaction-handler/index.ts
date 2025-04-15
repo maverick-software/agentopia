@@ -92,17 +92,27 @@ function hexToUint8Array(hex: string): Uint8Array {
 
 // --- Autocomplete Handler ---
 async function handleAutocomplete(interaction: Interaction): Promise<Response> {
+    console.log("--- Handling Autocomplete Request ---");
+    console.log("Received interaction data:", JSON.stringify(interaction.data, null, 2));
+
     const focusedOption = interaction.data?.options?.find(opt => opt.focused);
     const guildId = interaction.guild_id;
 
+    console.log(`Guild ID: ${guildId}, Focused Option: ${JSON.stringify(focusedOption)}`);
+
     if (!focusedOption || focusedOption.name !== 'agent' || !guildId) {
-        return new Response(JSON.stringify({ choices: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        console.log("Autocomplete conditions not met (no focused 'agent' option or guildId). Returning empty choices.");
+        return new Response(JSON.stringify({ type: 8, data: { choices: [] } }), {
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
     }
 
-    const searchQuery = focusedOption.value.toLowerCase();
+    const searchQuery = focusedOption.value?.toString().toLowerCase() || '';
     console.log(`Autocomplete query for guild ${guildId}: "${searchQuery}"`);
 
     try {
+        console.log("Attempting Supabase query for agents...");
         const { data, error } = await supabaseAdmin
             .from('agent_discord_connections')
             .select(`
@@ -113,21 +123,29 @@ async function handleAutocomplete(interaction: Interaction): Promise<Response> {
             .ilike('agents.name', `%${searchQuery}%`) // Case-insensitive search on agent name
             .limit(25);
 
-        if (error) throw error;
+        if (error) {
+            console.error("Supabase query error:", error);
+            throw error;
+        }
+
+        console.log(`Supabase query successful. Found ${data?.length || 0} potential matches.`);
 
         const choices: AutocompleteChoice[] = data?.map(conn => ({
-            name: `${conn.agents.name}`, // Just display name (or add ID back if preferred)
-            value: conn.agents.name // Return the NAME as the value
+            name: `${conn.agents.name} (ID: ${conn.agents.id})`,
+            value: conn.agents.id
         })) || [];
 
-        console.log(`Returning ${choices.length} choices for "${searchQuery}"`);
+        console.log(`Returning ${choices.length} choices for "${searchQuery}":`, JSON.stringify(choices));
         return new Response(JSON.stringify({ type: 8, data: { choices } }), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 
     } catch (error) {
-        console.error("Error fetching autocomplete choices:", error);
-        return new Response(JSON.stringify({ choices: [] }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        console.error("Error inside handleAutocomplete catch block:", error);
+        return new Response(JSON.stringify({ type: 8, data: { choices: [] } }), { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
     }
 }
 
@@ -156,7 +174,7 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
     const interactionToken = interaction.token;
     const interactionId = interaction.id;
     
-    console.log(`Handling command '${commandName}' (ID: ${interactionId}) in guild ${guildId}`);
+    console.log(`--- Handling Command Execution Request: '${commandName}' (ID: ${interactionId}) ---`);
 
     if (commandName === 'activate') {
         if (!guildId || !channelId) {
@@ -224,7 +242,9 @@ async function handleCommand(interaction: Interaction): Promise<Response> {
                 console.log(`Agent ${agentIdToSend} (Name: ${selectedAgentName}) is already active or activating.`);
                 activationSuccess = true;
                 errorMessage = "Agent is already active or being activated.";
-                return; // Exit the try block early
+                // Send followup immediately and return the deferred response
+                await sendFollowup(interactionToken, errorMessage);
+                return deferResponse; // Fix: Return the deferred response object
             }
             
             console.log(`Setting status to 'activating' for connection ${connectionId}`);
