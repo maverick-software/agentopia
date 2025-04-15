@@ -17,7 +17,6 @@ interface DiscordConnectProps {
   interactionEndpointUrl: string;
   discordAppId?: string;
   discordPublicKey?: string;
-  onAgentDetailChange: (field: 'discord_app_id' | 'discord_public_key', value: string) => void;
 }
 
 export function DiscordConnect({ 
@@ -35,7 +34,6 @@ export function DiscordConnect({
   interactionEndpointUrl,
   discordAppId,
   discordPublicKey,
-  onAgentDetailChange
 }: DiscordConnectProps) {
   
   const [botTokenInput, setBotTokenInput] = useState(''); 
@@ -52,13 +50,13 @@ export function DiscordConnect({
   const [localAppId, setLocalAppId] = useState('');
   const [localPublicKey, setLocalPublicKey] = useState('');
 
-  // Sync local display state based on props
+  // Sync local display state based on props (for initial masking)
   useEffect(() => {
     setLocalTimeout(connection?.inactivity_timeout_minutes || 10);
-    // Set local display based on whether prop has value
     setLocalAppId(discordAppId ? MASKED_VALUE : '');
     setLocalPublicKey(discordPublicKey ? MASKED_VALUE : '');
-  }, [connection, discordAppId, discordPublicKey]); // Re-run if props change
+    // IMPORTANT: Don't sync connection.discord_app_id here, as it creates a loop
+  }, [connection?.inactivity_timeout_minutes, discordAppId, discordPublicKey]); // Only react to initial props
 
   useEffect(() => {
     // Sync loading states
@@ -85,56 +83,44 @@ export function DiscordConnect({
     onDisconnect();
   };
 
-  const handleInputChange = (field: keyof AgentDiscordConnection | 'discord_app_id' | 'discord_public_key', value: any) => {
+  const handleInputChange = (field: keyof AgentDiscordConnection, value: any) => {
     console.log(`[DiscordConnect] InputChange: field=${String(field)}, value=${value}`);
     
-    if (field === 'inactivity_timeout_minutes') {
-      const numericValue = parseInt(value, 10);
-      setLocalTimeout(numericValue);
-      if (onConnectionChange) {
-          onConnectionChange(field, numericValue);
-      } 
-    } else if (field === 'discord_app_id') {
-       // Update local state directly with typed value
-       setLocalAppId(value); 
-       // Call parent handler with actual value
-       if (onAgentDetailChange) {
-          onAgentDetailChange(field, value);
-       } 
+    // Update local state for direct input feedback
+    if (field === 'discord_app_id') {
+       setLocalAppId(value);
     } else if (field === 'discord_public_key') {
-       // Update local state directly with typed value
        setLocalPublicKey(value);
-       // Call parent handler with actual value
-       if (onAgentDetailChange) {
-          onAgentDetailChange(field, value);
-       } 
+    } else if (field === 'inactivity_timeout_minutes') {
+       const numericValue = parseInt(value, 10) || 10;
+       setLocalTimeout(numericValue); 
+       value = numericValue; // Pass the parsed value up
     }
+    
+    // Always call parent handler to update AgentEdit state
+    if (onConnectionChange) {
+        onConnectionChange(field, value);
+    } 
   };
 
   // Handle focus: clear local state if it was masked
   const handleFocus = (field: 'discord_app_id' | 'discord_public_key') => {
      if (field === 'discord_app_id' && localAppId === MASKED_VALUE) {
-        setLocalAppId('');
+        setLocalAppId(''); // Clear for editing
      } else if (field === 'discord_public_key' && localPublicKey === MASKED_VALUE) {
-        setLocalPublicKey('');
+        setLocalPublicKey(''); // Clear for editing
      }
   };
 
-  // Handle blur: re-mask if parent has value
+  // Handle blur: Re-mask ONLY if the field is now empty AND there was an original prop value
   const handleBlur = (field: 'discord_app_id' | 'discord_public_key') => {
     if (field === 'discord_app_id') {
-       // Check the prop value passed from parent
-       if (discordAppId) {
-         setLocalAppId(MASKED_VALUE);
-       } else {
-         // If prop is empty (e.g., user cleared input and saved), keep local empty
-         setLocalAppId(''); 
+       if (!localAppId && discordAppId) { // If field is empty and original prop had value
+         setLocalAppId(MASKED_VALUE); // Re-mask
        }
     } else if (field === 'discord_public_key') {
-       if (discordPublicKey) {
-         setLocalPublicKey(MASKED_VALUE);
-       } else {
-         setLocalPublicKey('');
+       if (!localPublicKey && discordPublicKey) { // If field is empty and original prop had value
+         setLocalPublicKey(MASKED_VALUE); // Re-mask
        }
     }
   };
