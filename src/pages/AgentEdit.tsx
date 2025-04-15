@@ -9,7 +9,7 @@ import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
-import crypto from 'crypto-browserify'; // Use browser-compatible crypto
+import crypto from 'crypto'; // Use standard crypto, rely on Vite polyfill
 
 interface DiscordConnection {
   guildId: string;
