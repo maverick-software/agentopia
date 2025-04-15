@@ -10,7 +10,8 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 console.log("--- Worker Manager Service Starting ---");
 
 // --- Configuration --- 
-const PORT = process.env.PORT || 8000;
+const portString = process.env.PORT || '8000'; // Default to string '8000'
+const PORT = parseInt(portString, 10); // Explicitly parse to number
 const MANAGER_SECRET_KEY = process.env.MANAGER_SECRET_KEY;
 const WORKER_SCRIPT_PATH = process.env.WORKER_SCRIPT_PATH || '../discord-worker/src/worker.ts';
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -39,11 +40,13 @@ app.use(express.json()); // Parse JSON bodies
 const authenticate = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Authorization header missing or malformed' });
+        res.status(401).json({ error: 'Authorization header missing or malformed' });
+        return;
     }
     const token = authHeader.split(' ')[1];
     if (token !== MANAGER_SECRET_KEY) {
-        return res.status(403).json({ error: 'Invalid secret key' });
+        res.status(403).json({ error: 'Invalid secret key' });
+        return;
     }
     next(); // Authentication successful
 };
@@ -120,7 +123,7 @@ app.post('/start-worker', authenticate, (req: Request, res: Response) => {
 // TODO: Add endpoint to get status of workers (/status)
 
 // --- Start Server --- 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Worker Manager Service listening on port ${PORT}`);
 });
 
