@@ -9,6 +9,7 @@ import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
+import crypto from 'crypto-browserify'; // Use browser-compatible crypto
 
 interface DiscordConnection {
   guildId: string;
@@ -66,7 +67,8 @@ export function AgentEdit() {
     inactivity_timeout_minutes: 10,
     worker_status: 'inactive',
     discord_app_id: '',
-    discord_public_key: ''
+    discord_public_key: '',
+    interaction_secret: undefined
   });
   const [discordBotKey, setDiscordBotKey] = useState('');
 
@@ -202,7 +204,8 @@ export function AgentEdit() {
           inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes || 10,
           worker_status: connectionData.worker_status || 'inactive',
           discord_app_id: connectionData.discord_app_id || '',
-          discord_public_key: connectionData.discord_public_key || ''
+          discord_public_key: connectionData.discord_public_key || '',
+          interaction_secret: connectionData.interaction_secret || undefined
         });
       } else {
         setDiscordConnectionData({
@@ -212,7 +215,8 @@ export function AgentEdit() {
           inactivity_timeout_minutes: 10,
           worker_status: 'inactive',
           discord_app_id: '',
-          discord_public_key: ''
+          discord_public_key: '',
+          interaction_secret: undefined
         });
       }
 
@@ -451,6 +455,7 @@ export function AgentEdit() {
       inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
       discord_app_id: discordConnectionData.discord_app_id,
       discord_public_key: discordConnectionData.discord_public_key,
+      interaction_secret: discordConnectionData.interaction_secret
     };
 
     try {
@@ -474,24 +479,58 @@ export function AgentEdit() {
         agentId = newAgent.id;
       }
 
+      if (!agentId) {
+          throw new Error("Agent ID is missing after save/create.");
+      }
       connectionUpdateData.agent_id = agentId;
 
-      if (connectionUpdateData.agent_id && connectionUpdateData.guild_id && connectionUpdateData.discord_app_id && connectionUpdateData.discord_public_key) {
-           console.log("Upserting Discord connection details (timeout/status):");
+      if (connectionUpdateData.agent_id 
+          && connectionUpdateData.discord_app_id && connectionUpdateData.discord_public_key ) { 
+           console.log("Preparing Discord connection details for upsert:", connectionUpdateData);
+
+           // --- Generate Interaction Secret (WBS 5.3) ---
+           // Generate only if it doesn't seem to exist yet (e.g., on initial setup)
+           // Note: This frontend check isn't foolproof due to potential race conditions
+           // or if the state isn't perfectly synced. The DB ON CONFLICT is more reliable.
+           let secretToSave: string | undefined = discordConnectionData.interaction_secret; // Check if secret exists in current state
+           if (!secretToSave) {
+               console.log("Generating new interaction secret...");
+               // Generate 32 random bytes and base64 encode them
+               secretToSave = crypto.randomBytes(32).toString('base64url'); // Use base64url for URL safety
+               console.log("Generated Secret (first 10 chars):", secretToSave.substring(0, 10));
+           }
+           // --- End Secret Generation ---
+
+           const upsertData = {
+               agent_id: connectionUpdateData.agent_id,
+               guild_id: connectionUpdateData.guild_id || null, // Ensure null if undefined
+               inactivity_timeout_minutes: connectionUpdateData.inactivity_timeout_minutes,
+               discord_app_id: connectionUpdateData.discord_app_id,
+               discord_public_key: connectionUpdateData.discord_public_key,
+               interaction_secret: secretToSave // Add the secret to the upsert data (WBS 5.4)
+           };
+
+           console.log("Upserting data:", upsertData);
+           
            const { error: connectionSaveError } = await supabase
              .from('agent_discord_connections')
-             .upsert({ 
-                 agent_id: connectionUpdateData.agent_id,
-                 guild_id: connectionUpdateData.guild_id, 
-                 inactivity_timeout_minutes: connectionUpdateData.inactivity_timeout_minutes,
-                 discord_app_id: connectionUpdateData.discord_app_id,
-                 discord_public_key: connectionUpdateData.discord_public_key,
-              }, { onConflict: 'agent_id' }); 
+             .upsert(upsertData, { 
+                onConflict: 'agent_id', // Assumes one connection per agent 
+                // ignoreDuplicates: false // Default is false, ensures update happens
+             }); 
 
            if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
-       } else {
+           
+           // --- Update local state with the saved secret if it was newly generated ---
+           // Important for displaying the correct URL immediately after save
+           if (secretToSave && secretToSave !== discordConnectionData.interaction_secret) {
+               setDiscordConnectionData(prev => ({...prev, interaction_secret: secretToSave}));
+           }
+           // --- End state update ---
+           
+      } else {
            console.log("Skipping Discord connection upsert: Missing agent_id, App ID, or Public Key.");
-       }
+      }
 
       const appId = connectionUpdateData.discord_app_id;
       const botKey = discordBotKey;
@@ -569,9 +608,9 @@ export function AgentEdit() {
 
   const generateInteractionEndpointUrl = (secret?: string): string => {
       const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
-      return baseUrl;
+      return secret ? `${baseUrl}/${secret}` : baseUrl; 
   };
-  const interactionEndpointUrl = generateInteractionEndpointUrl(/* discordConnectionData.interaction_secret */);
+  const interactionEndpointUrl = generateInteractionEndpointUrl(discordConnectionData.interaction_secret);
 
   return (
     <div className="p-6 overflow-x-hidden">

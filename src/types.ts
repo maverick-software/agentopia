@@ -56,6 +56,7 @@ export interface AgentDiscordConnection {
   discord_public_key?: string;
   inactivity_timeout_minutes?: number;
   worker_status?: 'inactive' | 'activating' | 'active' | 'stopping' | 'error';
+  interaction_secret?: string;
 }
 
 // Ensure this type is defined, perhaps in types.ts or here
