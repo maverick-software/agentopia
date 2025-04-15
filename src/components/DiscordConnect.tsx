@@ -17,6 +17,7 @@ interface DiscordConnectProps {
   interactionEndpointUrl: string;
   discordAppId?: string;
   discordPublicKey?: string;
+  onAgentDetailChange?: (field: 'discord_app_id' | 'discord_public_key', value: string) => void;
 }
 
 export function DiscordConnect({ 
@@ -34,6 +35,7 @@ export function DiscordConnect({
   interactionEndpointUrl,
   discordAppId,
   discordPublicKey,
+  onAgentDetailChange,
 }: DiscordConnectProps) {
   
   const [botTokenInput, setBotTokenInput] = useState(''); 
@@ -46,17 +48,20 @@ export function DiscordConnect({
   const [localTimeout, setLocalTimeout] = useState(10);
 
   // --- Local state for masked inputs ---
-  const MASKED_VALUE = '**********';
+  const MASK_CHAR = '•'; // Use a circle character
   const [localAppId, setLocalAppId] = useState('');
   const [localPublicKey, setLocalPublicKey] = useState('');
+
+  // Helper to generate mask string
+  const generateMask = (length: number) => MASK_CHAR.repeat(length || 10); // Repeat mask char, default 10 if length 0
 
   // Sync local display state based on props (for initial masking)
   useEffect(() => {
     setLocalTimeout(connection?.inactivity_timeout_minutes || 10);
-    setLocalAppId(discordAppId ? MASKED_VALUE : '');
-    setLocalPublicKey(discordPublicKey ? MASKED_VALUE : '');
-    // IMPORTANT: Don't sync connection.discord_app_id here, as it creates a loop
-  }, [connection?.inactivity_timeout_minutes, discordAppId, discordPublicKey]); // Only react to initial props
+    // Generate mask based on prop length
+    setLocalAppId(discordAppId ? generateMask(discordAppId.length) : '');
+    setLocalPublicKey(discordPublicKey ? generateMask(discordPublicKey.length) : '');
+  }, [connection?.inactivity_timeout_minutes, discordAppId, discordPublicKey]);
 
   useEffect(() => {
     // Sync loading states
@@ -98,16 +103,19 @@ export function DiscordConnect({
     }
     
     // Always call parent handler to update AgentEdit state
-    if (onConnectionChange) {
+    if ((field === 'discord_app_id' || field === 'discord_public_key') && onConnectionChange) {
         onConnectionChange(field, value);
     } 
   };
 
   // Handle focus: clear local state if it was masked
   const handleFocus = (field: 'discord_app_id' | 'discord_public_key') => {
-     if (field === 'discord_app_id' && localAppId === MASKED_VALUE) {
+     // Check if current value is a mask string
+     const isMasked = (value: string) => value.length > 0 && value.split('').every(char => char === MASK_CHAR);
+     
+     if (field === 'discord_app_id' && isMasked(localAppId)) {
         setLocalAppId(''); // Clear for editing
-     } else if (field === 'discord_public_key' && localPublicKey === MASKED_VALUE) {
+     } else if (field === 'discord_public_key' && isMasked(localPublicKey)) {
         setLocalPublicKey(''); // Clear for editing
      }
   };
@@ -116,11 +124,11 @@ export function DiscordConnect({
   const handleBlur = (field: 'discord_app_id' | 'discord_public_key') => {
     if (field === 'discord_app_id') {
        if (!localAppId && discordAppId) { // If field is empty and original prop had value
-         setLocalAppId(MASKED_VALUE); // Re-mask
+         setLocalAppId(generateMask(discordAppId.length)); // Re-mask with correct length
        }
     } else if (field === 'discord_public_key') {
        if (!localPublicKey && discordPublicKey) { // If field is empty and original prop had value
-         setLocalPublicKey(MASKED_VALUE); // Re-mask
+         setLocalPublicKey(generateMask(discordPublicKey.length)); // Re-mask with correct length
        }
     }
   };

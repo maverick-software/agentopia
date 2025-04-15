@@ -9,7 +9,6 @@ import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
-import crypto from 'crypto'; // Use standard crypto, rely on Vite polyfill
 
 interface DiscordConnection {
   guildId: string;
@@ -27,6 +26,23 @@ const personalityTemplates = [
   { id: 'mbti-enfp', name: 'MBTI - ENFP', description: 'Campaigner - Enthusiastic, creative, sociable' },
   { id: 'custom', name: 'Custom Template', description: 'Create your own personality template' },
 ];
+
+// Helper function for Base64URL encoding (browser compatible)
+function bytesToBase64Url(bytes: Uint8Array): string {
+  // Convert bytes to string, handling potential character code issues
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  // Use btoa for standard Base64
+  const base64 = btoa(binary);
+  // Convert to Base64URL
+  return base64
+    .replace(/\+/g, '-') // Replace + with -
+    .replace(/\//g, '_') // Replace / with _
+    .replace(/=/g, '');   // Remove padding
+}
 
 export function AgentEdit() {
   const { user } = useAuth();
@@ -190,7 +206,7 @@ export function AgentEdit() {
 
       const { data: connectionData, error: connectionError } = await supabase
         .from('agent_discord_connections')
-        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
+        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key, interaction_secret')
         .eq('agent_id', agentId)
         .maybeSingle();
 
@@ -488,15 +504,13 @@ export function AgentEdit() {
           && connectionUpdateData.discord_app_id && connectionUpdateData.discord_public_key ) { 
            console.log("Preparing Discord connection details for upsert:", connectionUpdateData);
 
-           // --- Generate Interaction Secret (WBS 5.3) ---
-           // Generate only if it doesn't seem to exist yet (e.g., on initial setup)
-           // Note: This frontend check isn't foolproof due to potential race conditions
-           // or if the state isn't perfectly synced. The DB ON CONFLICT is more reliable.
-           let secretToSave: string | undefined = discordConnectionData.interaction_secret; // Check if secret exists in current state
+           // --- Generate Interaction Secret using Web Crypto API --- 
+           let secretToSave: string | undefined = discordConnectionData.interaction_secret;
            if (!secretToSave) {
-               console.log("Generating new interaction secret...");
-               // Generate 32 random bytes and base64 encode them
-               secretToSave = crypto.randomBytes(32).toString('base64url'); // Use base64url for URL safety
+               console.log("Generating new interaction secret using Web Crypto...");
+               const randomBytes = new Uint8Array(32);
+               window.crypto.getRandomValues(randomBytes); // Use window.crypto
+               secretToSave = bytesToBase64Url(randomBytes); // Encode as base64url
                console.log("Generated Secret (first 10 chars):", secretToSave.substring(0, 10));
            }
            // --- End Secret Generation ---
@@ -587,7 +601,7 @@ export function AgentEdit() {
     setDiscordBotKey(token);
   }, []);
 
-  // Define a dummy handler if DiscordConnect requires the prop but AgentEdit doesn't use it for these fields
+  // Define a dummy handler if DiscordConnect requires the prop (now optional)
   const handleAgentDetailChangeDummy = useCallback(() => { /* No-op */ }, []);
 
   if (!user) {
