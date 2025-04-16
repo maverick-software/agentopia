@@ -106,8 +106,7 @@ export function AgentEdit() {
     testMcpConnection 
   } = useAgentMcp(id);
 
-  // Comment out the entire function for now to stop guild fetching
-  /*
+  // Restore the original guild fetching logic
   const fetchDiscordGuildsLogic = async () => {
     if (!id) return;
     
@@ -147,14 +146,8 @@ export function AgentEdit() {
       setFetchingGuilds(false);
     }
   };
-  */
-  // Replace with a dummy function
-  const fetchDiscordGuildsLogic = async () => { 
-      console.log("Guild fetching currently disabled for debugging."); 
-      return Promise.resolve(); 
-  };
 
-  // Debounced version also uses the dummy function
+  // Ensure the debounced version uses the restored function
   const debouncedFetchDiscordGuilds = useDebouncedCallback(fetchDiscordGuildsLogic, 2000);
 
   useEffect(() => {
