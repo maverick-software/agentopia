@@ -70,22 +70,7 @@ async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error'
     log('log', `Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
     log('log', `Using filter: .eq('id', '${CONNECTION_ID}')`);
     try {
-        log('log', `Checking existence of connection ${CONNECTION_ID} before update...`);
-        const { data: checkData, error: checkError } = await supabase
-            .from('agent_discord_connections')
-            .select('id', { count: 'exact', head: true })
-            .eq('id', CONNECTION_ID);
-
-        if (checkError) {
-            log('error', `Supabase error CHECKING connection ${CONNECTION_ID} BEFORE update:`, JSON.stringify(checkError, null, 2));
-        } else if (!checkData || checkData.length === 0) {
-            log('error', `CRITICAL: Connection ${CONNECTION_ID} NOT FOUND in DB right before update attempt! Update will fail.`);
-            return;
-        } else {
-            log('log', `Connection ${CONNECTION_ID} confirmed to exist before update attempt.`);
-        }
-
-        log('log', `Proceeding with update for connection ${CONNECTION_ID}...`);
+        log('log', `Attempting direct update for connection ${CONNECTION_ID}...`);
         const { data, error } = await supabase
             .from('agent_discord_connections')
             .update({ worker_status: status })
@@ -93,12 +78,15 @@ async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error'
             .select();
 
         if (error) {
-            log('error', `Supabase error UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
+            log('error', `Supabase error DIRECTLY UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
+            log('error', `UPDATE FAILED - Code: ${error.code}, Message: ${error.message}, Details: ${error.details}, Hint: ${error.hint}`);
+        } else if (data && data.length > 0) {
+             log('log', `Successfully ran DIRECT update in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
         } else {
-            log('log', `Successfully ran update in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
+            log('error', `DIRECT UPDATE failed for connection ${CONNECTION_ID}: Row not found by UPDATE operation (returned empty data).`);
         }
     } catch (err) {
-        log('error', `Exception during status update for connection ${CONNECTION_ID}:`, err);
+        log('error', `Exception during DIRECT status update for connection ${CONNECTION_ID}:`, err);
     }
 }
 
