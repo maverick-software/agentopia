@@ -197,15 +197,21 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
                 SUPABASE_URL: SUPABASE_URL!,
                 SUPABASE_ANON_KEY: SUPABASE_ANON_KEY!,
             };
+
+            // --- Corrected PM2 Start Options --- 
+            const workerTsNodePath = path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node');
+            const workerScriptPath = path.resolve(__dirname, '../../discord-worker/src/worker.ts'); // Use resolved path for script too
+
             const startOptions: pm2.StartOptions = {
-                script: WORKER_SCRIPT_PATH,
+                script: workerTsNodePath, // Execute ts-node directly
+                args: [workerScriptPath], // Pass worker script as argument to ts-node
                 name: workerName,
-                interpreter: path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node'), 
+                // interpreter: undefined, // Ensure interpreter is not set
                 exec_mode: 'fork', 
                 env: workerEnv,
                 autorestart: false, 
             };
-            // --- End PM2 Start Options Setup ---
+            // --- End Corrected PM2 Start Options ---
 
             log('log', `[MANAGER START] Start options prepared. Calling pm2.start for ${workerName}...`);
             log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
