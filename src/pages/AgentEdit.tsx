@@ -9,6 +9,8 @@ import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
+import { AppIdPublicKeyModal } from '../components/AppIdPublicKeyModal';
+import { ServerChannelSelectModal } from '../components/ServerChannelSelectModal';
 
 interface DiscordConnection {
   guildId: string;
@@ -845,8 +847,8 @@ export function AgentEdit() {
         </div>
       </form>
 
-      {/* --- NEW: Modal Renderings (Conceptual) --- */}
-      {/* {showAppIdModal && (
+      {/* --- Render Modals --- */}
+      {showAppIdModal && (
         <AppIdPublicKeyModal 
           initialAppId={discordConnectionData.discord_app_id || ''}
           initialPublicKey={discordConnectionData.discord_public_key || ''}
@@ -854,9 +856,9 @@ export function AgentEdit() {
           onClose={() => setShowAppIdModal(false)}
           loading={saving} 
         />
-      )} */}
+      )}
 
-      {/* {showServerSelectModal && (
+      {showServerSelectModal && (
         <ServerChannelSelectModal
           guilds={discordGuilds}
           selectedGuildId={discordConnectionData.guild_id}
@@ -865,8 +867,8 @@ export function AgentEdit() {
           onClose={() => setShowServerSelectModal(false)}
           loading={saving || fetchingGuilds} // Show loading while fetching too
         />
-      )} */}
-      {/* --- End NEW Modals --- */}
+      )}
+      {/* --- End Modals --- */}
 
       {showDatastoreModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

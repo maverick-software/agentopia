@@ -152,6 +152,9 @@ export function DiscordConnect({
     return <span className={`font-medium ${color}`}>{text}</span>;
   };
 
+  // Determine if the full connection (App ID, Key) is established based on props
+  const isFullyConnected = !!(isConnected && connection.discord_app_id && connection.discord_public_key);
+
   return (
     <div className={`space-y-4 ${className}`}>
       {isConnected ? (
@@ -198,58 +201,21 @@ export function DiscordConnect({
       
       {isConnected && (
         <div className="space-y-4 pt-4 border-t border-gray-600">
-          <div>
-            <label htmlFor="discordAppId" className="block text-sm font-medium text-gray-300 mb-1">Discord Application ID *</label>
-            <div className="relative">
-              <input
-                type={isAppIdVisible ? "text" : "password"}
-                id="discordAppId"
-                required
-                value={localAppId}
-                onChange={(e) => handleInputChange('discord_app_id', e.target.value)}
-                className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder={'Paste Application ID here'}
-              />
-              <button 
-                type="button" 
-                onClick={() => setIsAppIdVisible(!isAppIdVisible)}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
-                aria-label={isAppIdVisible ? "Hide Application ID" : "Show Application ID"}
-              >
-                {isAppIdVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+          {isFullyConnected ? (
+            <div className="bg-gray-900 p-3 rounded">
+              <p className="text-sm text-green-400 font-medium mb-2">Application Details Connected</p>
+              {connection.guild_id ? (
+                 <p className="text-xs text-gray-300">Connected Server ID: {connection.guild_id}</p>
+              ) : (
+                 <p className="text-xs text-yellow-400">Server not selected yet. (Check modal flow)</p>
+              )}
             </div>
-          </div>
-          <div>
-            <label htmlFor="discordPublicKey" className="block text-sm font-medium text-gray-300 mb-1">Discord Public Key *</label>
-            <div className="relative">
-              <input
-                type={isPublicKeyVisible ? "text" : "password"}
-                id="discordPublicKey"
-                required
-                value={localPublicKey}
-                onChange={(e) => handleInputChange('discord_public_key', e.target.value)}
-                className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder={'Paste Public Key here'}
-              />
-              <button 
-                type="button" 
-                onClick={() => setIsPublicKeyVisible(!isPublicKeyVisible)}
-                className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
-                aria-label={isPublicKeyVisible ? "Hide Public Key" : "Show Public Key"}
-              >
-                {isPublicKeyVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-gray-400">
-              Find these in the 
-              <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline mx-1">
-                Discord Developer Portal
-                <ExternalLink size={12} className="inline ml-1"/>
-              </a> 
-              under General Information.
-            </p>
-            </div>
+           ) : (
+             <div className="bg-gray-900 p-3 rounded">
+                <p className="text-sm text-yellow-400 font-medium">Application details needed.</p>
+                <p className="text-xs text-gray-400">After connecting the token, follow the prompts to enter the Application ID and Public Key.</p>
+             </div>
+           )}
             
           <div className="bg-gray-900 p-3 rounded">
              <p className="text-sm text-gray-300 mb-2">
@@ -271,17 +237,6 @@ export function DiscordConnect({
                  >
                     {copied ? <Check size={16}/> : <Copy size={16}/>}
                           </button>
-                {connection?.interaction_secret && (
-                  <button 
-                    type="button" 
-                    onClick={handleRegenerateClick}
-                    disabled={regenerating}
-                    className={`p-1 rounded transition-colors duration-150 text-gray-400 hover:text-white hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title="Regenerate Secret"
-                  >
-                    {regenerating ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16}/>}
-                  </button>
-                )}
              </div>
               </div>
 
