@@ -662,6 +662,10 @@ export function AgentEdit() {
 
   // Update disconnect to clear channels
   const disconnectDiscordBot = async () => {
+    // *** ADDED LOGGING ***
+    console.log(`[disconnectDiscordBot] Function called for agent ${id}. Call stack trace:`, new Error().stack); 
+    // *** END ADDED LOGGING ***
+
     // Ensure modals are closed (no longer relevant, but keep for safety)
     // setShowAppIdModal(false);
     // setShowServerSelectModal(false);
@@ -687,7 +691,9 @@ export function AgentEdit() {
       else console.log('[disconnectDiscordBot] Clear token function invoked.');
 
       // 2. Delete connection details
-      console.log(`[disconnectDiscordBot] Attempting to delete discord connection details for agent: ${agentId}`);
+      // *** ADDED LOGGING ***
+      console.log(`[disconnectDiscordBot] Preparing to DELETE discord connection details for agent: ${agentId}`); 
+      // *** END ADDED LOGGING ***
       const { error: delError } = await supabase
         .from('agent_discord_connections')
         .delete()

@@ -192,7 +192,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .select(`
         id,
         agent_id,
-        name,
         is_active,
         priority,
         timeout_ms,
@@ -209,7 +208,7 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .order('priority', { ascending: true });
 
     if (error) {
-      console.error('Error fetching MCP configurations:', error);
+      console.error('Error fetching MCP configurations:', JSON.stringify(error, null, 2));
       return [];
     }
 
@@ -222,7 +221,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
     return configs.map((config: MCPConfigurationWithServer): MCPServerConfig => ({
       id: config.server.id,
       config_id: config.id,
-      name: config.name,
       endpoint_url: config.server.endpoint_url,
       vault_api_key_id: config.server.vault_api_key_id,
       timeout_ms: config.timeout_ms,
@@ -345,6 +343,10 @@ Deno.serve(async (req) => {
 
     // Handle Chat POST request
     if (req.method === 'POST') {
+      // --- Define variables outside try block for catch block access ---
+      let parsedBody: any = null; 
+      let agentIdFromRequest: string | null = null; 
+      // --- End Define ---
       try {
         console.log('Chat POST request received');
         // Validate OpenAI API key
@@ -369,11 +371,19 @@ Deno.serve(async (req) => {
         }
 
         // Parse request body
-        const { messages, agentId, agentName, agentPersonality, systemInstructions, assistantInstructions } = await req.json();
+        parsedBody = await req.json(); // Parse into a variable
+        const { messages, agentId, agentName, agentPersonality, systemInstructions, assistantInstructions } = parsedBody; // Destructure
+        agentIdFromRequest = agentId; // Store agentId for catch block
+
+        // *** ADDED LOGGING ***
+        console.log("Received Payload Body:", JSON.stringify(parsedBody, null, 2)); 
+        console.log(`Extracted - messages type: ${typeof messages}, isArray: ${Array.isArray(messages)}, agentId: ${agentId}`);
+        // *** END ADDED LOGGING ***
 
         // Validate required fields
         if (!messages || !Array.isArray(messages) || !agentId) {
-          throw new Error('Invalid request format');
+          // *** ADDED DETAIL TO ERROR ***
+          throw new Error(`Invalid request format. Messages valid: ${!!messages && Array.isArray(messages)}. AgentId valid: ${!!agentId}.`);
         }
 
         // Initialize context array for the LLM
@@ -526,31 +536,27 @@ Deno.serve(async (req) => {
               });
               controller.enqueue(encoder.encode(`data: ${errorMessage}\n\n`));
             } finally {
-              // Store the interaction in the database
+              // --- REMOVE Interaction Storing Block ---
+              /* 
               try {
                 console.log(`[Agent: ${agentId}] Storing interaction in database...`);
+                // ... (data preparation) ...
+                console.log("[Agent: ...] Data to insert:", JSON.stringify(interactionData, null, 2));
                 const { error: insertError } = await supabaseClient
-                  .from('agent_interactions')
-                  .insert({
-                    agent_id: agentId,
-                    user_message: messages[messages.length - 1].content,
-                    assistant_response: fullResponse,
-                    vector_context: vectorContext || null,
-                    mcp_context: mcpContext || null,
-                    // Store stringified errors
-                    error: mcpErrors.length > 0 ? JSON.stringify(mcpErrors) : null
-                  });
-
+                  .from('agent_interactions') // <<< This table doesn't exist
+                  .insert(interactionData); 
                 if (insertError) {
-                  console.error(`[Agent: ${agentId}] Error storing interaction:`, insertError);
+                  console.error(`[Agent: ${agentId}] Error storing interaction:`, JSON.stringify(insertError, null, 2));
                 } else {
                   console.log(`[Agent: ${agentId}] Interaction stored successfully.`);
                 }
               } catch (dbError) {
-                console.error(`[Agent: ${agentId}] Database error storing interaction:`, dbError);
+                console.error(`[Agent: ${agentId}] Database exception storing interaction:`, dbError);
               }
+              */ 
+             // --- END REMOVE ---
 
-              controller.close();
+              controller.close(); // Keep controller.close()
             }
           },
 
@@ -568,66 +574,40 @@ Deno.serve(async (req) => {
           },
         });
 
-      } catch (error) {
-        console.error('Error processing request:', error);
-
-        // Determine error type and appropriate status code
-        let status = 500;
-        let errorMessage = 'Internal server error';
-
-        if (error.message === 'Invalid request format' || error.message === 'Missing required parameters') {
-          status = 400;
-          errorMessage = error.message;
-        } else if (error.message === 'Agent not found') {
-          status = 404;
-          errorMessage = error.message;
-        } else if (error.message.includes('OpenAI API')) {
-          status = 502;
-          errorMessage = 'Error communicating with OpenAI';
-        } else if (error.message.includes('MCP')) {
-          // Log MCP errors but don't fail the request
-          console.warn('MCP processing error:', error);
-          status = 200; // Continue with partial success
-          errorMessage = 'Processed without MCP context';
-        }
-
-        // Store the error in the database if we have an agent ID
+      } catch (error) { // Outer catch block
+        console.error("Error processing request:", error);
+        // --- MODIFIED: Use agentIdFromRequest from outer scope ---
+        const agentIdForErrorLog = agentIdFromRequest; 
+        // --- END MODIFIED ---
+        // --- Add error logging to database ---
         try {
-          if (agentId) { // Only store if we have an agentId
-            console.log(`[Agent: ${agentId}] Storing interaction error in database: ${errorMessage}`);
-            const { error: insertError } = await supabaseClient
-              .from('agent_interactions')
-              .insert({
-                agent_id: agentId,
-                user_message: messages?.[messages.length - 1]?.content,
-                assistant_response: null,
-                vector_context: null,
-                mcp_context: null, // No MCP context if request failed before/during processing
-                // Store the primary error message and any MCP errors encountered before failure
-                error: JSON.stringify({ mainError: errorMessage, mcpErrors: mcpErrors })
-              });
-
-            if (insertError) {
-              console.error(`[Agent: ${agentId}] Error storing interaction error details:`, insertError);
+            // Attempt to stringify the raw body if available, otherwise the parsed body
+            let requestBodyString = null;
+            try {
+                // req.body might not be directly available or easily stringifiable in Deno serve
+                // Using the parsedBody is safer if parsing succeeded at least partially
+                 requestBodyString = parsedBody ? JSON.stringify(parsedBody) : 'Could not read request body';
+            } catch (stringifyError) {
+                 requestBodyString = `Error stringifying request body: ${stringifyError.message}`;
             }
-          }
+            
+            await supabaseClient.from('function_errors').insert({ 
+                function_name: 'chat',
+                // --- MODIFIED: Use variable from outer scope ---
+                agent_id: agentIdForErrorLog, 
+                // --- END MODIFIED ---
+                error_message: error.message,
+                stack_trace: error.stack,
+                request_body: requestBodyString 
+            });
         } catch (dbError) {
-          console.error('Database error while storing interaction error:', dbError);
+            console.error("Database error while storing interaction error:", dbError);
         }
-
-        return new Response(
-          JSON.stringify({
-            error: errorMessage,
-            details: error.message
-          }),
-          {
-            status,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
+        // --- END Add error logging ---
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 
@@ -643,20 +623,11 @@ Deno.serve(async (req) => {
       }
     );
 
-  } catch (error) {
-    console.error('Unhandled error:', error);
-    return new Response(
-      JSON.stringify({
-        error: 'Internal server error',
-        details: error.message
-      }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+  } catch (error) { // This is the outermost catch, unlikely to be hit unless server setup fails
+    console.error("General Server Error:", error);
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
