@@ -7,7 +7,6 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { corsHeaders } from "../_shared/cors.ts";
-import { encrypt } from "../_shared/security.ts";
 
 console.log("Function 'update-agent-discord-token' started.");
 
@@ -50,50 +49,46 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Bad Request: Missing agentId" }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // --- Get User-Specific Encryption Key ---
-    // Use service role for reading the secret key if RLS restricts direct user reads
-    // or if the function needs broader access. Ensure RLS allows SELECT for the user anyway.
-    const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "", 
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
-    const { data: secretData, error: secretError } = await supabaseAdmin
-        .from('user_secrets')
-        .select('encryption_key')
-        .eq('user_id', user.id)
-        .single();
+    // --- Remove User-Specific Encryption Key Fetch ---
+    // const supabaseAdmin = createClient(
+    //     Deno.env.get("SUPABASE_URL") ?? "", 
+    //     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    // );
+    // const { data: secretData, error: secretError } = await supabaseAdmin
+    //     .from('user_secrets')
+    //     .select('encryption_key')
+    //     .eq('user_id', user.id)
+    //     .single();
 
-    if (secretError || !secretData?.encryption_key) {
-        console.error(`Encryption key fetch error for user ${user.id}:`, secretError);
-        // If key doesn't exist, it might mean the signup trigger failed or RLS is wrong.
-        return new Response(JSON.stringify({ error: "Internal Server Error: Could not retrieve user encryption key." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-    const userEncryptionKey = secretData.encryption_key;
-    // --- End Get User-Specific Key ---
+    // if (secretError || !secretData?.encryption_key) {
+    //     console.error(`Encryption key fetch error for user ${user.id}:`, secretError);
+    //     return new Response(JSON.stringify({ error: "Internal Server Error: Could not retrieve user encryption key." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // }
+    // const userEncryptionKey = secretData.encryption_key;
+    // --- End Remove User-Specific Key Fetch ---
 
-    // 5. Encrypt the token (or prepare null if disconnecting)
-    let encryptedToken: string | null = null;
+    // 5. Use the raw token (or null if disconnecting)
+    let rawToken: string | null = null;
     if (token && token.trim()) {
-      // Use the fetched user-specific key
-      encryptedToken = await encrypt(token.trim(), userEncryptionKey);
+      rawToken = token.trim();
     } else {
       console.log(`Clearing token for agent ${agentId}`);
     }
 
     // 6. Update the agent in the database (ensuring ownership)
-    // Already using supabaseAdmin which has service role
-    const { error: updateError } = await supabaseAdmin
+    // Use supabaseClient which has user's auth context for RLS enforcement
+    const { error: updateError } = await supabaseClient // Use user client for RLS
       .from('agents')
-      .update({ discord_bot_key: encryptedToken })
+      .update({ discord_bot_key: rawToken }) // Save raw token
       .eq('id', agentId)
-      .eq('user_id', user.id); // <-- Crucial ownership check!
+      .eq('user_id', user.id); // <-- Crucial ownership check still applies!
 
     if (updateError) {
       console.error("Supabase Update Error:", updateError);
       return new Response(JSON.stringify({ error: "Database Error: " + updateError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Successfully updated token (encrypted: ${!!encryptedToken}) for agent ${agentId} owned by user ${user.id}`);
+    console.log(`Successfully updated token (raw: ${!!rawToken}) for agent ${agentId} owned by user ${user.id}`);
 
     // 7. Return success response
     return new Response(
