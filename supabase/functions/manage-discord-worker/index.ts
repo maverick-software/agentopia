@@ -76,7 +76,8 @@ serve(async (req) => {
     );
     const { data: agentData, error: agentError } = await supabaseAdmin
         .from('agents')
-        .select('id, user_id, discord_bot_key') // Fetch discord_bot_key here
+        // Select the required fields for the worker manager
+        .select('id, user_id, discord_bot_key, name, system_prompt, agent_instructions') 
         .eq('id', agentId)
         .single();
 
@@ -157,6 +158,13 @@ serve(async (req) => {
                  status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
              });
         }
+        // Check for other newly required fields
+        if (!agentData?.name || !agentData?.system_prompt || !agentData?.agent_instructions) {
+            console.error(`Agent name, system prompt, or instructions missing for agent ${agentId}`);
+            return new Response(JSON.stringify({ error: "Bad Request: Agent configuration incomplete (name/prompt/instructions)." }), { 
+                 status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+             });
+        }
 
         managerPayload = {
             agentId: agentId,
@@ -165,7 +173,11 @@ serve(async (req) => {
             // Ensure connectionDbId is passed
             connectionDbId: connectionId, 
             // Pass timeout (handle null with default)
-            inactivityTimeout: connectionDetails?.inactivity_timeout_minutes ?? 10 
+            inactivityTimeout: connectionDetails?.inactivity_timeout_minutes ?? 10, 
+            // Add the missing fields required by the worker manager
+            agentName: agentData.name,                         
+            systemPrompt: agentData.system_prompt,             
+            agentInstructions: agentData.agent_instructions     
         };
 
     } else if (action === 'stop') {

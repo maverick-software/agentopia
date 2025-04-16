@@ -133,7 +133,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
 
         const workerName = getWorkerPm2Name(agentId);
         const ecosystemFilePath = path.resolve(__dirname, '../../discord-worker/ecosystem.config.js');
-        log('log', `[MANAGER PRE-PM2] Ecosystem file path: ${ecosystemFilePath}`);
+        log('log', `[MANAGER PRE-PM2] Corrected Ecosystem file path: ${ecosystemFilePath}`);
 
         // Wrap the core PM2 interaction and polling in a Promise
         await new Promise<void>((resolve, reject) => {
