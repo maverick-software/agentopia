@@ -9,7 +9,8 @@ import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/
 const log = (level: 'log' | 'warn' | 'error', ...args: any[]) => console[level](new Date().toISOString(), '[WM]', ...args);
 
 // Load environment variables from .env file in the service directory
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// dotenv.config({ path: path.resolve(__dirname, '../.env') }); // OLD PATH
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') }); // NEW PATH - Project Root
 
 log('log', "--- Worker Manager Service Starting ---");
 
