@@ -5,6 +5,7 @@ import path from 'path';
 // import { spawn } from 'child_process'; // REMOVE child_process
 import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 // *** ADDED: Import PM2 API ***
+// @ts-ignore 
 import pm2 from 'pm2';
 
 // Add helper for timestamp
@@ -45,7 +46,7 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
 
 // --- PM2 Connection ---
 let pm2Connected = false;
-pm2.connect((err) => {
+pm2.connect((err: any) => {
   if (err) {
     log('error', 'PM2 connection error:', err);
     process.exit(2);
@@ -86,85 +87,102 @@ app.get('/', (req: Request, res: Response) => {
 
 // *** REFACTORED: Endpoint to start a new worker using PM2 ***
 app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
-    const { agentId, botToken, timeoutMinutes, guildId, channelId, connectionId } = req.body;
-    log('log', `[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
+    const { agentId, connectionDbId, botToken, inactivityTimeout } = req.body;
+    log('log', `[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}`);
+
+    // --- Input Validation ---
+    if (!agentId || !connectionDbId || !botToken) {
+        res.status(400).json({ error: 'Missing required fields: agentId, connectionDbId, or botToken' });
+        return;
+    }
+
+    // --- Check for Required Environment Variables ---
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        log('error', '[MANAGER START ERR] SUPABASE_URL or SUPABASE_ANON_KEY environment variables are not set.');
+        res.status(500).json({ error: 'Server configuration error: Missing Supabase credentials.' });
+        return;
+    }
+
     const workerName = getWorkerPm2Name(agentId);
 
-    if (!agentId || !botToken || timeoutMinutes === undefined || !connectionId) { // Check timeoutMinutes defined
-        res.status(400).json({ error: 'Missing required fields: agentId, botToken, timeoutMinutes, connectionId' });
-        return;
-    }
-
     // --- Check if worker already running via PM2 ---
-    try {
-        const description = await new Promise<pm2.ProcessDescription[]>((resolve, reject) => {
-             pm2.describe(workerName, (err, desc) => {
-                 if (err && !err.message.toLowerCase().includes('not found')) { // Ignore "process not found" errors here
-                    return reject(err);
-                 }
-                 resolve(desc || []);
-             });
-        });
-        
-        if (description.length > 0 && description[0].pm2_env?.status === 'online') {
-            log('warn', `Worker ${workerName} is already running according to PM2.`);
-            res.status(200).json({ message: `Worker for ${agentId} is already active.` });
+    pm2.describe(workerName, (err: any, description: any) => {
+        if (err && !err.message.toLowerCase().includes('not found')) {
+            log('error', `[MANAGER START ERR] Error checking existing PM2 process ${workerName}:`, err);
+            res.status(500).json({ error: 'Failed to query worker status before starting.' });
             return;
         }
-        log('log', `Worker ${workerName} is not currently running or found in PM2. Proceeding with start.`);
 
-    } catch (err) {
-        log('error', `[MANAGER START] Error checking PM2 status for ${workerName}:`, err);
-        res.status(500).json({ error: 'Failed to check worker status before starting.' });
-        return;
-    }
-    
-    // *** No need for pre-spawn DB checks here - PM2 is the source of truth for running process ***
-
-    // --- PM2 Start Options ---
-    const workerEnv: { [key: string]: string | undefined } = {
-        // Don't spread process.env directly for security/isolation
-        DISCORD_BOT_TOKEN: botToken,
-        AGENT_ID: agentId,
-        CONNECTION_ID: connectionId,
-        SUPABASE_URL: SUPABASE_URL,
-        SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
-        // Include Node options if needed, e.g., for memory limits
-        // NODE_OPTIONS: '--max-old-space-size=256' 
-    };
-
-    const parsedTimeout = parseInt(String(timeoutMinutes), 10);
-    if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
-        workerEnv.TIMEOUT_MINUTES = String(parsedTimeout);
-        log('log', `Setting TIMEOUT_MINUTES=${workerEnv.TIMEOUT_MINUTES} for worker ${agentId}`);
-    } else {
-        log('log', `Timeout is 0 or invalid (${timeoutMinutes}), TIMEOUT_MINUTES will not be set for worker ${agentId}.`);
-    }
-
-    const startOptions: pm2.StartOptions = {
-        script: WORKER_SCRIPT_PATH,
-        name: workerName,
-        exec_interpreter: 'ts-node', // Use ts-node
-        exec_mode: 'fork', // Use fork mode
-        env: workerEnv,
-        // Configure logs (optional, PM2 handles defaults)
-        // output: `/root/.pm2/logs/${workerName}-out.log`,
-        // error: `/root/.pm2/logs/${workerName}-error.log`,
-        autorestart: false, // Don't automatically restart if it fails/stops
-        // watch: false, // Don't watch for file changes
-    };
-
-    log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
-
-    pm2.start(startOptions, (err, apps) => {
-        if (err) {
-            log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, err);
-            res.status(500).json({ error: `Failed to start worker ${agentId}` });
-        } else {
-            log('log', `[MANAGER SPAWN OK] Worker ${workerName} started via PM2. App info:`, apps);
-            // Respond immediately - PM2 handles the process now
-            res.status(202).json({ message: `Worker process for ${agentId} is being started via PM2.` });
+        if (description && description.length > 0 && description[0].pm2_env?.status === 'online') {
+            log('warn', `[MANAGER START] Worker ${workerName} is already running according to PM2.`);
+            res.status(409).json({ message: `Worker ${agentId} is already active.` });
+            return;
         }
+
+        // --- Worker Not Running - Proceed to Start ---
+        log('log', `[MANAGER START] Worker ${workerName} is not running or not found by PM2. Proceeding to start...`);
+
+        // --- PM2 Start Options ---
+
+        // Robustly handle inactivityTimeout: undefined, null, 0, or "never" mean indefinite (0)
+        let inactivityTimeoutValue = '10'; // Default to 10 minutes if not specified
+        // Use inactivityTimeout directly from req.body
+        const lowerCaseTimeout = String(inactivityTimeout).toLowerCase();
+
+        if (inactivityTimeout === undefined || inactivityTimeout === null || inactivityTimeout === 0 || lowerCaseTimeout === 'never') {
+            inactivityTimeoutValue = '0'; // Indefinite timeout
+            log('log', `[MANAGER START] Inactivity timeout is indefinite (received: ${inactivityTimeout}), setting INACTIVITY_TIMEOUT_MINUTES=0 for worker ${agentId}`);
+        } else {
+            // Use inactivityTimeout directly from req.body
+            const parsedTimeout = parseInt(String(inactivityTimeout), 10);
+            if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
+                inactivityTimeoutValue = String(parsedTimeout);
+                log('log', `[MANAGER START] Setting INACTIVITY_TIMEOUT_MINUTES=${inactivityTimeoutValue} for worker ${agentId}`);
+            } else {
+                log('warn', `[MANAGER START] Invalid inactivity timeout value received: ${inactivityTimeout}. Defaulting to ${inactivityTimeoutValue} minutes.`);
+                // Keep the default value '10'
+            }
+        }
+
+        // Construct environment variables for the worker process
+        const workerEnv: { [key: string]: string } = { // Ensure type matches PM2 expectation
+            AGENT_ID: agentId,
+            CONNECTION_DB_ID: connectionDbId,
+            INACTIVITY_TIMEOUT_MINUTES: inactivityTimeoutValue,
+            // Add BOT_TOKEN here
+            DISCORD_BOT_TOKEN: botToken,
+            // Pass Supabase creds (guaranteed to be strings here)
+            SUPABASE_URL: SUPABASE_URL,
+            SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
+            // Include Node options if needed, e.g., for memory limits
+            // NODE_OPTIONS: '--max-old-space-size=256'
+        };
+
+        const startOptions: pm2.StartOptions = {
+            script: WORKER_SCRIPT_PATH,
+            name: workerName,
+            exec_interpreter: 'ts-node', // Use ts-node
+            exec_mode: 'fork', // Use fork mode
+            env: workerEnv,
+            // Configure logs (optional, PM2 handles defaults)
+            // output: `/root/.pm2/logs/${workerName}-out.log`,
+            // error: `/root/.pm2/logs/${workerName}-error.log`,
+            autorestart: false, // Don't automatically restart if it fails/stops
+            // watch: false, // Don't watch for file changes
+        };
+
+        log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
+
+        pm2.start(startOptions, (err: any, apps: any) => { // Explicit 'any'
+            if (err) {
+                log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, err);
+                res.status(500).json({ error: `Failed to start worker ${agentId}` });
+            } else {
+                log('log', `[MANAGER SPAWN OK] Worker ${workerName} started via PM2. App info:`, apps);
+                // Respond immediately - PM2 handles the process now
+                res.status(202).json({ message: `Worker process for ${agentId} is being started via PM2.` });
+            }
+        });
     });
 });
 
@@ -180,7 +198,7 @@ app.post('/stop-worker', authenticate, (req: Request, res: Response) => {
     }
 
     log('log', `[MANAGER STOP] Attempting to stop worker ${workerName} via PM2...`);
-    pm2.stop(workerName, (err, proc) => {
+    pm2.stop(workerName, (err: any, proc: any) => { // Explicit 'any'
          if (err) {
              // Check if error is "process not found" - treat as success
              if (err.message && err.message.toLowerCase().includes('not found')) {
@@ -205,7 +223,7 @@ app.get('/status', authenticate, async (req: Request, res: Response) => {
         const workerName = getWorkerPm2Name(specificAgentId);
         log('log', `[MANAGER RECV] Received /status request for Agent ID: ${specificAgentId} (PM2 name: ${workerName})`);
         
-        pm2.describe(workerName, (err, description) => {
+        pm2.describe(workerName, (err: any, description: any) => { // Explicit 'any'
             if (err && !err.message.toLowerCase().includes('not found')) {
                  log('error', `[MANAGER STATUS ERR] Error describing PM2 process ${workerName}:`, err);
                  res.status(500).json({ error: 'Failed to query worker status.' });
@@ -221,17 +239,17 @@ app.get('/status', authenticate, async (req: Request, res: Response) => {
     } else {
         // Return status for all potential worker agents
         log('log', `[MANAGER RECV] Received /status request for all agents`);
-        pm2.list((err, list) => {
+        pm2.list((err: any, list: any) => { // Explicit 'any'
              if (err) {
                  log('error', `[MANAGER STATUS ERR] Error listing PM2 processes:`, err);
                  res.status(500).json({ error: 'Failed to list workers.' });
                  return;
              }
              
-             const workerProcesses = list.filter(proc => proc.name?.startsWith('worker-'));
+             const workerProcesses = list.filter((proc: any) => proc.name?.startsWith('worker-'));
              const activeAgentIds = workerProcesses
-                 .filter(proc => proc.pm2_env?.status === 'online')
-                 .map(proc => proc.name?.replace('worker-', '')); // Extract agent ID from name
+                 .filter((proc: any) => proc.pm2_env?.status === 'online')
+                 .map((proc: any) => proc.name?.replace('worker-', '')); // Extract agent ID from name
 
              const response = {
                  activeWorkerCount: activeAgentIds.length,
