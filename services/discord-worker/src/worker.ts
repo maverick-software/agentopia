@@ -326,10 +326,15 @@ try {
                             log('log', "Finished reading stream. Full reply length:", accumulatedReply.length);
                         } else {
                             // Handle non-stream response (e.g., direct JSON error)
-                            const nonStreamResponse = await response.json();
+                            const nonStreamResponse: any = await response.json(); // Keep as any or define interface if structure is known
                             log('warn', "Received non-stream response:", nonStreamResponse);
-                            // Try to extract an error or default
-                             accumulatedReply = nonStreamResponse?.reply || nonStreamResponse?.error || "Received unexpected response format.";
+                            // Try to extract an error or default, checking properties safely
+                            if (nonStreamResponse && typeof nonStreamResponse === 'object') {
+                                 // Check if properties exist before accessing
+                                 accumulatedReply = nonStreamResponse.reply || nonStreamResponse.error || "Received unexpected response format.";
+                            } else {
+                                 accumulatedReply = "Received unexpected non-object response.";
+                            }
                         }
                     
                     } catch (err) {
