@@ -652,6 +652,12 @@ export function AgentEdit() {
   };
   const interactionEndpointUrl = generateInteractionEndpointUrl();
 
+  const isFullyConnected = !!(discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key);
+
+  // --- NEW: Find selected guild name ---
+  const selectedGuildName = discordGuilds.find(g => g.id === discordConnectionData.guild_id)?.name;
+  // --- End NEW ---
+
   return (
     <div className="p-6 overflow-x-hidden">
       <div className="flex justify-between items-center mb-6">
@@ -799,21 +805,16 @@ export function AgentEdit() {
                 <DiscordConnect
                   agentId={id || ''}
                   // Display connection status based on whether App ID/Key/Guild are set, not just token
-                  isConnected={!!discordBotKey && !!discordConnectionData.discord_app_id && !!discordConnectionData.discord_public_key} 
+                  isConnected={isFullyConnected}
                   connection={discordConnectionData} // Pass full connection data
                   onConnectionChange={handleDiscordConnectionChange} // Restored for prop requirement
-                  // onAgentDetailChange={handleAgentDetailChangeDummy} // Keep if DiscordConnect needs it
                   interactionEndpointUrl={interactionEndpointUrl} // Still needed
                   onConnect={connectDiscordBot} // Initial token connect trigger
                   onDisconnect={disconnectDiscordBot}
                   loading={discordLoading || saving} // Show loading during modal saves too
                   disconnecting={discordDisconnecting}
-                  // Remove props related to inline editing / fetching guilds within DiscordConnect
-                  // fetchingGuilds={fetchingGuilds} 
-                  // onRegenerateSecret={undefined} 
+                  discordGuilds={discordGuilds} // Add guilds array prop
                   className="mt-4"
-                  // Add prop to display selected guild?
-                  // selectedGuildId={discordConnectionData.guild_id} 
                 />
               </div>
             ) : (

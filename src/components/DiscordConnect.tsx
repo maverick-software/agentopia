@@ -15,8 +15,7 @@ interface DiscordConnectProps {
   connection: Partial<AgentDiscordConnection>;
   onConnectionChange: (field: keyof AgentDiscordConnection, value: any) => void;
   interactionEndpointUrl: string;
-  discordAppId?: string;
-  discordPublicKey?: string;
+  discordGuilds?: any[];
   onAgentDetailChange?: (field: 'discord_app_id' | 'discord_public_key', value: string) => void;
   onRegenerateSecret?: () => Promise<void>;
 }
@@ -34,8 +33,7 @@ export function DiscordConnect({
   connection,
   onConnectionChange,
   interactionEndpointUrl,
-  discordAppId,
-  discordPublicKey,
+  discordGuilds,
   onAgentDetailChange,
   onRegenerateSecret,
 }: DiscordConnectProps) {
@@ -61,14 +59,16 @@ export function DiscordConnect({
   // Helper to generate mask string
   const generateMask = (length: number) => MASK_CHAR.repeat(length || 10); // Repeat mask char, default 10 if length 0
 
-  // Sync local display state based on props (for initial masking)
+  // Sync local display state based on props 
   useEffect(() => {
     setLocalTimeout(connection?.inactivity_timeout_minutes || 10);
-    setLocalAppId(discordAppId || ''); // Store the actual value locally
-    setLocalPublicKey(discordPublicKey || ''); // Store the actual value locally
-    setIsAppIdVisible(false); // Reset visibility on prop change
-    setIsPublicKeyVisible(false); // Reset visibility on prop change
-  }, [connection?.inactivity_timeout_minutes, discordAppId, discordPublicKey]);
+    // Remove AppId/PublicKey sync - These lines were incorrectly re-added/modified by the previous edit
+    // setLocalAppId(discordGuilds?.find(g => g.is_primary)?.app_id || ''); 
+    // setLocalPublicKey(discordGuilds?.find(g => g.is_primary)?.public_key || ''); 
+    // setIsAppIdVisible(false); 
+    // setIsPublicKeyVisible(false); 
+  // Correct dependency array
+  }, [connection?.inactivity_timeout_minutes]); 
 
   useEffect(() => {
     // Sync loading states
@@ -92,6 +92,7 @@ export function DiscordConnect({
   };
 
   const handleDisconnectBot = async () => {
+    console.log("[DiscordConnect] Disconnect button clicked!");
     onDisconnect();
   };
 
@@ -155,6 +156,12 @@ export function DiscordConnect({
   // Determine if the full connection (App ID, Key) is established based on props
   const isFullyConnected = !!(isConnected && connection.discord_app_id && connection.discord_public_key);
 
+  // --- NEW: Find selected guild name ---
+  // Ensure discordGuilds is treated as an array
+  const guildsArray = Array.isArray(discordGuilds) ? discordGuilds : [];
+  const selectedGuildName = guildsArray.find(g => g.id === connection.guild_id)?.name;
+  // --- End NEW ---
+
   return (
     <div className={`space-y-4 ${className}`}>
       {isConnected ? (
@@ -204,8 +211,11 @@ export function DiscordConnect({
           {isFullyConnected ? (
             <div className="bg-gray-900 p-3 rounded">
               <p className="text-sm text-green-400 font-medium mb-2">Application Details Connected</p>
-              {connection.guild_id ? (
-                 <p className="text-xs text-gray-300">Connected Server ID: {connection.guild_id}</p>
+              {selectedGuildName ? (
+                 <p className="text-xs text-gray-300">Connected Server: {selectedGuildName} <span className='text-gray-500'>(ID: {connection.guild_id})</span></p>
+                 // TODO: Add Channel display if needed
+              ) : connection.guild_id ? (
+                 <p className="text-xs text-yellow-400">Connected Server ID: {connection.guild_id} (Name not found)</p>
               ) : (
                  <p className="text-xs text-yellow-400">Server not selected yet. (Check modal flow)</p>
               )}
