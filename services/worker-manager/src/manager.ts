@@ -104,16 +104,17 @@ app.get('/', (req: Request, res: Response) => {
 app.post('/start-worker', authenticate, async (req: Request, res: Response, next: NextFunction) => {
     log('log', `[MANAGER START REQ] Received /start-worker request`);
     try {
-        const { agentId, connectionDbId, discordToken, agentName, systemPrompt, agentInstructions } = req.body;
+        // CORRECT: Destructure botToken (as sent by Supabase function)
+        const { agentId, connectionDbId, botToken, agentName, systemPrompt, agentInstructions } = req.body;
 
         // --- Input Validation --- 
-        // CORRECTED: systemPrompt and agentInstructions are optional
-        if (!agentId || !connectionDbId || !discordToken || !agentName) {
+        // CORRECT: Validate botToken
+        if (!agentId || !connectionDbId || !botToken || !agentName) {
             log('warn', '[MANAGER START REQ] Missing required core fields');
-            res.status(400).json({ error: 'Missing required core fields (agentId, connectionDbId, discordToken, agentName).' }); 
+            // Update error message slightly for clarity
+            res.status(400).json({ error: 'Missing required core fields (agentId, connectionDbId, botToken, agentName).' }); 
             return; 
         }
-        // Log validation success (even if instructions are missing)
         log('log', `[MANAGER START REQ] Validated required fields for agent ${agentId}, connection ${connectionDbId}`);
 
         // --- Env Var Check --- 
@@ -161,9 +162,10 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                         AGENT_ID: agentId,
                         AGENT_NAME: agentName,
                         CONNECTION_DB_ID: connectionDbId,
-                        DISCORD_BOT_TOKEN: discordToken,
-                        SYSTEM_PROMPT: systemPrompt ?? '',             // Use empty string if null/undefined
-                        AGENT_INSTRUCTIONS: agentInstructions ?? '',   // Use empty string if null/undefined
+                        // CORRECT: Use botToken for the environment variable
+                        DISCORD_BOT_TOKEN: botToken,                 
+                        SYSTEM_PROMPT: systemPrompt ?? '',             
+                        AGENT_INSTRUCTIONS: agentInstructions ?? '',   
                         INACTIVITY_TIMEOUT_MINUTES: inactivityTimeoutValue,
                         SUPABASE_URL: SUPABASE_URL,
                         SUPABASE_SERVICE_ROLE_KEY: SUPABASE_SERVICE_KEY,
