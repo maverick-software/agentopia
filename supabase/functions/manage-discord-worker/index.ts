@@ -100,35 +100,33 @@ serve(async (req) => {
        });
     }
 
-    // *** MODIFIED: Step 4.5: Fetch Connection details (guild_id, connection id) ***
+    // *** MODIFIED: Step 4.5: Fetch Connection details (id, guild_id, timeout) ***
     let connectionDetails: any = null;
-    if (action === 'start') { // Only needed for starting
-        const { data: connData, error: connError } = await supabaseAdmin
-            .from('agent_discord_connections')
-            .select('id, guild_id, inactivity_timeout_minutes') 
-            .eq('agent_id', agentId)
-            .maybeSingle(); 
+    // We need connection ID and potentially timeout for START
+    // We only strictly need agentId for STOP
+    // Fetch details ONLY if starting or if needed for consistency check later
+    console.log(`[FUNC FETCH] Fetching agent ${agentId} connection details (needed for start)...`);
+    const { data: connData, error: connError } = await supabaseAdmin
+        .from('agent_discord_connections')
+        .select('id, guild_id, inactivity_timeout_minutes') 
+        .eq('agent_id', agentId)
+        .maybeSingle(); 
 
-        if (connError) {
-            // Log error, but maybe don't fail if connection record just doesn't exist?
-            // However, we NEED the connection ID and guild ID for the manager payload. Fail for now.
-            console.error(`Error fetching discord connection details for agent ${agentId}:`, connError);
-            return new Response(JSON.stringify({ error: "Internal Server Error: Failed to fetch connection details" }), { 
-                status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-            });
-        }
-        if (!connData) { // Connection record MUST exist to start
-             console.error(`Discord connection record not found for agent ${agentId}`);
-             return new Response(JSON.stringify({ error: "Bad Request: Discord connection record missing for agent." }), { 
-                 status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-             });
-        }
-        connectionDetails = connData;
-        connectionId = connectionDetails.id; // Store connection ID
-        // *** ADDED LOGGING ***
-        console.log(`[FUNC POST-FETCH] Fetched connection details for agent ${agentId}: ID=${connectionId}, Guild=${connectionDetails.guild_id}, Timeout=${connectionDetails.inactivity_timeout_minutes}`);
-        // *** END ADDED LOGGING ***
+    if (connError) {
+        console.error(`Error fetching discord connection details for agent ${agentId}:`, connError);
+        // Don't fail the whole function if just fetching fails, manager might handle it
+        // But log that we couldn't fetch it
+        connectionDetails = null;
     }
+    if (action === 'start' && !connData) { // Connection record MUST exist to start
+         console.error(`Discord connection record not found for agent ${agentId}. Required for start action.`);
+         return new Response(JSON.stringify({ error: "Bad Request: Discord connection record missing for agent." }), { 
+             status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+         });
+    }
+    connectionDetails = connData; // Store fetched data (could be null if not found)
+    connectionId = connectionDetails?.id || null; // Use optional chaining
+    console.log(`[FUNC POST-FETCH] Fetched connection details for agent ${agentId}: ID=${connectionId}, Guild=${connectionDetails?.guild_id}, Timeout=${connectionDetails?.inactivity_timeout_minutes}`);
     // *** END MODIFIED FETCH ***
 
     // 5. Forward request to Worker Manager service
@@ -142,50 +140,44 @@ serve(async (req) => {
     const managerEndpoint = action === 'start' ? `${managerUrl}/start-worker` : `${managerUrl}/stop-worker`;
     console.log(`Forwarding ${action} request for agent ${agentId} to ${managerEndpoint}`);
 
-    // *** ADDED: Pre-forward checks ***
-    try {
-        console.log(`[FUNC PRE-FORWARD CHECK] Checking agent ${agentId} and connection ${connectionId} existence before calling manager...`);
-        const { error: agentCheckErr } = await supabaseAdmin.from('agents').select('id', { count: 'exact', head: true }).eq('id', agentId);
-        const { error: connCheckErr } = await supabaseAdmin.from('agent_discord_connections').select('id', { count: 'exact', head: true }).eq('id', connectionId);
-        if (agentCheckErr || connCheckErr) {
-             console.error(`[FUNC PRE-FORWARD CHECK] Error during DB check. Agent check error: ${agentCheckErr?.message}, Connection check error: ${connCheckErr?.message}`);
-        } else {
-             console.log(`[FUNC PRE-FORWARD CHECK] Agent ${agentId} and Connection ${connectionId} confirmed to exist.`);
-        }
-    } catch (checkErr) {
-        console.error("[FUNC PRE-FORWARD CHECK] Exception during DB check:", checkErr);
-    }
-    // *** END ADDED ***
-
     // *** START MODIFIED: Construct payload based on action ***
-    let managerPayload: any = { agentId: agentId };
-    if (action === 'start' && agentData && connectionDetails) {
-        const finalGuildId = guildIdFromRequest || connectionDetails.guild_id;
-        // *** NEW: Check if finalGuildId is present ***
-        if (!finalGuildId) {
-            console.error(`Guild ID is missing for agent ${agentId}. Cannot start worker.`);
-            return new Response(JSON.stringify({ error: "Bad Request: Guild ID is required but missing." }), { 
-                status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-            });
+    let managerPayload: any = {}; // Start with empty object
+
+    if (action === 'start') {
+        // Check required data for start
+        if (!agentData?.discord_bot_key) {
+             console.error(`Bot token (discord_bot_key) is missing for agent ${agentId}`);
+             return new Response(JSON.stringify({ error: "Bad Request: Agent is missing Discord Bot Key." }), { 
+                 status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+             });
         }
-        
+        if (!connectionId) {
+             console.error(`Connection ID is missing for agent ${agentId}. Cannot construct payload.`);
+             return new Response(JSON.stringify({ error: "Internal Error: Missing connection details for start action." }), { 
+                 status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+             });
+        }
+
         managerPayload = {
             agentId: agentId,
-            // *** MODIFIED: Use discord_bot_key from agentData ***
-            botToken: agentData.discord_bot_key,
-            guildId: finalGuildId,
-            connectionId: connectionDetails.id,
-            // *** MODIFIED: Use fetched timeout value (or default) ***
-            // Use ?? operator: if timeout is null or undefined, default to 60. If 0 (Never), pass 0.
-            timeoutMinutes: connectionDetails.inactivity_timeout_minutes ?? 60
+            // Ensure botToken is passed
+            botToken: agentData.discord_bot_key, 
+            // Ensure connectionDbId is passed
+            connectionDbId: connectionId, 
+            // Pass timeout (handle null with default)
+            inactivityTimeout: connectionDetails?.inactivity_timeout_minutes ?? 10 
         };
 
     } else if (action === 'stop') {
-         // For stop, we might still only need agentId, assuming manager handles it
-         // If connectionId is needed for stop too, fetch it similar to 'start'
-         // managerPayload = { agentId: agentId }; // Kept simple for now
+         // Stop only needs agentId according to manager endpoint
+         managerPayload = { agentId: agentId };
     }
     // *** END MODIFIED ***
+
+    // --- ADDED: Log the exact payload being sent ---
+    const payloadString = JSON.stringify(managerPayload);
+    console.log(`[FUNC FORWARDING PAYLOAD] Payload: ${payloadString}`);
+    // --- END ADDED ---
 
     const managerResponse = await fetch(managerEndpoint, {
       method: 'POST',

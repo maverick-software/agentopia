@@ -103,6 +103,9 @@ app.get('/', (req: Request, res: Response) => {
 // *** REFACTORED: Endpoint to start a new worker using PM2 ***
 app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     log('log', `[MANAGER RECV ENTRY] /start-worker endpoint entered.`);
+    // --- ADDED: Log raw body before parsing ---
+    log('log', '[MANAGER RECV RAW BODY]', req.body);
+    // --- END ADDED ---
     let agentId, connectionDbId, botToken, inactivityTimeout;
     try {
         // Destructure body inside try/catch
