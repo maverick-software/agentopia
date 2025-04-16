@@ -200,7 +200,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
             const startOptions: pm2.StartOptions = {
                 script: WORKER_SCRIPT_PATH,
                 name: workerName,
-                interpreter: 'ts-node', 
+                interpreter: path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node'), 
                 exec_mode: 'fork', 
                 env: workerEnv,
                 autorestart: false, 
