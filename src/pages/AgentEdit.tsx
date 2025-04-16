@@ -841,21 +841,59 @@ export function AgentEdit() {
           setError("Cannot deactivate: Agent ID missing.");
           return;
       }
-      setSaving(true); // Reuse saving state
+      setSaving(true); // Reuse saving state (or add a new 'deactivating' state)
       setError(null);
+      
+      let shouldCallStop = true; // Assume we need to call stop initially
+      
       try {
-          console.log(`[AgentEdit] Invoking manage-discord-worker (stop) for agent ${agentId}`);
-          const { error } = await supabase.functions.invoke('manage-discord-worker', {
-              body: { agentId: agentId, action: 'stop' }
-          });
-          if (error) throw error;
+          // --- ADDED: Check worker status via proxy function --- 
+          console.log(`[AgentEdit] Checking worker status for agent ${agentId} via function...`);
+          const { data: statusData, error: statusError } = await supabase.functions.invoke(
+              'get-worker-status', 
+              { body: { agentId: agentId } }    // NEW - Pass in body
+          );
 
-          console.log("[AgentEdit] Deactivation request sent. Re-fetching agent data...");
-          await fetchAgent(agentId);
+          if (statusError) {
+              console.error("[AgentEdit] Error checking worker status:", statusError);
+              // Proceed with stop attempt anyway? Or show error? Let's proceed for now.
+              console.warn("Could not verify worker status before deactivation attempt."); // NEW - Fixed log
+          } else if (statusData && statusData.status === 'inactive') {
+              console.log(`[AgentEdit] Worker status for agent ${agentId} is already inactive according to manager. Skipping stop call.`);
+              shouldCallStop = false; 
+          } else {
+              console.log(`[AgentEdit] Worker status for agent ${agentId} is active or unknown. Proceeding with stop call.`);
+          }
+          // --- END ADDED --- 
+          
+          if (shouldCallStop) {
+              console.log(`[AgentEdit] Invoking manage-discord-worker (stop) for agent ${agentId}`);
+              const { error } = await supabase.functions.invoke('manage-discord-worker', {
+                  body: { agentId: agentId, action: 'stop' }
+              });
+              if (error) {
+                   // Throw the error to be caught by the outer catch block
+                   throw new Error(`Failed to deactivate agent: ${error.message || 'Edge Function returned a non-2xx status code'}`);
+              }
+              console.log("[AgentEdit] Deactivation request sent via manage-discord-worker.");
+          } else {
+             // If skipping stop call, maybe force UI refresh or local state update?
+             console.log("[AgentEdit] Skipping deactivation request as worker reported inactive.");
+             // Force a refresh of agent data to get the latest status from DB
+             // Or update local state optimistically
+             setDiscordConnectionData(prev => ({ ...prev, worker_status: 'inactive' })); 
+          }
+
+          // Always re-fetch agent data after attempt/skip to sync UI
+          console.log("[AgentEdit] Re-fetching agent data after deactivation attempt/skip...");
+          await fetchAgent(agentId); 
 
       } catch (err: any) {
-          console.error("[AgentEdit] Error deactivating agent:", err);
-          setError(`Failed to deactivate agent: ${err.message}`);
+          console.error("[AgentEdit] Error during deactivation process:", err);
+          // Set error state based on the caught error
+          setError(err.message || "An unknown error occurred during deactivation.");
+          // Optionally refetch agent data even on error to ensure UI consistency?
+          // await fetchAgent(agentId); 
       } finally {
           setSaving(false);
       }

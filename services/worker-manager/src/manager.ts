@@ -190,7 +190,72 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     res.status(202).json({ message: `Worker process for ${agentId} is being started.` });
 });
 
-// TODO: Add endpoint to stop a worker (/stop-worker?agentId=...)
+// --- ADDED: Endpoint to stop a worker --- 
+app.post('/stop-worker', authenticate, (req: Request, res: Response) => {
+    const { agentId } = req.body;
+    log('log', `[MANAGER RECV] Received /stop-worker request for Agent ID: ${agentId}`);
+
+    if (!agentId) {
+        res.status(400).json({ error: 'Missing required field: agentId' });
+        return;
+    }
+
+    const workerInfo = activeWorkers.get(agentId);
+
+    if (workerInfo) {
+        log('log', `[MANAGER STOP] Found active worker for Agent ID: ${agentId}. Sending SIGTERM...`);
+        try {
+            // Send SIGTERM - the worker should catch this and shut down gracefully
+            workerInfo.process.kill('SIGTERM'); 
+            // Remove immediately from map. The 'close' event handler will also try to remove,
+            // but removing here ensures we don't try to stop it twice.
+            activeWorkers.delete(agentId);
+            log('log', `[MANAGER STOP] SIGTERM sent to worker process for Agent ID: ${agentId}. Removed from active list.`);
+            res.status(200).json({ message: `Stop signal sent to worker for ${agentId}.` });
+        } catch (err) {
+            log('error', `[MANAGER STOP] Error sending SIGTERM to worker process for Agent ID: ${agentId}:`, err);
+            // Still remove from map if kill fails?
+            activeWorkers.delete(agentId); 
+            res.status(500).json({ error: `Failed to send stop signal to worker for ${agentId}.` });
+        }
+    } else {
+        log('warn', `[MANAGER STOP] Worker for Agent ID ${agentId} not found in active list (already stopped?).`);
+        // Consider it success if the worker isn't active
+        res.status(200).json({ message: `Worker for ${agentId} was not found (already stopped?).` });
+    }
+});
+// --- END ADDED Endpoint --- 
+
+// --- MODIFIED: Endpoint to get status of workers (handles specific agent too) --- 
+app.get('/status', authenticate, (req: Request, res: Response) => {
+    const specificAgentId = req.query.agent_id as string | undefined;
+
+    if (specificAgentId) {
+        // Check status for a specific agent
+        log('log', `[MANAGER RECV] Received /status request for Agent ID: ${specificAgentId}`);
+        const workerInfo = activeWorkers.get(specificAgentId);
+        const status = workerInfo ? 'active' : 'inactive'; // Active if in map, inactive otherwise
+        const response = {
+            agentId: specificAgentId,
+            status: status 
+        };
+        log('log', `[MANAGER STATUS] Status for Agent ${specificAgentId}: ${status}`);
+        res.status(200).json(response);
+
+    } else {
+        // Return status for all agents
+        log('log', `[MANAGER RECV] Received /status request for all agents`);
+        const activeAgentIds = Array.from(activeWorkers.keys());
+        const response = {
+            activeWorkerCount: activeWorkers.size,
+            activeAgentIds: activeAgentIds
+        };
+        log('log', `[MANAGER STATUS] Overall status: ${JSON.stringify(response)}`);
+        res.status(200).json(response);
+    }
+});
+// --- END MODIFIED Endpoint --- 
+
 // TODO: Add endpoint to get status of workers (/status)
 
 // --- Start Server --- 
