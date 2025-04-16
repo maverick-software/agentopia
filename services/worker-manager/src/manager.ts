@@ -188,21 +188,86 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
 
         log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
 
-        pm2.start(startOptions, (err: any, apps: any) => { // Explicit 'any'
+        pm2.start(startOptions, async (err: any, apps: any) => { // Make callback async
             if (err) {
                 log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, err);
-                res.status(500).json({ error: `Failed to start worker ${agentId}` });
-            } else {
-                log('log', `[MANAGER SPAWN OK] Worker ${workerName} started via PM2. App info:`, apps);
-                // Respond immediately - PM2 handles the process now
-                res.status(202).json({ message: `Worker process for ${agentId} is being started via PM2.` });
+                // Send error immediately if PM2 fails to start the process
+                return res.status(500).json({ error: `Failed to initiate worker start for ${agentId}` });
             }
+
+            log('log', `[MANAGER SPAWN OK] Worker ${workerName} initiated via PM2. App info:`, apps);
+            
+            // --- ADD Polling Logic --- 
+            const MAX_POLL_ATTEMPTS = 8; // Allow more time for worker startup
+            const POLL_INTERVAL_MS = 2500; // Check every 2.5 seconds
+            let attempts = 0;
+
+            const pollForActiveStatus = async (): Promise<boolean> => {
+                attempts++;
+                log('log', `[MANAGER START POLL ${attempts}/${MAX_POLL_ATTEMPTS}] Checking DB status for connection ${connectionDbId}...`);
+                
+                if (!supabaseAdmin) {
+                    log('error', '[MANAGER START POLL ERR] Supabase admin client not available.');
+                    return false; // Cannot poll without admin client
+                }
+
+                try {
+                    const { data, error: dbError } = await supabaseAdmin
+                        .from('agent_discord_connections')
+                        .select('worker_status')
+                        .eq('id', connectionDbId)
+                        .single();
+
+                    if (dbError) {
+                        // Log DB error, but continue polling unless it's a fatal error?
+                        log('error', `[MANAGER START POLL ERR] DB error fetching status (attempt ${attempts}):`, dbError.message);
+                        // Consider stopping poll if error code indicates permissions issue etc.
+                    } else if (data?.worker_status === 'active') {
+                        log('log', `[MANAGER START POLL OK] Confirmed 'active' status in DB for ${connectionDbId}.`);
+                        return true; // Success!
+                    } else {
+                        log('log', `[MANAGER START POLL] Status is still '${data?.worker_status || 'unknown'}'.`);
+                    }
+                    
+                    // Check if max attempts reached
+                    if (attempts >= MAX_POLL_ATTEMPTS) {
+                        log('warn', `[MANAGER START POLL TIMEOUT] Max attempts reached for ${connectionDbId}. Worker failed to become active.`);
+                        return false; // Timeout
+                    }
+                    
+                    // Wait and poll again
+                    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+                    return pollForActiveStatus(); 
+
+                } catch (pollErr) {
+                    log('error', `[MANAGER START POLL EXCEPTION] Exception during polling for ${connectionDbId}:`, pollErr);
+                    return false; // Stop polling on unhandled exception
+                }
+            };
+
+            const confirmedActive = await pollForActiveStatus();
+
+            if (confirmedActive) {
+                log('log', `[MANAGER START OK] Worker for agent ${agentId} confirmed active in DB.`);
+                // Respond with success AFTER polling confirms active status
+                res.status(200).json({ message: `Worker for ${agentId} started and confirmed active.` });
+            } else {
+                log('error', `[MANAGER START FAIL] Worker for agent ${agentId} failed to confirm active status after polling.`);
+                // Attempt to stop the potentially lingering/failed worker process
+                pm2.stop(workerName, (stopErr: any) => {
+                    if (stopErr) log('error', `[MANAGER START FAIL CLEANUP ERR] Error stopping failed worker ${workerName}:`, stopErr);
+                    else log('log', `[MANAGER START FAIL CLEANUP OK] Sent stop command to potentially failed worker ${workerName}.`);
+                });
+                // Respond with error AFTER polling fails
+                res.status(500).json({ error: `Worker for ${agentId} started but failed to activate.` });
+            }
+            // --- END Polling Logic ---
         });
     });
 });
 
-// *** REFACTORED: Endpoint to stop a worker via PM2 ***
-app.post('/stop-worker', authenticate, (req: Request, res: Response) => {
+// *** REFACTORED: Endpoint to stop a worker via PM2 WITH DB STATUS CONFIRMATION ***
+app.post('/stop-worker', authenticate, async (req: Request, res: Response) => { // Make handler async
     const { agentId } = req.body;
     log('log', `[MANAGER RECV] Received /stop-worker request for Agent ID: ${agentId}`);
     const workerName = getWorkerPm2Name(agentId);
@@ -211,23 +276,110 @@ app.post('/stop-worker', authenticate, (req: Request, res: Response) => {
         res.status(400).json({ error: 'Missing required field: agentId' });
         return;
     }
+    if (!supabaseAdmin) {
+        log('error', '[MANAGER STOP ERR] Supabase admin client not available for DB checks.');
+        res.status(500).json({ error: 'Server configuration error: Cannot verify stop operation.' });
+        return;
+    }
 
-    log('log', `[MANAGER STOP] Attempting to stop worker ${workerName} via PM2...`);
-    pm2.stop(workerName, (err: any, proc: any) => { // Explicit 'any'
-         if (err) {
-             // Check if error is "process not found" - treat as success
-             if (err.message && err.message.toLowerCase().includes('not found')) {
-                 log('warn', `[MANAGER STOP] Worker ${workerName} not found by PM2 (already stopped?).`);
-                 res.status(200).json({ message: `Worker for ${agentId} was not found (already stopped?).` });
-             } else {
-                 log('error', `[MANAGER STOP ERR] Error stopping worker ${workerName} via PM2:`, err);
-                 res.status(500).json({ error: `Failed to stop worker ${agentId}.` });
-             }
-         } else {
-             log('log', `[MANAGER STOP OK] Successfully stopped worker ${workerName} via PM2.`);
-             res.status(200).json({ message: `Worker for ${agentId} stopped successfully.` });
-         }
-    });
+    // --- Helper function for polling DB --- 
+    const MAX_POLL_ATTEMPTS = 6; // 6 attempts * 2 seconds = 12 seconds total timeout
+    const POLL_INTERVAL_MS = 2000; // 2 seconds
+
+    const pollForInactiveStatus = async (connId: string | null): Promise<boolean> => {
+        if (!connId) {
+            log('warn', '[MANAGER STOP POLL] Cannot poll for inactive status, connection ID is unknown.');
+            return false; // Cannot confirm if we don't know the ID
+        }
+        let attempts = 0;
+        while (attempts < MAX_POLL_ATTEMPTS) {
+            attempts++;
+            log('log', `[MANAGER STOP POLL ${attempts}/${MAX_POLL_ATTEMPTS}] Checking DB status for connection ${connId}...`);
+            try {
+                const { data, error: dbError } = await supabaseAdmin
+                    .from('agent_discord_connections')
+                    .select('worker_status')
+                    .eq('id', connId)
+                    .single();
+
+                if (dbError && dbError.code !== 'PGRST116') { // Ignore "Row not found" error if deleted
+                    log('error', `[MANAGER STOP POLL ERR] DB error fetching status (attempt ${attempts}):`, dbError.message);
+                    // Maybe retry on transient errors? For now, continue polling.
+                } else if (!data || data?.worker_status === 'inactive') {
+                    // Consider row not found as inactive
+                    log('log', `[MANAGER STOP POLL OK] Confirmed 'inactive' status (or row deleted) in DB for ${connId}.`);
+                    return true; // Success!
+                } else {
+                    log('log', `[MANAGER STOP POLL] Status is still '${data?.worker_status}'.`);
+                }
+            } catch (pollErr) {
+                log('error', `[MANAGER STOP POLL EXCEPTION] Exception during polling for ${connId}:`, pollErr);
+                // Stop polling on unhandled exception
+                return false;
+            }
+            // Wait before next attempt
+            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+        log('warn', `[MANAGER STOP POLL TIMEOUT] Max attempts reached for ${connId}. Worker failed to become inactive in DB.`);
+        return false; // Timeout
+    };
+    // --- End helper function ---
+
+    try {
+        // --- Fetch Connection ID first --- 
+        log('log', `[MANAGER STOP] Fetching connection ID for agent ${agentId}...`);
+        const { data: connData, error: fetchErr } = await supabaseAdmin
+            .from('agent_discord_connections')
+            .select('id')
+            .eq('agent_id', agentId)
+            .maybeSingle(); // Use maybeSingle as it might not exist
+
+        if (fetchErr) {
+            log('error', `[MANAGER STOP ERR] DB error fetching connection ID for agent ${agentId}:`, fetchErr.message);
+            // Proceed with PM2 stop attempt anyway, but polling won't work
+        }
+        const connectionDbId = connData?.id || null;
+        log('log', `[MANAGER STOP] Found connection ID: ${connectionDbId || 'None'}`);
+        // --- End Fetch --- 
+
+        log('log', `[MANAGER STOP] Attempting to stop worker ${workerName} via PM2...`);
+        // Use a promise to handle the PM2 callback asynchronously
+        const pm2StopPromise = new Promise<boolean>((resolve, reject) => {
+            pm2.stop(workerName, (err: any, proc: any) => {
+                if (err) {
+                    if (err.message && err.message.toLowerCase().includes('not found')) {
+                        log('warn', `[MANAGER STOP] Worker ${workerName} not found by PM2 (already stopped?). Proceeding to DB check.`);
+                        resolve(true); // Resolve true even if not found, we still need to poll DB
+                    } else {
+                        log('error', `[MANAGER STOP ERR] Error stopping worker ${workerName} via PM2:`, err);
+                        reject(new Error(`PM2 failed to stop worker ${agentId}.`)); // Reject the promise on PM2 error
+                    }
+                } else {
+                    log('log', `[MANAGER STOP OK] Successfully sent stop command to worker ${workerName} via PM2.`);
+                    resolve(true); // Resolve true on success
+                }
+            });
+        });
+
+        // Await the PM2 stop command attempt
+        await pm2StopPromise;
+
+        // Now poll for DB status confirmation
+        const confirmedInactive = await pollForInactiveStatus(connectionDbId);
+
+        if (confirmedInactive) {
+            log('log', `[MANAGER STOP OK] Worker for agent ${agentId} confirmed inactive in DB.`);
+            res.status(200).json({ message: `Worker for ${agentId} stopped and confirmed inactive.` });
+        } else {
+            log('error', `[MANAGER STOP FAIL] Worker for agent ${agentId} failed to confirm inactive status after polling.`);
+            res.status(500).json({ error: `Worker for ${agentId} stop initiated, but failed to confirm inactive status in DB.` });
+        }
+
+    } catch (error: any) {
+        // Catch errors from pm2StopPromise rejection or other issues
+        log('error', `[MANAGER STOP FAIL] Overall error during stop process for agent ${agentId}:`, error);
+        res.status(500).json({ error: error.message || `Failed to stop worker ${agentId}.` });
+    }
 });
 
 // *** REFACTORED: Endpoint to get status of workers via PM2 ***

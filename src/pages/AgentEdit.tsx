@@ -795,144 +795,100 @@ export function AgentEdit() {
 
   // --- NEW: Handler for Activating Agent Worker ---
   const handleActivateAgent = async () => {
-    // *** ADDED LOGGING ***
     console.log(`%c[AgentEdit] handleActivateAgent CALLED! Agent: ${id}, Current Status in State: ${discordConnectionData?.worker_status}`, "color: red; font-weight: bold;");
-    // *** END ADDED LOGGING ***
 
     if (!id || !discordConnectionData.guild_id) {
       setError("Cannot activate: Agent ID or selected server is missing.");
       return;
     }
-    console.log(`[AgentEdit] Invoking manage-discord-worker (start) for agent ${id}`);
+    
     setDiscordLoading(true);
     setError(null);
+    
     try {
+      // --- REFACTORED: Call manager and wait for confirmation --- 
+      console.log(`[AgentEdit] Invoking manage-discord-worker (start) for agent ${id} and awaiting confirmation...`);
+      // Assuming 'manage-discord-worker' calls the manager's /start-worker endpoint which now polls
       const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
         body: { 
           action: 'start',
           agentId: id,
-          guildId: discordConnectionData.guild_id 
+          guildId: discordConnectionData.guild_id // Pass guildId if needed by function/manager
+          // Add connectionDbId and botToken if the function requires them directly
+          // connectionDbId: discordConnectionData.id, 
+          // botToken: discordBotKey 
         }
       });
 
       if (invokeError) {
+        // Error response from manager (e.g., polling timeout)
         throw invokeError;
       }
-      console.log("[AgentEdit] Activation request sent successfully.");
-      // Update local status optimistically or wait for DB update?
-      // For now, let's assume a DB trigger/subscription will update the status
-      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'activating' })); 
-      // Consider polling or listening for status changes here
+      
+      // --- Manager confirmed worker is active --- 
+      console.log("[AgentEdit] Manager confirmed agent activation successful.");
+      setDiscordConnectionData(prev => ({ ...(prev || {}), worker_status: 'active' } as Partial<AgentDiscordConnection>)); 
       
     } catch (err: any) {
       console.error("[AgentEdit] Error activating agent:", err);
-      setError(`Failed to activate agent: ${err.message || err.details || 'Unknown error'}`);
-      // Reset status if activation failed
-      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'inactive' })); // Or 'error'?
+      const errorMessage = err.context?.function_error // Supabase specific error structure
+                         || err.message 
+                         || err.details 
+                         || 'Activation failed. Check manager logs.';
+      setError(`Failed to activate agent: ${errorMessage}`);
+      // Reset status if activation failed?
+      // setDiscordConnectionData(prev => ({ ...(prev || {}), worker_status: 'inactive' } as Partial<AgentDiscordConnection>));
     } finally {
       setDiscordLoading(false);
     }
   };
-  // --- End Activate Handler ---
+  // --- End Activate Handler --- 
 
-  // --- NEW: Handler for Deactivating Agent Worker ---
+  // --- REFACTORED: Handler for Deactivating Agent Worker --- 
   const handleDeactivateAgent = async () => {
     if (!id) return;
     console.log(`%c[UI DEACTIVATE START] Deactivating agent ${id}...`, 'color: orange; font-weight: bold;');
-    setDiscordLoading(true); // Indicate loading state for activate/deactivate
+    setDiscordLoading(true); 
     setError(null);
 
-    const MAX_POLL_ATTEMPTS = 6; // e.g., 6 attempts * 2 seconds = 12 seconds total timeout
-    const POLL_INTERVAL_MS = 2000; // 2 seconds
-
     try {
-      // Call the backend endpoint to stop the worker via the manager
-      // Note: This still uses manage-discord-worker for now, adjust if you have agentopiaClient.deactivateAgent
-      const { error: stopError } = await supabase.functions.invoke('manage-discord-worker', {
+      // --- REFACTORED: Call manager and wait for confirmation --- 
+      console.log(`[AgentEdit] Invoking manage-discord-worker (stop) for agent ${id} and awaiting confirmation...`);
+       // Assuming 'manage-discord-worker' calls the manager's /stop-worker endpoint which now polls
+      const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
         body: { 
           action: 'stop',
-          agentId: id,
-          guildId: discordConnectionData.guild_id // Ensure guildId is included if needed by the function
+          agentId: id
+          // Add guildId if needed by stop function/manager?
+          // guildId: discordConnectionData.guild_id 
         }
       });
 
-      if (stopError) {
-        throw stopError; // Throw if the stop request itself fails
+      if (invokeError) {
+         // Error response from manager (e.g., polling timeout)
+        throw invokeError;
       }
-      console.log(`%c[UI DEACTIVATE REQ OK] Deactivation request successful for agent ${id}. Starting polling...`, 'color: green; font-weight: bold;');
 
-      // --- ADDED Polling Logic ---
-      let attempts = 0;
-      const pollStatus = async (): Promise<boolean> => {
-        attempts++;
-        console.log(`%c[UI DEACTIVATE POLL ${attempts}/${MAX_POLL_ATTEMPTS}] Checking DB status for connection ${discordConnectionData.id}...`, 'color: purple;');
-        
-        if (!discordConnectionData.id) {
-            console.warn('[UI DEACTIVATE POLL WARN] Cannot poll status, connection ID unknown.');
-            return false; // Cannot poll without connection ID
-        }
-
-        try {
-          const { data, error } = await supabase
-            .from('agent_discord_connections')
-            .select('worker_status')
-            .eq('id', discordConnectionData.id)
-            .single();
-
-          if (error) {
-            console.error('[UI DEACTIVATE POLL ERR] Polling error fetching status:', error);
-            return false; // Continue polling on fetch error, maybe?
-          }
-
-          if (data?.worker_status === 'inactive') {
-            console.log(`%c[UI DEACTIVATE POLL OK] Confirmed inactive status in DB.`, 'color: green; font-weight: bold;');
-            return true; // Success!
-          } else {
-            console.log(`%c[UI DEACTIVATE POLL] Status is still '${data?.worker_status}'.`, 'color: purple;');
-            if (attempts >= MAX_POLL_ATTEMPTS) {
-               console.warn(`%c[UI DEACTIVATE POLL TIMEOUT] Max attempts reached.`, 'color: orange;');
-               return false; // Timeout
-            }
-            // Wait and poll again
-            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-            return pollStatus(); 
-          }
-        } catch (pollErr) {
-          console.error("Exception during polling:", pollErr);
-          return false; // Stop polling on exception
-        }
-      };
-
-      const confirmedInactive = await pollStatus();
-
-      if (confirmedInactive) {
-        setDiscordConnectionData(prev => ({ 
-            ...(prev || {}), 
-            worker_status: 'inactive' 
-        } as Partial<AgentDiscordConnection>));
-        console.log(`%c[UI DEACTIVATE STATE] Set local state to inactive after polling confirmation.`, 'color: blue; font-weight: bold;');
-      } else {
-        console.error("[UI DEACTIVATE ERR] Failed to confirm inactive status after polling.");
-        setError("Failed to confirm agent deactivation. Status might be out of sync.");
-        // Optionally force UI to inactive anyway, or leave as is?
-        // Forcing it for better UX for now:
-        setDiscordConnectionData(prev => ({ 
-            ...(prev || {}), 
-            worker_status: 'inactive' 
-        } as Partial<AgentDiscordConnection>));
-        console.warn(`%c[UI DEACTIVATE STATE] Forcing local state to inactive after polling timeout/error.`, 'color: orange; font-weight: bold;');
-      }
-      // --- End Polling Logic ---
-
+      // --- Manager confirmed worker is inactive --- 
+      console.log("[AgentEdit] Manager confirmed agent deactivation successful.");
+      setDiscordConnectionData(prev => ({ ...(prev || {}), worker_status: 'inactive' } as Partial<AgentDiscordConnection>));
+      
+      // --- REMOVED UI Polling Logic --- 
+      
     } catch (err: any) {
-      console.error("[UI DEACTIVATE ERR] Error during deactivation request:", err);
-      const errorMessage = err.message || err.details || 'Failed to send deactivation request';
+      console.error("[UI DEACTIVATE ERR] Error during deactivation:", err);
+      const errorMessage = err.context?.function_error // Supabase specific error structure
+                         || err.message 
+                         || err.details 
+                         || 'Deactivation failed. Check manager logs.';
       setError(`Deactivation Error: ${errorMessage}`);
+      // Maybe re-fetch agent data here to get actual DB state on error?
+      // fetchAgent(id);
     } finally {
       setDiscordLoading(false);
     }
   };
-  // --- End Deactivate Handler ---
+  // --- End Deactivate Handler --- 
 
   // *** ADDED LOGGING ***
   console.log(`[AgentEdit RENDER] Rendering component. discordConnectionData.worker_status =`, discordConnectionData?.worker_status);
