@@ -200,26 +200,81 @@ client.on(Events.MessageCreate, async (message) => {
 
                 console.log("Sending payload to chat function:", JSON.stringify(chatPayload, null, 2));
 
-                const { data: agentResponse, error: agentError } = await supabase.functions.invoke(
-                    'chat', 
-                    { body: chatPayload } // Send the correctly structured payload
-                );
+                // --- MODIFIED: Use fetch to handle streaming response --- 
+                const functionUrl = `${SUPABASE_URL}/functions/v1/chat`;
+                let accumulatedReply = '';
+                let fetchError: Error | null = null;
 
-                if (agentError) {
-                    console.error("Error invoking chat function:", agentError); // Renamed log
-                    await message.reply("Sorry, I encountered an error trying to process that.");
-                } else {
-                   console.log("Received response from chat function:", agentResponse); // Renamed log
-                    const replyContent = agentResponse?.reply || "Sorry, I couldn't generate a response.";
-                    if (replyContent.length > 2000) {
-                        await message.reply({ content: replyContent.substring(0, 1997) + '...' });
-                    } else {
-                        await message.reply({ content: replyContent });
+                try {
+                    const response = await fetch(functionUrl, {
+                        method: 'POST',
+                        headers: {
+                            // Pass Supabase Anon Key for function invocation (if RLS needed)
+                            // Note: Service Role key used *inside* the function itself
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(chatPayload)
+                    });
+
+                    if (!response.ok) {
+                        const errorBody = await response.text();
+                        let detail = `Function returned error ${response.status}`;
+                        try { detail = JSON.parse(errorBody).error || detail; } catch(e) {}
+                        throw new Error(detail);
                     }
+
+                    // Check if response is a stream
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('text/event-stream') && response.body) {
+                        console.log("Received stream response from chat function.");
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            const chunk = decoder.decode(value, { stream: true });
+                            // Simple handling: Assume chunk is the content itself
+                            // More robust SSE parsing might be needed if using event types/ids
+                            accumulatedReply += chunk;
+                            // Optional: Send partial replies? Could be complex with rate limits.
+                        }
+                        console.log("Finished reading stream. Full reply length:", accumulatedReply.length);
+                    } else {
+                        // Handle non-stream response (e.g., direct JSON error)
+                        const nonStreamResponse = await response.json();
+                        console.warn("Received non-stream response:", nonStreamResponse);
+                        // Try to extract an error or default
+                         accumulatedReply = nonStreamResponse?.reply || nonStreamResponse?.error || "Received unexpected response format.";
+                    }
+                
+                } catch (err) {
+                    console.error("Error fetching/processing chat function response:", err);
+                    fetchError = err;
                 }
-            } catch (invokeErr) {
-                console.error("Exception invoking chat function:", invokeErr); // Renamed log
-                await message.reply("Sorry, there was an unexpected issue connecting to the agent core.");
+                // --- END MODIFIED --- 
+
+                // --- MODIFIED: Handle reply based on fetch result --- 
+                if (fetchError) {
+                    // If fetch itself or reading the stream failed
+                    await message.reply(`Sorry, I encountered an error: ${fetchError.message}`);
+                } else if (accumulatedReply) {
+                   // If we successfully accumulated a reply
+                    if (accumulatedReply.length > 2000) {
+                        await message.reply({ content: accumulatedReply.substring(0, 1997) + '...' });
+                    } else {
+                        await message.reply({ content: accumulatedReply });
+                    }
+                } else {
+                    // If fetch succeeded but no reply content was accumulated (shouldn't happen often)
+                    await message.reply("Sorry, I couldn't generate a response. (Empty reply received)");
+                }
+                // --- END MODIFIED --- 
+
+            } catch (err) { // Catch errors from *before* fetch (e.g., fetching agent details)
+                console.error("Exception before invoking chat function:", err); 
+                await message.reply("Sorry, there was an unexpected issue preparing your request.");
             }
         } else {
              await message.reply("Hello! How can I help you today?"); 

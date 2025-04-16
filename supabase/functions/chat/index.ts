@@ -192,7 +192,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .select(`
         id,
         agent_id,
-        priority,
         timeout_ms,
         max_retries,
         retry_backoff_ms,
@@ -202,8 +201,7 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
           vault_api_key_id
         )
       `)
-      .eq('agent_id', agentId)
-      .order('priority', { ascending: true });
+      .eq('agent_id', agentId);
 
     if (error) {
       console.error('Error fetching MCP configurations:', JSON.stringify(error, null, 2));
@@ -224,7 +222,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       timeout_ms: config.timeout_ms,
       max_retries: config.max_retries,
       retry_backoff_ms: config.retry_backoff_ms,
-      priority: config.priority,
     }));
   } catch (error) {
     console.error('Error in getMCPConfigurations:', error);
