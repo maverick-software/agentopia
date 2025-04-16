@@ -161,7 +161,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
         const startOptions: pm2.StartOptions = {
             script: WORKER_SCRIPT_PATH,
             name: workerName,
-            exec_interpreter: 'ts-node', // Use ts-node
+            interpreter: 'ts-node', // Corrected from exec_interpreter
             exec_mode: 'fork', // Use fork mode
             env: workerEnv,
             // Configure logs (optional, PM2 handles defaults)
