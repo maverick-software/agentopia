@@ -102,23 +102,46 @@ app.get('/', (req: Request, res: Response) => {
 
 // *** REFACTORED: Endpoint to start a new worker using PM2 ***
 app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
-    const { agentId, connectionDbId, botToken, inactivityTimeout } = req.body;
-    log('log', `[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}`);
+    log('log', `[MANAGER RECV ENTRY] /start-worker endpoint entered.`);
+    let agentId, connectionDbId, botToken, inactivityTimeout;
+    try {
+        // Destructure body inside try/catch
+        ({ agentId, connectionDbId, botToken, inactivityTimeout } = req.body);
+        log('log', `[MANAGER RECV OK] Received /start-worker request for Agent ID: ${agentId}. Body parsed.`);
+    } catch (parseError) {
+        log('error', `[MANAGER RECV ERR] Failed to parse request body:`, parseError);
+        // Ensure response is sent if body parsing fails
+        if (!res.headersSent) {
+            res.status(400).json({ error: 'Malformed request body' });
+        }
+        return; // Exit
+    }
 
     // --- Input Validation ---
+    log('log', `[MANAGER VALIDATE] Checking required fields: agentId=${!!agentId}, connectionDbId=${!!connectionDbId}, botToken=${!!botToken}`);
     if (!agentId || !connectionDbId || !botToken) {
-        res.status(400).json({ error: 'Missing required fields: agentId, connectionDbId, or botToken' });
+        log('warn', `[MANAGER VALIDATE FAIL] Missing required fields.`);
+        if (!res.headersSent) {
+            res.status(400).json({ error: 'Missing required fields: agentId, connectionDbId, or botToken' });
+        }
         return;
     }
+    log('log', `[MANAGER VALIDATE OK] Required fields present.`);
 
     // --- Check for Required Environment Variables ---
+    log('log', `[MANAGER ENV CHECK] Checking environment variables: SUPABASE_URL=${!!SUPABASE_URL}, SUPABASE_ANON_KEY=${!!SUPABASE_ANON_KEY}`);
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        log('error', '[MANAGER START ERR] SUPABASE_URL or SUPABASE_ANON_KEY environment variables are not set.');
-        res.status(500).json({ error: 'Server configuration error: Missing Supabase credentials.' });
+        log('error', '[MANAGER ENV CHECK FAIL] SUPABASE_URL or SUPABASE_ANON_KEY environment variables are not set.');
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Server configuration error: Missing Supabase credentials.' });
+        }
         return;
     }
+    log('log', `[MANAGER ENV CHECK OK] Environment variables present.`);
 
+    log('log', `[MANAGER PRE-PM2] Preparing worker name for agent ${agentId}...`);
     const workerName = getWorkerPm2Name(agentId);
+    log('log', `[MANAGER PRE-PM2] Worker name is ${workerName}.`);
 
     // --- Check if worker already running via PM2 ---
     log('log', `[MANAGER START] Calling pm2.describe for ${workerName}...`);
