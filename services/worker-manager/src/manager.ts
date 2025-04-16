@@ -79,16 +79,25 @@ app.post('/start-worker', authenticate, (req: Request, res: Response) => {
     // --- Spawn Worker Process --- 
     console.log(`Spawning worker process using script: ${WORKER_SCRIPT_PATH}`);
     
-    const workerEnv = { 
+    const workerEnv: { [key: string]: string | undefined } = { 
         ...process.env, // Inherit manager env vars
         DISCORD_BOT_TOKEN: botToken,
         AGENT_ID: agentId,
         CONNECTION_ID: connectionId,
-        TIMEOUT_MINUTES: String(timeoutMinutes),
         // Pass Supabase details needed by worker
         SUPABASE_URL: SUPABASE_URL,
         SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
     };
+
+    // Only set TIMEOUT_MINUTES if it's a positive number
+    const parsedTimeout = parseInt(String(timeoutMinutes), 10);
+    if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
+        workerEnv.TIMEOUT_MINUTES = String(parsedTimeout);
+        console.log(`Setting TIMEOUT_MINUTES=${workerEnv.TIMEOUT_MINUTES} for worker ${agentId}`);
+    } else {
+        console.log(`Timeout is 0 or invalid (${timeoutMinutes}), TIMEOUT_MINUTES will not be set for worker ${agentId}.`);
+        // Worker should handle the absence of this variable as "Never" timeout
+    }
 
     // Use ts-node to run the TypeScript worker directly (for development)
     // In production, you'd run the compiled JS (e.g., node dist/worker.js)

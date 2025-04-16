@@ -93,10 +93,12 @@ export function AgentEdit() {
   const [discordDisconnecting, setDiscordDisconnecting] = useState(false);
   const [discordGuilds, setDiscordGuilds] = useState<any[]>([]);
   const [fetchingGuilds, setFetchingGuilds] = useState(false);
+  const [discordChannels, setDiscordChannels] = useState<any[]>([]);
+  const [fetchingChannels, setFetchingChannels] = useState(false);
 
-  // --- NEW: State for modals ---
-  const [showAppIdModal, setShowAppIdModal] = useState(false);
-  const [showServerSelectModal, setShowServerSelectModal] = useState(false);
+  // --- NEW: Connection Stage State ---
+  type DiscordStage = 'initial' | 'enter_credentials' | 'select_server' | 'connected';
+  const [discordConnectionStage, setDiscordConnectionStage] = useState<DiscordStage>('initial');
   // --- End NEW State ---
 
   const fetchAgentAttempts = useRef(0);
@@ -318,6 +320,17 @@ export function AgentEdit() {
     }
   }, [showDatastoreModal, datastores.length, loadingDatastores, user, fetchDatastores]);
 
+  // *** NEW: Handler to update connection state from DiscordConnect ***
+  const handleConnectionChange = (field: keyof AgentDiscordConnection, value: any) => {
+    console.log(`[AgentEdit] Updating connection state: ${String(field)} = ${value}`);
+    setDiscordConnectionData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    // Note: This only updates local state. 
+    // The value needs to be persisted during SaveCredentials, SelectServer, or SelectChannel.
+  };
+
   const handleDiscordDisconnectBot = () => {
     disconnectDiscordBot();
   };
@@ -371,166 +384,323 @@ export function AgentEdit() {
     }
   };
 
+  // Determine initial stage based on fetched data
+  useEffect(() => {
+      if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key && discordConnectionData.guild_id) {
+          setDiscordConnectionStage('connected');
+      } else if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key) {
+          setDiscordConnectionStage('select_server');
+          // Fetch guilds if we are in server select stage but haven't fetched yet
+          if (discordGuilds.length === 0 && !fetchingGuilds) {
+             fetchDiscordGuildsLogic();
+          }
+      } else if (discordBotKey) {
+          setDiscordConnectionStage('enter_credentials');
+      } else {
+          setDiscordConnectionStage('initial');
+      }
+  // Add dependencies that determine the stage
+  }, [discordBotKey, discordConnectionData.discord_app_id, discordConnectionData.discord_public_key, discordConnectionData.guild_id]);
+
+  // Update connectDiscordBot to change stage
   const connectDiscordBot = async (token: string) => {
-    const agentId = id; // Use current agent ID
+    const agentId = id; 
     if (!agentId || !token.trim()) {
       setError('Agent ID and bot token are required');
       return;
     }
-
     setDiscordLoading(true);
     setError(null);
     try {
-      console.log(`Invoking function to update token for agent ${agentId}`);
-      const { data: fnResponse, error: fnError } = await supabase.functions.invoke(
-        'update-agent-discord-token',
-        { body: { agentId: agentId, token: token.trim() } }
-      );
-
-      if (fnError) throw fnError;
-      console.log('Function response:', fnResponse);
-
-      // On successful token save, update state and show the App ID/Key modal
+      console.log(`[AgentEdit] Invoking function to update token for agent ${agentId}`);
+      await supabase.functions.invoke('update-agent-discord-token', { 
+          body: { agentId: agentId, token: token.trim() } 
+      });
+      console.log('[AgentEdit] Token function invoked successfully.');
+      // On successful token save, update state and change stage
       setDiscordBotKey(token.trim()); 
-      setShowAppIdModal(true); // <-- Open the first modal
-
+      setDiscordConnectionStage('enter_credentials'); // <-- Change stage
     } catch (err: any) {
-      console.error("Error connecting bot (calling function):", err);
+      console.error("[AgentEdit] Error connecting bot (saving token):", err);
       let detailedMessage = err.message;
-      if (err.context?.error_details) {
-          detailedMessage = `${err.message} - ${err.context.error_details}`;
-      } else if (err.details) {
-          detailedMessage = `${err.message} - ${err.details}`;
-      }
+      if (err.context?.error_details) detailedMessage = `${err.message} - ${err.context.error_details}`;
+      else if (err.details) detailedMessage = `${err.message} - ${err.details}`;
       setError(`Failed to save bot token: ${detailedMessage}`);
+      // Reset stage if token save fails?
+      // setDiscordConnectionStage('initial'); 
     } finally {
       setDiscordLoading(false);
     }
   };
 
-  // --- NEW: Handler for saving App ID / Public Key from Modal 1 ---
-  const handleSaveAppIdPublicKey = async (appId: string, publicKey: string) => {
+  // Renamed handler for saving credentials
+  const handleSaveCredentials = async (appId: string, publicKey: string) => {
     const agentId = id;
     if (!agentId || !appId || !publicKey) {
       setError("Agent ID, Application ID, and Public Key are required.");
       return;
     }
-    setSaving(true); // Use main saving indicator
+    setSaving(true); 
     setError(null);
 
     const upsertData = {
       agent_id: agentId,
       discord_app_id: appId.trim(),
       discord_public_key: publicKey.trim(),
-      // Include other potentially existing fields to avoid overwriting them with null
       guild_id: discordConnectionData.guild_id ?? null, 
       channel_id: discordConnectionData.channel_id ?? null, 
       inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes || 10,
     };
 
     try {
-      console.log("Upserting App ID/Public Key:", upsertData);
+      console.log("[AgentEdit] Upserting App ID/Public Key:", upsertData);
       const { error: connectionSaveError } = await supabase
         .from('agent_discord_connections')
         .upsert(upsertData, { onConflict: 'agent_id' });
 
       if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
 
-      // Update local state
-      setDiscordConnectionData(prev => ({
-        ...prev,
-        // Update with the saved data, ensuring undefined if null
-        agent_id: upsertData.agent_id,
-        discord_app_id: upsertData.discord_app_id,
-        discord_public_key: upsertData.discord_public_key,
-        guild_id: upsertData.guild_id ?? undefined,
-        channel_id: upsertData.channel_id ?? undefined,
-        inactivity_timeout_minutes: upsertData.inactivity_timeout_minutes,
-        // Keep existing id and worker_status
-        id: prev.id,
-        worker_status: prev.worker_status 
-      }));
+      // --- NEW: Fetch the connection ID after upsert ---
+      console.log("[AgentEdit] Fetching connection ID after upsert...");
+      const { data: idData, error: idError } = await supabase
+        .from('agent_discord_connections')
+        .select('id')
+        .eq('agent_id', agentId)
+        .single(); // Expect exactly one row now
 
-      setShowAppIdModal(false); // Close modal 1
-      
-      // Fetch guilds and show modal 2
+      if (idError || !idData?.id) {
+        console.error("[AgentEdit] Failed to fetch connection ID after upsert:", idError);
+        // Throw error? Or just warn and proceed without ID?
+        // Throwing is safer as channel select will fail later.
+        throw new Error("Failed to retrieve connection details after saving credentials.");
+      }
+      const connectionId = idData.id;
+      console.log(`[AgentEdit] Fetched connection ID: ${connectionId}`);
+      // --- End Fetch ID ---
+
+      // Update local state (including the fetched ID)
+      setDiscordConnectionData(prev => ({ 
+          ...prev, // Keep existing status etc. 
+          ...upsertData, // Saved credentials
+          id: connectionId, // <<< Add the fetched ID
+          guild_id: upsertData.guild_id ?? undefined,
+          channel_id: upsertData.channel_id ?? undefined,
+       }));
+
+      // Fetch guilds and change stage
       await fetchDiscordGuildsLogic(); 
-      setShowServerSelectModal(true); // Open modal 2
+      setDiscordConnectionStage('select_server'); // <-- Change stage
 
     } catch (err: any) {
-       console.error("Error saving App ID/Public Key:", err);
+       console.error("[AgentEdit] Error saving App ID/Public Key:", err);
        setError(`Failed to save Discord App ID/Public Key: ${err.message}`);
+       // Should we revert stage? Maybe not, user can retry save.
     } finally {
        setSaving(false);
     }
   };
-  // --- End NEW Handler ---
 
-  // --- NEW: Handler for saving Guild Selection from Modal 2 ---
-  const handleSaveGuildSelection = async (guildId: string | null) => {
+  // NEW: Function to fetch channels for a selected guild
+  const fetchDiscordChannelsLogic = async (selectedGuildId: string) => {
+      const agentId = id;
+      if (!agentId || !selectedGuildId) {
+          console.error("[AgentEdit] Cannot fetch channels: Agent ID or Guild ID missing.");
+          setError("Cannot fetch channels: Agent ID or Guild ID missing.");
+          setDiscordChannels([]);
+          return;
+      }
+      console.log(`[AgentEdit] Fetching channels for guild ${selectedGuildId}...`);
+      setFetchingChannels(true);
+      setError(null); 
+      try {
+          const functionName = 'discord-get-guild-channels'; // Assumes this function exists
+          const queryParams = new URLSearchParams({ agentId, guildId: selectedGuildId });
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          if (!supabaseUrl) throw new Error('Supabase URL not configured.');
+          const invokeUrl = `${supabaseUrl}/functions/v1/${functionName}?${queryParams.toString()}`;
+
+          const response = await fetch(invokeUrl, {
+              method: 'GET',
+              headers: {
+                  'Authorization': `Bearer ${ (await supabase.auth.getSession()).data.session?.access_token }`,
+                  'Content-Type': 'application/json'
+              }
+          });
+
+          if (!response.ok) {
+              const errorBody = await response.text();
+              let detail = errorBody;
+              try { detail = JSON.parse(errorBody).error || errorBody; } catch(e) {}
+              throw new Error(`Failed to fetch channels (${response.status}): ${detail}`);
+          }
+
+          const data = await response.json();
+          console.log('[AgentEdit] Discord channels fetched successfully:', data);
+          setDiscordChannels(data || []); // Assuming data is the array of channels
+
+      } catch (err: any) {
+          console.error('[AgentEdit] Discord channels fetch error:', err);
+          setError(`Error fetching channels: ${err.message}`);
+          setDiscordChannels([]); // Clear channels on error
+      } finally {
+          setFetchingChannels(false);
+      }
+  };
+
+  // Update stage determination useEffect
+  useEffect(() => {
+      if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key && discordConnectionData.guild_id) {
+          setDiscordConnectionStage('connected');
+          // Fetch channels if connected to a guild but channels aren't loaded
+          if (discordConnectionData.guild_id && discordChannels.length === 0 && !fetchingChannels) {
+              fetchDiscordChannelsLogic(discordConnectionData.guild_id);
+          }
+      } else if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key) {
+          setDiscordConnectionStage('select_server');
+          // Fetch guilds if we are in server select stage but haven't fetched yet
+          if (discordGuilds.length === 0 && !fetchingGuilds) {
+             fetchDiscordGuildsLogic();
+          }
+      } else if (discordBotKey) {
+          setDiscordConnectionStage('enter_credentials');
+      } else {
+          setDiscordConnectionStage('initial');
+      }
+  // Add dependencies that determine the stage
+  }, [discordBotKey, discordConnectionData.discord_app_id, discordConnectionData.discord_public_key, discordConnectionData.guild_id]);
+
+  // Modify server selection handler to fetch channels
+  const handleSelectServer = async (guildId: string | null) => {
     const agentId = id;
-    const connectionId = discordConnectionData.id; // Need the connection ID to update
+    const connectionId = discordConnectionData.id; 
 
-    // Use connection ID if available (safer update), otherwise fall back to agent_id
     if (!agentId || (!connectionId && !agentId)) { 
         setError("Cannot save guild selection: Agent or Connection ID missing.");
         return;
     }
     
-    setSaving(true);
+    setSaving(true); 
     setError(null);
+    setDiscordChannels([]); // Clear channels when server changes
 
-    const updateData = {
+    const updateData = { 
         guild_id: guildId || null,
-        // Potentially reset channel_id if guild changes? Or handle channel selection.
-        // channel_id: null 
+        channel_id: null // Reset channel ID when server changes
     };
 
     try {
-        console.log(`Updating connection for agent ${agentId} with guild ${guildId}`);
+        console.log(`[AgentEdit] Updating connection for agent ${agentId} with guild ${guildId}`);
         let query = supabase.from('agent_discord_connections').update(updateData);
-        
-        // Prefer updating by connection ID if known
-        if (connectionId) {
-            query = query.eq('id', connectionId);
-        } else {
-            query = query.eq('agent_id', agentId); // Fallback if ID unknown
-        }
+        if (connectionId) query = query.eq('id', connectionId);
+        else query = query.eq('agent_id', agentId); 
 
         const { error: updateError } = await query;
-
         if (updateError) throw new Error(`Guild selection save error: ${updateError.message}`);
 
-        // Update local state
-        setDiscordConnectionData(prev => ({
-            ...prev,
-            guild_id: guildId || undefined // Update local state
-        }));
-
-        setShowServerSelectModal(false); // Close modal 2
+        // Update local state 
+        setDiscordConnectionData(prev => ({ ...prev, guild_id: guildId || undefined, channel_id: undefined }));
         
-        // Optionally re-fetch agent data to ensure UI consistency
-        // if (agentId) {
-        //   await fetchAgent(agentId); 
-        // }
+        if (guildId) {
+            // Fetch channels for the new guild and stay in select_server stage
+            await fetchDiscordChannelsLogic(guildId);
+            setDiscordConnectionStage('select_server'); 
+        } else {
+            // If no guild selected, move to connected (or maybe back to select_server?)
+            setDiscordConnectionStage('connected'); // Treat no server as 'connected' but incomplete
+        }
+        console.log("[AgentEdit] Guild selection saved.");
 
     } catch (err: any) {
-        console.error("Error saving Guild selection:", err);
+        console.error("[AgentEdit] Error saving Guild selection:", err);
         setError(`Failed to save Discord server selection: ${err.message}`);
     } finally {
         setSaving(false);
     }
   };
-  // --- End NEW Handler ---
 
+  // NEW: Handler for saving Channel Selection
+  const handleSelectChannel = async (channelId: string | null) => {
+      const agentId = id;
+      const connectionId = discordConnectionData.id;
+      if (!agentId || !connectionId) { // Require connection ID for channel update
+          setError("Cannot save channel selection: Connection ID missing.");
+          return;
+      }
+      setSaving(true); // Reuse saving state maybe?
+      setError(null);
+      const updateData = { channel_id: channelId || null };
+      try {
+          console.log(`[AgentEdit] Updating connection ${connectionId} with channel ${channelId}`);
+          const { error: updateError } = await supabase
+              .from('agent_discord_connections')
+              .update(updateData)
+              .eq('id', connectionId);
+              
+          if (updateError) throw new Error(`Channel selection save error: ${updateError.message}`);
+
+          // Update local state and stage (remain connected)
+          setDiscordConnectionData(prev => ({ ...prev, channel_id: channelId || undefined }));
+          setDiscordConnectionStage('connected'); // Stay connected
+          console.log("[AgentEdit] Channel selection saved.");
+
+      } catch (err: any) {
+          console.error("[AgentEdit] Error saving Channel selection:", err);
+          setError(`Failed to save Discord channel selection: ${err.message}`);
+      } finally {
+          setSaving(false);
+      }
+  };
+
+  // Update disconnect to clear channels
   const disconnectDiscordBot = async () => {
-    // ... (disconnect logic remains largely the same) ...
-    // Ensure modals are closed on disconnect
-    setShowAppIdModal(false);
-    setShowServerSelectModal(false);
+    // Ensure modals are closed (no longer relevant, but keep for safety)
+    // setShowAppIdModal(false);
+    // setShowServerSelectModal(false);
 
-    if (!id) return;
-    // ... rest of disconnect logic ...
+    const agentId = id; 
+    if (!agentId) {
+        console.error("[disconnectDiscordBot] Agent ID missing, cannot disconnect.");
+        setError("Cannot disconnect: Agent ID is missing.");
+        return;
+    }
+    
+    console.log(`[disconnectDiscordBot] Starting disconnect for agent ${agentId}...`);
+    setDiscordDisconnecting(true);
+    setError(null);
+    
+    try {
+      // 1. Clear token in agents table
+      console.log(`[disconnectDiscordBot] Invoking function to clear token for agent ${agentId}`);
+      const { error: fnError } = await supabase.functions.invoke('update-agent-discord-token', 
+          { body: { agentId: agentId, token: null } } 
+      );
+      if (fnError) console.error("[disconnectDiscordBot] Error invoking clear token function (proceeding anyway):", fnError);
+      else console.log('[disconnectDiscordBot] Clear token function invoked.');
+
+      // 2. Delete connection details
+      console.log(`[disconnectDiscordBot] Attempting to delete discord connection details for agent: ${agentId}`);
+      const { error: delError } = await supabase
+        .from('agent_discord_connections')
+        .delete()
+        .eq('agent_id', agentId); 
+      if (delError) console.error("[disconnectDiscordBot] Error deleting connection details from DB (proceeding anyway):", delError);
+      else console.log("[disconnectDiscordBot] Connection details deleted (or none existed).");
+
+    } catch (err: any) { // Catch potential errors during invoke/delete
+      console.error("[disconnectDiscordBot] Error during disconnect process:", err);
+      // Don't set main error state here, rely on finally block's state reset
+    } finally {
+       console.log("[disconnectDiscordBot] Entering finally block. Resetting state.");
+       // Always reset state after disconnect attempt
+       setDiscordBotKey('');
+       setDiscordGuilds([]);
+       setDiscordChannels([]); // <-- Clear channels
+       setDiscordConnectionData({}); 
+       setDiscordConnectionStage('initial'); // <-- Reset stage
+       setDiscordDisconnecting(false);
+       setError(null); // Clear any lingering errors from the disconnect process
+       console.log("[disconnectDiscordBot] Disconnect process finished, state reset.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -608,27 +778,71 @@ export function AgentEdit() {
     }
   };
 
-  // --- Restore Handler for DiscordConnect prop compatibility ---
-  const handleDiscordConnectionChange = (field: keyof AgentDiscordConnection, value: any) => {
-      console.log(`[AgentEdit] handleDiscordConnectionChange: field=${String(field)}, value=${value}`);
-      if (field === 'inactivity_timeout_minutes') {
-          value = parseInt(value, 10) || 10;
+  // --- NEW: Handler for Activating Agent Worker ---
+  const handleActivateAgent = async () => {
+    if (!id || !discordConnectionData.guild_id) {
+      setError("Cannot activate: Agent ID or selected server is missing.");
+      return;
+    }
+    console.log(`[AgentEdit] Invoking manage-discord-worker (start) for agent ${id}`);
+    setDiscordLoading(true);
+    setError(null);
+    try {
+      const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
+        body: { 
+          action: 'start',
+          agentId: id,
+          guildId: discordConnectionData.guild_id 
+        }
+      });
+
+      if (invokeError) {
+        throw invokeError;
       }
-      // Ensure this doesn't overwrite modal-handled fields if called unexpectedly
-      if (field === 'discord_app_id' || field === 'discord_public_key' || field === 'guild_id') {
-        console.warn(`handleDiscordConnectionChange called for ${String(field)}, which should be handled by modals.`);
-        return; 
-      }
-      setDiscordConnectionData(prev => ({ ...prev, [field]: value }));
+      console.log("[AgentEdit] Activation request sent successfully.");
+      // Update local status optimistically or wait for DB update?
+      // For now, let's assume a DB trigger/subscription will update the status
+      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'activating' })); 
+      // Consider polling or listening for status changes here
+      
+    } catch (err: any) {
+      console.error("[AgentEdit] Error activating agent:", err);
+      setError(`Failed to activate agent: ${err.message || err.details || 'Unknown error'}`);
+      // Reset status if activation failed
+      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'inactive' })); // Or 'error'?
+    } finally {
+      setDiscordLoading(false);
+    }
   };
-  // --- End Restore Handler ---
+  // --- End Activate Handler ---
 
-  const handleDiscordBotKeyChange = useCallback((token: string) => {
-    // ... existing code ...
-  }, []);
+  // --- NEW: Handler for Deactivating Agent Worker ---
+  const handleDeactivateAgent = async () => {
+      const agentId = id;
+      if (!agentId) {
+          setError("Cannot deactivate: Agent ID missing.");
+          return;
+      }
+      setSaving(true); // Reuse saving state
+      setError(null);
+      try {
+          console.log(`[AgentEdit] Invoking manage-discord-worker (stop) for agent ${agentId}`);
+          const { error } = await supabase.functions.invoke('manage-discord-worker', {
+              body: { agentId: agentId, action: 'stop' }
+          });
+          if (error) throw error;
 
-  // Remove Regenerate Secret logic as it was tied to interaction_secret which was removed
-  // const handleRegenerateSecret = async () => { ... };
+          console.log("[AgentEdit] Deactivation request sent. Re-fetching agent data...");
+          await fetchAgent(agentId);
+
+      } catch (err: any) {
+          console.error("[AgentEdit] Error deactivating agent:", err);
+          setError(`Failed to deactivate agent: ${err.message}`);
+      } finally {
+          setSaving(false);
+      }
+  };
+  // --- End Deactivate Handler ---
 
   if (!user) {
     return (
@@ -801,19 +1015,23 @@ export function AgentEdit() {
             {id ? (
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
-                
                 <DiscordConnect
                   agentId={id || ''}
-                  // Display connection status based on whether App ID/Key/Guild are set, not just token
-                  isConnected={isFullyConnected}
-                  connection={discordConnectionData} // Pass full connection data
-                  onConnectionChange={handleDiscordConnectionChange} // Restored for prop requirement
-                  interactionEndpointUrl={interactionEndpointUrl} // Still needed
-                  onConnect={connectDiscordBot} // Initial token connect trigger
+                  // Pass stage and relevant data/handlers
+                  connectionStage={discordConnectionStage}
+                  connection={discordConnectionData}
+                  guilds={discordGuilds} 
+                  channels={discordChannels} 
+                  onConnectToken={connectDiscordBot} 
+                  onSaveCredentials={handleSaveCredentials} 
+                  onSelectServer={handleSelectServer} 
+                  onSelectChannel={handleSelectChannel} 
                   onDisconnect={disconnectDiscordBot}
-                  loading={discordLoading || saving} // Show loading during modal saves too
+                  onActivate={handleActivateAgent} // Pass activate handler
+                  onDeactivate={handleDeactivateAgent} // Pass deactivate handler
+                  onConnectionChange={handleConnectionChange} // Pass connection change handler
+                  loading={discordLoading || saving || fetchingGuilds || fetchingChannels} // Combine loading states
                   disconnecting={discordDisconnecting}
-                  discordGuilds={discordGuilds} // Add guilds array prop
                   className="mt-4"
                 />
               </div>
@@ -847,29 +1065,6 @@ export function AgentEdit() {
           </div>
         </div>
       </form>
-
-      {/* --- Render Modals --- */}
-      {showAppIdModal && (
-        <AppIdPublicKeyModal 
-          initialAppId={discordConnectionData.discord_app_id || ''}
-          initialPublicKey={discordConnectionData.discord_public_key || ''}
-          onSave={handleSaveAppIdPublicKey}
-          onClose={() => setShowAppIdModal(false)}
-          loading={saving} 
-        />
-      )}
-
-      {showServerSelectModal && (
-        <ServerChannelSelectModal
-          guilds={discordGuilds}
-          selectedGuildId={discordConnectionData.guild_id}
-          // selectedChannelId={discordConnectionData.channel_id} // If channel selection is added
-          onSave={handleSaveGuildSelection}
-          onClose={() => setShowServerSelectModal(false)}
-          loading={saving || fetchingGuilds} // Show loading while fetching too
-        />
-      )}
-      {/* --- End Modals --- */}
 
       {showDatastoreModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

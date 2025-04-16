@@ -14,7 +14,14 @@ console.log("--- Discord Worker Starting ---");
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const AGENT_ID = process.env.AGENT_ID;
 const CONNECTION_ID = process.env.CONNECTION_ID; // Database ID for this connection
-const TIMEOUT_MINUTES = parseInt(process.env.TIMEOUT_MINUTES || '10', 10);
+const timeoutEnvVar = process.env.TIMEOUT_MINUTES;
+let TIMEOUT_MINUTES: number | null = null; // Use null to indicate no timeout
+if (timeoutEnvVar) {
+    const parsed = parseInt(timeoutEnvVar, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+        TIMEOUT_MINUTES = parsed;
+    }
+}
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
@@ -26,7 +33,7 @@ if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON
 
 console.log(`Worker configured for Agent ID: ${AGENT_ID}`);
 console.log(`Connection DB ID: ${CONNECTION_ID}`);
-console.log(`Inactivity Timeout: ${TIMEOUT_MINUTES} minutes`);
+console.log(`Inactivity Timeout: ${TIMEOUT_MINUTES !== null ? `${TIMEOUT_MINUTES} minutes` : 'Disabled'}`);
 
 // --- Supabase Client --- 
 // Use Anon key - worker updates its own status, RLS policy should allow this.
@@ -82,11 +89,15 @@ function resetInactivityTimer() {
     if (inactivityTimer) {
         clearTimeout(inactivityTimer);
     }
-    console.log(`Resetting inactivity timer (${TIMEOUT_MINUTES} minutes)...`);
-    inactivityTimer = setTimeout(() => {
-        console.log("Inactivity timeout reached. Shutting down...");
-        shutdown('inactive'); // Trigger graceful shutdown due to inactivity
-    }, TIMEOUT_MINUTES * 60 * 1000);
+    if (TIMEOUT_MINUTES !== null && TIMEOUT_MINUTES > 0) { 
+        console.log(`Resetting inactivity timer (${TIMEOUT_MINUTES} minutes)...`);
+        inactivityTimer = setTimeout(() => {
+            console.log("Inactivity timeout reached. Shutting down...");
+            shutdown('inactive'); // Trigger graceful shutdown due to inactivity
+        }, TIMEOUT_MINUTES * 60 * 1000);
+    } else {
+        console.log("Inactivity timer is disabled.");
+    }
 }
 
 /**
@@ -96,6 +107,7 @@ async function shutdown(finalStatus: 'inactive' | 'error' = 'inactive', errorMes
     console.log(`Initiating shutdown with status: ${finalStatus}`);
     if (inactivityTimer) {
         clearTimeout(inactivityTimer);
+        inactivityTimer = null; // Explicitly nullify
     }
     try {
         await updateStatus(finalStatus, errorMessage); 
@@ -114,7 +126,7 @@ async function shutdown(finalStatus: 'inactive' | 'error' = 'inactive', errorMes
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}!`);
     await updateStatus('active'); // Set status to active in DB
-    resetInactivityTimer(); // Start the inactivity timer
+    resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
 });
 
 client.on(Events.MessageCreate, async (message) => {
