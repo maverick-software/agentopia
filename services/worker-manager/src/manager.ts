@@ -2,15 +2,16 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-import { spawn } from 'child_process'; // To launch worker processes
-import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js'; // Import Supabase client
+// import { spawn } from 'child_process'; // REMOVE child_process
+import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
+// *** ADDED: Import PM2 API ***
+import pm2 from 'pm2';
 
 // Add helper for timestamp
 const log = (level: 'log' | 'warn' | 'error', ...args: any[]) => console[level](new Date().toISOString(), '[WM]', ...args);
 
-// Load environment variables from .env file in the service directory
-// dotenv.config({ path: path.resolve(__dirname, '../.env') }); // OLD PATH
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') }); // NEW PATH - Project Root
+// Load environment variables from .env file in the project root
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') }); 
 
 log('log', "--- Worker Manager Service Starting ---");
 
@@ -28,14 +29,8 @@ if (!MANAGER_SECRET_KEY) {
     process.exit(1);
 }
 
-// --- State (Simple in-memory tracking for demo) --- 
-// !! IMPORTANT: In production, use a proper process manager or database !!
-interface WorkerInfo {
-    agentId: string;
-    process: ReturnType<typeof spawn>;
-    connectionId: string;
-}
-const activeWorkers = new Map<string, WorkerInfo>(); // Map agentId to WorkerInfo
+// --- State ---
+// REMOVED: const activeWorkers = new Map<string, WorkerInfo>(); // No longer needed
 
 // *** ADDED: Supabase Admin Client ***
 let supabaseAdmin: SupabaseClient | null = null;
@@ -47,6 +42,18 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
 } else {
     log('error', "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Cannot perform pre-spawn checks.");
 }
+
+// --- PM2 Connection ---
+let pm2Connected = false;
+pm2.connect((err) => {
+  if (err) {
+    log('error', 'PM2 connection error:', err);
+    process.exit(2);
+  }
+  log('log', 'Connected to PM2 daemon successfully.');
+  pm2Connected = true;
+  // Optional: Clean up any old worker processes on startup?
+});
 
 // --- Express App Setup --- 
 const app = express();
@@ -68,209 +75,185 @@ const authenticate = (req: Request, res: Response, next: NextFunction) => {
     next(); // Authentication successful
 };
 
+// --- Helper Function ---
+const getWorkerPm2Name = (agentId: string): string => `worker-${agentId}`;
+
 // --- Routes --- 
 
 app.get('/', (req: Request, res: Response) => {
     res.status(200).send('Worker Manager Service is running.');
 });
 
-// Endpoint to start a new worker
+// *** REFACTORED: Endpoint to start a new worker using PM2 ***
 app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     const { agentId, botToken, timeoutMinutes, guildId, channelId, connectionId } = req.body;
     log('log', `[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
+    const workerName = getWorkerPm2Name(agentId);
 
-    // --- Input Validation --- 
-    if (!agentId || !botToken || !timeoutMinutes || !connectionId) {
+    if (!agentId || !botToken || timeoutMinutes === undefined || !connectionId) { // Check timeoutMinutes defined
         res.status(400).json({ error: 'Missing required fields: agentId, botToken, timeoutMinutes, connectionId' });
         return;
     }
 
-    // --- Check if worker already running (simple check) --- 
-    if (activeWorkers.has(agentId)) {
-        log('warn', `Worker for Agent ID ${agentId} is already running.`);
-        res.status(200).json({ message: `Worker for ${agentId} is already active.` });
+    // --- Check if worker already running via PM2 ---
+    try {
+        const description = await new Promise<pm2.ProcessDescription[]>((resolve, reject) => {
+             pm2.describe(workerName, (err, desc) => {
+                 if (err && !err.message.toLowerCase().includes('not found')) { // Ignore "process not found" errors here
+                    return reject(err);
+                 }
+                 resolve(desc || []);
+             });
+        });
+        
+        if (description.length > 0 && description[0].pm2_env?.status === 'online') {
+            log('warn', `Worker ${workerName} is already running according to PM2.`);
+            res.status(200).json({ message: `Worker for ${agentId} is already active.` });
+            return;
+        }
+        log('log', `Worker ${workerName} is not currently running or found in PM2. Proceeding with start.`);
+
+    } catch (err) {
+        log('error', `[MANAGER START] Error checking PM2 status for ${workerName}:`, err);
+        res.status(500).json({ error: 'Failed to check worker status before starting.' });
         return;
     }
-
-    // --- Spawn Worker Process --- 
     
-    // *** ADDED: Pre-spawn logging and check ***
-    log('log', `[MANAGER PRE-SPAWN CHECK] Preparing to spawn worker for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
-    if (supabaseAdmin && agentId && connectionId) {
-        try {
-            // Check Agent
-            const { data: agentCheck, error: agentCheckError } = await supabaseAdmin
-                .from('agents')
-                .select('id', { count: 'exact', head: true })
-                .eq('id', agentId);
-            // Check Connection
-            const { data: connCheck, error: connCheckError } = await supabaseAdmin
-                .from('agent_discord_connections')
-                .select('id', { count: 'exact', head: true })
-                .eq('id', connectionId);
+    // *** No need for pre-spawn DB checks here - PM2 is the source of truth for running process ***
 
-            // Log Agent Check Result
-            if (agentCheckError) {
-                log('error', `[MANAGER PRE-SPAWN CHECK] Error checking agent ${agentId} existence:`, agentCheckError.message);
-            } else if (agentCheck && agentCheck.length > 0) {
-                 log('log', `[MANAGER PRE-SPAWN CHECK] Agent ${agentId} CONFIRMED TO EXIST.`);
-            } else {
-                log('error', `[MANAGER PRE-SPAWN CHECK] CRITICAL: Agent ${agentId} NOT FOUND right before spawn attempt!`);
-            }
-            // Log Connection Check Result
-            if (connCheckError) {
-                log('error', `[MANAGER PRE-SPAWN CHECK] Error checking connection ${connectionId} existence:`, connCheckError.message);
-            } else if (connCheck && connCheck.length > 0) {
-                 log('log', `[MANAGER PRE-SPAWN CHECK] Connection ${connectionId} CONFIRMED TO EXIST.`);
-            } else {
-                log('error', `[MANAGER PRE-SPAWN CHECK] CRITICAL: Connection ${connectionId} NOT FOUND right before spawn attempt!`);
-                 // If connection is gone, maybe don't spawn?
-                 // For now, log and proceed.
-            }
-        } catch(checkErr: any) {
-             log('error', `[MANAGER PRE-SPAWN CHECK] Exception during DB checks for Agent ${agentId} / Conn ${connectionId}:`, checkErr.message);
-        }
-    } else {
-         log('warn', "[MANAGER PRE-SPAWN CHECK] Skipping DB checks (Supabase Admin client, agentId, or connectionId missing).");
-    }
-    // *** END MODIFIED CHECK ***
-
-    log('log', `[MANAGER SPAWN CMD] Spawning worker process using script: ${WORKER_SCRIPT_PATH}`);
-    
-    const workerEnv: { [key: string]: string | undefined } = { 
-        ...process.env, // Inherit manager env vars
+    // --- PM2 Start Options ---
+    const workerEnv: { [key: string]: string | undefined } = {
+        // Don't spread process.env directly for security/isolation
         DISCORD_BOT_TOKEN: botToken,
         AGENT_ID: agentId,
         CONNECTION_ID: connectionId,
-        // Pass Supabase details needed by worker
         SUPABASE_URL: SUPABASE_URL,
         SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
+        // Include Node options if needed, e.g., for memory limits
+        // NODE_OPTIONS: '--max-old-space-size=256' 
     };
 
-    // Only set TIMEOUT_MINUTES if it's a positive number
     const parsedTimeout = parseInt(String(timeoutMinutes), 10);
     if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
         workerEnv.TIMEOUT_MINUTES = String(parsedTimeout);
         log('log', `Setting TIMEOUT_MINUTES=${workerEnv.TIMEOUT_MINUTES} for worker ${agentId}`);
     } else {
         log('log', `Timeout is 0 or invalid (${timeoutMinutes}), TIMEOUT_MINUTES will not be set for worker ${agentId}.`);
-        // Worker should handle the absence of this variable as "Never" timeout
     }
 
-    // Use ts-node to run the TypeScript worker directly (for development)
-    // In production, you'd run the compiled JS (e.g., node dist/worker.js)
-    const workerProcess = spawn('npx', ['ts-node', WORKER_SCRIPT_PATH], { 
-        env: workerEnv, 
-        stdio: 'inherit' // Pipe worker output to manager console
+    const startOptions: pm2.StartOptions = {
+        script: WORKER_SCRIPT_PATH,
+        name: workerName,
+        exec_interpreter: 'ts-node', // Use ts-node
+        exec_mode: 'fork', // Use fork mode
+        env: workerEnv,
+        // Configure logs (optional, PM2 handles defaults)
+        // output: `/root/.pm2/logs/${workerName}-out.log`,
+        // error: `/root/.pm2/logs/${workerName}-error.log`,
+        autorestart: false, // Don't automatically restart if it fails/stops
+        // watch: false, // Don't watch for file changes
+    };
+
+    log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
+
+    pm2.start(startOptions, (err, apps) => {
+        if (err) {
+            log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, err);
+            res.status(500).json({ error: `Failed to start worker ${agentId}` });
+        } else {
+            log('log', `[MANAGER SPAWN OK] Worker ${workerName} started via PM2. App info:`, apps);
+            // Respond immediately - PM2 handles the process now
+            res.status(202).json({ message: `Worker process for ${agentId} is being started via PM2.` });
+        }
     });
-
-    // *** ADDED: Post-spawn logging ***
-    log('log', `[MANAGER POST-SPAWN CMD] Spawn command executed for Agent ID: ${agentId}. Waiting for 'spawn' event...`);
-    // *** END ADDED ***
-
-    workerProcess.on('spawn', () => {
-        log('log', `[MANAGER SPAWN EVENT] Worker process spawned event received for Agent ID: ${agentId} (PID: ${workerProcess.pid})`);
-        activeWorkers.set(agentId, { agentId, process: workerProcess, connectionId });
-        // Optionally update DB status here to confirm manager started it?
-    });
-
-    workerProcess.on('error', (error) => {
-        log('error', `Error spawning worker for Agent ID ${agentId}:`, error);
-        // Optionally try to update DB status to error?
-    });
-
-    workerProcess.on('close', (code) => {
-        log('log', `Worker process for Agent ID ${agentId} exited with code ${code}`);
-        activeWorkers.delete(agentId);
-        // Optionally update DB status to inactive/error based on code?
-        // Requires passing connectionId here or looking it up.
-    });
-
-    // Respond immediately, don't wait for worker to fully connect to Discord
-    res.status(202).json({ message: `Worker process for ${agentId} is being started.` });
 });
 
-// --- ADDED: Endpoint to stop a worker --- 
+// *** REFACTORED: Endpoint to stop a worker via PM2 ***
 app.post('/stop-worker', authenticate, (req: Request, res: Response) => {
     const { agentId } = req.body;
     log('log', `[MANAGER RECV] Received /stop-worker request for Agent ID: ${agentId}`);
+    const workerName = getWorkerPm2Name(agentId);
 
     if (!agentId) {
         res.status(400).json({ error: 'Missing required field: agentId' });
         return;
     }
 
-    const workerInfo = activeWorkers.get(agentId);
-
-    if (workerInfo) {
-        log('log', `[MANAGER STOP] Found active worker for Agent ID: ${agentId}. Sending SIGTERM...`);
-        try {
-            // Send SIGTERM - the worker should catch this and shut down gracefully
-            workerInfo.process.kill('SIGTERM'); 
-            // Remove immediately from map. The 'close' event handler will also try to remove,
-            // but removing here ensures we don't try to stop it twice.
-            activeWorkers.delete(agentId);
-            log('log', `[MANAGER STOP] SIGTERM sent to worker process for Agent ID: ${agentId}. Removed from active list.`);
-            res.status(200).json({ message: `Stop signal sent to worker for ${agentId}.` });
-        } catch (err) {
-            log('error', `[MANAGER STOP] Error sending SIGTERM to worker process for Agent ID: ${agentId}:`, err);
-            // Still remove from map if kill fails?
-            activeWorkers.delete(agentId); 
-            res.status(500).json({ error: `Failed to send stop signal to worker for ${agentId}.` });
-        }
-    } else {
-        log('warn', `[MANAGER STOP] Worker for Agent ID ${agentId} not found in active list (already stopped?).`);
-        // Consider it success if the worker isn't active
-        res.status(200).json({ message: `Worker for ${agentId} was not found (already stopped?).` });
-    }
+    log('log', `[MANAGER STOP] Attempting to stop worker ${workerName} via PM2...`);
+    pm2.stop(workerName, (err, proc) => {
+         if (err) {
+             // Check if error is "process not found" - treat as success
+             if (err.message && err.message.toLowerCase().includes('not found')) {
+                 log('warn', `[MANAGER STOP] Worker ${workerName} not found by PM2 (already stopped?).`);
+                 res.status(200).json({ message: `Worker for ${agentId} was not found (already stopped?).` });
+             } else {
+                 log('error', `[MANAGER STOP ERR] Error stopping worker ${workerName} via PM2:`, err);
+                 res.status(500).json({ error: `Failed to stop worker ${agentId}.` });
+             }
+         } else {
+             log('log', `[MANAGER STOP OK] Successfully stopped worker ${workerName} via PM2.`);
+             res.status(200).json({ message: `Worker for ${agentId} stopped successfully.` });
+         }
+    });
 });
-// --- END ADDED Endpoint --- 
 
-// --- MODIFIED: Endpoint to get status of workers (handles specific agent too) --- 
-app.get('/status', authenticate, (req: Request, res: Response) => {
+// *** REFACTORED: Endpoint to get status of workers via PM2 ***
+app.get('/status', authenticate, async (req: Request, res: Response) => {
     const specificAgentId = req.query.agent_id as string | undefined;
 
     if (specificAgentId) {
-        // Check status for a specific agent
-        log('log', `[MANAGER RECV] Received /status request for Agent ID: ${specificAgentId}`);
-        const workerInfo = activeWorkers.get(specificAgentId);
-        const status = workerInfo ? 'active' : 'inactive'; // Active if in map, inactive otherwise
-        const response = {
-            agentId: specificAgentId,
-            status: status 
-        };
-        log('log', `[MANAGER STATUS] Status for Agent ${specificAgentId}: ${status}`);
-        res.status(200).json(response);
+        const workerName = getWorkerPm2Name(specificAgentId);
+        log('log', `[MANAGER RECV] Received /status request for Agent ID: ${specificAgentId} (PM2 name: ${workerName})`);
+        
+        pm2.describe(workerName, (err, description) => {
+            if (err && !err.message.toLowerCase().includes('not found')) {
+                 log('error', `[MANAGER STATUS ERR] Error describing PM2 process ${workerName}:`, err);
+                 res.status(500).json({ error: 'Failed to query worker status.' });
+            } else if (description && description.length > 0 && description[0].pm2_env?.status === 'online') {
+                log('log', `[MANAGER STATUS] PM2 status for ${workerName}: online`);
+                 res.status(200).json({ agentId: specificAgentId, status: 'active' }); // Report 'active' if PM2 says online
+            } else {
+                 log('log', `[MANAGER STATUS] PM2 status for ${workerName}: offline or not found`);
+                 res.status(200).json({ agentId: specificAgentId, status: 'inactive' }); // Report 'inactive' otherwise
+            }
+        });
 
     } else {
-        // Return status for all agents
+        // Return status for all potential worker agents
         log('log', `[MANAGER RECV] Received /status request for all agents`);
-        const activeAgentIds = Array.from(activeWorkers.keys());
-        const response = {
-            activeWorkerCount: activeWorkers.size,
-            activeAgentIds: activeAgentIds
-        };
-        log('log', `[MANAGER STATUS] Overall status: ${JSON.stringify(response)}`);
-        res.status(200).json(response);
+        pm2.list((err, list) => {
+             if (err) {
+                 log('error', `[MANAGER STATUS ERR] Error listing PM2 processes:`, err);
+                 res.status(500).json({ error: 'Failed to list workers.' });
+                 return;
+             }
+             
+             const workerProcesses = list.filter(proc => proc.name?.startsWith('worker-'));
+             const activeAgentIds = workerProcesses
+                 .filter(proc => proc.pm2_env?.status === 'online')
+                 .map(proc => proc.name?.replace('worker-', '')); // Extract agent ID from name
+
+             const response = {
+                 activeWorkerCount: activeAgentIds.length,
+                 activeAgentIds: activeAgentIds
+             };
+             log('log', `[MANAGER STATUS] Overall status: ${JSON.stringify(response)}`);
+             res.status(200).json(response);
+        });
     }
 });
-// --- END MODIFIED Endpoint --- 
-
-// TODO: Add endpoint to get status of workers (/status)
 
 // --- Start Server --- 
 app.listen(PORT, '0.0.0.0', () => {
     log('log', `Worker Manager Service listening on port ${PORT}`);
 });
 
-// --- Graceful Shutdown Handling (for Manager) --- 
+// --- Graceful Shutdown Handling --- 
 const cleanup = () => {
+    log('log', 'Disconnecting from PM2 daemon...');
+    pm2.disconnect(); // Disconnect from PM2
     log('log', 'Shutting down manager service...');
-    activeWorkers.forEach((workerInfo, agentId) => {
-        log('log', `Terminating worker for Agent ID: ${agentId}`);
-        workerInfo.process.kill('SIGTERM'); // Send TERM signal to workers
-    });
-    // Add any other cleanup logic here
+    // No need to manually kill workers - PM2 handles them
     process.exit(0);
 };
 

@@ -796,8 +796,9 @@ export function AgentEdit() {
   // --- NEW: Handler for Activating Agent Worker ---
   const handleActivateAgent = async () => {
     // *** ADDED LOGGING ***
-    console.log(`[UI PRE-INVOKE] handleActivateAgent called for agent ${id}. Connection data:`, JSON.stringify(discordConnectionData));
+    console.log(`%c[AgentEdit] handleActivateAgent CALLED! Agent: ${id}, Current Status in State: ${discordConnectionData?.worker_status}`, "color: red; font-weight: bold;");
     // *** END ADDED LOGGING ***
+
     if (!id || !discordConnectionData.guild_id) {
       setError("Cannot activate: Agent ID or selected server is missing.");
       return;
@@ -881,7 +882,6 @@ export function AgentEdit() {
              console.log("[AgentEdit] Skipping deactivation request as worker reported inactive.");
              // Force a refresh of agent data to get the latest status from DB
              // Or update local state optimistically
-             setDiscordConnectionData(prev => ({ ...prev, worker_status: 'inactive' })); 
           }
 
           // Always re-fetch agent data after attempt/skip to sync UI
@@ -899,6 +899,10 @@ export function AgentEdit() {
       }
   };
   // --- End Deactivate Handler ---
+
+  // *** ADDED LOGGING ***
+  console.log(`[AgentEdit RENDER] Rendering component. discordConnectionData.worker_status =`, discordConnectionData?.worker_status);
+  // *** END ADDED LOGGING ***
 
   if (!user) {
     return (
