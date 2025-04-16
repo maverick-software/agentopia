@@ -198,22 +198,23 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
                 SUPABASE_ANON_KEY: SUPABASE_ANON_KEY!,
             };
 
-            // --- Corrected PM2 Start Options --- 
-            const workerTsNodePath = path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node');
-            const workerScriptPath = path.resolve(__dirname, '../../discord-worker/src/worker.ts'); // Use resolved path for script too
+            // --- Attempt 3: Force ts-node registration via node_args --- 
+            // const workerTsNodePath = path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node');
+            const workerScriptPath = path.resolve(__dirname, '../../discord-worker/src/worker.ts');
 
             const startOptions: pm2.StartOptions = {
-                script: workerTsNodePath, // Execute ts-node directly
-                args: [workerScriptPath], // Pass worker script as argument to ts-node
+                script: workerScriptPath, // Point back to the actual TS script
+                // args: [], // No args needed here
                 name: workerName,
-                // interpreter: undefined, // Ensure interpreter is not set
+                // interpreter: undefined, 
+                node_args: ["--require", "ts-node/register"], // Tell node to load ts-node first
                 exec_mode: 'fork', 
                 env: workerEnv,
                 autorestart: false, 
             };
-            // --- End Corrected PM2 Start Options ---
+            // --- End Attempt 3 --- 
 
-            log('log', `[MANAGER START] Start options prepared. Calling pm2.start for ${workerName}...`);
+            log('log', `[MANAGER START] Start options prepared (using node_args). Calling pm2.start for ${workerName}...`);
             log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
 
             pm2.start(startOptions, async (startErr: any, apps: any) => { // Renamed err to startErr
