@@ -5,10 +5,13 @@ import path from 'path';
 import { spawn } from 'child_process'; // To launch worker processes
 import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js'; // Import Supabase client
 
+// Add helper for timestamp
+const log = (level: 'log' | 'warn' | 'error', ...args: any[]) => console[level](new Date().toISOString(), '[WM]', ...args);
+
 // Load environment variables from .env file in the service directory
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-console.log("--- Worker Manager Service Starting ---");
+log('log', "--- Worker Manager Service Starting ---");
 
 // --- Configuration --- 
 const portString = process.env.PORT || '8000'; // Default to string '8000'
@@ -20,7 +23,7 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // Worker uses anon key
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // Need service key for admin check
 
 if (!MANAGER_SECRET_KEY) {
-    console.error("FATAL: MANAGER_SECRET_KEY environment variable not set.");
+    log('error', "FATAL: MANAGER_SECRET_KEY environment variable not set.");
     process.exit(1);
 }
 
@@ -39,9 +42,9 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
     supabaseAdmin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
         auth: { persistSession: false }
     });
-    console.log("Supabase Admin client initialized for checks.");
+    log('log', "Supabase Admin client initialized for checks.");
 } else {
-    console.error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Cannot perform pre-spawn checks.");
+    log('error', "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Cannot perform pre-spawn checks.");
 }
 
 // --- Express App Setup --- 
@@ -73,7 +76,7 @@ app.get('/', (req: Request, res: Response) => {
 // Endpoint to start a new worker
 app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     const { agentId, botToken, timeoutMinutes, guildId, channelId, connectionId } = req.body;
-    console.log(`[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
+    log('log', `[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
 
     // --- Input Validation --- 
     if (!agentId || !botToken || !timeoutMinutes || !connectionId) {
@@ -83,7 +86,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
 
     // --- Check if worker already running (simple check) --- 
     if (activeWorkers.has(agentId)) {
-        console.warn(`Worker for Agent ID ${agentId} is already running.`);
+        log('warn', `Worker for Agent ID ${agentId} is already running.`);
         res.status(200).json({ message: `Worker for ${agentId} is already active.` });
         return;
     }
@@ -91,7 +94,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     // --- Spawn Worker Process --- 
     
     // *** ADDED: Pre-spawn logging and check ***
-    console.log(`[MANAGER PRE-SPAWN CHECK] Preparing to spawn worker for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
+    log('log', `[MANAGER PRE-SPAWN CHECK] Preparing to spawn worker for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
     if (supabaseAdmin && agentId && connectionId) {
         try {
             // Check Agent
@@ -107,31 +110,31 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
 
             // Log Agent Check Result
             if (agentCheckError) {
-                console.error(`[MANAGER PRE-SPAWN CHECK] Error checking agent ${agentId} existence:`, agentCheckError.message);
+                log('error', `[MANAGER PRE-SPAWN CHECK] Error checking agent ${agentId} existence:`, agentCheckError.message);
             } else if (agentCheck && agentCheck.length > 0) {
-                 console.log(`[MANAGER PRE-SPAWN CHECK] Agent ${agentId} CONFIRMED TO EXIST.`);
+                 log('log', `[MANAGER PRE-SPAWN CHECK] Agent ${agentId} CONFIRMED TO EXIST.`);
             } else {
-                console.error(`[MANAGER PRE-SPAWN CHECK] CRITICAL: Agent ${agentId} NOT FOUND right before spawn attempt!`);
+                log('error', `[MANAGER PRE-SPAWN CHECK] CRITICAL: Agent ${agentId} NOT FOUND right before spawn attempt!`);
             }
             // Log Connection Check Result
             if (connCheckError) {
-                console.error(`[MANAGER PRE-SPAWN CHECK] Error checking connection ${connectionId} existence:`, connCheckError.message);
+                log('error', `[MANAGER PRE-SPAWN CHECK] Error checking connection ${connectionId} existence:`, connCheckError.message);
             } else if (connCheck && connCheck.length > 0) {
-                 console.log(`[MANAGER PRE-SPAWN CHECK] Connection ${connectionId} CONFIRMED TO EXIST.`);
+                 log('log', `[MANAGER PRE-SPAWN CHECK] Connection ${connectionId} CONFIRMED TO EXIST.`);
             } else {
-                console.error(`[MANAGER PRE-SPAWN CHECK] CRITICAL: Connection ${connectionId} NOT FOUND right before spawn attempt!`);
+                log('error', `[MANAGER PRE-SPAWN CHECK] CRITICAL: Connection ${connectionId} NOT FOUND right before spawn attempt!`);
                  // If connection is gone, maybe don't spawn?
                  // For now, log and proceed.
             }
         } catch(checkErr: any) {
-             console.error(`[MANAGER PRE-SPAWN CHECK] Exception during DB checks for Agent ${agentId} / Conn ${connectionId}:`, checkErr.message);
+             log('error', `[MANAGER PRE-SPAWN CHECK] Exception during DB checks for Agent ${agentId} / Conn ${connectionId}:`, checkErr.message);
         }
     } else {
-         console.warn("[MANAGER PRE-SPAWN CHECK] Skipping DB checks (Supabase Admin client, agentId, or connectionId missing).");
+         log('warn', "[MANAGER PRE-SPAWN CHECK] Skipping DB checks (Supabase Admin client, agentId, or connectionId missing).");
     }
     // *** END MODIFIED CHECK ***
 
-    console.log(`[MANAGER SPAWN CMD] Spawning worker process using script: ${WORKER_SCRIPT_PATH}`);
+    log('log', `[MANAGER SPAWN CMD] Spawning worker process using script: ${WORKER_SCRIPT_PATH}`);
     
     const workerEnv: { [key: string]: string | undefined } = { 
         ...process.env, // Inherit manager env vars
@@ -147,9 +150,9 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     const parsedTimeout = parseInt(String(timeoutMinutes), 10);
     if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
         workerEnv.TIMEOUT_MINUTES = String(parsedTimeout);
-        console.log(`Setting TIMEOUT_MINUTES=${workerEnv.TIMEOUT_MINUTES} for worker ${agentId}`);
+        log('log', `Setting TIMEOUT_MINUTES=${workerEnv.TIMEOUT_MINUTES} for worker ${agentId}`);
     } else {
-        console.log(`Timeout is 0 or invalid (${timeoutMinutes}), TIMEOUT_MINUTES will not be set for worker ${agentId}.`);
+        log('log', `Timeout is 0 or invalid (${timeoutMinutes}), TIMEOUT_MINUTES will not be set for worker ${agentId}.`);
         // Worker should handle the absence of this variable as "Never" timeout
     }
 
@@ -161,22 +164,22 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     });
 
     // *** ADDED: Post-spawn logging ***
-    console.log(`[MANAGER POST-SPAWN CMD] Spawn command executed for Agent ID: ${agentId}. Waiting for 'spawn' event...`);
+    log('log', `[MANAGER POST-SPAWN CMD] Spawn command executed for Agent ID: ${agentId}. Waiting for 'spawn' event...`);
     // *** END ADDED ***
 
     workerProcess.on('spawn', () => {
-        console.log(`[MANAGER SPAWN EVENT] Worker process spawned event received for Agent ID: ${agentId} (PID: ${workerProcess.pid})`);
+        log('log', `[MANAGER SPAWN EVENT] Worker process spawned event received for Agent ID: ${agentId} (PID: ${workerProcess.pid})`);
         activeWorkers.set(agentId, { agentId, process: workerProcess, connectionId });
         // Optionally update DB status here to confirm manager started it?
     });
 
     workerProcess.on('error', (error) => {
-        console.error(`Error spawning worker for Agent ID ${agentId}:`, error);
+        log('error', `Error spawning worker for Agent ID ${agentId}:`, error);
         // Optionally try to update DB status to error?
     });
 
     workerProcess.on('close', (code) => {
-        console.log(`Worker process for Agent ID ${agentId} exited with code ${code}`);
+        log('log', `Worker process for Agent ID ${agentId} exited with code ${code}`);
         activeWorkers.delete(agentId);
         // Optionally update DB status to inactive/error based on code?
         // Requires passing connectionId here or looking it up.
@@ -191,14 +194,14 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
 
 // --- Start Server --- 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Worker Manager Service listening on port ${PORT}`);
+    log('log', `Worker Manager Service listening on port ${PORT}`);
 });
 
 // --- Graceful Shutdown Handling (for Manager) --- 
 const cleanup = () => {
-    console.log('Shutting down manager service...');
+    log('log', 'Shutting down manager service...');
     activeWorkers.forEach((workerInfo, agentId) => {
-        console.log(`Terminating worker for Agent ID: ${agentId}`);
+        log('log', `Terminating worker for Agent ID: ${agentId}`);
         workerInfo.process.kill('SIGTERM'); // Send TERM signal to workers
     });
     // Add any other cleanup logic here

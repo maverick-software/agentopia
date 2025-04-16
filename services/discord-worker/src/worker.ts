@@ -8,6 +8,9 @@ import path from 'path';
 // Load environment variables from .env file in the service directory
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+// Add helper for timestamp
+const log = (level: 'log' | 'warn' | 'error', ...args: any[]) => console[level](new Date().toISOString(), '[WK]', ...args);
+
 console.log("--- Discord Worker Starting ---");
 console.log(`[WORKER START] Process started. AgentID: ${process.env.AGENT_ID}, ConnectionID: ${process.env.CONNECTION_ID}`);
 
@@ -64,25 +67,25 @@ let inactivityTimer: NodeJS.Timeout | null = null;
  * Updates the worker status in the Supabase database.
  */
 async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string) {
-    console.log(`Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
-    console.log(`Using filter: .eq('id', '${CONNECTION_ID}')`);
+    log('log', `Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
+    log('log', `Using filter: .eq('id', '${CONNECTION_ID}')`);
     try {
-        console.log(`Checking existence of connection ${CONNECTION_ID} before update...`);
+        log('log', `Checking existence of connection ${CONNECTION_ID} before update...`);
         const { data: checkData, error: checkError } = await supabase
             .from('agent_discord_connections')
             .select('id', { count: 'exact', head: true })
             .eq('id', CONNECTION_ID);
 
         if (checkError) {
-            console.error(`Supabase error CHECKING connection ${CONNECTION_ID} BEFORE update:`, JSON.stringify(checkError, null, 2));
+            log('error', `Supabase error CHECKING connection ${CONNECTION_ID} BEFORE update:`, JSON.stringify(checkError, null, 2));
         } else if (!checkData || checkData.length === 0) {
-            console.error(`CRITICAL: Connection ${CONNECTION_ID} NOT FOUND in DB right before update attempt! Update will fail.`);
+            log('error', `CRITICAL: Connection ${CONNECTION_ID} NOT FOUND in DB right before update attempt! Update will fail.`);
             return;
         } else {
-            console.log(`Connection ${CONNECTION_ID} confirmed to exist before update attempt.`);
+            log('log', `Connection ${CONNECTION_ID} confirmed to exist before update attempt.`);
         }
 
-        console.log(`Proceeding with update for connection ${CONNECTION_ID}...`);
+        log('log', `Proceeding with update for connection ${CONNECTION_ID}...`);
         const { data, error } = await supabase
             .from('agent_discord_connections')
             .update({ worker_status: status })
@@ -90,12 +93,12 @@ async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error'
             .select();
 
         if (error) {
-            console.error(`Supabase error UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
+            log('error', `Supabase error UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
         } else {
-            console.log(`Successfully ran update in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
+            log('log', `Successfully ran update in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
         }
     } catch (err) {
-        console.error(`Exception during status update for connection ${CONNECTION_ID}:`, err);
+        log('error', `Exception during status update for connection ${CONNECTION_ID}:`, err);
     }
 }
 
@@ -107,13 +110,13 @@ function resetInactivityTimer() {
         clearTimeout(inactivityTimer);
     }
     if (TIMEOUT_MINUTES !== null && TIMEOUT_MINUTES > 0) { 
-        console.log(`Resetting inactivity timer (${TIMEOUT_MINUTES} minutes)...`);
+        log('log', `Resetting inactivity timer (${TIMEOUT_MINUTES} minutes)...`);
         inactivityTimer = setTimeout(() => {
-            console.log("Inactivity timeout reached. Shutting down...");
+            log('log', "Inactivity timeout reached. Shutting down...");
             shutdown('inactive'); // Trigger graceful shutdown due to inactivity
         }, TIMEOUT_MINUTES * 60 * 1000);
     } else {
-        console.log("Inactivity timer is disabled.");
+        log('log', "Inactivity timer is disabled.");
     }
 }
 
@@ -121,26 +124,26 @@ function resetInactivityTimer() {
  * Handles graceful shutdown of the worker.
  */
 async function shutdown(finalStatus: 'inactive' | 'error' = 'inactive', errorMessage?: string) {
-    console.log(`Initiating shutdown with status: ${finalStatus}`);
+    log('log', `Initiating shutdown with status: ${finalStatus}`);
     if (inactivityTimer) {
         clearTimeout(inactivityTimer);
         inactivityTimer = null; // Explicitly nullify
     }
     try {
         await updateStatus(finalStatus, errorMessage); 
-        console.log("Destroying Discord client...");
+        log('log', "Destroying Discord client...");
         client.destroy();
-        console.log("Shutdown complete.");
+        log('log', "Shutdown complete.");
         process.exit(0); // Exit cleanly
     } catch (err) {
-        console.error("Error during shutdown:", err);
+        log('error', "Error during shutdown:", err);
         process.exit(1); // Exit with error
     }
 }
 
 // *** ADDED: DB Check Function ***
 async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Promise<boolean> {
-    console.log(`[WORKER DB CHECK] Checking for ${recordType} with ID: ${id}`);
+    log('log', `[WORKER DB CHECK] Checking for ${recordType} with ID: ${id}`);
     let tableName: string;
     let columnName: string;
 
@@ -151,12 +154,12 @@ async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Pr
         tableName = 'agent_discord_connections';
         columnName = 'id'; // Assuming CONNECTION_ID is the primary key
     } else {
-        console.error("[WORKER DB CHECK] Invalid record type specified.");
+        log('error', "[WORKER DB CHECK] Invalid record type specified.");
         return false;
     }
 
     if (!id) {
-         console.error(`[WORKER DB CHECK] Cannot check for ${recordType}, ID is missing.`);
+         log('error', `[WORKER DB CHECK] Cannot check for ${recordType}, ID is missing.`);
          return false;
     }
 
@@ -168,16 +171,16 @@ async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Pr
             .eq(columnName, id);
 
         if (error) {
-            console.error(`[WORKER DB CHECK] Supabase error checking ${recordType} ${id}:`, error.message);
+            log('error', `[WORKER DB CHECK] Supabase error checking ${recordType} ${id}:`, error.message);
             return false; // Assume not found on error
         } 
         
         const exists = count !== null && count > 0;
-        console.log(`[WORKER DB CHECK] ${recordType} ${id} ${exists ? 'FOUND' : 'NOT FOUND'}.`);
+        log('log', `[WORKER DB CHECK] ${recordType} ${id} ${exists ? 'FOUND' : 'NOT FOUND'}.`);
         return exists;
 
     } catch (err) {
-        console.error(`[WORKER DB CHECK] Exception checking ${recordType} ${id}:`, err);
+        log('error', `[WORKER DB CHECK] Exception checking ${recordType} ${id}:`, err);
         return false;
     }
 }
@@ -186,10 +189,10 @@ async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Pr
 // --- Discord Event Handlers --- 
 
 client.once(Events.ClientReady, async (readyClient) => {
-    console.log(`[WORKER LOGIN SUCCESS] Logged in as ${readyClient.user.tag}!`);
+    log('log', `[WORKER LOGIN SUCCESS] Logged in as ${readyClient.user.tag}!`);
     await checkDbRecord('agent', AGENT_ID);
     const connectionExists = await checkDbRecord('connection', CONNECTION_ID);
-    console.log(`[WORKER PRE-STATUS-UPDATE] Attempting to update status to active. Connection exists: ${connectionExists}`);
+    log('log', `[WORKER PRE-STATUS-UPDATE] Attempting to update status to active. Connection exists: ${connectionExists}`);
     await updateStatus('active'); // Set status to active in DB
     resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
 });
@@ -203,14 +206,14 @@ client.on(Events.MessageCreate, async (message) => {
     const wasMentioned = message.content.includes(botMention);
 
     if (wasMentioned) {
-        console.log(`Bot mentioned by ${message.author.tag}. Resetting timer.`);
+        log('log', `Bot mentioned by ${message.author.tag}. Resetting timer.`);
         resetInactivityTimer();
 
         const messageContent = message.content.replace(botMention, '').trim();
         await message.channel.sendTyping();
 
         if (messageContent) {
-            console.log(`Processing message for agent core. Agent ID: ${AGENT_ID}`);
+            log('log', `Processing message for agent core. Agent ID: ${AGENT_ID}`);
             try {
                 // *** NEW: Fetch agent details ***
                 const { data: agentData, error: agentFetchError } = await supabase
@@ -220,7 +223,7 @@ client.on(Events.MessageCreate, async (message) => {
                     .single();
 
                 if (agentFetchError || !agentData) {
-                    console.error("Error fetching agent details for chat:", agentFetchError);
+                    log('error', "Error fetching agent details for chat:", agentFetchError);
                     await message.reply("Sorry, I couldn't retrieve my configuration.");
                     return; // Don't proceed if agent details are missing
                 }
@@ -247,7 +250,7 @@ client.on(Events.MessageCreate, async (message) => {
                     // message: messageContent 
                 };
 
-                console.log("Sending payload to chat function:", JSON.stringify(chatPayload, null, 2));
+                log('log', "Sending payload to chat function:", JSON.stringify(chatPayload, null, 2));
 
                 // --- MODIFIED: Use fetch to handle streaming response --- 
                 const functionUrl = `${SUPABASE_URL}/functions/v1/chat`;
@@ -276,7 +279,7 @@ client.on(Events.MessageCreate, async (message) => {
                     // Check if response is a stream
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('text/event-stream') && response.body) {
-                        console.log("Received stream response from chat function.");
+                        log('log', "Received stream response from chat function.");
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
                         
@@ -289,17 +292,17 @@ client.on(Events.MessageCreate, async (message) => {
                             accumulatedReply += chunk;
                             // Optional: Send partial replies? Could be complex with rate limits.
                         }
-                        console.log("Finished reading stream. Full reply length:", accumulatedReply.length);
+                        log('log', "Finished reading stream. Full reply length:", accumulatedReply.length);
                     } else {
                         // Handle non-stream response (e.g., direct JSON error)
                         const nonStreamResponse = await response.json();
-                        console.warn("Received non-stream response:", nonStreamResponse);
+                        log('warn', "Received non-stream response:", nonStreamResponse);
                         // Try to extract an error or default
                          accumulatedReply = nonStreamResponse?.reply || nonStreamResponse?.error || "Received unexpected response format.";
                     }
                 
                 } catch (err) {
-                    console.error("Error fetching/processing chat function response:", err);
+                    log('error', "Error fetching/processing chat function response:", err);
                     // --- MODIFIED: Type check before assignment ---
                     if (err instanceof Error) {
                         fetchError = err; // Assign if it's an Error
@@ -329,7 +332,7 @@ client.on(Events.MessageCreate, async (message) => {
                 // --- END MODIFIED --- 
 
             } catch (err) { // Catch errors from *before* fetch (e.g., fetching agent details)
-                console.error("Exception before invoking chat function:", err); 
+                log('error', "Exception before invoking chat function:", err); 
                 await message.reply("Sorry, there was an unexpected issue preparing your request.");
             }
         } else {
@@ -342,13 +345,13 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.Error, async (error) => {
-    console.error("Discord Client Error:", error);
+    log('error', "Discord Client Error:", error);
     // Attempt to report error status before shutting down
     await shutdown('error', error.message);
 });
 
 client.on(Events.Warn, (warning) => {
-    console.warn("Discord Client Warning:", warning);
+    log('warn', "Discord Client Warning:", warning);
 });
 
 // --- Process Signal Handling --- 
@@ -357,14 +360,14 @@ process.on('SIGINT', () => shutdown('inactive'));
 process.on('SIGTERM', () => shutdown('inactive'));
 
 // --- Login --- 
-console.log("[WORKER PRE-LOGIN] Attempting to log into Discord...");
+log('log', "[WORKER PRE-LOGIN] Attempting to log into Discord...");
 (async () => { // Wrap check in async IIFE
     await checkDbRecord('agent', AGENT_ID);
     await checkDbRecord('connection', CONNECTION_ID);
-    console.log("[WORKER PRE-LOGIN] DB checks complete. Proceeding with login.");
+    log('log', "[WORKER PRE-LOGIN] DB checks complete. Proceeding with login.");
 
     client.login(BOT_TOKEN).catch(async (error) => {
-        console.error("Failed to login:", error);
+        log('error', "Failed to login:", error);
         // Update status to error if login fails
         await updateStatus('error', `Failed to login: ${error.message}`);
         process.exit(1);
