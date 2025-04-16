@@ -92,7 +92,7 @@ try {
     /**
      * Updates the worker status in the Supabase database.
      */
-    async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string) {
+    async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string): Promise<void> {
         log('log', `Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
         log('log', `Using filter: .eq('id', '${CONNECTION_ID}')`);
         try {
@@ -119,7 +119,7 @@ try {
     /**
      * Resets the inactivity timer.
      */
-    function resetInactivityTimer() {
+    function resetInactivityTimer(): void {
         if (inactivityTimer) {
             clearTimeout(inactivityTimer);
         }
@@ -137,7 +137,7 @@ try {
     /**
      * Handles graceful shutdown of the worker.
      */
-    async function shutdown(finalStatus: 'inactive' | 'error' = 'inactive', errorMessage?: string) {
+    async function shutdown(finalStatus: 'active' | 'inactive' | 'stopping' | 'error' = 'inactive', errorMessage?: string): Promise<void> {
         log('log', `Initiating shutdown with status: ${finalStatus}`);
         if (inactivityTimer) {
             clearTimeout(inactivityTimer);
@@ -203,7 +203,7 @@ try {
     // --- Graceful Shutdown Handling ---
     let isShuttingDown = false;
 
-    const handleShutdown = async (signal: string) => {
+    const handleShutdown = async (signal: string): Promise<void> => {
         // Prevent multiple shutdowns if signals are received rapidl
         if (isShuttingDown) {
             log('warn', `Shutdown already in progress. Ignoring signal: ${signal}`);
