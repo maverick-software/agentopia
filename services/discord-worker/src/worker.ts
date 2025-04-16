@@ -63,25 +63,38 @@ let inactivityTimer: NodeJS.Timeout | null = null;
  * Updates the worker status in the Supabase database.
  */
 async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string) {
-    console.log(`Attempting to update status to: ${status}` + (errorMessage ? ` Error: ${errorMessage}` : ''));
+    console.log(`Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
+    console.log(`Using filter: .eq('id', '${CONNECTION_ID}')`);
     try {
+        console.log(`Checking existence of connection ${CONNECTION_ID} before update...`);
+        const { data: checkData, error: checkError } = await supabase
+            .from('agent_discord_connections')
+            .select('id', { count: 'exact', head: true })
+            .eq('id', CONNECTION_ID);
+
+        if (checkError) {
+            console.error(`Supabase error CHECKING connection ${CONNECTION_ID} BEFORE update:`, JSON.stringify(checkError, null, 2));
+        } else if (!checkData || checkData.length === 0) {
+            console.error(`CRITICAL: Connection ${CONNECTION_ID} NOT FOUND in DB right before update attempt! Update will fail.`);
+            return;
+        } else {
+            console.log(`Connection ${CONNECTION_ID} confirmed to exist before update attempt.`);
+        }
+
+        console.log(`Proceeding with update for connection ${CONNECTION_ID}...`);
         const { data, error } = await supabase
             .from('agent_discord_connections')
-            .update({ 
-                worker_status: status,
-                // TODO: Add last_error field to DB?
-                // last_error: errorMessage?.substring(0, 500) // Truncate error
-             })
-            .eq('id', CONNECTION_ID) // Use the specific connection ID
-            .select(); // Add select() to get the result back
+            .update({ worker_status: status })
+            .eq('id', CONNECTION_ID)
+            .select();
 
         if (error) {
-            console.error("Supabase error updating status:", JSON.stringify(error, null, 2));
+            console.error(`Supabase error UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
         } else {
-            console.log(`Successfully updated status in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
+            console.log(`Successfully ran update in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
         }
     } catch (err) {
-        console.error("Exception during status update:", err);
+        console.error(`Exception during status update for connection ${CONNECTION_ID}:`, err);
     }
 }
 
