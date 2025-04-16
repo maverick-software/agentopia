@@ -218,7 +218,7 @@ export function AgentEdit() {
 
       const { data: connectionData, error: connectionError } = await supabase
         .from('agent_discord_connections')
-        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
+        .select('id, guild_id, channel_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
         .eq('agent_id', agentId)
         .maybeSingle();
 
@@ -229,7 +229,8 @@ export function AgentEdit() {
           id: connectionData.id,
           agent_id: agentId,
           guild_id: connectionData.guild_id,
-          inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes || 10,
+          channel_id: connectionData.channel_id,
+          inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes ?? 60,
           worker_status: connectionData.worker_status || 'inactive',
           discord_app_id: connectionData.discord_app_id || '',
           discord_public_key: connectionData.discord_public_key || '',
@@ -239,7 +240,8 @@ export function AgentEdit() {
           id: undefined,
           agent_id: agentId,
           guild_id: undefined,
-          inactivity_timeout_minutes: 10,
+          channel_id: undefined,
+          inactivity_timeout_minutes: 60,
           worker_status: 'inactive',
           discord_app_id: '',
           discord_public_key: '',
@@ -384,23 +386,134 @@ export function AgentEdit() {
     }
   };
 
-  // Determine initial stage based on fetched data
+  // Determine initial stage AND fetch guilds/channels if needed
   useEffect(() => {
+      let stage: DiscordStage = 'initial';
+      let shouldFetchGuilds = false;
+      let shouldFetchChannels = false;
+      let guildToFetchChannels: string | null | undefined = null;
+
+      // Determine stage based on available data
       if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key && discordConnectionData.guild_id) {
-          setDiscordConnectionStage('connected');
+          stage = 'connected';
+          // *** MODIFIED: Always need guilds if app_id/key are present ***
+          shouldFetchGuilds = true; 
+          guildToFetchChannels = discordConnectionData.guild_id; 
       } else if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key) {
-          setDiscordConnectionStage('select_server');
-          // Fetch guilds if we are in server select stage but haven't fetched yet
-          if (discordGuilds.length === 0 && !fetchingGuilds) {
-             fetchDiscordGuildsLogic();
-          }
+          stage = 'select_server';
+          shouldFetchGuilds = true; 
       } else if (discordBotKey) {
-          setDiscordConnectionStage('enter_credentials');
-      } else {
-          setDiscordConnectionStage('initial');
+          stage = 'enter_credentials';
       }
-  // Add dependencies that determine the stage
-  }, [discordBotKey, discordConnectionData.discord_app_id, discordConnectionData.discord_public_key, discordConnectionData.guild_id]);
+
+      setDiscordConnectionStage(stage);
+      console.log(`[AgentEdit Stage Effect] Stage set to: ${stage}. Guild data present: ${!!discordConnectionData.guild_id}. Bot Key: ${!!discordBotKey}, App ID: ${!!discordConnectionData.discord_app_id}`);
+
+      // Trigger fetches ONLY if necessary and not already loading
+      if (shouldFetchGuilds && discordGuilds.length === 0 && !fetchingGuilds) {
+         console.log("[AgentEdit Stage Effect] Triggering fetch guilds.");
+         fetchDiscordGuildsLogic();
+      }
+      // Fetch channels ONLY if stage is connected and guild ID exists
+      if (stage === 'connected' && guildToFetchChannels && discordChannels.length === 0 && !fetchingChannels) { 
+         console.log(`[AgentEdit Stage Effect] Triggering fetch channels for guild ${guildToFetchChannels} because stage is 'connected'.`);
+         fetchDiscordChannelsLogic(guildToFetchChannels);
+      }
+
+  // Dependencies: include everything used to determine stage + fetch status flags
+  }, [
+      discordBotKey, 
+      discordConnectionData.discord_app_id, 
+      discordConnectionData.discord_public_key, 
+      discordConnectionData.guild_id, 
+      fetchingGuilds, // Trigger re-check when fetchingGuilds changes
+      fetchingChannels, // Trigger re-check when fetchingChannels changes
+      // *** REMOVED length dependencies to avoid potential loops ***
+      // discordGuilds.length, 
+      // discordChannels.length 
+  ]);
+
+  // *** RESTORED: Modify server selection handler to fetch channels ***
+  const handleSelectServer = async (guildId: string | null) => {
+    const agentId = id;
+    const connectionId = discordConnectionData.id;
+
+    if (!agentId || (!connectionId && !agentId)) { 
+        setError("Cannot save guild selection: Agent or Connection ID missing.");
+        return;
+    }
+    
+    setSaving(true); 
+    setError(null);
+    setDiscordChannels([]); // Clear channels when server changes
+
+    const updateData = { 
+        guild_id: guildId || null,
+        channel_id: null // Reset channel ID when server changes
+    };
+
+    try {
+        console.log(`[AgentEdit] Updating connection for agent ${agentId} with guild ${guildId}`);
+        let query = supabase.from('agent_discord_connections').update(updateData);
+        if (connectionId) query = query.eq('id', connectionId);
+        else query = query.eq('agent_id', agentId); 
+
+        const { error: updateError } = await query;
+        if (updateError) throw new Error(`Guild selection save error: ${updateError.message}`);
+
+        // Update local state 
+        setDiscordConnectionData(prev => ({ ...prev, guild_id: guildId || undefined, channel_id: undefined }));
+        
+        if (guildId) {
+            // Fetch channels for the new guild AND update stage
+            await fetchDiscordChannelsLogic(guildId);
+            setDiscordConnectionStage('select_server'); 
+        } else {
+            // If no guild selected, move to connected (or maybe back to select_server?)
+            setDiscordConnectionStage('connected'); // Treat no server as 'connected' but incomplete
+        }
+        console.log("[AgentEdit] Guild selection saved.");
+
+    } catch (err: any) {
+        console.error("[AgentEdit] Error saving Guild selection:", err);
+        setError(`Failed to save Discord server selection: ${err.message}`);
+    } finally {
+        setSaving(false);
+    }
+  };
+
+  // *** RESTORED: Handler for saving Channel Selection ***
+  const handleSelectChannel = async (channelId: string | null) => {
+      const agentId = id;
+      const connectionId = discordConnectionData.id;
+      if (!agentId || !connectionId) { // Require connection ID for channel update
+          setError("Cannot save channel selection: Connection ID missing.");
+          return;
+      }
+      setSaving(true); // Reuse saving state maybe?
+      setError(null);
+      const updateData = { channel_id: channelId || null };
+      try {
+          console.log(`[AgentEdit] Updating connection ${connectionId} with channel ${channelId}`);
+          const { error: updateError } = await supabase
+              .from('agent_discord_connections')
+              .update(updateData)
+              .eq('id', connectionId);
+              
+          if (updateError) throw new Error(`Channel selection save error: ${updateError.message}`);
+
+          // Update local state and stage (remain connected)
+          setDiscordConnectionData(prev => ({ ...prev, channel_id: channelId || undefined }));
+          setDiscordConnectionStage('connected'); // Stay connected
+          console.log("[AgentEdit] Channel selection saved.");
+
+      } catch (err: any) {
+          console.error("[AgentEdit] Error saving Channel selection:", err);
+          setError(`Failed to save Discord channel selection: ${err.message}`);
+      } finally {
+          setSaving(false);
+      }
+  };
 
   // Update connectDiscordBot to change stage
   const connectDiscordBot = async (token: string) => {
@@ -544,110 +657,6 @@ export function AgentEdit() {
           setDiscordChannels([]); // Clear channels on error
       } finally {
           setFetchingChannels(false);
-      }
-  };
-
-  // Update stage determination useEffect
-  useEffect(() => {
-      if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key && discordConnectionData.guild_id) {
-          setDiscordConnectionStage('connected');
-          // Fetch channels if connected to a guild but channels aren't loaded
-          if (discordConnectionData.guild_id && discordChannels.length === 0 && !fetchingChannels) {
-              fetchDiscordChannelsLogic(discordConnectionData.guild_id);
-          }
-      } else if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key) {
-          setDiscordConnectionStage('select_server');
-          // Fetch guilds if we are in server select stage but haven't fetched yet
-          if (discordGuilds.length === 0 && !fetchingGuilds) {
-             fetchDiscordGuildsLogic();
-          }
-      } else if (discordBotKey) {
-          setDiscordConnectionStage('enter_credentials');
-      } else {
-          setDiscordConnectionStage('initial');
-      }
-  // Add dependencies that determine the stage
-  }, [discordBotKey, discordConnectionData.discord_app_id, discordConnectionData.discord_public_key, discordConnectionData.guild_id]);
-
-  // Modify server selection handler to fetch channels
-  const handleSelectServer = async (guildId: string | null) => {
-    const agentId = id;
-    const connectionId = discordConnectionData.id; 
-
-    if (!agentId || (!connectionId && !agentId)) { 
-        setError("Cannot save guild selection: Agent or Connection ID missing.");
-        return;
-    }
-    
-    setSaving(true); 
-    setError(null);
-    setDiscordChannels([]); // Clear channels when server changes
-
-    const updateData = { 
-        guild_id: guildId || null,
-        channel_id: null // Reset channel ID when server changes
-    };
-
-    try {
-        console.log(`[AgentEdit] Updating connection for agent ${agentId} with guild ${guildId}`);
-        let query = supabase.from('agent_discord_connections').update(updateData);
-        if (connectionId) query = query.eq('id', connectionId);
-        else query = query.eq('agent_id', agentId); 
-
-        const { error: updateError } = await query;
-        if (updateError) throw new Error(`Guild selection save error: ${updateError.message}`);
-
-        // Update local state 
-        setDiscordConnectionData(prev => ({ ...prev, guild_id: guildId || undefined, channel_id: undefined }));
-        
-        if (guildId) {
-            // Fetch channels for the new guild and stay in select_server stage
-            await fetchDiscordChannelsLogic(guildId);
-            setDiscordConnectionStage('select_server'); 
-        } else {
-            // If no guild selected, move to connected (or maybe back to select_server?)
-            setDiscordConnectionStage('connected'); // Treat no server as 'connected' but incomplete
-        }
-        console.log("[AgentEdit] Guild selection saved.");
-
-    } catch (err: any) {
-        console.error("[AgentEdit] Error saving Guild selection:", err);
-        setError(`Failed to save Discord server selection: ${err.message}`);
-    } finally {
-        setSaving(false);
-    }
-  };
-
-  // NEW: Handler for saving Channel Selection
-  const handleSelectChannel = async (channelId: string | null) => {
-      const agentId = id;
-      const connectionId = discordConnectionData.id;
-      if (!agentId || !connectionId) { // Require connection ID for channel update
-          setError("Cannot save channel selection: Connection ID missing.");
-          return;
-      }
-      setSaving(true); // Reuse saving state maybe?
-      setError(null);
-      const updateData = { channel_id: channelId || null };
-      try {
-          console.log(`[AgentEdit] Updating connection ${connectionId} with channel ${channelId}`);
-          const { error: updateError } = await supabase
-              .from('agent_discord_connections')
-              .update(updateData)
-              .eq('id', connectionId);
-              
-          if (updateError) throw new Error(`Channel selection save error: ${updateError.message}`);
-
-          // Update local state and stage (remain connected)
-          setDiscordConnectionData(prev => ({ ...prev, channel_id: channelId || undefined }));
-          setDiscordConnectionStage('connected'); // Stay connected
-          console.log("[AgentEdit] Channel selection saved.");
-
-      } catch (err: any) {
-          console.error("[AgentEdit] Error saving Channel selection:", err);
-          setError(`Failed to save Discord channel selection: ${err.message}`);
-      } finally {
-          setSaving(false);
       }
   };
 
