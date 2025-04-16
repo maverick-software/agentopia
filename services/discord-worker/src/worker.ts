@@ -150,7 +150,6 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
 
     // --- Activity Detection & Timer Reset --- 
-    // Check if the bot was mentioned
     const botMention = `<@${client.user?.id}>`;
     const wasMentioned = message.content.includes(botMention);
 
@@ -158,40 +157,60 @@ client.on(Events.MessageCreate, async (message) => {
         console.log(`Bot mentioned by ${message.author.tag}. Resetting timer.`);
         resetInactivityTimer();
 
-        // --- Agent Interaction Logic --- 
-        // Extract the actual message content, removing the mention
         const messageContent = message.content.replace(botMention, '').trim();
-
-        // Show typing indicator while processing
         await message.channel.sendTyping();
 
         if (messageContent) {
-            console.log(`Sending message content to agent core for Agent ID: ${AGENT_ID}`);
+            console.log(`Processing message for agent core. Agent ID: ${AGENT_ID}`);
             try {
-                // Invoke the CORRECT agent core handler function
+                // *** NEW: Fetch agent details ***
+                const { data: agentData, error: agentFetchError } = await supabase
+                    .from('agents')
+                    .select('name, personality, system_instructions, assistant_instructions')
+                    .eq('id', AGENT_ID)
+                    .single();
+
+                if (agentFetchError || !agentData) {
+                    console.error("Error fetching agent details for chat:", agentFetchError);
+                    await message.reply("Sorry, I couldn't retrieve my configuration.");
+                    return; // Don't proceed if agent details are missing
+                }
+
+                // *** NEW: Construct messages array ***
+                const chatMessages = [
+                    // We could potentially fetch actual history here in the future
+                    { role: 'user', content: messageContent }
+                ];
+                
+                // *** NEW: Construct payload matching chat function ***
+                const chatPayload = {
+                    messages: chatMessages,
+                    agentId: AGENT_ID, // Already have this
+                    agentName: agentData.name, // From fetched data
+                    agentPersonality: agentData.personality, // From fetched data
+                    systemInstructions: agentData.system_instructions, // From fetched data
+                    assistantInstructions: agentData.assistant_instructions, // From fetched data
+                    // Remove fields not expected by chat function:
+                    // userId: message.author.id, 
+                    // userName: message.author.username, 
+                    // channelId: message.channel.id, 
+                    // guildId: message.guild?.id, 
+                    // message: messageContent 
+                };
+
+                console.log("Sending payload to chat function:", JSON.stringify(chatPayload, null, 2));
+
                 const { data: agentResponse, error: agentError } = await supabase.functions.invoke(
-                    'chat', // Corrected function name
-                    {
-                        body: {
-                            agentId: AGENT_ID, // Pass the agent ID
-                            userId: message.author.id, // Pass the Discord user ID
-                            userName: message.author.username, // Pass username
-                            channelId: message.channel.id, // Pass channel context
-                            guildId: message.guild?.id, // Pass guild context
-                            message: messageContent // Pass the actual message
-                        }
-                    }
+                    'chat', 
+                    { body: chatPayload } // Send the correctly structured payload
                 );
 
                 if (agentError) {
-                    console.error("Error invoking agent-core-handler:", agentError);
+                    console.error("Error invoking chat function:", agentError); // Renamed log
                     await message.reply("Sorry, I encountered an error trying to process that.");
                 } else {
-                    console.log("Received response from agent core:", agentResponse);
-                    // Send the agent's response back to Discord
-                    // Assuming agentResponse has a structure like { reply: "..." }
+                   console.log("Received response from chat function:", agentResponse); // Renamed log
                     const replyContent = agentResponse?.reply || "Sorry, I couldn't generate a response.";
-                    // Handle potential Discord message length limits
                     if (replyContent.length > 2000) {
                         await message.reply({ content: replyContent.substring(0, 1997) + '...' });
                     } else {
@@ -199,14 +218,12 @@ client.on(Events.MessageCreate, async (message) => {
                     }
                 }
             } catch (invokeErr) {
-                console.error("Exception invoking agent-core-handler:", invokeErr);
+                console.error("Exception invoking chat function:", invokeErr); // Renamed log
                 await message.reply("Sorry, there was an unexpected issue connecting to the agent core.");
             }
         } else {
-             // Handle cases where the bot is mentioned with no actual message content
-             await message.reply("Hello! How can I help you today?"); // Or provide help info
+             await message.reply("Hello! How can I help you today?"); 
         }
-        // --- End Agent Interaction Logic ---
     } else {
         // Optional: Reset timer even on non-mention messages in specific channels/guilds?
         // For now, only mentions reset the timer.
