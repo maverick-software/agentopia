@@ -9,7 +9,22 @@ import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/
 import pm2 from 'pm2';
 
 // Add helper for timestamp
-const log = (level: 'log' | 'warn' | 'error', ...args: any[]) => console[level](new Date().toISOString(), '[WM]', ...args);
+const log = (level: 'log' | 'warn' | 'error', ...args: any[]) => {
+    // Ensure timestamp and prefix are applied consistently
+    const timestamp = new Date().toISOString();
+    const prefix = '[WM]';
+    switch (level) {
+        case 'warn':
+            console.warn(timestamp, prefix, ...args);
+            break;
+        case 'error':
+            console.error(timestamp, prefix, ...args);
+            break;
+        default:
+            console.log(timestamp, prefix, ...args);
+            break;
+    }
+};
 
 // Load environment variables from .env file in the project root
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') }); 
