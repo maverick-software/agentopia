@@ -192,7 +192,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .select(`
         id,
         agent_id,
-        is_active,
         priority,
         timeout_ms,
         max_retries,
@@ -204,7 +203,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
         )
       `)
       .eq('agent_id', agentId)
-      .eq('is_active', true)
       .order('priority', { ascending: true });
 
     if (error) {
@@ -227,7 +225,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       max_retries: config.max_retries,
       retry_backoff_ms: config.retry_backoff_ms,
       priority: config.priority,
-      is_active: config.is_active
     }));
   } catch (error) {
     console.error('Error in getMCPConfigurations:', error);
