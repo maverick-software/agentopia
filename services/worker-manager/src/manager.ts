@@ -121,148 +121,133 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     const workerName = getWorkerPm2Name(agentId);
 
     // --- Check if worker already running via PM2 ---
+    log('log', `[MANAGER START] Calling pm2.describe for ${workerName}...`);
     pm2.describe(workerName, (err: any, description: any) => {
-        if (err && !err.message.toLowerCase().includes('not found')) {
-            log('error', `[MANAGER START ERR] Error checking existing PM2 process ${workerName}:`, err);
-            res.status(500).json({ error: 'Failed to query worker status before starting.' });
-            return;
-        }
+        // Wrap callback logic in try/catch
+        try {
+            log('log', `[MANAGER START] Entered pm2.describe callback for ${workerName}.`);
+            if (err && !err.message.toLowerCase().includes('not found')) {
+                // Log error specifically from describe
+                log('error', `[MANAGER START ERR - DESCRIBE] Error checking existing PM2 process ${workerName}:`, err);
+                // Ensure response is sent even on error within callback
+                if (!res.headersSent) {
+                   res.status(500).json({ error: 'Failed to query worker status before starting.' });
+                }
+                return; // Exit callback
+            }
 
-        if (description && description.length > 0 && description[0].pm2_env?.status === 'online') {
-            log('warn', `[MANAGER START] Worker ${workerName} is already running according to PM2.`);
-            res.status(409).json({ message: `Worker ${agentId} is already active.` });
-            return;
-        }
+            if (description && description.length > 0 && description[0].pm2_env?.status === 'online') {
+                log('warn', `[MANAGER START] Worker ${workerName} is already running according to PM2.`);
+                if (!res.headersSent) {
+                    res.status(409).json({ message: `Worker ${agentId} is already active.` });
+                }
+                return; // Exit callback
+            }
 
-        // --- Worker Not Running - Proceed to Start ---
-        log('log', `[MANAGER START] Worker ${workerName} is not running or not found by PM2. Proceeding to start...`);
+            // --- Worker Not Running - Proceed to Start ---
+            log('log', `[MANAGER START] Worker ${workerName} is not running or not found by PM2. Proceeding to prepare start options...`);
 
-        // --- PM2 Start Options ---
-
-        // Robustly handle inactivityTimeout: undefined, null, 0, or "never" mean indefinite (0)
-        let inactivityTimeoutValue = '10'; // Default to 10 minutes if not specified
-        // Use inactivityTimeout directly from req.body
-        const lowerCaseTimeout = String(inactivityTimeout).toLowerCase();
-
-        if (inactivityTimeout === undefined || inactivityTimeout === null || inactivityTimeout === 0 || lowerCaseTimeout === 'never') {
-            inactivityTimeoutValue = '0'; // Indefinite timeout
-            log('log', `[MANAGER START] Inactivity timeout is indefinite (received: ${inactivityTimeout}), setting INACTIVITY_TIMEOUT_MINUTES=0 for worker ${agentId}`);
-        } else {
-            // Use inactivityTimeout directly from req.body
-            const parsedTimeout = parseInt(String(inactivityTimeout), 10);
-            if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
-                inactivityTimeoutValue = String(parsedTimeout);
-                log('log', `[MANAGER START] Setting INACTIVITY_TIMEOUT_MINUTES=${inactivityTimeoutValue} for worker ${agentId}`);
+            // --- PM2 Start Options --- 
+            // Robustly handle inactivityTimeout: undefined, null, 0, or "never" mean indefinite (0)
+            let inactivityTimeoutValue = '10'; // Default to 10 minutes if not specified
+            const lowerCaseTimeout = String(inactivityTimeout).toLowerCase();
+            if (inactivityTimeout === undefined || inactivityTimeout === null || inactivityTimeout === 0 || lowerCaseTimeout === 'never') {
+                inactivityTimeoutValue = '0';
+                log('log', `[MANAGER START] Inactivity timeout is indefinite (received: ${inactivityTimeout}), setting INACTIVITY_TIMEOUT_MINUTES=0`);
             } else {
-                log('warn', `[MANAGER START] Invalid inactivity timeout value received: ${inactivityTimeout}. Defaulting to ${inactivityTimeoutValue} minutes.`);
-                // Keep the default value '10'
-            }
-        }
-
-        // Construct environment variables for the worker process
-        const workerEnv: { [key: string]: string } = { // Ensure type matches PM2 expectation
-            AGENT_ID: agentId,
-            CONNECTION_DB_ID: connectionDbId,
-            INACTIVITY_TIMEOUT_MINUTES: inactivityTimeoutValue,
-            // Add BOT_TOKEN here
-            DISCORD_BOT_TOKEN: botToken,
-            // Pass Supabase creds (guaranteed to be strings here)
-            SUPABASE_URL: SUPABASE_URL,
-            SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
-            // Include Node options if needed, e.g., for memory limits
-            // NODE_OPTIONS: '--max-old-space-size=256'
-        };
-
-        const startOptions: pm2.StartOptions = {
-            script: WORKER_SCRIPT_PATH,
-            name: workerName,
-            interpreter: 'ts-node', // Corrected from exec_interpreter
-            exec_mode: 'fork', // Use fork mode
-            env: workerEnv,
-            // Configure logs (optional, PM2 handles defaults)
-            // output: `/root/.pm2/logs/${workerName}-out.log`,
-            // error: `/root/.pm2/logs/${workerName}-error.log`,
-            autorestart: false, // Don't automatically restart if it fails/stops
-            // watch: false, // Don't watch for file changes
-        };
-
-        log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
-
-        pm2.start(startOptions, async (err: any, apps: any) => { // Make callback async
-            if (err) {
-                log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, err);
-                // Send error immediately if PM2 fails to start the process
-                return res.status(500).json({ error: `Failed to initiate worker start for ${agentId}` });
-            }
-
-            log('log', `[MANAGER SPAWN OK] Worker ${workerName} initiated via PM2. App info:`, apps);
-            
-            // --- ADD Polling Logic --- 
-            const MAX_POLL_ATTEMPTS = 8; // Allow more time for worker startup
-            const POLL_INTERVAL_MS = 2500; // Check every 2.5 seconds
-            let attempts = 0;
-
-            const pollForActiveStatus = async (): Promise<boolean> => {
-                attempts++;
-                log('log', `[MANAGER START POLL ${attempts}/${MAX_POLL_ATTEMPTS}] Checking DB status for connection ${connectionDbId}...`);
-                
-                if (!supabaseAdmin) {
-                    log('error', '[MANAGER START POLL ERR] Supabase admin client not available.');
-                    return false; // Cannot poll without admin client
+                const parsedTimeout = parseInt(String(inactivityTimeout), 10);
+                if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
+                    inactivityTimeoutValue = String(parsedTimeout);
+                    log('log', `[MANAGER START] Setting INACTIVITY_TIMEOUT_MINUTES=${inactivityTimeoutValue}`);
+                } else {
+                    log('warn', `[MANAGER START] Invalid inactivity timeout value received: ${inactivityTimeout}. Defaulting to ${inactivityTimeoutValue} minutes.`);
                 }
-
-                try {
-                    const { data, error: dbError } = await supabaseAdmin
-                        .from('agent_discord_connections')
-                        .select('worker_status')
-                        .eq('id', connectionDbId)
-                        .single();
-
-                    if (dbError) {
-                        // Log DB error, but continue polling unless it's a fatal error?
-                        log('error', `[MANAGER START POLL ERR] DB error fetching status (attempt ${attempts}):`, dbError.message);
-                        // Consider stopping poll if error code indicates permissions issue etc.
-                    } else if (data?.worker_status === 'active') {
-                        log('log', `[MANAGER START POLL OK] Confirmed 'active' status in DB for ${connectionDbId}.`);
-                        return true; // Success!
-                    } else {
-                        log('log', `[MANAGER START POLL] Status is still '${data?.worker_status || 'unknown'}'.`);
-                    }
-                    
-                    // Check if max attempts reached
-                    if (attempts >= MAX_POLL_ATTEMPTS) {
-                        log('warn', `[MANAGER START POLL TIMEOUT] Max attempts reached for ${connectionDbId}. Worker failed to become active.`);
-                        return false; // Timeout
-                    }
-                    
-                    // Wait and poll again
-                    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-                    return pollForActiveStatus(); 
-
-                } catch (pollErr) {
-                    log('error', `[MANAGER START POLL EXCEPTION] Exception during polling for ${connectionDbId}:`, pollErr);
-                    return false; // Stop polling on unhandled exception
-                }
+            }
+            const workerEnv: { [key: string]: string } = { 
+                AGENT_ID: agentId,
+                CONNECTION_DB_ID: connectionDbId,
+                INACTIVITY_TIMEOUT_MINUTES: inactivityTimeoutValue,
+                DISCORD_BOT_TOKEN: botToken,
+                SUPABASE_URL: SUPABASE_URL!,
+                SUPABASE_ANON_KEY: SUPABASE_ANON_KEY!,
             };
+            const startOptions: pm2.StartOptions = {
+                script: WORKER_SCRIPT_PATH,
+                name: workerName,
+                interpreter: 'ts-node', 
+                exec_mode: 'fork', 
+                env: workerEnv,
+                autorestart: false, 
+            };
+            // --- End PM2 Start Options Setup ---
 
-            const confirmedActive = await pollForActiveStatus();
+            log('log', `[MANAGER START] Start options prepared. Calling pm2.start for ${workerName}...`);
+            log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
 
-            if (confirmedActive) {
-                log('log', `[MANAGER START OK] Worker for agent ${agentId} confirmed active in DB.`);
-                // Respond with success AFTER polling confirms active status
-                res.status(200).json({ message: `Worker for ${agentId} started and confirmed active.` });
-            } else {
-                log('error', `[MANAGER START FAIL] Worker for agent ${agentId} failed to confirm active status after polling.`);
-                // Attempt to stop the potentially lingering/failed worker process
-                pm2.stop(workerName, (stopErr: any) => {
-                    if (stopErr) log('error', `[MANAGER START FAIL CLEANUP ERR] Error stopping failed worker ${workerName}:`, stopErr);
-                    else log('log', `[MANAGER START FAIL CLEANUP OK] Sent stop command to potentially failed worker ${workerName}.`);
-                });
-                // Respond with error AFTER polling fails
-                res.status(500).json({ error: `Worker for ${agentId} started but failed to activate.` });
+            pm2.start(startOptions, async (startErr: any, apps: any) => { // Renamed err to startErr
+                // Wrap start callback logic in try/catch
+                try {
+                    log('log', `[MANAGER START] Entered pm2.start callback for ${workerName}.`);
+                    if (startErr) {
+                        log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, startErr);
+                        if (!res.headersSent) {
+                           res.status(500).json({ error: `Failed to initiate worker start for ${agentId}` });
+                        }
+                        return; // Exit start callback
+                    }
+
+                    log('log', `[MANAGER SPAWN OK] Worker ${workerName} initiated via PM2. App info: ${JSON.stringify(apps)}. Starting DB polling...`);
+                    
+                    // --- Polling Logic --- 
+                    const MAX_POLL_ATTEMPTS = 8;
+                    const POLL_INTERVAL_MS = 2500;
+                    let attempts = 0;
+                    const pollForActiveStatus = async (): Promise<boolean> => {
+                        attempts++;
+                        log('log', `[MANAGER START POLL ${attempts}/${MAX_POLL_ATTEMPTS}] Checking DB status for connection ${connectionDbId}...`);
+                        if (!supabaseAdmin) { log('error', 'Supabase admin client not available.'); return false; }
+                        try {
+                            const { data, error: dbError } = await supabaseAdmin.from('agent_discord_connections').select('worker_status').eq('id', connectionDbId).single();
+                            if (dbError) { log('error', `DB error polling status (attempt ${attempts}):`, dbError.message); }
+                            else if (data?.worker_status === 'active') { log('log', `Confirmed 'active' status.`); return true; }
+                            else { log('log', `Status is still '${data?.worker_status || 'unknown'}'.`); }
+                            if (attempts >= MAX_POLL_ATTEMPTS) { log('warn', `Polling timeout.`); return false; }
+                            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+                            return pollForActiveStatus(); // Recursive call
+                        } catch (pollErr) { log('error', `Polling exception:`, pollErr); return false; }
+                    };
+                    const confirmedActive = await pollForActiveStatus();
+                    // --- End Polling Logic ---
+
+                    if (confirmedActive) {
+                        log('log', `[MANAGER START OK] Worker for agent ${agentId} confirmed active in DB.`);
+                        if (!res.headersSent) {
+                            res.status(200).json({ message: `Worker for ${agentId} started and confirmed active.` });
+                        }
+                    } else {
+                        log('error', `[MANAGER START FAIL] Worker for agent ${agentId} failed to confirm active status after polling.`);
+                        // Attempt to stop the potentially lingering/failed worker process
+                        pm2.stop(workerName, (stopErr: any) => {
+                            if (stopErr) log('error', `[MANAGER START FAIL CLEANUP ERR] Error stopping failed worker ${workerName}:`, stopErr);
+                            else log('log', `[MANAGER START FAIL CLEANUP OK] Sent stop command to potentially failed worker ${workerName}.`);
+                        });
+                        if (!res.headersSent) {
+                            res.status(500).json({ error: `Worker for ${agentId} started but failed to activate.` });
+                        }
+                    }
+                } catch(startCallbackError) {
+                     log('error', `[MANAGER START ERR - START CALLBACK] Uncaught exception inside pm2.start callback for ${workerName}:`, startCallbackError);
+                     if (!res.headersSent) {
+                         res.status(500).json({ error: 'Internal server error during worker startup sequence.' });
+                     }
+                }
+            });
+        } catch (describeCallbackError) {
+            log('error', `[MANAGER START ERR - DESCRIBE CALLBACK] Uncaught exception inside pm2.describe callback for ${workerName}:`, describeCallbackError);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Internal server error during worker status check.' });
             }
-            // --- END Polling Logic ---
-        });
+        }
     });
 });
 
