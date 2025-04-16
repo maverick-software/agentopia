@@ -795,6 +795,9 @@ export function AgentEdit() {
 
   // --- NEW: Handler for Activating Agent Worker ---
   const handleActivateAgent = async () => {
+    // *** ADDED LOGGING ***
+    console.log(`[UI PRE-INVOKE] handleActivateAgent called for agent ${id}. Connection data:`, JSON.stringify(discordConnectionData));
+    // *** END ADDED LOGGING ***
     if (!id || !discordConnectionData.guild_id) {
       setError("Cannot activate: Agent ID or selected server is missing.");
       return;

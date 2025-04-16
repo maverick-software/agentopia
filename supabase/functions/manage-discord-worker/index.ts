@@ -13,6 +13,11 @@ if (!managerUrl || !managerSecretKey) {
 }
 
 serve(async (req) => {
+  // --- Define variables for logging --- 
+  let agentId: string | null = null; 
+  let connectionId: string | null = null;
+  // --- End Define ---
+
   // --- START CORS Preflight Handling ---
   if (req.method === 'OPTIONS') {
     console.log("Handling OPTIONS request for CORS preflight.");
@@ -42,7 +47,6 @@ serve(async (req) => {
     }
 
     // 3. Parse request body
-    let agentId: string | null = null;
     let action: 'start' | 'stop' | null = null;
     let guildIdFromRequest: string | null = null; // *** NEW: Variable for guildId from request ***
     try {
@@ -50,6 +54,9 @@ serve(async (req) => {
       agentId = body.agentId;
       action = body.action;
       guildIdFromRequest = body.guildId; // *** NEW: Get guildId from body ***
+      // *** ADDED LOGGING ***
+      console.log(`[FUNC START] Invoked with Action: ${action}, AgentID: ${agentId}`);
+      // *** END ADDED LOGGING ***
     } catch (e) {
        return new Response(JSON.stringify({ error: "Bad Request: Invalid JSON body" }), { 
          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -117,7 +124,10 @@ serve(async (req) => {
              });
         }
         connectionDetails = connData;
-        console.log(`Fetched connection details for agent ${agentId}: ID=${connectionDetails.id}, Guild=${connectionDetails.guild_id}, Timeout=${connectionDetails.inactivity_timeout_minutes}`);
+        connectionId = connectionDetails.id; // Store connection ID
+        // *** ADDED LOGGING ***
+        console.log(`[FUNC POST-FETCH] Fetched connection details for agent ${agentId}: ID=${connectionId}, Guild=${connectionDetails.guild_id}, Timeout=${connectionDetails.inactivity_timeout_minutes}`);
+        // *** END ADDED LOGGING ***
     }
     // *** END MODIFIED FETCH ***
 
@@ -131,6 +141,21 @@ serve(async (req) => {
     
     const managerEndpoint = action === 'start' ? `${managerUrl}/start-worker` : `${managerUrl}/stop-worker`;
     console.log(`Forwarding ${action} request for agent ${agentId} to ${managerEndpoint}`);
+
+    // *** ADDED: Pre-forward checks ***
+    try {
+        console.log(`[FUNC PRE-FORWARD CHECK] Checking agent ${agentId} and connection ${connectionId} existence before calling manager...`);
+        const { error: agentCheckErr } = await supabaseAdmin.from('agents').select('id', { count: 'exact', head: true }).eq('id', agentId);
+        const { error: connCheckErr } = await supabaseAdmin.from('agent_discord_connections').select('id', { count: 'exact', head: true }).eq('id', connectionId);
+        if (agentCheckErr || connCheckErr) {
+             console.error(`[FUNC PRE-FORWARD CHECK] Error during DB check. Agent check error: ${agentCheckErr?.message}, Connection check error: ${connCheckErr?.message}`);
+        } else {
+             console.log(`[FUNC PRE-FORWARD CHECK] Agent ${agentId} and Connection ${connectionId} confirmed to exist.`);
+        }
+    } catch (checkErr) {
+        console.error("[FUNC PRE-FORWARD CHECK] Exception during DB check:", checkErr);
+    }
+    // *** END ADDED ***
 
     // *** START MODIFIED: Construct payload based on action ***
     let managerPayload: any = { agentId: agentId };
@@ -185,7 +210,9 @@ serve(async (req) => {
     }
 
     const managerResult = await managerResponse.json();
-    console.log("Worker Manager response:", managerResult);
+    // *** ADDED LOGGING ***
+    console.log("[FUNC POST-FORWARD] Worker Manager response:", JSON.stringify(managerResult, null, 2));
+    // *** END ADDED LOGGING ***
     
     // 6. Return success (or the manager's response)
     return new Response(

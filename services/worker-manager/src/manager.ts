@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { spawn } from 'child_process'; // To launch worker processes
+import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js'; // Import Supabase client
 
 // Load environment variables from .env file in the service directory
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -16,6 +17,7 @@ const MANAGER_SECRET_KEY = process.env.MANAGER_SECRET_KEY;
 const WORKER_SCRIPT_PATH = process.env.WORKER_SCRIPT_PATH || '../discord-worker/src/worker.ts';
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // Worker uses anon key
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // Need service key for admin check
 
 if (!MANAGER_SECRET_KEY) {
     console.error("FATAL: MANAGER_SECRET_KEY environment variable not set.");
@@ -30,6 +32,17 @@ interface WorkerInfo {
     connectionId: string;
 }
 const activeWorkers = new Map<string, WorkerInfo>(); // Map agentId to WorkerInfo
+
+// *** ADDED: Supabase Admin Client ***
+let supabaseAdmin: SupabaseClient | null = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+    supabaseAdmin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+        auth: { persistSession: false }
+    });
+    console.log("Supabase Admin client initialized for checks.");
+} else {
+    console.error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Cannot perform pre-spawn checks.");
+}
 
 // --- Express App Setup --- 
 const app = express();
@@ -58,10 +71,9 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Endpoint to start a new worker
-app.post('/start-worker', authenticate, (req: Request, res: Response) => {
+app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
     const { agentId, botToken, timeoutMinutes, guildId, channelId, connectionId } = req.body;
-
-    console.log(`Received request to start worker for Agent ID: ${agentId}`);
+    console.log(`[MANAGER RECV] Received /start-worker request for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
 
     // --- Input Validation --- 
     if (!agentId || !botToken || !timeoutMinutes || !connectionId) {
@@ -77,7 +89,49 @@ app.post('/start-worker', authenticate, (req: Request, res: Response) => {
     }
 
     // --- Spawn Worker Process --- 
-    console.log(`Spawning worker process using script: ${WORKER_SCRIPT_PATH}`);
+    
+    // *** ADDED: Pre-spawn logging and check ***
+    console.log(`[MANAGER PRE-SPAWN CHECK] Preparing to spawn worker for Agent ID: ${agentId}, Connection ID: ${connectionId}`);
+    if (supabaseAdmin && agentId && connectionId) {
+        try {
+            // Check Agent
+            const { data: agentCheck, error: agentCheckError } = await supabaseAdmin
+                .from('agents')
+                .select('id', { count: 'exact', head: true })
+                .eq('id', agentId);
+            // Check Connection
+            const { data: connCheck, error: connCheckError } = await supabaseAdmin
+                .from('agent_discord_connections')
+                .select('id', { count: 'exact', head: true })
+                .eq('id', connectionId);
+
+            // Log Agent Check Result
+            if (agentCheckError) {
+                console.error(`[MANAGER PRE-SPAWN CHECK] Error checking agent ${agentId} existence:`, agentCheckError.message);
+            } else if (agentCheck && agentCheck.length > 0) {
+                 console.log(`[MANAGER PRE-SPAWN CHECK] Agent ${agentId} CONFIRMED TO EXIST.`);
+            } else {
+                console.error(`[MANAGER PRE-SPAWN CHECK] CRITICAL: Agent ${agentId} NOT FOUND right before spawn attempt!`);
+            }
+            // Log Connection Check Result
+            if (connCheckError) {
+                console.error(`[MANAGER PRE-SPAWN CHECK] Error checking connection ${connectionId} existence:`, connCheckError.message);
+            } else if (connCheck && connCheck.length > 0) {
+                 console.log(`[MANAGER PRE-SPAWN CHECK] Connection ${connectionId} CONFIRMED TO EXIST.`);
+            } else {
+                console.error(`[MANAGER PRE-SPAWN CHECK] CRITICAL: Connection ${connectionId} NOT FOUND right before spawn attempt!`);
+                 // If connection is gone, maybe don't spawn?
+                 // For now, log and proceed.
+            }
+        } catch(checkErr: any) {
+             console.error(`[MANAGER PRE-SPAWN CHECK] Exception during DB checks for Agent ${agentId} / Conn ${connectionId}:`, checkErr.message);
+        }
+    } else {
+         console.warn("[MANAGER PRE-SPAWN CHECK] Skipping DB checks (Supabase Admin client, agentId, or connectionId missing).");
+    }
+    // *** END MODIFIED CHECK ***
+
+    console.log(`[MANAGER SPAWN CMD] Spawning worker process using script: ${WORKER_SCRIPT_PATH}`);
     
     const workerEnv: { [key: string]: string | undefined } = { 
         ...process.env, // Inherit manager env vars
@@ -106,8 +160,12 @@ app.post('/start-worker', authenticate, (req: Request, res: Response) => {
         stdio: 'inherit' // Pipe worker output to manager console
     });
 
+    // *** ADDED: Post-spawn logging ***
+    console.log(`[MANAGER POST-SPAWN CMD] Spawn command executed for Agent ID: ${agentId}. Waiting for 'spawn' event...`);
+    // *** END ADDED ***
+
     workerProcess.on('spawn', () => {
-        console.log(`Worker process spawned for Agent ID: ${agentId} (PID: ${workerProcess.pid})`);
+        console.log(`[MANAGER SPAWN EVENT] Worker process spawned event received for Agent ID: ${agentId} (PID: ${workerProcess.pid})`);
         activeWorkers.set(agentId, { agentId, process: workerProcess, connectionId });
         // Optionally update DB status here to confirm manager started it?
     });

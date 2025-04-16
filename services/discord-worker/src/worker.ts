@@ -9,6 +9,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 console.log("--- Discord Worker Starting ---");
+console.log(`[WORKER START] Process started. AgentID: ${process.env.AGENT_ID}, ConnectionID: ${process.env.CONNECTION_ID}`);
 
 // --- Configuration --- 
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -137,10 +138,58 @@ async function shutdown(finalStatus: 'inactive' | 'error' = 'inactive', errorMes
     }
 }
 
+// *** ADDED: DB Check Function ***
+async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Promise<boolean> {
+    console.log(`[WORKER DB CHECK] Checking for ${recordType} with ID: ${id}`);
+    let tableName: string;
+    let columnName: string;
+
+    if (recordType === 'agent') {
+        tableName = 'agents';
+        columnName = 'id';
+    } else if (recordType === 'connection') {
+        tableName = 'agent_discord_connections';
+        columnName = 'id'; // Assuming CONNECTION_ID is the primary key
+    } else {
+        console.error("[WORKER DB CHECK] Invalid record type specified.");
+        return false;
+    }
+
+    if (!id) {
+         console.error(`[WORKER DB CHECK] Cannot check for ${recordType}, ID is missing.`);
+         return false;
+    }
+
+    try {
+        // Use the existing anon client for the worker
+        const { data, error, count } = await supabase
+            .from(tableName)
+            .select('id', { count: 'exact', head: true })
+            .eq(columnName, id);
+
+        if (error) {
+            console.error(`[WORKER DB CHECK] Supabase error checking ${recordType} ${id}:`, error.message);
+            return false; // Assume not found on error
+        } 
+        
+        const exists = count !== null && count > 0;
+        console.log(`[WORKER DB CHECK] ${recordType} ${id} ${exists ? 'FOUND' : 'NOT FOUND'}.`);
+        return exists;
+
+    } catch (err) {
+        console.error(`[WORKER DB CHECK] Exception checking ${recordType} ${id}:`, err);
+        return false;
+    }
+}
+// *** END ADDED ***
+
 // --- Discord Event Handlers --- 
 
 client.once(Events.ClientReady, async (readyClient) => {
-    console.log(`Logged in as ${readyClient.user.tag}!`);
+    console.log(`[WORKER LOGIN SUCCESS] Logged in as ${readyClient.user.tag}!`);
+    await checkDbRecord('agent', AGENT_ID);
+    const connectionExists = await checkDbRecord('connection', CONNECTION_ID);
+    console.log(`[WORKER PRE-STATUS-UPDATE] Attempting to update status to active. Connection exists: ${connectionExists}`);
     await updateStatus('active'); // Set status to active in DB
     resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
 });
@@ -308,10 +357,16 @@ process.on('SIGINT', () => shutdown('inactive'));
 process.on('SIGTERM', () => shutdown('inactive'));
 
 // --- Login --- 
-console.log("Logging into Discord...");
-client.login(BOT_TOKEN).catch(async (error) => {
-    console.error("Failed to login:", error);
-    // Update status to error if login fails
-    await updateStatus('error', `Failed to login: ${error.message}`);
-    process.exit(1);
-}); 
+console.log("[WORKER PRE-LOGIN] Attempting to log into Discord...");
+(async () => { // Wrap check in async IIFE
+    await checkDbRecord('agent', AGENT_ID);
+    await checkDbRecord('connection', CONNECTION_ID);
+    console.log("[WORKER PRE-LOGIN] DB checks complete. Proceeding with login.");
+
+    client.login(BOT_TOKEN).catch(async (error) => {
+        console.error("Failed to login:", error);
+        // Update status to error if login fails
+        await updateStatus('error', `Failed to login: ${error.message}`);
+        process.exit(1);
+    }); 
+})(); // Immediately invoke the async function 
