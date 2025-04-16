@@ -63,19 +63,22 @@ let inactivityTimer: NodeJS.Timeout | null = null;
  * Updates the worker status in the Supabase database.
  */
 async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string) {
-    console.log(`Updating status to: ${status}` + (errorMessage ? ` Error: ${errorMessage}` : ''));
+    console.log(`Attempting to update status to: ${status}` + (errorMessage ? ` Error: ${errorMessage}` : ''));
     try {
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('agent_discord_connections')
             .update({ 
                 worker_status: status,
                 // TODO: Add last_error field to DB?
                 // last_error: errorMessage?.substring(0, 500) // Truncate error
              })
-            .eq('id', CONNECTION_ID); // Use the specific connection ID
+            .eq('id', CONNECTION_ID) // Use the specific connection ID
+            .select(); // Add select() to get the result back
 
         if (error) {
-            console.error("Supabase error updating status:", error);
+            console.error("Supabase error updating status:", JSON.stringify(error, null, 2));
+        } else {
+            console.log(`Successfully updated status in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
         }
     } catch (err) {
         console.error("Exception during status update:", err);
