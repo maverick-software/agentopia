@@ -22,15 +22,15 @@ log('log', "Log helper defined.");
 
 try {
     log('log', "Loading environment variables...");
-    // Load environment variables from .env file in the service directory
-    dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load environment variables from .env file in the service directory
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
     log('log', "Environment variables potentially loaded (dotenv). Checking process.env...");
 
-    // --- Configuration --- 
+// --- Configuration --- 
     log('log', "Reading configuration from process.env...");
-    const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-    const AGENT_ID = process.env.AGENT_ID;
-    const CONNECTION_ID = process.env.CONNECTION_ID; // Database ID for this connection
+const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const AGENT_ID = process.env.AGENT_ID;
+const CONNECTION_ID = process.env.CONNECTION_ID; // Database ID for this connection
     const timeoutEnvVar = process.env.TIMEOUT_MINUTES;
     let TIMEOUT_MINUTES: number | null = null; // Use null to indicate no timeout
     if (timeoutEnvVar) {
@@ -39,12 +39,12 @@ try {
             TIMEOUT_MINUTES = parsed;
         }
     }
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
     log('log', "Configuration read complete. Validating...");
 
-    // Validate necessary configuration
-    if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+// Validate necessary configuration
+if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
         log('error', "FATAL: Missing required environment variables.", {
             BOT_TOKEN: !!BOT_TOKEN,
             AGENT_ID: !!AGENT_ID,
@@ -52,58 +52,58 @@ try {
             SUPABASE_URL: !!SUPABASE_URL,
             SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY
         });
-        process.exit(1); // Exit if configuration is missing
-    }
+    process.exit(1); // Exit if configuration is missing
+}
     log('log', "Configuration validated successfully.");
 
     log('log', `Worker configured for Agent ID: ${AGENT_ID}`);
     log('log', `Connection DB ID: ${CONNECTION_ID}`);
     log('log', `Inactivity Timeout: ${TIMEOUT_MINUTES !== null ? `${TIMEOUT_MINUTES} minutes` : 'Disabled'}`);
 
-    // --- Supabase Client --- 
+// --- Supabase Client --- 
     log('log', "Initializing Supabase client...");
-    const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-            persistSession: false,
-            autoRefreshToken: false
-        }
-    });
+const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false
+    }
+});
     log('log', "Supabase client initialized.");
 
-    // --- Discord Client --- 
+// --- Discord Client --- 
     log('log', "Initializing Discord client...");
-    const client = new Client({
-        intents: [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent, // Make sure this intent is enabled in Discord Dev Portal
-            // Add other intents as needed (e.g., GuildMembers if needed)
-        ]
-    });
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent, // Make sure this intent is enabled in Discord Dev Portal
+        // Add other intents as needed (e.g., GuildMembers if needed)
+    ]
+});
     log('log', "Discord client initialized.");
 
-    // --- State --- 
-    let inactivityTimer: NodeJS.Timeout | null = null;
+// --- State --- 
+let inactivityTimer: NodeJS.Timeout | null = null;
     log('log', "Initial state defined.");
 
-    // --- Functions --- 
+// --- Functions --- 
     log('log', "Defining functions (updateStatus, resetInactivityTimer, shutdown, checkDbRecord, handleShutdown)...");
-    
-    /**
-     * Updates the worker status in the Supabase database.
-     */
+
+/**
+ * Updates the worker status in the Supabase database.
+ */
     async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string): Promise<void> {
         log('log', `Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
         log('log', `Using filter: .eq('id', '${CONNECTION_ID}')`);
-        try {
+    try {
             log('log', `Attempting direct update for connection ${CONNECTION_ID}...`);
             const { data, error } = await supabase
-                .from('agent_discord_connections')
+            .from('agent_discord_connections')
                 .update({ worker_status: status })
                 .eq('id', CONNECTION_ID)
                 .select();
 
-            if (error) {
+        if (error) {
                 log('error', `Supabase error DIRECTLY UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
                 log('error', `UPDATE FAILED - Code: ${error.code}, Message: ${error.message}, Details: ${error.details}, Hint: ${error.hint}`);
             } else if (data && data.length > 0) {
@@ -113,47 +113,47 @@ try {
             }
         } catch (err) {
             log('error', `Exception during DIRECT status update for connection ${CONNECTION_ID}:`, err);
-        }
     }
+}
 
-    /**
-     * Resets the inactivity timer.
-     */
+/**
+ * Resets the inactivity timer.
+ */
     function resetInactivityTimer(): void {
-        if (inactivityTimer) {
-            clearTimeout(inactivityTimer);
-        }
+    if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+    }
         if (TIMEOUT_MINUTES !== null && TIMEOUT_MINUTES > 0) { 
             log('log', `Resetting inactivity timer (${TIMEOUT_MINUTES} minutes)...`);
-            inactivityTimer = setTimeout(() => {
+    inactivityTimer = setTimeout(() => {
                 log('log', "Inactivity timeout reached. Shutting down...");
-                shutdown('inactive'); // Trigger graceful shutdown due to inactivity
-            }, TIMEOUT_MINUTES * 60 * 1000);
+        shutdown('inactive'); // Trigger graceful shutdown due to inactivity
+    }, TIMEOUT_MINUTES * 60 * 1000);
         } else {
             log('log', "Inactivity timer is disabled.");
         }
-    }
+}
 
-    /**
-     * Handles graceful shutdown of the worker.
-     */
+/**
+ * Handles graceful shutdown of the worker.
+ */
     async function shutdown(finalStatus: 'active' | 'inactive' | 'stopping' | 'error' = 'inactive', errorMessage?: string): Promise<void> {
         log('log', `Initiating shutdown with status: ${finalStatus}`);
-        if (inactivityTimer) {
-            clearTimeout(inactivityTimer);
+    if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
             inactivityTimer = null; // Explicitly nullify
-        }
-        try {
-            await updateStatus(finalStatus, errorMessage); 
-            log('log', "Destroying Discord client...");
-            client.destroy();
-            log('log', "Shutdown complete.");
-            process.exit(0); // Exit cleanly
-        } catch (err) {
-            log('error', "Error during shutdown:", err);
-            process.exit(1); // Exit with error
-        }
     }
+    try {
+        await updateStatus(finalStatus, errorMessage); 
+            log('log', "Destroying Discord client...");
+        client.destroy();
+            log('log', "Shutdown complete.");
+        process.exit(0); // Exit cleanly
+    } catch (err) {
+            log('error', "Error during shutdown:", err);
+        process.exit(1); // Exit with error
+    }
+}
 
     // *** ADDED: DB Check Function ***
     async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Promise<boolean> {
@@ -217,33 +217,33 @@ try {
     process.on('SIGINT', () => handleShutdown('SIGINT'));
     process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
-    // --- Discord Event Handlers --- 
+// --- Discord Event Handlers --- 
 
-    client.once(Events.ClientReady, async (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
         log('log', `[WORKER LOGIN SUCCESS] Logged in as ${readyClient.user.tag}!`);
         await checkDbRecord('agent', AGENT_ID);
         const connectionExists = await checkDbRecord('connection', CONNECTION_ID);
         log('log', `[WORKER PRE-STATUS-UPDATE] Attempting to update status to active. Connection exists: ${connectionExists}`);
-        await updateStatus('active'); // Set status to active in DB
+    await updateStatus('active'); // Set status to active in DB
         resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
-    });
+});
 
-    client.on(Events.MessageCreate, async (message) => {
-        // Ignore messages from bots or itself
-        if (message.author.bot) return;
+client.on(Events.MessageCreate, async (message) => {
+    // Ignore messages from bots or itself
+    if (message.author.bot) return;
 
-        // --- Activity Detection & Timer Reset --- 
-        const botMention = `<@${client.user?.id}>`;
-        const wasMentioned = message.content.includes(botMention);
+    // --- Activity Detection & Timer Reset --- 
+    const botMention = `<@${client.user?.id}>`;
+    const wasMentioned = message.content.includes(botMention);
 
-        if (wasMentioned) {
+    if (wasMentioned) {
             log('log', `Bot mentioned by ${message.author.tag}. Resetting timer.`);
-            resetInactivityTimer();
+        resetInactivityTimer();
 
-            const messageContent = message.content.replace(botMention, '').trim();
-            await message.channel.sendTyping();
+        const messageContent = message.content.replace(botMention, '').trim();
+        await message.channel.sendTyping();
 
-            if (messageContent) {
+        if (messageContent) {
                 log('log', `Processing message for agent core. Agent ID: ${AGENT_ID}`);
                 try {
                     // *** NEW: Fetch agent details ***
@@ -358,7 +358,7 @@ try {
                        // If we successfully accumulated a reply
                         if (accumulatedReply.length > 2000) {
                             await message.reply({ content: accumulatedReply.substring(0, 1997) + '...' });
-                        } else {
+                } else {
                             await message.reply({ content: accumulatedReply });
                         }
                     } else {
@@ -374,23 +374,23 @@ try {
             } else {
                  await message.reply("Hello! How can I help you today?"); 
             }
-        } else {
-            // Optional: Reset timer even on non-mention messages in specific channels/guilds?
-            // For now, only mentions reset the timer.
-        }
-    });
+    } else {
+        // Optional: Reset timer even on non-mention messages in specific channels/guilds?
+        // For now, only mentions reset the timer.
+    }
+});
 
-    client.on(Events.Error, async (error) => {
+client.on(Events.Error, async (error) => {
         log('error', "Discord Client Error:", error);
-        // Attempt to report error status before shutting down
-        await shutdown('error', error.message);
-    });
+    // Attempt to report error status before shutting down
+    await shutdown('error', error.message);
+});
 
-    client.on(Events.Warn, (warning) => {
+client.on(Events.Warn, (warning) => {
         log('warn', "Discord Client Warning:", warning);
-    });
+});
 
-    // --- Login --- 
+// --- Login --- 
     log('log', "[WORKER PRE-LOGIN] Entering async IIFE for DB checks and login...");
     (async () => { // Wrap check in async IIFE
         try {
