@@ -158,10 +158,11 @@ serve(async (req) => {
                  status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
              });
         }
-        // Check for other newly required fields using CORRECT column names
-        if (!agentData?.name || !agentData?.system_instructions || !agentData?.assistant_instructions) {
-            console.error(`Agent name, system instructions, or assistant instructions missing for agent ${agentId}`);
-            return new Response(JSON.stringify({ error: "Bad Request: Agent configuration incomplete (name/system/assistant instructions)." }), { 
+        
+        // CORRECTED CHECK: Only require the agent name
+        if (!agentData?.name) {
+            console.error(`Agent name missing for agent ${agentId}`);
+            return new Response(JSON.stringify({ error: "Bad Request: Agent configuration incomplete (name)." }), { 
                  status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
              });
         }
@@ -171,9 +172,11 @@ serve(async (req) => {
             botToken: agentData.discord_bot_key, 
             connectionDbId: connectionId, 
             inactivityTimeout: connectionDetails?.inactivity_timeout_minutes ?? 10, 
+            // Map the CORRECT database columns to the expected payload keys
+            // These values can be null if they are null in the DB
             agentName: agentData.name,                         
-            systemPrompt: agentData.system_instructions,       // Use correct source column     
-            agentInstructions: agentData.assistant_instructions  // Use correct source column
+            systemPrompt: agentData.system_instructions,       
+            agentInstructions: agentData.assistant_instructions  
         };
 
     } else if (action === 'stop') {

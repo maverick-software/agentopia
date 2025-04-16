@@ -106,33 +106,32 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
     try {
         const { agentId, connectionDbId, discordToken, agentName, systemPrompt, agentInstructions } = req.body;
 
-        // --- Input Validation (as before) --- 
-        if (!agentId || !connectionDbId || !discordToken || !agentName || !systemPrompt || !agentInstructions) {
-            log('warn', '[MANAGER START REQ] Missing required fields');
-            // Send response, then explicitly return void
-            res.status(400).json({ error: 'Missing required fields.' }); 
-            return; // Add plain return here
+        // --- Input Validation --- 
+        // CORRECTED: systemPrompt and agentInstructions are optional
+        if (!agentId || !connectionDbId || !discordToken || !agentName) {
+            log('warn', '[MANAGER START REQ] Missing required core fields');
+            res.status(400).json({ error: 'Missing required core fields (agentId, connectionDbId, discordToken, agentName).' }); 
+            return; 
         }
-        log('log', `[MANAGER START REQ] Validated fields for agent ${agentId}, connection ${connectionDbId}`);
+        // Log validation success (even if instructions are missing)
+        log('log', `[MANAGER START REQ] Validated required fields for agent ${agentId}, connection ${connectionDbId}`);
 
-        // --- Env Var Check (as before) --- 
-        // ... (supabaseUrl, supabaseServiceRoleKey, openaiApiKey checks) ...
+        // --- Env Var Check --- 
+        // ... (unchanged) ...
         if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !OPENAI_API_KEY) {
             log('error', '[MANAGER START REQ] Server configuration error: Missing environment variables.');
-            // Send response, then explicitly return void
             res.status(500).json({ error: 'Server configuration error.' });
-            return; // Add plain return here
+            return;
         }
         if (!supabaseAdmin) {
              log('error', '[MANAGER START REQ] Server configuration error: Supabase admin client not initialized.');
-             // Send response, then explicitly return void
              res.status(500).json({ error: 'Server configuration error.' });
-             return; // Add plain return here
+             return;
         }
         log('log', '[MANAGER START REQ] Environment variables and Supabase client OK.');
 
         const workerName = getWorkerPm2Name(agentId);
-        const ecosystemFilePath = path.resolve(__dirname, '../../discord-worker/ecosystem.config.js');
+        const ecosystemFilePath = path.resolve(__dirname, '../../discord-worker/ecosystem.config.js'); 
         log('log', `[MANAGER PRE-PM2] Corrected Ecosystem file path: ${ecosystemFilePath}`);
 
         // Wrap the core PM2 interaction and polling in a Promise
@@ -151,27 +150,27 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                     }
                     log('log', `[MANAGER START] Worker ${workerName} not running or stopped. Proceeding to start via ecosystem file...`);
 
-                    // --- Construct Environment Variables (as before) --- 
+                    // --- Construct Environment Variables --- 
                     const inactivityTimeoutValue = req.body.inactivityTimeout === undefined || req.body.inactivityTimeout === null
-                        ? '10' // Default to 10 minutes
+                        ? '10' 
                         : String(req.body.inactivityTimeout);
                     log('log', `[MANAGER START] Inactivity timeout set to: ${inactivityTimeoutValue} minutes`);
                     
-                    // Ensure all required env vars for the worker are defined
+                    // Ensure env vars passed to worker handle nulls correctly (use empty string)
                     const workerEnv = {
                         AGENT_ID: agentId,
                         AGENT_NAME: agentName,
                         CONNECTION_DB_ID: connectionDbId,
                         DISCORD_BOT_TOKEN: discordToken,
-                        SYSTEM_PROMPT: systemPrompt,
-                        AGENT_INSTRUCTIONS: agentInstructions,
+                        SYSTEM_PROMPT: systemPrompt ?? '',             // Use empty string if null/undefined
+                        AGENT_INSTRUCTIONS: agentInstructions ?? '',   // Use empty string if null/undefined
                         INACTIVITY_TIMEOUT_MINUTES: inactivityTimeoutValue,
                         SUPABASE_URL: SUPABASE_URL,
                         SUPABASE_SERVICE_ROLE_KEY: SUPABASE_SERVICE_KEY,
                         OPENAI_API_KEY: OPENAI_API_KEY,
                         NODE_ENV: process.env.NODE_ENV || 'production'
                     };
-                    log('log', `[MANAGER START] Worker env prepared.`); // Avoid logging sensitive vars
+                    log('log', `[MANAGER START] Worker env prepared.`);
 
                     // --- Execute PM2 Start using Ecosystem file via exec --- 
                     const command = `pm2 start ${ecosystemFilePath} --only ${workerName} --update-env`;
