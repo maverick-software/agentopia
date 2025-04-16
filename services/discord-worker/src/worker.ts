@@ -251,7 +251,14 @@ client.on(Events.MessageCreate, async (message) => {
                 
                 } catch (err) {
                     console.error("Error fetching/processing chat function response:", err);
-                    fetchError = err;
+                    // --- MODIFIED: Type check before assignment ---
+                    if (err instanceof Error) {
+                        fetchError = err; // Assign if it's an Error
+                    } else {
+                        // Handle cases where the caught thing isn't an Error object
+                        fetchError = new Error(`Caught non-Error value: ${String(err)}`); 
+                    }
+                    // --- END MODIFIED ---
                 }
                 // --- END MODIFIED --- 
 
