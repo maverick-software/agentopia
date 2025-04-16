@@ -171,71 +171,73 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
             }
 
             // --- Worker Not Running - Proceed to Start ---
-            log('log', `[MANAGER START] Worker ${workerName} is not running or not found by PM2. Proceeding to prepare start options...`);
+            log('log', `[MANAGER START] Worker ${workerName} is not running or not found by PM2. Proceeding to start using ecosystem config...`);
 
-            // --- PM2 Start Options --- 
-            // Robustly handle inactivityTimeout: undefined, null, 0, or "never" mean indefinite (0)
-            let inactivityTimeoutValue = '10'; // Default to 10 minutes if not specified
+            // --- Environment Variables for the specific worker instance ---
+            let inactivityTimeoutValue = '10'; 
             const lowerCaseTimeout = String(inactivityTimeout).toLowerCase();
             if (inactivityTimeout === undefined || inactivityTimeout === null || inactivityTimeout === 0 || lowerCaseTimeout === 'never') {
                 inactivityTimeoutValue = '0';
-                log('log', `[MANAGER START] Inactivity timeout is indefinite (received: ${inactivityTimeout}), setting INACTIVITY_TIMEOUT_MINUTES=0`);
-            } else {
-                const parsedTimeout = parseInt(String(inactivityTimeout), 10);
-                if (!isNaN(parsedTimeout) && parsedTimeout > 0) {
-                    inactivityTimeoutValue = String(parsedTimeout);
-                    log('log', `[MANAGER START] Setting INACTIVITY_TIMEOUT_MINUTES=${inactivityTimeoutValue}`);
-                } else {
-                    log('warn', `[MANAGER START] Invalid inactivity timeout value received: ${inactivityTimeout}. Defaulting to ${inactivityTimeoutValue} minutes.`);
-                }
             }
-            const workerEnv: { [key: string]: string } = { 
+            // ... (rest of timeout parsing logic if needed, or just pass raw value? Let's keep it simple for now) ...
+            // Ensure timeout is string for env var
+            const finalTimeout = String(inactivityTimeout ?? 10); 
+
+            const workerEnv = { 
                 AGENT_ID: agentId,
                 CONNECTION_DB_ID: connectionDbId,
-                INACTIVITY_TIMEOUT_MINUTES: inactivityTimeoutValue,
+                INACTIVITY_TIMEOUT_MINUTES: finalTimeout, // Pass calculated timeout
                 DISCORD_BOT_TOKEN: botToken,
-                SUPABASE_URL: SUPABASE_URL!,
-                SUPABASE_ANON_KEY: SUPABASE_ANON_KEY!,
+                // Crucially, pass Supabase keys needed by worker from manager's env
+                SUPABASE_URL: process.env.SUPABASE_URL, // Get from manager's env
+                SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY, // Get from manager's env
+            };
+            // Filter out undefined values just in case
+            const cleanWorkerEnv = Object.entries(workerEnv)
+                 .filter(([_, v]) => v !== undefined)
+                 .reduce((acc, [k, v]) => ({ ...acc, [k]: v as string }), {});
+            // --- End Environment Variable Setup ---
+
+            // --- Start using Ecosystem file --- 
+            const ecosystemConfigFile = path.resolve(__dirname, 'ecosystem.config.js');
+            log('log', `[MANAGER START] Using ecosystem config: ${ecosystemConfigFile}`);
+
+            const startOptions = {
+                // We don't specify script, interpreter, args etc. here
+                // Those should be picked up from ecosystem.config.js app definition
+                name: workerName, // Override the template name with the specific worker name
+                env: cleanWorkerEnv, // Pass the specific environment variables for THIS worker
+                 // Ensure PM2 merges this env with the one in the config file if one exists there
+                merge_logs: true, // Optional: merge logs if defined in ecosystem
+                // We might need to explicitly tell PM2 *which* app definition 
+                // in the ecosystem file to use if there were more than one,
+                // but since there's only one, PM2 might infer it. 
+                // If needed, could use pm2.start(ecosystemConfigFile, { only: appNameFromConfig, ... }) 
+                // but the API might just need the object directly.
             };
 
-            // --- Attempt 3: Force ts-node registration via node_args --- 
-            // const workerTsNodePath = path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node');
-            const workerScriptPath = path.resolve(__dirname, '../../discord-worker/src/worker.ts');
+            log('log', `[MANAGER START] Calling pm2.start with dynamic options:`, JSON.stringify(startOptions, null, 2));
 
-            const startOptions: pm2.StartOptions = {
-                script: workerScriptPath, // Point back to the actual TS script
-                // args: [], // No args needed here
-                name: workerName,
-                // interpreter: undefined, 
-                node_args: ["--require", "ts-node/register"], // Tell node to load ts-node first
-                exec_mode: 'fork', 
-                env: workerEnv,
-                autorestart: false, 
-            };
-            // --- End Attempt 3 --- 
-
-            log('log', `[MANAGER START] Start options prepared (using node_args). Calling pm2.start for ${workerName}...`);
-            log('log', `[MANAGER SPAWN CMD] Starting worker ${workerName} via PM2... Options:`, JSON.stringify(startOptions, null, 2));
-
-            pm2.start(startOptions, async (startErr: any, apps: any) => { // Renamed err to startErr
+            // The first argument to pm2.start can be a script OR an ecosystem file/object
+            pm2.start(ecosystemConfigFile, startOptions, async (startErr: any, apps: any) => { // Pass config file and dynamic options
                 // Wrap start callback logic in try/catch
                 try {
-                    log('log', `[MANAGER START] Entered pm2.start callback for ${workerName}.`);
+                    log('log', `[MANAGER START] Entered pm2.start callback for ${workerName} (using ecosystem).`);
                     if (startErr) {
-                        log('error', `[MANAGER SPAWN ERR] Error starting worker ${workerName} via PM2:`, startErr);
+                        log('error', `[MANAGER SPAWN ERR - ECOSYSTEM] Error starting worker ${workerName} via PM2 ecosystem:`, startErr);
                         if (!res.headersSent) {
                            res.status(500).json({ error: `Failed to initiate worker start for ${agentId}` });
                         }
                         return; // Exit start callback
                     }
 
-                    log('log', `[MANAGER SPAWN OK] Worker ${workerName} initiated via PM2. App info: ${JSON.stringify(apps)}. Starting DB polling...`);
+                    log('log', `[MANAGER SPAWN OK - ECOSYSTEM] Worker ${workerName} initiated via PM2 ecosystem. App info: ${JSON.stringify(apps)}. Starting DB polling...`);
                     
-                    // --- Polling Logic --- 
+                    // --- Polling Logic (remains the same) --- 
                     const MAX_POLL_ATTEMPTS = 8;
                     const POLL_INTERVAL_MS = 2500;
                     let attempts = 0;
-                    const pollForActiveStatus = async (): Promise<boolean> => {
+                    const pollForActiveStatusImpl = async (): Promise<boolean> => {
                         attempts++;
                         log('log', `[MANAGER START POLL ${attempts}/${MAX_POLL_ATTEMPTS}] Checking DB status for connection ${connectionDbId}...`);
                         if (!supabaseAdmin) { log('error', 'Supabase admin client not available.'); return false; }
@@ -246,10 +248,10 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
                             else { log('log', `Status is still '${data?.worker_status || 'unknown'}'.`); }
                             if (attempts >= MAX_POLL_ATTEMPTS) { log('warn', `Polling timeout.`); return false; }
                             await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-                            return pollForActiveStatus(); // Recursive call
+                            return pollForActiveStatusImpl(); // Recursive call
                         } catch (pollErr) { log('error', `Polling exception:`, pollErr); return false; }
                     };
-                    const confirmedActive = await pollForActiveStatus();
+                    const confirmedActive = await pollForActiveStatusImpl();
                     // --- End Polling Logic ---
 
                     if (confirmedActive) {
@@ -259,7 +261,6 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response) => {
                         }
                     } else {
                         log('error', `[MANAGER START FAIL] Worker for agent ${agentId} failed to confirm active status after polling.`);
-                        // Attempt to stop the potentially lingering/failed worker process
                         pm2.stop(workerName, (stopErr: any) => {
                             if (stopErr) log('error', `[MANAGER START FAIL CLEANUP ERR] Error stopping failed worker ${workerName}:`, stopErr);
                             else log('log', `[MANAGER START FAIL CLEANUP OK] Sent stop command to potentially failed worker ${workerName}.`);
