@@ -84,7 +84,6 @@ export function AgentEdit() {
     worker_status: 'inactive',
     discord_app_id: '',
     discord_public_key: '',
-    interaction_secret: undefined
   });
   const [discordBotKey, setDiscordBotKey] = useState('');
 
@@ -206,7 +205,7 @@ export function AgentEdit() {
 
       const { data: connectionData, error: connectionError } = await supabase
         .from('agent_discord_connections')
-        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key, interaction_secret')
+        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
         .eq('agent_id', agentId)
         .maybeSingle();
 
@@ -221,7 +220,6 @@ export function AgentEdit() {
           worker_status: connectionData.worker_status || 'inactive',
           discord_app_id: connectionData.discord_app_id || '',
           discord_public_key: connectionData.discord_public_key || '',
-          interaction_secret: connectionData.interaction_secret || undefined
         });
       } else {
         setDiscordConnectionData({
@@ -232,7 +230,6 @@ export function AgentEdit() {
           worker_status: 'inactive',
           discord_app_id: '',
           discord_public_key: '',
-          interaction_secret: undefined
         });
       }
 
@@ -471,7 +468,6 @@ export function AgentEdit() {
       inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
       discord_app_id: discordConnectionData.discord_app_id,
       discord_public_key: discordConnectionData.discord_public_key,
-      interaction_secret: discordConnectionData.interaction_secret
     };
 
     try {
@@ -513,14 +509,14 @@ export function AgentEdit() {
            console.log("Preparing Discord connection details for upsert:", connectionUpdateData);
 
            // --- Generate Interaction Secret using Web Crypto API --- 
-           let secretToSave: string | undefined = discordConnectionData.interaction_secret;
-           if (!secretToSave) {
-               console.log("Generating new interaction secret using Web Crypto...");
-               const randomBytes = new Uint8Array(32);
-               window.crypto.getRandomValues(randomBytes); // Use window.crypto
-               secretToSave = bytesToBase64Url(randomBytes); // Encode as base64url
-               console.log("Generated Secret (first 10 chars):", secretToSave.substring(0, 10));
-           }
+           // let secretToSave: string | undefined = discordConnectionData.interaction_secret;
+           // if (!secretToSave) {
+           //     console.log("Generating new interaction secret using Web Crypto...");
+           //     const randomBytes = new Uint8Array(32);
+           //     window.crypto.getRandomValues(randomBytes); // Use window.crypto
+           //     secretToSave = bytesToBase64Url(randomBytes); // Encode as base64url
+           //     console.log("Generated Secret (first 10 chars):", secretToSave.substring(0, 10));
+           // }
            // --- End Secret Generation ---
 
            const upsertData = {
@@ -530,7 +526,7 @@ export function AgentEdit() {
                inactivity_timeout_minutes: connectionUpdateData.inactivity_timeout_minutes,
                discord_app_id: connectionUpdateData.discord_app_id,
                discord_public_key: connectionUpdateData.discord_public_key,
-               interaction_secret: secretToSave // Add the secret to the upsert data (WBS 5.4)
+               // interaction_secret: secretToSave // Add the secret to the upsert data (WBS 5.4)
            };
 
            console.log("Upserting data:", upsertData);
@@ -546,9 +542,9 @@ export function AgentEdit() {
            
            // --- Update local state with the saved secret if it was newly generated ---
            // Important for displaying the correct URL immediately after save
-           if (secretToSave && secretToSave !== discordConnectionData.interaction_secret) {
-               setDiscordConnectionData(prev => ({...prev, interaction_secret: secretToSave}));
-           }
+           // if (secretToSave && secretToSave !== discordConnectionData.interaction_secret) {
+           //     setDiscordConnectionData(prev => ({...prev, interaction_secret: secretToSave}));
+           // }
            // --- End state update ---
            
       } else {
@@ -634,7 +630,7 @@ export function AgentEdit() {
       // 2. Update database
       const { error: updateError } = await supabase
         .from('agent_discord_connections')
-        .update({ interaction_secret: newSecret })
+        .update({}) // Provide empty update if no other fields are updated, or add other fields if needed
         .eq('id', discordConnectionData.id) // Update by connection primary key
         .eq('agent_id', id); // Extra check for safety, RLS should handle ownership
 
@@ -643,7 +639,7 @@ export function AgentEdit() {
       }
 
       // 3. Update local state
-      setDiscordConnectionData(prev => ({ ...prev, interaction_secret: newSecret }));
+      // setDiscordConnectionData(prev => ({ ...prev, interaction_secret: newSecret }));
       console.log("Successfully regenerated and saved new secret.");
       // Optionally show a temporary success message?
 
@@ -672,11 +668,11 @@ export function AgentEdit() {
     );
   }
 
-  const generateInteractionEndpointUrl = (secret?: string): string => {
+  const generateInteractionEndpointUrl = (): string => {
       const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
-      return secret ? `${baseUrl}/${secret}` : baseUrl; 
+      return baseUrl; 
   };
-  const interactionEndpointUrl = generateInteractionEndpointUrl(discordConnectionData.interaction_secret);
+  const interactionEndpointUrl = generateInteractionEndpointUrl();
 
   return (
     <div className="p-6 overflow-x-hidden">
@@ -836,7 +832,7 @@ export function AgentEdit() {
                   loading={discordLoading}
                   disconnecting={discordDisconnecting}
                   fetchingGuilds={fetchingGuilds}
-                  onRegenerateSecret={handleRegenerateSecret}
+                  onRegenerateSecret={undefined}
                   className="mt-4"
                 />
               </div>
