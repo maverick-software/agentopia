@@ -174,6 +174,23 @@ async function checkDbRecord(recordType: 'agent' | 'connection', id: string): Pr
 }
 // *** END ADDED ***
 
+// --- Graceful Shutdown Handling ---
+let isShuttingDown = false;
+
+const handleShutdown = async (signal: string) => {
+    // Prevent multiple shutdowns if signals are received rapidl
+    if (isShuttingDown) {
+        log('warn', `Shutdown already in progress. Ignoring signal: ${signal}`);
+        return;
+    }
+    isShuttingDown = true;
+    log('warn', `Received ${signal}. Initiating graceful shutdown...`);
+    await shutdown('inactive'); // Call the existing shutdown function, ensuring status is set to inactive
+};
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
 // --- Discord Event Handlers --- 
 
 client.once(Events.ClientReady, async (readyClient) => {
@@ -341,11 +358,6 @@ client.on(Events.Error, async (error) => {
 client.on(Events.Warn, (warning) => {
     log('warn', "Discord Client Warning:", warning);
 });
-
-// --- Process Signal Handling --- 
-// Gracefully handle common termination signals
-process.on('SIGINT', () => shutdown('inactive'));
-process.on('SIGTERM', () => shutdown('inactive'));
 
 // --- Login --- 
 log('log', "[WORKER PRE-LOGIN] Attempting to log into Discord...");
