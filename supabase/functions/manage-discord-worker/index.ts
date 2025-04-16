@@ -76,8 +76,8 @@ serve(async (req) => {
     );
     const { data: agentData, error: agentError } = await supabaseAdmin
         .from('agents')
-        // Select the required fields for the worker manager
-        .select('id, user_id, discord_bot_key, name, system_prompt, agent_instructions') 
+        // Select the required fields using the CORRECT column names
+        .select('id, user_id, discord_bot_key, name, system_instructions, assistant_instructions') 
         .eq('id', agentId)
         .single();
 
@@ -158,26 +158,22 @@ serve(async (req) => {
                  status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
              });
         }
-        // Check for other newly required fields
-        if (!agentData?.name || !agentData?.system_prompt || !agentData?.agent_instructions) {
-            console.error(`Agent name, system prompt, or instructions missing for agent ${agentId}`);
-            return new Response(JSON.stringify({ error: "Bad Request: Agent configuration incomplete (name/prompt/instructions)." }), { 
+        // Check for other newly required fields using CORRECT column names
+        if (!agentData?.name || !agentData?.system_instructions || !agentData?.assistant_instructions) {
+            console.error(`Agent name, system instructions, or assistant instructions missing for agent ${agentId}`);
+            return new Response(JSON.stringify({ error: "Bad Request: Agent configuration incomplete (name/system/assistant instructions)." }), { 
                  status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
              });
         }
 
         managerPayload = {
             agentId: agentId,
-            // Ensure botToken is passed
             botToken: agentData.discord_bot_key, 
-            // Ensure connectionDbId is passed
             connectionDbId: connectionId, 
-            // Pass timeout (handle null with default)
             inactivityTimeout: connectionDetails?.inactivity_timeout_minutes ?? 10, 
-            // Add the missing fields required by the worker manager
             agentName: agentData.name,                         
-            systemPrompt: agentData.system_prompt,             
-            agentInstructions: agentData.agent_instructions     
+            systemPrompt: agentData.system_instructions,       // Use correct source column     
+            agentInstructions: agentData.assistant_instructions  // Use correct source column
         };
 
     } else if (action === 'stop') {
