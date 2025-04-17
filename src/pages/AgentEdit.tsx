@@ -296,8 +296,15 @@ export function AgentEdit() {
 
       const initialSelected: { vector?: string; knowledge?: string } = {};
       agentDatastores?.forEach(ad => {
-          if (ad.datastores && ad.datastores.type === 'vector') initialSelected.vector = ad.datastore_id;
-          if (ad.datastores && ad.datastores.type === 'knowledge') initialSelected.knowledge = ad.datastore_id;
+          if (ad.datastores && Array.isArray(ad.datastores)) {
+             const ds = ad.datastores[0];
+             if (ds && ds.type === 'vector') {
+                 initialSelected.vector = ad.datastore_id;
+             }
+             if (ds && ds.type === 'knowledge') {
+                 initialSelected.knowledge = ad.datastore_id;
+             }
+          }
       });
       setSelectedDatastores(initialSelected);
       console.log(`[fetchAgent] Fetched selected datastores for ${agentId}.`);
@@ -500,7 +507,7 @@ export function AgentEdit() {
     setSaveSuccess(false);
     console.log(`Form submitted. ${isEditing ? 'Updating' : 'Creating'} agent...`);
 
-    const agentPayload: Partial<AgentType> = {
+    const agentPayload: Partial<AgentType> & { user_id: string } = {
       name: agentFormData.name,
       description: agentFormData.description,
       personality: agentFormData.personality,
@@ -508,7 +515,7 @@ export function AgentEdit() {
       assistant_instructions: agentFormData.assistant_instructions,
       active: agentFormData.active,
       user_id: user.id,
-      discord_bot_key: discordBotKey ? discordBotKey : null,
+      discord_bot_key: discordBotKey || undefined,
     };
 
     const connectionPayload: Partial<AgentDiscordConnection> = {
@@ -617,6 +624,14 @@ export function AgentEdit() {
   
       console.log(`Agent ${id} activation request sent successfully.`);
       setDiscordConnectionData(prev => ({ ...prev, worker_status: 'activating' })); 
+
+      // Add a delay then refetch agent status to update UI
+      setTimeout(() => {
+        if (id) {
+          console.log('Refetching agent status after activation attempt...');
+          fetchAgent(id);
+        }
+      }, 5000); // Refetch after 5 seconds
   
     } catch (err: any) {
       console.error(`Error activating agent ${id}: ${err.message}`, { error: err });
@@ -646,6 +661,14 @@ export function AgentEdit() {
   
       console.log(`Agent ${id} deactivation request sent successfully.`);
       setDiscordConnectionData(prev => ({ ...prev, worker_status: 'stopping' }));
+
+      // Add a delay then refetch agent status to update UI
+      setTimeout(() => {
+        if (id) {
+          console.log('Refetching agent status after deactivation attempt...');
+          fetchAgent(id);
+        }
+      }, 5000); // Refetch after 5 seconds
   
     } catch (err: any) {
       console.error(`Error deactivating agent ${id}: ${err.message}`, { error: err });
