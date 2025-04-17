@@ -202,15 +202,15 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                                 if (!supabaseAdmin) { log('error', 'Supabase admin client not available.'); return false; }
                                 try {
                                     const { data, error } = await supabaseAdmin
-                                        .from('connections') // Ensure using correct table name from Supabase schema
-                                        .select('status')
+                                        .from('agent_discord_connections')
+                                        .select('worker_status')
                                         .eq('id', connectionDbId)
                                         .single();
                                     if (error) { log('error', `Polling error: ${error.message}`); return false; }
-                                    if (data?.status === 'active') { log('log', 'Polling success: status is active.'); return true; }
-                                    log('log', `Polling status: ${data?.status}`);
+                                    if (data?.worker_status === 'active') { log('log', 'Polling success: status is active.'); return true; }
+                                    log('log', `Polling status: ${data?.worker_status}`);
                                     if (attempts >= MAX_POLL_ATTEMPTS) { log('warn', `Polling timeout.`); return false; }
-                                    await new Promise(resolvePoll => setTimeout(resolvePoll, POLL_INTERVAL_MS)); // Renamed inner resolve
+                                    await new Promise(resolvePoll => setTimeout(resolvePoll, POLL_INTERVAL_MS));
                                     return pollForActiveStatusImpl();
                                 } catch (pollErr) { log('error', `Polling exception:`, pollErr); return false; }
                             };
