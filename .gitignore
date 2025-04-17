@@ -1,3 +1,6 @@
+#debugging logs
+logs.txt
+
 # Dependencies
 node_modules/
 .pnp

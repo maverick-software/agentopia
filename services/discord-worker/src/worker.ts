@@ -1,7 +1,11 @@
 // services/discord-worker/src/worker.ts
-// Log immediately to confirm script execution start
-console.log(`${new Date().toISOString()} [WK] --- Worker process entry point ---`); 
+console.log(`${new Date().toISOString()} [WK] --- DIAGNOSTIC TEST: Worker process entry point ---`);
 
+// Immediately exit for diagnostic testing
+process.exit(0); 
+
+// --- Original code below this line (commented out for diagnostic test) ---
+/* 
 import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -30,8 +34,8 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
     log('log', "Reading configuration from process.env...");
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const AGENT_ID = process.env.AGENT_ID;
-const CONNECTION_ID = process.env.CONNECTION_ID; // Database ID for this connection
-    const timeoutEnvVar = process.env.TIMEOUT_MINUTES;
+const CONNECTION_ID = process.env.CONNECTION_DB_ID; // *** Corrected based on manager ***
+    const timeoutEnvVar = process.env.INACTIVITY_TIMEOUT_MINUTES; // *** Corrected based on manager ***
     let TIMEOUT_MINUTES: number | null = null; // Use null to indicate no timeout
     if (timeoutEnvVar) {
         const parsed = parseInt(timeoutEnvVar, 10);
@@ -40,17 +44,17 @@ const CONNECTION_ID = process.env.CONNECTION_ID; // Database ID for this connect
         }
     }
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // *** Corrected based on manager? Check if worker needs anon or service role ***
     log('log', "Configuration read complete. Validating...");
 
 // Validate necessary configuration
-if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) { // *** Ensure ANON_KEY check is correct ***
         log('error', "FATAL: Missing required environment variables.", {
             BOT_TOKEN: !!BOT_TOKEN,
             AGENT_ID: !!AGENT_ID,
             CONNECTION_ID: !!CONNECTION_ID,
             SUPABASE_URL: !!SUPABASE_URL,
-            SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY
+            SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY // *** Check if ANON_KEY is correct for worker ***
         });
     process.exit(1); // Exit if configuration is missing
 }
@@ -62,7 +66,8 @@ if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON
 
 // --- Supabase Client --- 
     log('log', "Initializing Supabase client...");
-const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+// *** Consider if worker needs Service Role Key instead of Anon Key for status updates ***    
+const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { // *** Use ANON_KEY? ***
     auth: {
         persistSession: false,
         autoRefreshToken: false
@@ -87,11 +92,9 @@ let inactivityTimer: NodeJS.Timeout | null = null;
     log('log', "Initial state defined.");
 
 // --- Functions --- 
-    log('log', "Defining functions (updateStatus, resetInactivityTimer, shutdown, checkDbRecord, handleShutdown)...");
+    log('log', "Defining functions (updateStatus, resetInactivityTimer, shutdown, checkDbRecord, handleShutdown)...", CONNECTION_ID);
 
-/**
- * Updates the worker status in the Supabase database.
- */
+
     async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string): Promise<void> {
         log('log', `Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
         log('log', `Using filter: .eq('id', '${CONNECTION_ID}')`);
@@ -99,9 +102,9 @@ let inactivityTimer: NodeJS.Timeout | null = null;
             log('log', `Attempting direct update for connection ${CONNECTION_ID}...`);
             const { data, error } = await supabase
             .from('agent_discord_connections')
-                .update({ worker_status: status })
+                .update({ worker_status: status }) // Ensure schema matches: worker_status
                 .eq('id', CONNECTION_ID)
-                .select();
+                .select(); // Select to confirm update
 
         if (error) {
                 log('error', `Supabase error DIRECTLY UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
@@ -116,9 +119,7 @@ let inactivityTimer: NodeJS.Timeout | null = null;
     }
 }
 
-/**
- * Resets the inactivity timer.
- */
+
     function resetInactivityTimer(): void {
     if (inactivityTimer) {
         clearTimeout(inactivityTimer);
@@ -134,9 +135,7 @@ let inactivityTimer: NodeJS.Timeout | null = null;
         }
 }
 
-/**
- * Handles graceful shutdown of the worker.
- */
+
     async function shutdown(finalStatus: 'active' | 'inactive' | 'stopping' | 'error' = 'inactive', errorMessage?: string): Promise<void> {
         log('log', `Initiating shutdown with status: ${finalStatus}`);
     if (inactivityTimer) {
@@ -200,11 +199,11 @@ let inactivityTimer: NodeJS.Timeout | null = null;
     }
     // *** END ADDED ***
 
-    // --- Graceful Shutdown Handling ---
+    // --- Graceful Shutdown Handling --- 
     let isShuttingDown = false;
 
     const handleShutdown = async (signal: string): Promise<void> => {
-        // Prevent multiple shutdowns if signals are received rapidl
+        // Prevent multiple shutdowns if signals are received rapidly
         if (isShuttingDown) {
             log('warn', `Shutdown already in progress. Ignoring signal: ${signal}`);
             return;
@@ -219,7 +218,7 @@ let inactivityTimer: NodeJS.Timeout | null = null;
 
 // --- Discord Event Handlers --- 
 
-client.once(Events.ClientReady, async (readyClient) => {
+client.once(Events.ClientReady, async (readyClient: any) => {
         log('log', `[WORKER LOGIN SUCCESS] Logged in as ${readyClient.user.tag}!`);
         await checkDbRecord('agent', AGENT_ID);
         const connectionExists = await checkDbRecord('connection', CONNECTION_ID);
@@ -228,7 +227,7 @@ client.once(Events.ClientReady, async (readyClient) => {
         resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
 });
 
-client.on(Events.MessageCreate, async (message) => {
+client.on(Events.MessageCreate, async (message: any) => {
     // Ignore messages from bots or itself
     if (message.author.bot) return;
 
@@ -294,7 +293,7 @@ client.on(Events.MessageCreate, async (message) => {
                             headers: {
                                 // Pass Supabase Anon Key for function invocation (if RLS needed)
                                 // Note: Service Role key used *inside* the function itself
-                                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, // *** CHECK IF ANON KEY IS CORRECT ***
                                 'Content-Type': 'application/json'
                             },
                             body: JSON.stringify(chatPayload)
@@ -358,7 +357,7 @@ client.on(Events.MessageCreate, async (message) => {
                        // If we successfully accumulated a reply
                         if (accumulatedReply.length > 2000) {
                             await message.reply({ content: accumulatedReply.substring(0, 1997) + '...' });
-                } else {
+                        } else {
                             await message.reply({ content: accumulatedReply });
                         }
                     } else {
@@ -380,13 +379,13 @@ client.on(Events.MessageCreate, async (message) => {
     }
 });
 
-client.on(Events.Error, async (error) => {
+client.on(Events.Error, async (error: Error) => {
         log('error', "Discord Client Error:", error);
     // Attempt to report error status before shutting down
     await shutdown('error', error.message);
 });
 
-client.on(Events.Warn, (warning) => {
+client.on(Events.Warn, (warning: string) => {
         log('warn', "Discord Client Warning:", warning);
 });
 
@@ -403,7 +402,7 @@ client.on(Events.Warn, (warning) => {
             // If login succeeds, the 'ClientReady' event will handle the rest 
             log('log', "[WORKER LOGIN CALL] client.login() promise resolved (implies successful initial connection).");
 
-        } catch (error) { // Catch errors during DB check OR login
+        } catch (error: unknown) { // Catch errors during DB check OR login
             log('error', "[WORKER LOGIN/CHECK ERR] Error during pre-login checks or client.login():", error);
             try {
                  log('error', "Attempting to update status to error due to login/check failure...");
@@ -417,7 +416,10 @@ client.on(Events.Warn, (warning) => {
 
 } catch (startupErr) {
     // Catch any synchronous errors during initial setup (imports, env loading, client init etc.)
-    log('error', "[WORKER FATAL STARTUP ERR] Uncaught exception during initial script execution:", startupErr);
+    // Ensure log is defined if possible, otherwise use console.error
+    const emergencyLog = typeof log === 'function' ? log : console.error;
+    emergencyLog('error', "[WORKER FATAL STARTUP ERR] Uncaught exception during initial script execution:", startupErr);
     // Cannot rely on updateStatus here as Supabase client might not be initialized
     process.exit(1);
-} 
+}
+*/ 
