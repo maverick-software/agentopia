@@ -97,31 +97,28 @@ let inactivityTimer: NodeJS.Timeout | null = null;
 // --- Functions --- 
     log('log', "Defining functions (updateStatus, resetInactivityTimer, shutdown, checkDbRecord, handleShutdown)...", CONNECTION_ID);
 
-
+    // *** REFACTORED: Use RPC call to database function ***
     async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string): Promise<void> {
-        log('log', `Attempting to update status to: ${status} for connection ${CONNECTION_ID} (Type: ${typeof CONNECTION_ID})`);
-        log('log', `Using filter: .eq('id', '${CONNECTION_ID}')`);
-    try {
-            log('log', `Attempting direct update for connection ${CONNECTION_ID}...`);
-            const { data, error } = await supabase
-            .from('agent_discord_connections')
-                .update({ worker_status: status }) // Ensure schema matches: worker_status
-                .eq('id', CONNECTION_ID)
-                .select(); // Select to confirm update
+        // The errorMessage is not directly used by the RPC function but good to log
+        log('log', `Attempting RPC update_worker_status for connection ${CONNECTION_ID} to status: ${status}. Error msg (if any): ${errorMessage}`);
+        
+        try {
+            const { error: rpcError } = await supabase.rpc('update_worker_status', {
+                connection_id_in: CONNECTION_ID, 
+                new_status_in: status
+            });
 
-        if (error) {
-                log('error', `Supabase error DIRECTLY UPDATING status for connection ${CONNECTION_ID}:`, JSON.stringify(error, null, 2));
-                log('error', `UPDATE FAILED - Code: ${error.code}, Message: ${error.message}, Details: ${error.details}, Hint: ${error.hint}`);
-            } else if (data && data.length > 0) {
-                 log('log', `Successfully ran DIRECT update in DB for connection ${CONNECTION_ID}. Result:`, JSON.stringify(data, null, 2));
+            if (rpcError) {
+                log('error', `Supabase RPC error calling update_worker_status for connection ${CONNECTION_ID}:`, JSON.stringify(rpcError, null, 2));
             } else {
-                log('error', `DIRECT UPDATE failed for connection ${CONNECTION_ID}: Row not found by UPDATE operation (returned empty data).`);
+                 log('log', `Successfully called RPC update_worker_status for connection ${CONNECTION_ID} to status ${status}.`);
             }
+            // Note: RPC call doesn't return data like .update().select(), so we can't check row count here.
+            // The database function handles the update internally.
         } catch (err) {
-            log('error', `Exception during DIRECT status update for connection ${CONNECTION_ID}:`, err);
+            log('error', `Exception during RPC call update_worker_status for connection ${CONNECTION_ID}:`, err);
+        }
     }
-}
-
 
     function resetInactivityTimer(): void {
     if (inactivityTimer) {
@@ -137,7 +134,6 @@ let inactivityTimer: NodeJS.Timeout | null = null;
             log('log', "Inactivity timer is disabled.");
         }
 }
-
 
     async function shutdown(finalStatus: 'active' | 'inactive' | 'stopping' | 'error' = 'inactive', errorMessage?: string): Promise<void> {
         log('log', `Initiating shutdown with status: ${finalStatus}`);
