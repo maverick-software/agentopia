@@ -1,15 +1,14 @@
 // services/discord-worker/src/worker.ts
-console.log(`${new Date().toISOString()} [WK] --- DIAGNOSTIC TEST: Worker process entry point ---`);
-
-// Immediately exit for diagnostic testing
-process.exit(0); 
-
-// --- Original code below this line (commented out for diagnostic test) ---
-/* 
 import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
+
+// --- DIAGNOSTIC LOGGING --- 
+console.log(`${new Date().toISOString()} [WK DIAG] --- Worker process starting ---`);
+// Log all available environment variables passed by PM2
+console.log(`${new Date().toISOString()} [WK DIAG] process.env: ${JSON.stringify(process.env, null, 2)}`);
+// --- END DIAGNOSTIC LOGGING ---
 
 // Log after imports
 console.log(`${new Date().toISOString()} [WK] Imports successful.`);
@@ -27,6 +26,7 @@ log('log', "Log helper defined.");
 try {
     log('log', "Loading environment variables...");
 // Load environment variables from .env file in the service directory
+// NOTE: This is likely NOT needed if PM2 is injecting correctly, but keep for potential local testing
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
     log('log', "Environment variables potentially loaded (dotenv). Checking process.env...");
 
@@ -44,17 +44,20 @@ const CONNECTION_ID = process.env.CONNECTION_DB_ID; // *** Corrected based on ma
         }
     }
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // *** Corrected based on manager? Check if worker needs anon or service role ***
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // *** Check if worker needs anon or service role ***
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY; // *** Added based on manager passing it ***
     log('log', "Configuration read complete. Validating...");
 
 // Validate necessary configuration
-if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) { // *** Ensure ANON_KEY check is correct ***
+// *** ADDED OPENAI_API_KEY validation ***
+if (!BOT_TOKEN || !AGENT_ID || !CONNECTION_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY || !OPENAI_API_KEY) { 
         log('error', "FATAL: Missing required environment variables.", {
             BOT_TOKEN: !!BOT_TOKEN,
             AGENT_ID: !!AGENT_ID,
             CONNECTION_ID: !!CONNECTION_ID,
             SUPABASE_URL: !!SUPABASE_URL,
-            SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY // *** Check if ANON_KEY is correct for worker ***
+            SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY, // *** Check if ANON_KEY is correct ***
+            OPENAI_API_KEY: !!OPENAI_API_KEY      // *** Added check ***
         });
     process.exit(1); // Exit if configuration is missing
 }
@@ -421,5 +424,4 @@ client.on(Events.Warn, (warning: string) => {
     emergencyLog('error', "[WORKER FATAL STARTUP ERR] Uncaught exception during initial script execution:", startupErr);
     // Cannot rely on updateStatus here as Supabase client might not be initialized
     process.exit(1);
-}
-*/ 
+} 
