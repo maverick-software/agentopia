@@ -1,6 +1,13 @@
 #debugging logs
 logs.txt
 
+# Ignore environment files in service directories
+services/**/.env
+
+# Ignore all environment files
+.env
+**/.env
+
 # Dependencies
 node_modules/
 .pnp

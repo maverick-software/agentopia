@@ -27,6 +27,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
     *   `/activate` slash command to bring agents online in a server.
     *   Agent responses when mentioned (`@AgentName`).
     *   Management of agent worker processes.
+    *   Digital Ocean Login -     ssh -i c:/users/<user>/ssh_key_filename root@165.22.172.98
 
 ## Project Structure
 
