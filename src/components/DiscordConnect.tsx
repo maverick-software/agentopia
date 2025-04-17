@@ -1,351 +1,295 @@
 import { useState, useEffect } from 'react';
-import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw, Save } from 'lucide-react';
-import type { AgentDiscordConnection, Agent } from '../types';
+import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw, Save, Server, Settings, Link as LinkIcon, Play, StopCircle } from 'lucide-react';
+import type { AgentDiscordConnection } from '../types';
 
+// --- Props Interface Aligned with Plan Phase 7 ---
 interface DiscordConnectProps {
-  agentId: string;
-  connectionStage: 'initial' | 'enter_credentials' | 'select_server' | 'connected';
-  onDisconnect: () => void;
-  onConnectToken: (token: string) => Promise<void>;
-  onSaveCredentials: (appId: string, publicKey: string) => Promise<void>;
-  onSelectServer: (guildId: string | null) => Promise<void>;
+  connection: Partial<AgentDiscordConnection>; // Existing: pass connection details
+  botKey: string; // New: Passed from AgentEdit state
+  onBotKeyChange: (key: string) => void; // New: Handler to update bot key in AgentEdit
+  onConnectionChange: (field: keyof AgentDiscordConnection, value: any) => void; // Existing: For timeout changes
+  discord_app_id?: string; // New: Pass explicitly for invite link
+  onManageServers: () => void; // New: Callback to open modal in AgentEdit
+  onGenerateInviteLink: () => void; // New: Callback to generate invite
+  isGeneratingInvite: boolean; // New: Loading state for invite link
+  workerStatus?: AgentDiscordConnection['worker_status']; // New: Pass status explicitly
+  onActivate: () => Promise<void>; // Existing: Activation callback
+  onDeactivate: () => Promise<void>; // Existing: Deactivation callback
+  isActivating: boolean; // New: Activation loading state
+  isDeactivating: boolean; // New: Deactivation loading state
   className?: string;
-  loading?: boolean;
-  disconnecting?: boolean;
-  guilds?: any[];
-  connection: Partial<AgentDiscordConnection>;
-  onActivate: () => Promise<void>;
-  onDeactivate: () => Promise<void>;
-  onConnectionChange?: (field: keyof AgentDiscordConnection, value: any) => void;
+  // Removed: guilds, onSelectServer, onDisconnect (part of old single-server logic)
 }
 
 export function DiscordConnect({ 
-  agentId, 
-  connectionStage,
-  onDisconnect,
-  onConnectToken,
-  onSaveCredentials,
-  onSelectServer,
+  connection,
+  botKey, // Use passed prop
+  onBotKeyChange, // Use passed prop
+  onConnectionChange,
+  discord_app_id, // Use passed prop
+  onManageServers, // Use passed prop
+  onGenerateInviteLink, // Use passed prop
+  isGeneratingInvite, // Use passed prop
+  workerStatus, // Use passed prop
   onActivate,
   onDeactivate,
-  onConnectionChange,
+  isActivating, // Use passed prop
+  isDeactivating, // Use passed prop
   className = '',
-  loading: externalLoading,
-  disconnecting: externalDisconnecting,
-  guilds = [],
-  connection,
 }: DiscordConnectProps) {
   
-  const [botTokenInput, setBotTokenInput] = useState(''); 
-  const [appIdInput, setAppIdInput] = useState('');
-  const [publicKeyInput, setPublicKeyInput] = useState('');
-  
-  const [loading, setLoading] = useState(externalLoading || false);
-  const [disconnecting, setDisconnecting] = useState(externalDisconnecting || false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // --- State for Input Values (derived from props) ---
+  // Local timeout state is fine
+  const [localTimeout, setLocalTimeout] = useState(connection?.inactivity_timeout_minutes ?? 10);
+  // Remove localBotKey state, use botKey prop directly
+  // const [localBotKey, setLocalBotKey] = useState(botKey || '');
 
-  const [localTimeout, setLocalTimeout] = useState(connection?.inactivity_timeout_minutes ?? 60);
-
-  // --- State for masked inputs ---
-  const MASK_CHAR = '•'; // Use a circle character
-  const [localAppId, setLocalAppId] = useState('');
-  const [localPublicKey, setLocalPublicKey] = useState('');
+  // --- State for Masked Inputs & Visibility ---
+  const MASK_CHAR = '•';
+  const [isBotKeyVisible, setIsBotKeyVisible] = useState(false);
   const [isAppIdVisible, setIsAppIdVisible] = useState(false);
   const [isPublicKeyVisible, setIsPublicKeyVisible] = useState(false);
-
-  const [regenerating, setRegenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null); // Keep local error state
 
   // Helper to generate mask string
-  const generateMask = (length: number) => MASK_CHAR.repeat(length || 10); // Repeat mask char, default 10 if length 0
+  // const generateMask = (length: number) => MASK_CHAR.repeat(length || 10); // Unused, remove?
 
-  // Sync local display state based on props 
+  // --- Sync local state with props --- 
   useEffect(() => {
-    setLocalTimeout(connection?.inactivity_timeout_minutes ?? 60);
-    // Remove AppId/PublicKey sync - These lines were incorrectly re-added/modified by the previous edit
-    // setLocalAppId(discordGuilds?.find(g => g.is_primary)?.app_id || ''); 
-    // setLocalPublicKey(discordGuilds?.find(g => g.is_primary)?.public_key || ''); 
-    // setIsAppIdVisible(false); 
-    // setIsPublicKeyVisible(false); 
-  // Correct dependency array
+    setLocalTimeout(connection?.inactivity_timeout_minutes ?? 10);
   }, [connection?.inactivity_timeout_minutes]); 
 
-  useEffect(() => {
-    // Sync loading states
-    if (externalLoading !== undefined) setLoading(externalLoading);
-    if (externalDisconnecting !== undefined) setDisconnecting(externalDisconnecting);
-  }, [externalLoading, externalDisconnecting]); // Removed externalFetchingGuilds dependency
+  // Remove useEffect for localBotKey, it now comes directly from props
+  // useEffect(() => {
+  //   setLocalBotKey(botKey || '');
+  //   setIsBotKeyVisible(false); // Reset visibility when key changes
+  // }, [botKey]);
 
-  // NEW: Sync AppID/Key inputs when connection data changes (e.g., after fetch)
-  useEffect(() => {
-    setAppIdInput(connection?.discord_app_id || '');
-    setPublicKeyInput(connection?.discord_public_key || '');
-  }, [connection?.discord_app_id, connection?.discord_public_key]);
-
-  const handleConnectClick = async () => {
-    if (!botTokenInput.trim()) {
-      setError('Bot token is required.');
-      return;
-    }
-    setError(null);
-    try {
-      await onConnectToken(botTokenInput);
-      setBotTokenInput('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect using token.');
-      console.error("Connect error:", err);
+  // --- Handlers ---
+  const handleTimeoutChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    const numericValue = parseInt(value, 10);
+    if (!isNaN(numericValue)) {
+      setLocalTimeout(numericValue);
+      onConnectionChange('inactivity_timeout_minutes', numericValue);
+    } else if (value === '') {
+       setLocalTimeout(0); // Allow clearing the input
+       onConnectionChange('inactivity_timeout_minutes', 0);
     }
   };
 
-  const handleDisconnectBot = async () => {
-    console.log("[DiscordConnect] Disconnect button clicked!");
-    onDisconnect();
+  // Use onBotKeyChange directly
+  const handleBotKeyInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = event.target.value;
+      // Directly call the handler passed from AgentEdit to update the actual state
+      onBotKeyChange(newValue);
   };
 
-  // NEW: Handler for the "Save Credentials" button
-  const handleSaveCredentialsClick = () => {
-      if (!appIdInput.trim() || !publicKeyInput.trim()) {
-          // Should ideally have inline validation, but alert for now
-          alert("Application ID and Public Key cannot be empty.");
-          return;
-      }
-      onSaveCredentials(appIdInput, publicKeyInput);
-  };
+  // No longer needed:
+  // handleConnectClick, handleDisconnectBot, handleSaveCredentialsClick, handleServerSelectChange
 
-  // NEW: Handler for server selection change
-  const handleServerSelectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const guildId = event.target.value || null;
-      onSelectServer(guildId);
-  };
-
-  // *** NEW: Restore handleInputChange for timeout ***
-  const handleInputChange = (field: keyof AgentDiscordConnection, value: any) => {
-    console.log(`[DiscordConnect] InputChange: field=${String(field)}, value=${value}`);
-    if (field === 'inactivity_timeout_minutes') {
-       const numericValue = parseInt(value, 10);
-       // Check if parsing failed (NaN) or if value is not a number we expect
-       if (isNaN(numericValue)) {
-           console.warn(`[DiscordConnect] Invalid timeout value received: ${value}`);
-           return; // Don't update state with invalid input
-       }
-       setLocalTimeout(numericValue); 
-       // Only call onConnectionChange if it exists
-       if (onConnectionChange) {
-           onConnectionChange(field, numericValue); 
-       } 
-    } else {
-      console.warn(`[DiscordConnect] handleInputChange called for unhandled field: ${String(field)}`);
-    }
-  };
-
-  // Restore renderWorkerStatus 
   const renderWorkerStatus = () => {
-    const status = connection?.worker_status || 'inactive'; 
-    let color = 'text-gray-400';
+    const status = workerStatus || 'inactive'; 
+    let color = 'text-gray-400'; // Default color removed, handled by badge class
     let text = 'Inactive';
+    let icon = <StopCircle size={16} />; // Default icon updated
     switch (status) {
-      case 'active': color = 'text-green-400'; text = 'Active'; break;
-      case 'activating': color = 'text-yellow-400'; text = 'Activating...'; break;
-      case 'stopping': color = 'text-yellow-400'; text = 'Stopping...'; break;
-      case 'error': color = 'text-red-400'; text = 'Error'; break;
+      case 'active': text = 'Active'; icon = <Check size={16} />; break;
+      case 'activating': text = 'Activating...'; icon = <Loader2 size={16} className="animate-spin" />; break;
+      case 'stopping': text = 'Stopping...'; icon = <Loader2 size={16} className="animate-spin" />; break;
+      case 'error': text = 'Error'; icon = <X size={16} />; break;
+      case 'inactive':
+      default: text = 'Inactive'; icon = <StopCircle size={16} />; break;
     }
-    return <span className={`font-medium ${color}`}>{text}</span>;
+    return (
+        // Use statusBadgeClass for background/text color
+        <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass()}`}>
+            {icon}
+            <span>{text}</span>
+        </div>
+    );
   };
 
-  // *** NEW: Calculate status badge class dynamically ***
-  let statusBadgeClass = 'bg-gray-600 text-gray-300'; // Default
-  if (connection.worker_status === 'active') {
-    statusBadgeClass = 'bg-green-900/50 text-green-300';
-  } else if (connection.worker_status === 'activating' || connection.worker_status === 'stopping') {
-    statusBadgeClass = 'bg-yellow-900/50 text-yellow-300';
-  } else if (connection.worker_status === 'error') {
-    statusBadgeClass = 'bg-red-900/50 text-red-300';
-  }
+  const statusBadgeClass = () => {
+    const status = workerStatus || 'inactive'; 
+    switch (status) {
+      case 'active': return 'bg-green-900/50 text-green-300';
+      case 'activating':
+      case 'stopping': return 'bg-yellow-900/50 text-yellow-300';
+      case 'error': return 'bg-red-900/50 text-red-300';
+      case 'inactive':
+      default: return 'bg-gray-600 text-gray-300';
+    }
+  };
+
+  const copyToClipboard = (text: string | undefined | null) => { // Allow null
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  // Updated activation condition based on passed props
+  const canActivate = !!discord_app_id && !!connection?.discord_public_key && !!botKey;
 
   return (
-    <div className={`space-y-4 ${className}`}>
-      
-      {/* Stage 1: Initial - Enter Token */} 
-      {connectionStage === 'initial' && (
-        <div className="flex items-end space-x-2">
-          <div className="flex-grow">
-            <label htmlFor="botToken" className="block text-sm font-medium text-gray-300 mb-1">Discord Bot Token</label>
-              <input
-                type="password"
-                id="botToken"
-                value={botTokenInput}
-                onChange={(e) => setBotTokenInput(e.target.value)}
-                placeholder="Enter your bot token"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-          </div>
-          <button 
-            type="button"
-            onClick={handleConnectClick} // Triggers token save and stage change
-            disabled={loading || !botTokenInput.trim()}
-            className="flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? <Loader2 className="animate-spin mr-2" size={18} /> : <Bot size={18} className="mr-2" />}
-            Connect Token
-          </button>
+    <div className={`space-y-6 ${className}`}>
+        {/* Connection Status & Activation Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+            {renderWorkerStatus()}
+            <div className="flex items-center space-x-2">
+                <button
+                    type="button"
+                    onClick={onActivate}
+                    // Updated disabled logic based on props
+                    disabled={!canActivate || isActivating || isDeactivating || workerStatus === 'active' || workerStatus === 'activating'}
+                    className="flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isActivating ? <Loader2 className="animate-spin mr-2" size={16} /> : <Play size={16} className="mr-2" />}
+                    Activate
+                </button>
+                <button
+                    type="button"
+                    onClick={onDeactivate}
+                    // Updated disabled logic based on props
+                    disabled={isDeactivating || isActivating || workerStatus === 'inactive' || workerStatus === 'stopping'}
+                    className="flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isDeactivating ? <Loader2 className="animate-spin mr-2" size={16} /> : <StopCircle size={16} className="mr-2" />}
+                    Deactivate
+                </button>
+            </div>
         </div>
-      )}
-
-      {/* Stage 2: Enter Credentials */} 
-      {connectionStage === 'enter_credentials' && (
-        <div className="space-y-4 pt-4 border-t border-gray-600">
-            {/* Keep Bot Token Displayed (Readonly/Disabled) */} 
-            <div>
-                 <label className="block text-sm font-medium text-gray-400 mb-1">Discord Bot Token</label>
-                 <div className="flex items-center space-x-2 bg-gray-700 p-3 rounded-md">
-                    <Bot className="text-green-400" size={20} />
-                    <span className="text-white font-medium flex-grow">Bot Token Connected</span> 
-                    <Check className="text-green-400" size={16} />
-                 </div>
-            </div>
-            {/* App ID Input */} 
-            <div>
-              <label htmlFor="appIdCred" className="block text-sm font-medium text-gray-300 mb-1">Application ID *</label>
-              <input
-                type="text" id="appIdCred" required value={appIdInput}
-                onChange={(e) => setAppIdInput(e.target.value)} disabled={loading}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                placeholder="Paste Application ID here"
-              />
-            </div>
-            {/* Public Key Input */} 
-            <div>
-              <label htmlFor="publicKeyCred" className="block text-sm font-medium text-gray-300 mb-1">Public Key *</label>
-              <input
-                type="text" id="publicKeyCred" required value={publicKeyInput}
-                onChange={(e) => setPublicKeyInput(e.target.value)} disabled={loading}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                placeholder="Paste Public Key here"
-              />
-             <p className="mt-1 text-xs text-gray-400">
-              Find these in the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Discord Developer Portal</a>.
+        {!canActivate && workerStatus === 'inactive' && (
+             <p className="text-xs text-yellow-400">
+                Enter Bot Token, App ID, and Public Key (and save agent) before activating.
              </p>
-            </div>
-             {/* Save Credentials Button */} 
-             <button 
-                type="button"
-                onClick={handleSaveCredentialsClick} 
-                disabled={loading || !appIdInput.trim() || !publicKeyInput.trim()}
-                // Use standard button styling 
-                className="w-full flex justify-center items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white disabled:opacity-50 disabled:cursor-not-allowed"
-             >
-                {loading ? <Loader2 className="animate-spin mr-2" size={18} /> : <Save size={18} className="mr-2" />}
-                Save Credentials & Select Server
-             </button>
-        </div>
-      )}
+        )}
+        {error && <p className="text-sm text-red-400">Error: {error}</p>}
 
-      {/* Stage 3 & 4: Select Server / Connected */} 
-      {(connectionStage === 'select_server' || connectionStage === 'connected') && (
-        <div className="space-y-4">
-             {/* Combined Connected Status */} 
-             <div className="flex justify-between items-center bg-gray-700 p-3 rounded-md">
-               <div className="flex items-center space-x-2">
-                 <Check className="text-green-400" size={20} />
-                 <span className="text-white font-medium">Discord Connected</span>
-               </div>
-               <button
-                 type="button"
-                 onClick={onDisconnect} // Use direct prop
-                 disabled={disconnecting}
-                 className="flex items-center px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 {disconnecting ? <Loader2 className="animate-spin mr-1" size={16} /> : <X size={16} className="mr-1"/>}
-                 Disconnect
-               </button>
-            </div>
-            
-            {/* Server Selection Dropdown */} 
-            <div className="pt-4 border-t border-gray-600">
-                <label htmlFor="guildSelect" className="block text-sm font-medium text-gray-300 mb-1">Selected Server</label>
-                <select
-                    id="guildSelect"
-                    value={connection.guild_id ?? ''} 
-                    onChange={handleServerSelectChange} // Saves selection on change
-                    disabled={loading || disconnecting || guilds.length === 0}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                 >
-                    <option value="">
-                      {loading ? 'Loading Servers...' : (guilds.length === 0 ? 'No Servers Found' : '-- Select a Server --')}
-                    </option>
-                    {guilds.map(guild => (
-                      <option key={guild.id} value={guild.id}>
-                        {guild.name}
-                      </option>
-                    ))}
-                 </select>
-            </div>
-
-            {/* Connection Status (Keep) */} 
+        {/* Credentials and Settings */} 
+        <div className="space-y-4 pt-4 border-t border-gray-600">
+             {/* Bot Token Input - Use botKey prop */}
              <div>
-               <p className="text-sm text-gray-300">Worker Status: {renderWorkerStatus()}</p>
+              <label htmlFor="botTokenKey" className="block text-sm font-medium text-gray-300 mb-1">Discord Bot Token *</label>
+              <div className="flex items-center space-x-2">
+                <input
+                    id="botTokenKey"
+                    type={isBotKeyVisible ? 'text' : 'password'}
+                    value={botKey} // Use prop directly
+                    onChange={handleBotKeyInputChange} // Calls prop handler
+                    placeholder="Paste Bot Token here"
+                    required
+                    className="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button type="button" onClick={() => setIsBotKeyVisible(!isBotKeyVisible)} className="p-2 text-gray-400 hover:text-white">
+                    {isBotKeyVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+                <button type="button" onClick={() => copyToClipboard(botKey)} className="p-2 text-gray-400 hover:text-white">
+                    {copied ? <Check size={18} className="text-green-400"/> : <Copy size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {/* App ID Input (Readonly Display - Value from connection prop) */}
+            <div>
+              <label htmlFor="appIdDisplay" className="block text-sm font-medium text-gray-300 mb-1">Application ID *</label>
+              <div className="flex items-center space-x-2">
+                  <input
+                    id="appIdDisplay"
+                    type={isAppIdVisible ? 'text' : 'password'}
+                    readOnly // Value still comes from AgentEdit form via connection prop
+                    value={connection?.discord_app_id || ''}
+                    placeholder="Save in Agent form"
+                    className="flex-grow px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-400 cursor-not-allowed"
+                  />
+                  <button type="button" onClick={() => setIsAppIdVisible(!isAppIdVisible)} className="p-2 text-gray-400 hover:text-white">
+                      {isAppIdVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                  <button type="button" onClick={() => copyToClipboard(connection?.discord_app_id)} className="p-2 text-gray-400 hover:text-white">
+                    {copied ? <Check size={18} className="text-green-400"/> : <Copy size={18} />}
+                  </button>
+              </div>
+            </div>
+
+            {/* Public Key Input (Readonly Display - Value from connection prop) */}
+            <div>
+              <label htmlFor="publicKeyDisplay" className="block text-sm font-medium text-gray-300 mb-1">Public Key *</label>
+               <div className="flex items-center space-x-2">
+                  <input
+                    id="publicKeyDisplay"
+                    type={isPublicKeyVisible ? 'text' : 'password'}
+                    readOnly // Value still comes from AgentEdit form via connection prop
+                    value={connection?.discord_public_key || ''}
+                    placeholder="Save in Agent form"
+                    className="flex-grow px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-400 cursor-not-allowed"
+                  />
+                   <button type="button" onClick={() => setIsPublicKeyVisible(!isPublicKeyVisible)} className="p-2 text-gray-400 hover:text-white">
+                       {isPublicKeyVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                   </button>
+                   <button type="button" onClick={() => copyToClipboard(connection?.discord_public_key)} className="p-2 text-gray-400 hover:text-white">
+                    {copied ? <Check size={18} className="text-green-400"/> : <Copy size={18} />}
+                  </button>
+                </div>
+            </div>
+
+             {/* Interaction Endpoint URL */}
+             <div>
+                 <label className="block text-sm font-medium text-gray-300 mb-1">Interaction Endpoint URL</label>
+                 <div className="flex items-center space-x-2">
+                    <input
+                        type="text"
+                        readOnly
+                        value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`}
+                        className="flex-grow px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-400"
+                    />
+                     <button type="button" onClick={() => copyToClipboard(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`)} className="p-2 text-gray-400 hover:text-white">
+                        {copied ? <Check size={18} className="text-green-400"/> : <Copy size={18} />}
+                     </button>
+                 </div>
+                 <p className="mt-1 text-xs text-gray-400">
+                    Copy this URL into the "Interactions Endpoint URL" field in your <a href={`https://discord.com/developers/applications/${discord_app_id || ''}/information`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Discord App settings</a>.
+                 </p>
              </div>
 
-            {/* Worker Status & Activate/Deactivate Button */} 
-            <div className="pt-4 border-t border-gray-600">
-               <label className="block text-sm font-medium text-gray-300 mb-1">Agent Status</label>
-               <div className="flex items-center justify-between space-x-4">
-                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusBadgeClass}`}> 
-                     {connection.worker_status ? connection.worker_status.charAt(0).toUpperCase() + connection.worker_status.slice(1) : 'Unknown'}
-                 </span>
-
-                 {connection.worker_status === 'active' || connection.worker_status === 'stopping' ? ( // Show Deactivate if active or stopping
-                     <button
-                         type="button"
-                         onClick={onDeactivate}
-                         disabled={loading || disconnecting || connection.worker_status === 'stopping'}
-                         className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                     >
-                         {loading || connection.worker_status === 'stopping' ? <Loader2 className="animate-spin mr-2" size={16} /> : <X className="mr-2" size={16}/>}
-                         {connection.worker_status === 'stopping' ? 'Stopping...' : 'Deactivate'}
-                     </button>
-                 ) : ( // Otherwise show Activate (inactive, error, activating, or unknown)
-                     <button
-                         type="button"
-                         onClick={onActivate}
-                         // Disable activate if activating, no server selected, or disconnecting
-                         disabled={loading || disconnecting || connection.worker_status === 'activating' || !connection.guild_id}
-                         className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                         title={!connection.guild_id ? "Select a server first" : "Activate Agent"} // Add title
-                     >
-                         {loading || connection.worker_status === 'activating' ? <Loader2 className="animate-spin mr-2" size={16} /> : <Bot className="mr-2" size={16}/>}
-                         {connection.worker_status === 'activating' ? 'Activating...' : 'Activate Agent'}
-                     </button>
-                 )}
-               </div>
-            </div>
-
-            {/* *** NEW: Restore Inactivity Timeout Section with new options *** */}
-            <div className="mt-4">
-              <label htmlFor="inactivityTimeout" className="block text-sm font-medium text-gray-300 mb-1">Inactivity Timeout</label>
-              <select
+            {/* Inactivity Timeout */}
+            <div>
+              <label htmlFor="inactivityTimeout" className="block text-sm font-medium text-gray-300 mb-1">Inactivity Timeout (minutes)</label>
+              <input
+                type="number"
                 id="inactivityTimeout"
-                value={localTimeout ?? 60} // Use localTimeout state, default to 60 if undefined/null
-                onChange={(e) => handleInputChange('inactivity_timeout_minutes', e.target.value)}
-                disabled={loading || disconnecting}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                <option value={10}>10 minutes</option>
-                <option value={20}>20 minutes</option>
-                <option value={30}>30 minutes</option>
-                <option value={60}>60 minutes</option>
-                <option value={0}>Never</option> {/* Use value="0" for Never */}
-              </select>
-              <p className="mt-1 text-xs text-gray-400">
-                Automatically disconnect the bot after this period of inactivity.
-              </p>
+                value={localTimeout}
+                onChange={handleTimeoutChange}
+                min="1"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-400">Time before the agent worker stops due to inactivity.</p>
             </div>
-
         </div>
-      )}
 
-      {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-
+        {/* Server Management & Invite Link - Use new props */}
+        <div className="flex flex-wrap items-center justify-start gap-4 pt-4 border-t border-gray-600">
+             <button 
+                type="button"
+                onClick={onManageServers} // Use passed handler
+                disabled={isActivating || isDeactivating} // Disable if worker is changing state
+                className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                <Server size={18} className="mr-2" />
+                Manage Servers
+             </button>
+              <button 
+                type="button"
+                onClick={onGenerateInviteLink} // Use passed handler
+                disabled={!discord_app_id || isGeneratingInvite} // Use passed props for condition
+                className="flex items-center px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                {isGeneratingInvite ? <Loader2 className="animate-spin mr-2" size={18} /> : <LinkIcon size={18} className="mr-2" />}
+                Generate Invite Link
+             </button>
+        </div>
     </div>
   );
 }

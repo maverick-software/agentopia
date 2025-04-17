@@ -8,13 +8,14 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 - [Project Structure](#project-structure)
 - [Key Components](#key-components)
 - [Deployed Endpoints & Services](#deployed-endpoints--services)
+- [Database Schema](#database-schema)
 - [Core Workflows](#core-workflows)
   - [Agent Activation Flow](#agent-activation-flow)
   - [Agent Deactivation Flow](#agent-deactivation-flow)
   - [Agent Message Handling Flow](#agent-message-handling-flow)
 - [Development & Setup](#development--setup)
 - [Current Status & Next Steps](#current-status--next-steps)
-- [Database Schema](#database-schema)
+- [Deployment](#deployment)
 
 ## Project Overview
 
@@ -91,6 +92,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
     *   Allows users to log in (via Supabase Auth), create/edit agents (name, personality, instructions), and configure Discord connection details (Bot Token, App ID, Public Key, timeout).
     *   Initiates activation/deactivation requests via the `manage-discord-worker` Supabase function.
     *   Interacts with the Supabase database via the Supabase JS client.
+    *   **Note:** The previous functionality to select a specific Discord channel for the agent has been removed. Future updates will allow managing the agent's presence across multiple servers via a dedicated interface.
 *   **Supabase Backend (`supabase/`):**
     *   **Database:** Stores agent configurations (`agents` table), Discord connection details and status (`agent_discord_connections` table), user data, etc. Uses Row Level Security (RLS), with specific bypasses managed via `SECURITY DEFINER` functions.
     *   **Authentication:** Handles user login/signup.
@@ -138,11 +140,11 @@ Based on the provided schema diagram, the core tables are:
     *   `active`: Boolean indicating if the agent is generally active (may not reflect Discord connection status).
     *   `discord_channel`, `system_instructions`, `discord_bot_token_id`, `discord_user_id`: Fields likely related to Discord setup, potentially including secrets or IDs.
     *   `created_at`, `updated_at`: Timestamps.
-*   **`agent_discord_connections`**: Tracks the specific connection details and status for an agent within a Discord server (guild).
+*   **`agent_discord_connections`**: Tracks the specific connection details and status for an agent within a Discord server (guild). **Note:** This table is being modified to support multi-server enabling/disabling instead of a single guild/channel connection per agent.
     *   `id`: Primary Key.
     *   `agent_id`: Foreign Key referencing `agents.id`.
     *   `guild_id`: The ID of the Discord server (guild) the agent is connected to.
-    *   `channel_id`: (Optional) Specific channel ID if relevant.
+    *   `is_enabled`: (New) Boolean indicating if the connection for this specific guild is active.
     *   `discord_app_id`, `discord_public_key`: Discord application credentials.
     *   `inactivity_timeout_ms`: Timeout duration for the worker process.
     *   `worker_status`: Tracks the current state of the `discord-worker` process (e.g., `inactive`, `connecting`, `active`, `terminating`, `error`). Updated via RPC.
@@ -185,6 +187,21 @@ Based on the provided schema diagram, the core tables are:
 *   An `agent` can have one `mcp_configurations` record.
 *   An `mcp_configurations` record can have multiple `mcp_servers`.
 *   An `mcp_server` references secrets likely detailed further via `user_secrets` and the associated user.
+
+### Row Level Security (RLS) Policies (Current State as of 2025-04-17)
+
+**Important Note:** The following policies were observed in the Supabase Studio. RLS is enabled, but the policies require review and correction as outlined in the [Multi-Server Management Plan](docs/plans/multi_server_management_plan.md). They contain redundancies, overly broad permissions (e.g., applied to `public` or `anon` roles), and may conflict with intended secure RPC mechanisms.
+
+**`agents` Table:**
+*   `(SELECT, anon role)` `Allow anon worker read access`: Allows anonymous processes to read agent details. (Potentially insecure).
+*   `(CRUD, public role)` `Allow individual user ...`: Grants full CRUD operations to any public user. (Highly insecure).
+*   `(INSERT/DELETE/SELECT/UPDATE, authenticated role)` `Users can ... agents`: Allows authenticated users basic CRUD, but lack specific `USING`/`WITH CHECK` clauses to strictly enforce ownership (`auth.uid() = user_id`).
+
+**`agent_discord_connections` Table:**
+*   `(CRUD, public role)` `Allow owner ... via agent` / `Allow users to ... connections for their own agents`: Multiple redundant policies intended for owner-based access but incorrectly applied to the `public` role.
+*   `(SELECT, anon role)` `Allow worker read own connection`: Allows anonymous processes to read connection details.
+*   `(UPDATE, public role)` `Allow worker self-update`: Unclear purpose, wrong role.
+*   `(UPDATE, anon role)` `Allow worker update own status`: Allows anonymous processes direct table update access, bypassing the intended `update_worker_status` RPC function. (Conflicts with design).
 
 ## Core Workflows
 
@@ -326,6 +343,7 @@ Environment variables are crucial for connecting services. Create `.env` files i
     *   `SUPABASE_URL`: Your Supabase project URL.
     *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key (**Keep this secret!**).
     *   `MANAGER_SECRET_KEY`: A secret key shared between the manager and Supabase functions for authentication (**Generate a strong secret**).
+    *   `WORKER_SCRIPT_PATH`: Path to the discord-worker entry point (e.g., `../discord-worker/src/worker.ts`). Used by PM2.
 
 *   **Discord Worker (`./services/discord-worker/.env`):**
     *   `SUPABASE_URL`: Your Supabase project URL.
@@ -368,19 +386,43 @@ Environment variables are crucial for connecting services. Create `.env` files i
     ```
     This serves your functions locally, typically accessible via `http://localhost:54321/functions/v1/`. Update `MANAGER_URL` in function envs accordingly.
 
-**Note:** For local development involving Discord interactions, you'll need a way to expose your local Supabase functions endpoint and potentially your worker-manager service to the internet so Discord can send webhooks. Tools like `ngrok` or the `Cloudflare Tunnel` can achieve this. 
+**5. Supabase Database Types:**
+
+To ensure type safety when interacting with the Supabase database from the frontend, TypeScript types are generated based on your database schema.
+
+*   **Location:** The generated types are stored in `src/types/database.types.ts`.
+*   **Generation/Update:** Run the following command whenever your database schema changes:
+    ```bash
+    supabase gen types typescript --linked > src/types/database.types.ts
+    ```
+    *(Note: This requires you to be logged in (`supabase login`) and linked to your project (`supabase link`)).*
+*   **Automation (Recommended):** Add a script to your root `package.json` for convenience:
+    ```json
+    // package.json
+    {
+      "scripts": {
+        // ... other scripts
+        "sync-types": "supabase gen types typescript --linked > src/types/database.types.ts"
+      }
+    }
+    ```
+    Then you can simply run `npm run sync-types`.
+
+**Note:** For local development involving Discord interactions, you'll need a way to expose your local Supabase functions endpoint and potentially your worker-manager service to the internet so Discord can send webhooks. Tools like `ngrok` or the `Cloudflare Tunnel` can achieve this.
 
 ## Current Status & Next Steps
 
-*   **Status:** The agent activation workflow is functional. The `worker-manager` successfully uses the PM2 API to launch `discord-worker` processes, and workers connect to Discord. RLS issues preventing status updates have been resolved using a `SECURITY DEFINER` RPC function (`update_worker_status`).
+*   **Status:** The agent activation/deactivation workflow is functional. The `worker-manager` uses PM2 API to manage `discord-worker` processes. RLS issues with status updates resolved via `update_worker_status` RPC. The Discord channel selection UI/feature has been removed.
 *   **Immediate Next Steps:**
     1.  **Re-enable RLS:** Row Level Security was disabled on `agent_discord_connections` and `agents` tables during debugging. It needs to be **re-enabled** in the Supabase dashboard. The `update_worker_status` function should allow status updates to continue working correctly.
-    2.  **Verify Deactivation:** Thoroughly test the agent deactivation flow from the UI to ensure the `pm2.stop` logic in the manager and the worker's shutdown procedure (including RPC status updates) function correctly.
-    3.  **Code Cleanup (Optional):** Remove temporary diagnostic logs (e.g., `console.log(process.env)`) added during troubleshooting.
-    4.  **Review RLS (`agents` table):** Determine if RLS policies are needed for the `agents` table (e.g., users can only see/edit their own agents) and implement them.
-    5.  **Establish Logging:** Create the standard log directory (`docs/console/logs/`) and implement robust logging within the `worker-manager` and `discord-worker` services, adhering to project conventions (RULE #2).
+    2.  **Verify Deactivation:** Thoroughly test the agent deactivation flow from the UI.
+    3.  **Multi-Server UI:** Implement the frontend UI for managing agent presence across multiple Discord servers (enable/disable per server).
+    4.  **Backend Multi-Server Logic:** Update `manage-discord-worker` and `discord-interaction-handler` functions to handle the new multi-server activation/deactivation model based on the `is_enabled` flag in `agent_discord_connections`.
+    5.  **Review RLS (`agents` table):** Determine if RLS policies are needed for the `agents` table (e.g., users can only see/edit their own agents) and implement them.
+    6.  **Establish Logging:** Create the standard log directory (`./logs/`) and implement robust logging within the `worker-manager` and `discord-worker` services, adhering to project conventions (RULE #2).
+    7.  **Code Cleanup:** Remove temporary diagnostic logs added during troubleshooting.
 
-**5. Deployment:**
+## Deployment
 
 *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
 *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
@@ -392,201 +434,4 @@ Environment variables are crucial for connecting services. Create `.env` files i
     *   Configure the production `.env` file for `worker-manager`.
     *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
     *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-*   **Run Edge Functions locally (requires Docker):**
-    ```bash
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-
-*   **Deployment:**
-    *   **Frontend:** Typically deployed via a static hosting provider like Netlify or Vercel, connected to the Git repository.
-    *   **Supabase:** Functions and database changes are deployed using the Supabase CLI (`supabase functions deploy`, `supabase db push`) or via Git integration if configured.
-    *   **Backend Services (`worker-manager`):**
-        *   Requires a server environment (like a DigitalOcean Droplet) with Node.js and PM2 installed (`npm install pm2 -g`).
-        *   Copy the `services/worker-manager` and `services/discord-worker` directories to the server.
-        *   Install dependencies on the server (`npm install` in both directories).
-        *   Compile TypeScript (if not using `ts-node` in production): `npm run build` (assuming build scripts in `package.json`).
-        *   Configure the production `.env` file for `worker-manager`.
-        *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
-        *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
-
-*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
+*   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point.
