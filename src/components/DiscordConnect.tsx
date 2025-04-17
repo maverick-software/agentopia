@@ -9,12 +9,10 @@ interface DiscordConnectProps {
   onConnectToken: (token: string) => Promise<void>;
   onSaveCredentials: (appId: string, publicKey: string) => Promise<void>;
   onSelectServer: (guildId: string | null) => Promise<void>;
-  onSelectChannel: (channelId: string | null) => Promise<void>;
   className?: string;
   loading?: boolean;
   disconnecting?: boolean;
   guilds?: any[];
-  channels?: any[];
   connection: Partial<AgentDiscordConnection>;
   onActivate: () => Promise<void>;
   onDeactivate: () => Promise<void>;
@@ -28,7 +26,6 @@ export function DiscordConnect({
   onConnectToken,
   onSaveCredentials,
   onSelectServer,
-  onSelectChannel,
   onActivate,
   onDeactivate,
   onConnectionChange,
@@ -36,7 +33,6 @@ export function DiscordConnect({
   loading: externalLoading,
   disconnecting: externalDisconnecting,
   guilds = [],
-  channels = [],
   connection,
 }: DiscordConnectProps) {
   
@@ -122,12 +118,6 @@ export function DiscordConnect({
       onSelectServer(guildId);
   };
 
-  // NEW: Handler for channel selection change
-  const handleChannelSelectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const channelId = event.target.value || null;
-      onSelectChannel(channelId);
-  };
-
   // *** NEW: Restore handleInputChange for timeout ***
   const handleInputChange = (field: keyof AgentDiscordConnection, value: any) => {
     console.log(`[DiscordConnect] InputChange: field=${String(field)}, value=${value}`);
@@ -147,11 +137,6 @@ export function DiscordConnect({
       console.warn(`[DiscordConnect] handleInputChange called for unhandled field: ${String(field)}`);
     }
   };
-
-  // --- NEW: Prepare channels array and find selected channel name ---
-  const channelsArray = Array.isArray(channels) ? channels : [];
-  const selectedChannelName = channelsArray.find(c => c.id === connection.channel_id)?.name;
-  // --- End NEW ---
 
   // Restore renderWorkerStatus 
   const renderWorkerStatus = () => {
@@ -294,46 +279,6 @@ export function DiscordConnect({
                       </option>
                     ))}
                  </select>
-                 {/* Channel Selection Dropdown */} 
-                 <div className="mt-4">
-                   <label htmlFor="channelSelect" className="block text-sm font-medium text-gray-300 mb-1">Selected Channel (Optional)</label>
-                   <select
-                       id="channelSelect"
-                       value={connection.channel_id ?? ''} 
-                       onChange={handleChannelSelectChange} // Saves selection on change
-                       disabled={loading || disconnecting || !connection.guild_id || channelsArray.length === 0}
-                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                   >
-                       <option value="">{channelsArray.length === 0 ? 'No channels found' : '-- Select a Channel --'}</option>
-                       {channelsArray.map(channel => (
-                         <option key={channel.id} value={channel.id}>
-                           {channel.name}
-                         </option>
-                       ))}
-                   </select>
-                 </div>
-            </div>
-
-            {/* *** NEW: Restore Inactivity Timeout Section with new options *** */}
-            <div className="mt-4">
-              <label htmlFor="inactivityTimeout" className="block text-sm font-medium text-gray-300 mb-1">Inactivity Timeout</label>
-              <select
-                id="inactivityTimeout"
-                // Use localTimeout state, default to 60 if undefined/null
-                value={localTimeout ?? 60}
-                onChange={(e) => handleInputChange('inactivity_timeout_minutes', e.target.value)}
-                disabled={loading || disconnecting}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-              >
-                <option value={10}>10 minutes</option>
-                <option value={20}>20 minutes</option>
-                <option value={30}>30 minutes</option>
-                <option value={60}>60 minutes</option>
-                <option value={0}>Never</option> {/* Use value="0" for Never */}
-              </select>
-              <p className="mt-1 text-xs text-gray-400">
-                Automatically disconnect the bot after this period of inactivity.
-              </p>
             </div>
 
             {/* Connection Status (Keep) */} 
@@ -373,6 +318,27 @@ export function DiscordConnect({
                      </button>
                  )}
                </div>
+            </div>
+
+            {/* *** NEW: Restore Inactivity Timeout Section with new options *** */}
+            <div className="mt-4">
+              <label htmlFor="inactivityTimeout" className="block text-sm font-medium text-gray-300 mb-1">Inactivity Timeout</label>
+              <select
+                id="inactivityTimeout"
+                value={localTimeout ?? 60} // Use localTimeout state, default to 60 if undefined/null
+                onChange={(e) => handleInputChange('inactivity_timeout_minutes', e.target.value)}
+                disabled={loading || disconnecting}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+              >
+                <option value={10}>10 minutes</option>
+                <option value={20}>20 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={60}>60 minutes</option>
+                <option value={0}>Never</option> {/* Use value="0" for Never */}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">
+                Automatically disconnect the bot after this period of inactivity.
+              </p>
             </div>
 
         </div>

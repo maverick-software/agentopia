@@ -2,20 +2,6 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts' // Assuming a shared CORS file
 
-// Define the structure expected by the frontend
-interface DiscordChannel {
-  id: string;
-  name: string;
-  // Add other relevant fields if needed, like type
-  type?: number; 
-}
-
-interface DiscordGuild {
-  id: string;
-  name: string;
-  channels: DiscordChannel[];
-}
-
 // TEMPORARY - Use only while encryption is not implemented in discord-connect
 async function decryptToken(supposedlyEncryptedToken: string): Promise<string> {
   console.warn("decryptToken function is NOT decrypting; returning raw value. Implement encryption in discord-connect.");
@@ -91,45 +77,10 @@ serve(async (req) => {
         throw new Error(`Failed to parse guilds response from Discord.`);
     }
     
-    // 6. Fetch Channels for each Guild (rest of the original logic...)
-    const guildsWithChannels: DiscordGuild[] = [];
-    for (const guild of guilds) {
-        try {
-            const channelsResponse = await fetch(`${discordApiBase}/guilds/${guild.id}/channels`, {
-                headers: { Authorization: `Bot ${botToken}` },
-            });
-
-            if (!channelsResponse.ok) {
-                console.warn(`Failed to fetch channels for guild ${guild.id} (${guild.name}). Status: ${channelsResponse.status}`);
-                 guildsWithChannels.push({
-                    id: guild.id,
-                    name: guild.name,
-                    channels: [],
-                });
-                continue; 
-            }
-
-            const channels: DiscordChannel[] = (await channelsResponse.json())
-                .filter((ch: any) => ch.type === 0) 
-                .map((ch: any) => ({ id: ch.id, name: ch.name }));
-
-            guildsWithChannels.push({
-                id: guild.id,
-                name: guild.name,
-                channels: channels,
-            });
-        } catch (channelError) {
-             console.warn(`Error processing channels for guild ${guild.id} (${guild.name}):`, channelError);
-             guildsWithChannels.push({
-                id: guild.id,
-                name: guild.name,
-                channels: [],
-            });
-        }
-    }
-    
-    // 7. Return formatted data
-    return new Response(JSON.stringify(guildsWithChannels), {
+    // 7. Return formatted data (just id and name)
+    const simplifiedGuilds = guilds.map(g => ({ id: g.id, name: g.name }));
+    console.log(`[discord-get-bot-guilds] Returning simplified guilds:`, simplifiedGuilds);
+    return new Response(JSON.stringify(simplifiedGuilds), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });

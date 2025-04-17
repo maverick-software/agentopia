@@ -93,8 +93,6 @@ export function AgentEdit() {
   const [discordDisconnecting, setDiscordDisconnecting] = useState(false);
   const [discordGuilds, setDiscordGuilds] = useState<any[]>([]);
   const [fetchingGuilds, setFetchingGuilds] = useState(false);
-  const [discordChannels, setDiscordChannels] = useState<any[]>([]);
-  const [fetchingChannels, setFetchingChannels] = useState(false);
 
   // --- NEW: Connection Stage State ---
   type DiscordStage = 'initial' | 'enter_credentials' | 'select_server' | 'connected';
@@ -218,7 +216,7 @@ export function AgentEdit() {
 
       const { data: connectionData, error: connectionError } = await supabase
         .from('agent_discord_connections')
-        .select('id, guild_id, channel_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
+        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
         .eq('agent_id', agentId)
         .maybeSingle();
 
@@ -229,7 +227,6 @@ export function AgentEdit() {
           id: connectionData.id,
           agent_id: agentId,
           guild_id: connectionData.guild_id,
-          channel_id: connectionData.channel_id,
           inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes ?? 60,
           worker_status: connectionData.worker_status || 'inactive',
           discord_app_id: connectionData.discord_app_id || '',
@@ -240,7 +237,6 @@ export function AgentEdit() {
           id: undefined,
           agent_id: agentId,
           guild_id: undefined,
-          channel_id: undefined,
           inactivity_timeout_minutes: 60,
           worker_status: 'inactive',
           discord_app_id: '',
@@ -390,15 +386,11 @@ export function AgentEdit() {
   useEffect(() => {
       let stage: DiscordStage = 'initial';
       let shouldFetchGuilds = false;
-      let shouldFetchChannels = false;
-      let guildToFetchChannels: string | null | undefined = null;
 
       // Determine stage based on available data
       if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key && discordConnectionData.guild_id) {
           stage = 'connected';
-          // *** MODIFIED: Always need guilds if app_id/key are present ***
           shouldFetchGuilds = true; 
-          guildToFetchChannels = discordConnectionData.guild_id; 
       } else if (discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key) {
           stage = 'select_server';
           shouldFetchGuilds = true; 
@@ -413,11 +405,6 @@ export function AgentEdit() {
       if (shouldFetchGuilds && discordGuilds.length === 0 && !fetchingGuilds) {
          console.log("[AgentEdit Stage Effect] Triggering fetch guilds.");
          fetchDiscordGuildsLogic();
-      }
-      // Fetch channels ONLY if stage is connected and guild ID exists
-      if (stage === 'connected' && guildToFetchChannels && discordChannels.length === 0 && !fetchingChannels) { 
-         console.log(`[AgentEdit Stage Effect] Triggering fetch channels for guild ${guildToFetchChannels} because stage is 'connected'.`);
-         fetchDiscordChannelsLogic(guildToFetchChannels);
       }
 
   // Dependencies: include everything used to determine stage + fetch status flags
@@ -445,11 +432,11 @@ export function AgentEdit() {
     
     setSaving(true); 
     setError(null);
-    setDiscordChannels([]); // Clear channels when server changes
+    // setDiscordChannels([]); // Clear channels when server changes - Refers to removed state
 
     const updateData = { 
         guild_id: guildId || null,
-        channel_id: null // Reset channel ID when server changes
+        // channel_id: null // WBS 14.3: Removed
     };
 
     try {
@@ -462,11 +449,11 @@ export function AgentEdit() {
         if (updateError) throw new Error(`Guild selection save error: ${updateError.message}`);
 
         // Update local state 
-        setDiscordConnectionData(prev => ({ ...prev, guild_id: guildId || undefined, channel_id: undefined }));
+        setDiscordConnectionData(prev => ({ ...prev, guild_id: guildId || undefined /*, channel_id: undefined WBS 14.4: Removed */ }));
         
         if (guildId) {
-            // Fetch channels for the new guild AND update stage
-            await fetchDiscordChannelsLogic(guildId);
+            // Fetch channels for the new guild AND update stage - REMOVED channel fetch
+            // await fetchDiscordChannelsLogic(guildId); 
             setDiscordConnectionStage('select_server'); 
         } else {
             // If no guild selected, move to connected (or maybe back to select_server?)
@@ -482,38 +469,12 @@ export function AgentEdit() {
     }
   };
 
-  // *** RESTORED: Handler for saving Channel Selection ***
+  // *** RESTORED: Handler for saving Channel Selection *** - REMOVED WBS 12.3
+  /*
   const handleSelectChannel = async (channelId: string | null) => {
-      const agentId = id;
-      const connectionId = discordConnectionData.id;
-      if (!agentId || !connectionId) { // Require connection ID for channel update
-          setError("Cannot save channel selection: Connection ID missing.");
-          return;
-      }
-      setSaving(true); // Reuse saving state maybe?
-      setError(null);
-      const updateData = { channel_id: channelId || null };
-      try {
-          console.log(`[AgentEdit] Updating connection ${connectionId} with channel ${channelId}`);
-          const { error: updateError } = await supabase
-              .from('agent_discord_connections')
-              .update(updateData)
-              .eq('id', connectionId);
-              
-          if (updateError) throw new Error(`Channel selection save error: ${updateError.message}`);
-
-          // Update local state and stage (remain connected)
-          setDiscordConnectionData(prev => ({ ...prev, channel_id: channelId || undefined }));
-          setDiscordConnectionStage('connected'); // Stay connected
-          console.log("[AgentEdit] Channel selection saved.");
-
-      } catch (err: any) {
-          console.error("[AgentEdit] Error saving Channel selection:", err);
-          setError(`Failed to save Discord channel selection: ${err.message}`);
-      } finally {
-          setSaving(false);
-      }
+      // ... function body removed ...
   };
+  */
 
   // Update connectDiscordBot to change stage
   const connectDiscordBot = async (token: string) => {
@@ -546,119 +507,12 @@ export function AgentEdit() {
     }
   };
 
-  // Renamed handler for saving credentials
-  const handleSaveCredentials = async (appId: string, publicKey: string) => {
-    const agentId = id;
-    if (!agentId || !appId || !publicKey) {
-      setError("Agent ID, Application ID, and Public Key are required.");
-      return;
-    }
-    setSaving(true); 
-    setError(null);
-
-    const upsertData = {
-      agent_id: agentId,
-      discord_app_id: appId.trim(),
-      discord_public_key: publicKey.trim(),
-      guild_id: discordConnectionData.guild_id ?? null, 
-      channel_id: discordConnectionData.channel_id ?? null, 
-      inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes || 10,
-    };
-
-    try {
-      console.log("[AgentEdit] Upserting App ID/Public Key:", upsertData);
-      const { error: connectionSaveError } = await supabase
-        .from('agent_discord_connections')
-        .upsert(upsertData, { onConflict: 'agent_id' });
-
-      if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
-
-      // --- NEW: Fetch the connection ID after upsert ---
-      console.log("[AgentEdit] Fetching connection ID after upsert...");
-      const { data: idData, error: idError } = await supabase
-        .from('agent_discord_connections')
-        .select('id')
-        .eq('agent_id', agentId)
-        .single(); // Expect exactly one row now
-
-      if (idError || !idData?.id) {
-        console.error("[AgentEdit] Failed to fetch connection ID after upsert:", idError);
-        // Throw error? Or just warn and proceed without ID?
-        // Throwing is safer as channel select will fail later.
-        throw new Error("Failed to retrieve connection details after saving credentials.");
-      }
-      const connectionId = idData.id;
-      console.log(`[AgentEdit] Fetched connection ID: ${connectionId}`);
-      // --- End Fetch ID ---
-
-      // Update local state (including the fetched ID)
-      setDiscordConnectionData(prev => ({ 
-          ...prev, // Keep existing status etc. 
-          ...upsertData, // Saved credentials
-          id: connectionId, // <<< Add the fetched ID
-          guild_id: upsertData.guild_id ?? undefined,
-          channel_id: upsertData.channel_id ?? undefined,
-       }));
-
-      // Fetch guilds and change stage
-      await fetchDiscordGuildsLogic(); 
-      setDiscordConnectionStage('select_server'); // <-- Change stage
-
-    } catch (err: any) {
-       console.error("[AgentEdit] Error saving App ID/Public Key:", err);
-       setError(`Failed to save Discord App ID/Public Key: ${err.message}`);
-       // Should we revert stage? Maybe not, user can retry save.
-    } finally {
-       setSaving(false);
-    }
-  };
-
-  // NEW: Function to fetch channels for a selected guild
+  // NEW: Function to fetch channels for a selected guild - REMOVED WBS 11.3
+  /*
   const fetchDiscordChannelsLogic = async (selectedGuildId: string) => {
-      const agentId = id;
-      if (!agentId || !selectedGuildId) {
-          console.error("[AgentEdit] Cannot fetch channels: Agent ID or Guild ID missing.");
-          setError("Cannot fetch channels: Agent ID or Guild ID missing.");
-          setDiscordChannels([]);
-          return;
-      }
-      console.log(`[AgentEdit] Fetching channels for guild ${selectedGuildId}...`);
-      setFetchingChannels(true);
-      setError(null); 
-      try {
-          const functionName = 'discord-get-guild-channels'; // Assumes this function exists
-          const queryParams = new URLSearchParams({ agentId, guildId: selectedGuildId });
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-          if (!supabaseUrl) throw new Error('Supabase URL not configured.');
-          const invokeUrl = `${supabaseUrl}/functions/v1/${functionName}?${queryParams.toString()}`;
-
-          const response = await fetch(invokeUrl, {
-              method: 'GET',
-              headers: {
-                  'Authorization': `Bearer ${ (await supabase.auth.getSession()).data.session?.access_token }`,
-                  'Content-Type': 'application/json'
-              }
-          });
-
-          if (!response.ok) {
-              const errorBody = await response.text();
-              let detail = errorBody;
-              try { detail = JSON.parse(errorBody).error || errorBody; } catch(e) {}
-              throw new Error(`Failed to fetch channels (${response.status}): ${detail}`);
-          }
-
-          const data = await response.json();
-          console.log('[AgentEdit] Discord channels fetched successfully:', data);
-          setDiscordChannels(data || []); // Assuming data is the array of channels
-
-      } catch (err: any) {
-          console.error('[AgentEdit] Discord channels fetch error:', err);
-          setError(`Error fetching channels: ${err.message}`);
-          setDiscordChannels([]); // Clear channels on error
-      } finally {
-          setFetchingChannels(false);
-      }
+    // ... function body removed ...
   };
+  */
 
   // Update disconnect to clear channels
   const disconnectDiscordBot = async () => {
@@ -709,12 +563,79 @@ export function AgentEdit() {
        // Always reset state after disconnect attempt
        setDiscordBotKey('');
        setDiscordGuilds([]);
-       setDiscordChannels([]); // <-- Clear channels
+       // setDiscordChannels([]); // <-- Clear channels - WBS: Refers to removed state
        setDiscordConnectionData({}); 
        setDiscordConnectionStage('initial'); // <-- Reset stage
        setDiscordDisconnecting(false);
        setError(null); // Clear any lingering errors from the disconnect process
        console.log("[disconnectDiscordBot] Disconnect process finished, state reset.");
+    }
+  };
+
+  // Renamed handler for saving credentials - RESTORED
+  const handleSaveCredentials = async (appId: string, publicKey: string) => {
+    const agentId = id;
+    if (!agentId || !appId || !publicKey) {
+      setError("Agent ID, Application ID, and Public Key are required.");
+      return;
+    }
+    setSaving(true); 
+    setError(null);
+
+    const upsertData = {
+      agent_id: agentId,
+      discord_app_id: appId.trim(),
+      discord_public_key: publicKey.trim(),
+      guild_id: discordConnectionData.guild_id ?? null, 
+      // channel_id: discordConnectionData.channel_id ?? null, // WBS 15.3: Removed
+      inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes || 10,
+    };
+
+    try {
+      console.log("[AgentEdit] Upserting App ID/Public Key:", upsertData);
+      const { error: connectionSaveError } = await supabase
+        .from('agent_discord_connections')
+        .upsert(upsertData, { onConflict: 'agent_id' });
+
+      if (connectionSaveError) throw new Error(`Discord connection save error: ${connectionSaveError.message}`);
+
+      // --- NEW: Fetch the connection ID after upsert ---
+      console.log("[AgentEdit] Fetching connection ID after upsert...");
+      const { data: idData, error: idError } = await supabase
+        .from('agent_discord_connections')
+        .select('id')
+        .eq('agent_id', agentId)
+        .single(); // Expect exactly one row now
+
+      if (idError || !idData?.id) {
+        console.error("[AgentEdit] Failed to fetch connection ID after upsert:", idError);
+        // Throw error? Or just warn and proceed without ID?
+        // Throwing is safer as channel select will fail later.
+        throw new Error("Failed to retrieve connection details after saving credentials.");
+      }
+      const connectionId = idData.id;
+      console.log(`[AgentEdit] Fetched connection ID: ${connectionId}`);
+      // --- End Fetch ID ---
+
+      // Update local state (including the fetched ID)
+      setDiscordConnectionData(prev => ({ 
+          ...prev, // Keep existing status etc. 
+          ...upsertData, // Saved credentials
+          id: connectionId, // <<< Add the fetched ID
+          guild_id: upsertData.guild_id ?? undefined,
+          // channel_id: upsertData.channel_id ?? undefined, // WBS 15.4: Removed
+       }));
+
+      // Fetch guilds and change stage
+      await fetchDiscordGuildsLogic(); 
+      setDiscordConnectionStage('select_server'); // <-- Change stage
+
+    } catch (err: any) {
+       console.error("[AgentEdit] Error saving App ID/Public Key:", err);
+       setError(`Failed to save Discord App ID/Public Key: ${err.message}`);
+       // Should we revert stage? Maybe not, user can retry save.
+    } finally {
+       setSaving(false);
     }
   };
 
@@ -1071,16 +992,16 @@ export function AgentEdit() {
                   connectionStage={discordConnectionStage}
                   connection={discordConnectionData}
                   guilds={discordGuilds} 
-                  channels={discordChannels} 
+                  // channels={discordChannels} // WBS 17.3: Removed
                   onConnectToken={connectDiscordBot} 
                   onSaveCredentials={handleSaveCredentials} 
                   onSelectServer={handleSelectServer} 
-                  onSelectChannel={handleSelectChannel} 
+                  // onSelectChannel={handleSelectChannel} // WBS 18.3: Removed
                   onDisconnect={disconnectDiscordBot}
                   onActivate={handleActivateAgent} // Pass activate handler
                   onDeactivate={handleDeactivateAgent} // Pass deactivate handler
                   onConnectionChange={handleConnectionChange} // Pass connection change handler
-                  loading={discordLoading || saving || fetchingGuilds || fetchingChannels} // Combine loading states
+                  loading={discordLoading || saving || fetchingGuilds /* || fetchingChannels WBS: Refers to removed state */} 
                   disconnecting={discordDisconnecting}
                   className="mt-4"
                 />
