@@ -426,8 +426,8 @@ export function AgentEdit() {
       discordConnectionData.discord_app_id, 
       discordConnectionData.discord_public_key, 
       discordConnectionData.guild_id, 
-      fetchingGuilds, // Trigger re-check when fetchingGuilds changes
-      fetchingChannels, // Trigger re-check when fetchingChannels changes
+      // fetchingGuilds, // Trigger re-check when fetchingGuilds changes <-- REMOVED
+      // fetchingChannels, // Trigger re-check when fetchingChannels changes <-- REMOVED
       // *** REMOVED length dependencies to avoid potential loops ***
       // discordGuilds.length, 
       // discordChannels.length 

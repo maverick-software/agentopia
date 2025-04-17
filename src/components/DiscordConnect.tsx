@@ -285,7 +285,9 @@ export function DiscordConnect({
                     disabled={loading || disconnecting || guilds.length === 0}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                  >
-                    <option value="">{loading && guilds.length === 0 ? 'Loading Servers...' : '-- Select a Server --'}</option>
+                    <option value="">
+                      {loading ? 'Loading Servers...' : (guilds.length === 0 ? 'No Servers Found' : '-- Select a Server --')}
+                    </option>
                     {guilds.map(guild => (
                       <option key={guild.id} value={guild.id}>
                         {guild.name}
