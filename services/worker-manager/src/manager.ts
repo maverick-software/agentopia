@@ -100,25 +100,21 @@ app.get('/', (req: Request, res: Response) => {
     res.status(200).send('Worker Manager Service is running.');
 });
 
-// *** REFACTORED: Endpoint to start a new worker using PM2 Ecosystem File ***
+// *** REFACTORED: Use pm2.start API instead of exec + ecosystem ***
 app.post('/start-worker', authenticate, async (req: Request, res: Response, next: NextFunction) => {
     log('log', `[MANAGER START REQ] Received /start-worker request`);
     try {
-        // CORRECT: Destructure botToken (as sent by Supabase function)
         const { agentId, connectionDbId, botToken, agentName, systemPrompt, agentInstructions } = req.body;
 
-        // --- Input Validation --- 
-        // CORRECT: Validate botToken
+        // --- Input Validation (as before) --- 
         if (!agentId || !connectionDbId || !botToken || !agentName) {
             log('warn', '[MANAGER START REQ] Missing required core fields');
-            // Update error message slightly for clarity
             res.status(400).json({ error: 'Missing required core fields (agentId, connectionDbId, botToken, agentName).' }); 
             return; 
         }
         log('log', `[MANAGER START REQ] Validated required fields for agent ${agentId}, connection ${connectionDbId}`);
 
-        // --- Env Var Check --- 
-        // ... (unchanged) ...
+        // --- Env Var Check (as before) --- 
         if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !OPENAI_API_KEY) {
             log('error', '[MANAGER START REQ] Server configuration error: Missing environment variables.');
             res.status(500).json({ error: 'Server configuration error.' });
@@ -132,14 +128,15 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
         log('log', '[MANAGER START REQ] Environment variables and Supabase client OK.');
 
         const workerName = getWorkerPm2Name(agentId);
-        const ecosystemFilePath = path.resolve(__dirname, '../../discord-worker/ecosystem.config.js'); 
-        log('log', `[MANAGER PRE-PM2] Corrected Ecosystem file path: ${ecosystemFilePath}`);
+        // Define worker script path relative to manager's location
+        const workerScript = path.resolve(__dirname, '../../discord-worker/src/worker.ts');
+        log('log', `[MANAGER PRE-PM2] Worker script path: ${workerScript}`);
 
         // Wrap the core PM2 interaction and polling in a Promise
         await new Promise<void>((resolve, reject) => {
             log('log', `[MANAGER START] Checking if ${workerName} already exists via pm2.describe...`);
             pm2.describe(workerName, (descErr: any, description: any) => {
-                try { // Inner try for pm2.describe callback sync errors
+                try { 
                     log('log', `[MANAGER START] Entered pm2.describe callback for ${workerName}.`);
                     if (descErr && !descErr.message.toLowerCase().includes('not found')) {
                         log('error', `[MANAGER START ERR - DESCRIBE] pm2.describe failed for ${workerName}:`, descErr);
@@ -149,20 +146,18 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                         log('warn', `[MANAGER START] Worker ${workerName} is already running.`);
                         return resolve(); // Resolve if already running
                     }
-                    log('log', `[MANAGER START] Worker ${workerName} not running or stopped. Proceeding to start via ecosystem file...`);
+                    log('log', `[MANAGER START] Worker ${workerName} not running or stopped. Proceeding to start via pm2.start API...`);
 
-                    // --- Construct Environment Variables --- 
+                    // --- Construct Environment Variables (as before) --- 
                     const inactivityTimeoutValue = req.body.inactivityTimeout === undefined || req.body.inactivityTimeout === null
                         ? '10' 
                         : String(req.body.inactivityTimeout);
                     log('log', `[MANAGER START] Inactivity timeout set to: ${inactivityTimeoutValue} minutes`);
                     
-                    // Ensure env vars passed to worker handle nulls correctly (use empty string)
                     const workerEnv = {
                         AGENT_ID: agentId,
                         AGENT_NAME: agentName,
                         CONNECTION_DB_ID: connectionDbId,
-                        // CORRECT: Use botToken for the environment variable
                         DISCORD_BOT_TOKEN: botToken,                 
                         SYSTEM_PROMPT: systemPrompt ?? '',             
                         AGENT_INSTRUCTIONS: agentInstructions ?? '',   
@@ -174,24 +169,35 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                     };
                     log('log', `[MANAGER START] Worker env prepared.`);
 
-                    // --- Execute PM2 Start using Ecosystem file via exec --- 
-                    const command = `pm2 start ${ecosystemFilePath} --only ${workerName} --update-env`;
-                    log('log', `[MANAGER EXEC] Executing command: ${command}`);
+                    // --- PM2 Start Options for Programmatic API --- 
+                    const startOptions = {
+                        script: workerScript,
+                        name: workerName,
+                        // Use node_args to require ts-node/register for TS execution
+                        node_args: ["--require", "ts-node/register"], 
+                        // We don't need interpreter if using node_args
+                        // interpreter: './node_modules/.bin/ts-node', 
+                        args: [], // Add any script arguments if needed
+                        env: workerEnv, // Pass constructed environment
+                        autorestart: false,
+                        // Ensure it runs in the correct directory if relative paths matter in worker
+                        cwd: path.dirname(workerScript), 
+                    };
 
-                    exec(command, { env: { ...process.env, ...workerEnv } }, async (execError, stdout, stderr) => {
-                        try { // Inner try for exec callback async errors
-                            if (execError) {
-                                log('error', `[MANAGER EXEC ERR] PM2 start command failed for ${workerName}:`, execError);
-                                log('error', `[MANAGER EXEC ERR STDERR] ${stderr}`);
-                                return reject(new Error(`Failed to execute PM2 start command: ${execError.message}`));
+                    log('log', `[MANAGER PM2 START] Attempting pm2.start with options:`, JSON.stringify(startOptions, null, 2));
+
+                    // --- Execute PM2 Start using Programmatic API --- 
+                    pm2.start(startOptions, async (startErr: any, apps: any) => { // Callback for pm2.start
+                        try { 
+                            if (startErr) {
+                                log('error', `[MANAGER PM2 START ERR] pm2.start failed for ${workerName}:`, startErr);
+                                return reject(new Error(`Failed to start worker via PM2 API: ${startErr.message}`));
                             }
-                            log('log', `[MANAGER EXEC OK] PM2 start command successful for ${workerName}.`);
-                            log('log', `[MANAGER EXEC STDOUT] ${stdout}`);
-                            if (stderr) log('warn', `[MANAGER EXEC STDERR] ${stderr}`);
+                            log('log', `[MANAGER PM2 START OK] pm2.start command successful for ${workerName}. Apps:`, apps?.[0]?.pm2_env?.name);
 
-                            log('log', `[MANAGER START] PM2 start command finished. Starting DB polling for ${connectionDbId}...`);
+                            log('log', `[MANAGER START] PM2 start initiated. Starting DB polling for ${connectionDbId}...`);
 
-                            // --- Polling Logic --- 
+                            // --- Polling Logic (Unchanged) --- 
                             const MAX_POLL_ATTEMPTS = 8;
                             const POLL_INTERVAL_MS = 2500;
                             let attempts = 0;
@@ -202,15 +208,15 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                                 if (!supabaseAdmin) { log('error', 'Supabase admin client not available.'); return false; }
                                 try {
                                     const { data, error } = await supabaseAdmin
-                                        .from('agent_discord_connections')
-                                        .select('worker_status')
+                                        .from('agent_discord_connections') 
+                                        .select('worker_status')           
                                         .eq('id', connectionDbId)
                                         .single();
                                     if (error) { log('error', `Polling error: ${error.message}`); return false; }
                                     if (data?.worker_status === 'active') { log('log', 'Polling success: status is active.'); return true; }
-                                    log('log', `Polling status: ${data?.worker_status}`);
+                                    log('log', `Polling status: ${data?.worker_status}`); 
                                     if (attempts >= MAX_POLL_ATTEMPTS) { log('warn', `Polling timeout.`); return false; }
-                                    await new Promise(resolvePoll => setTimeout(resolvePoll, POLL_INTERVAL_MS));
+                                    await new Promise(resolvePoll => setTimeout(resolvePoll, POLL_INTERVAL_MS)); 
                                     return pollForActiveStatusImpl();
                                 } catch (pollErr) { log('error', `Polling exception:`, pollErr); return false; }
                             };
@@ -222,15 +228,19 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                                 log('log', `[MANAGER START OK] Worker ${agentId} confirmed active.`);
                                 resolve(); // Resolve the outer promise on success
                             } else {
-                                log('error', `[MANAGER START FAIL] Worker ${agentId} failed polling.`);
-                                pm2.stop(workerName, (stopErr: any) => { /* ... cleanup log ... */ });
+                                log('error', `[MANAGER START FAIL] Worker ${agentId} failed polling. Attempting cleanup...`);
+                                // Attempt to stop the process if polling failed
+                                pm2.stop(workerName, (stopErr: any) => {
+                                    if (stopErr) log('error', `[MANAGER START FAIL CLEANUP ERR] Failed to stop worker ${workerName} after polling failure:`, stopErr);
+                                    else log('warn', `[MANAGER START FAIL CLEANUP OK] Stopped worker ${workerName} after polling failure.`);
+                                });
                                 reject(new Error(`Worker started but failed to activate.`)); // Reject outer promise on failure
                             }
-                        } catch (execCallbackError) {
-                            log('error', `[MANAGER START ERR - EXEC CALLBACK] Uncaught exception:`, execCallbackError);
-                            reject(execCallbackError instanceof Error ? execCallbackError : new Error('Error in exec callback'));
+                        } catch (startCallbackError) {
+                            log('error', `[MANAGER START ERR - PM2 START CALLBACK] Uncaught exception:`, startCallbackError);
+                            reject(startCallbackError instanceof Error ? startCallbackError : new Error('Error in pm2.start callback'));
                         }
-                    }); // End of exec callback
+                    }); // End of pm2.start callback
                 } catch (describeCallbackError) {
                     log('error', `[MANAGER START ERR - DESCRIBE CALLBACK] Uncaught exception:`, describeCallbackError);
                     reject(describeCallbackError instanceof Error ? describeCallbackError : new Error('Error in describe callback'));
@@ -240,20 +250,12 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
 
         // If the promise resolved successfully:
         log('log', `[MANAGER START OK - HANDLER] Worker process management completed successfully for ${agentId}.`);
-        // Send success response (NO return before or after)
         res.status(200).json({ message: `Worker initiated or already running.` });
 
     } catch (error) {
         // If the promise rejected or other errors occurred:
         log('error', '[MANAGER START ERR - HANDLER] Caught error in /start-worker:', error);
-        const message = error instanceof Error ? error.message : 'Internal server error during worker start.';
-        // Ensure response hasn't already been sent (e.g., validation error)
-        if (!res.headersSent) {
-            // No 'return' here - just send response
-            res.status(500).json({ error: message });
-        }
-        // Use next() to pass the error to the Express error handler
-        next(error);
+        next(error); // Use next() for error handling
     }
 });
 
