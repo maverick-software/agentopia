@@ -2,11 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'discord-worker-template', // Use a template name
-      script: 'src/worker.ts',       // Path to the source TypeScript file
-      interpreter: './node_modules/.bin/ts-node', // Path to local ts-node
-      // Or alternatively, use node_args:
-      // script: 'src/worker.ts',
-      // node_args: ["--require", "ts-node/register"],
+      script: 'src/test.js',       // Point to simple JS file
+      // interpreter: './node_modules/.bin/ts-node', // Comment out interpreter
       exec_mode: 'fork',
       autorestart: false,
       // Environment variables will be injected by the manager when starting
