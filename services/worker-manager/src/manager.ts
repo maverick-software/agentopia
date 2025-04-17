@@ -100,7 +100,7 @@ app.get('/', (req: Request, res: Response) => {
     res.status(200).send('Worker Manager Service is running.');
 });
 
-// *** REFACTORED: Use pm2.start API instead of exec + ecosystem ***
+// *** REFACTORED: Use pm2.start API - Attempt 3 (Run ts-node as script) ***
 app.post('/start-worker', authenticate, async (req: Request, res: Response, next: NextFunction) => {
     log('log', `[MANAGER START REQ] Received /start-worker request`);
     try {
@@ -128,9 +128,13 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
         log('log', '[MANAGER START REQ] Environment variables and Supabase client OK.');
 
         const workerName = getWorkerPm2Name(agentId);
-        // Define worker script path relative to manager's location
-        const workerScript = path.resolve(__dirname, '../../discord-worker/src/worker.ts');
-        log('log', `[MANAGER PRE-PM2] Worker script path: ${workerScript}`);
+        // Define paths relative to manager's location
+        const tsNodePath = path.resolve(__dirname, '../../discord-worker/node_modules/.bin/ts-node');
+        const workerScriptPath = path.resolve(__dirname, '../../discord-worker/src/worker.ts');
+        const workerCwd = path.dirname(workerScriptPath); // Get the directory of the worker script
+        log('log', `[MANAGER PRE-PM2] ts-node path: ${tsNodePath}`);
+        log('log', `[MANAGER PRE-PM2] Worker script path: ${workerScriptPath}`);
+        log('log', `[MANAGER PRE-PM2] Worker CWD: ${workerCwd}`);
 
         // Wrap the core PM2 interaction and polling in a Promise
         await new Promise<void>((resolve, reject) => {
@@ -146,7 +150,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                         log('warn', `[MANAGER START] Worker ${workerName} is already running.`);
                         return resolve(); // Resolve if already running
                     }
-                    log('log', `[MANAGER START] Worker ${workerName} not running or stopped. Proceeding to start via pm2.start API...`);
+                    log('log', `[MANAGER START] Worker ${workerName} not running or stopped. Proceeding to start via pm2.start API (ts-node as script)...`);
 
                     // --- Construct Environment Variables (as before) --- 
                     const inactivityTimeoutValue = req.body.inactivityTimeout === undefined || req.body.inactivityTimeout === null
@@ -169,19 +173,17 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                     };
                     log('log', `[MANAGER START] Worker env prepared.`);
 
-                    // --- PM2 Start Options for Programmatic API --- 
+                    // --- PM2 Start Options: Run ts-node binary, pass worker.ts as arg --- 
                     const startOptions = {
-                        script: workerScript,
+                        // Run the ts-node binary itself as the script
+                        script: tsNodePath, 
+                        // Pass the actual worker.ts path as an argument to ts-node
+                        args: [workerScriptPath], 
                         name: workerName,
-                        // Use node_args to require ts-node/register for TS execution
-                        node_args: ["--require", "ts-node/register"], 
-                        // We don't need interpreter if using node_args
-                        // interpreter: './node_modules/.bin/ts-node', 
-                        args: [], // Add any script arguments if needed
                         env: workerEnv, // Pass constructed environment
                         autorestart: false,
-                        // Ensure it runs in the correct directory if relative paths matter in worker
-                        cwd: path.dirname(workerScript), 
+                        cwd: workerCwd, // Set CWD to the worker's src directory
+                        // No interpreter or node_args needed here, as we run ts-node directly
                     };
 
                     log('log', `[MANAGER PM2 START] Attempting pm2.start with options:`, JSON.stringify(startOptions, null, 2));
@@ -229,12 +231,11 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                                 resolve(); // Resolve the outer promise on success
                             } else {
                                 log('error', `[MANAGER START FAIL] Worker ${agentId} failed polling. Attempting cleanup...`);
-                                // Attempt to stop the process if polling failed
                                 pm2.stop(workerName, (stopErr: any) => {
                                     if (stopErr) log('error', `[MANAGER START FAIL CLEANUP ERR] Failed to stop worker ${workerName} after polling failure:`, stopErr);
                                     else log('warn', `[MANAGER START FAIL CLEANUP OK] Stopped worker ${workerName} after polling failure.`);
                                 });
-                                reject(new Error(`Worker started but failed to activate.`)); // Reject outer promise on failure
+                                reject(new Error(`Worker started but failed to activate.`)); 
                             }
                         } catch (startCallbackError) {
                             log('error', `[MANAGER START ERR - PM2 START CALLBACK] Uncaught exception:`, startCallbackError);
@@ -248,14 +249,14 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
             }); // End of pm2.describe callback
         }); // End of new Promise wrapper
 
-        // If the promise resolved successfully:
+        // --- Success Case --- 
         log('log', `[MANAGER START OK - HANDLER] Worker process management completed successfully for ${agentId}.`);
         res.status(200).json({ message: `Worker initiated or already running.` });
 
     } catch (error) {
-        // If the promise rejected or other errors occurred:
+        // --- Error Handling --- 
         log('error', '[MANAGER START ERR - HANDLER] Caught error in /start-worker:', error);
-        next(error); // Use next() for error handling
+        next(error); 
     }
 });
 
