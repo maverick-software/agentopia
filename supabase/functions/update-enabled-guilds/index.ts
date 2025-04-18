@@ -9,7 +9,7 @@ interface EnabledGuildInfo {
   // Include other fields that need to be preserved or updated during upsert
   discord_app_id: string; 
   discord_public_key: string;
-  inactivity_timeout_ms: number | null; // Match DB schema type
+  inactivity_timeout_minutes: number | null; // Match DB schema type (assuming _minutes)
 }
 
 serve(async (req) => {
@@ -54,12 +54,9 @@ serve(async (req) => {
         guild_id: guildInfo.guild_id,
         is_enabled: guildInfo.is_enabled,
         // Pass through other required fields provided by the frontend
-        // These are necessary because the primary key is just 'id', not composite.
-        // If a row for agent_id/guild_id doesn't exist, upsert creates it,
-        // and needs these values. If it does exist, they might be updated.
         discord_app_id: guildInfo.discord_app_id,
         discord_public_key: guildInfo.discord_public_key,
-        inactivity_timeout_ms: guildInfo.inactivity_timeout_ms,
+        inactivity_timeout_minutes: guildInfo.inactivity_timeout_minutes, // Use _minutes
         // worker_status is likely managed by the worker/manager, not set here
       };
 
@@ -97,7 +94,7 @@ serve(async (req) => {
                     // Update other fields if necessary?
                     discord_app_id: guildInfo.discord_app_id,
                     discord_public_key: guildInfo.discord_public_key,
-                    inactivity_timeout_ms: guildInfo.inactivity_timeout_ms,
+                    inactivity_timeout_minutes: guildInfo.inactivity_timeout_minutes, // Use _minutes
                  })
                 .eq('id', existing.id); // Match on the actual primary key
              if (updateError) throw updateError;
@@ -110,7 +107,7 @@ serve(async (req) => {
             // associated with the agent but stored denormalized here.
              const { error: insertError } = await supabaseAdmin
                 .from('agent_discord_connections')
-                .insert(upsertData); // Insert the full record
+                .insert(upsertData); // Insert the full record (now includes _minutes)
              if (insertError) throw insertError;
              console.log(`Insert successful for agent ${agentId}, guild ${guildInfo.guild_id}`);
         }

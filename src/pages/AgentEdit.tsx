@@ -9,7 +9,7 @@ import { DiscordConnect } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
-// import { GuildSelectionModal } from '../components/GuildSelectionModal'; // Commented out: Component not yet created (Phase 8)
+import { GuildSelectionModal } from '../components/GuildSelectionModal';
 
 interface BotGuild {
   id: string;
@@ -256,27 +256,71 @@ export function AgentEdit() {
       });
       setDiscordBotKey(agentData.discord_bot_key || '');
 
-      const { data: connectionData, error: connectionError } = await supabase
+      // Fetch ALL connection records for the agent
+      const { data: allConnections, error: connectionError } = await supabase
         .from('agent_discord_connections')
         .select('id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
-        .eq('agent_id', agentId)
-        .limit(1)
-        .maybeSingle();
+        .eq('agent_id', agentId);
 
-      console.log(`[fetchAgent] Received connection data for ${agentId}:`, connectionData ? connectionData.id : 'None');
+      console.log(`[fetchAgent] Received all connection records for ${agentId}:`, allConnections);
 
       if (connectionError) throw new Error(connectionError.message);
 
-      if (connectionData) {
+      // Determine representative status and details
+      let representativeStatus: AgentDiscordConnection['worker_status'] = 'inactive';
+      let representativeConnection: Partial<AgentDiscordConnection> | null = null;
+
+      if (allConnections && allConnections.length > 0) {
+        // Prioritize showing 'active' if any connection is active
+        const activeConnection = allConnections.find(c => c.worker_status === 'active');
+        if (activeConnection) {
+          representativeStatus = 'active';
+          representativeConnection = activeConnection;
+          console.log(`[fetchAgent] Found active connection (ID: ${activeConnection.id})`);
+        } else {
+          // If none are active, check for 'activating'
+          const activatingConnection = allConnections.find(c => c.worker_status === 'activating');
+          if (activatingConnection) {
+            representativeStatus = 'activating';
+            representativeConnection = activatingConnection;
+            console.log(`[fetchAgent] Found activating connection (ID: ${activatingConnection.id})`);
+          } else {
+             // If none active/activating, check for 'stopping'
+            const stoppingConnection = allConnections.find(c => c.worker_status === 'stopping');
+            if (stoppingConnection) {
+                representativeStatus = 'stopping';
+                representativeConnection = stoppingConnection;
+                console.log(`[fetchAgent] Found stopping connection (ID: ${stoppingConnection.id})`);
+            } else {
+                // If none active/activating/stopping, check for 'error'
+                 const errorConnection = allConnections.find(c => c.worker_status === 'error');
+                 if (errorConnection) {
+                    representativeStatus = 'error';
+                    representativeConnection = errorConnection;
+                    console.log(`[fetchAgent] Found error connection (ID: ${errorConnection.id})`);
+                 } else {
+                    // Otherwise, use the first record found as representative for details (status is inactive)
+                    representativeConnection = allConnections[0];
+                    representativeStatus = representativeConnection.worker_status || 'inactive'; // Default to inactive
+                    console.log(`[fetchAgent] No active/activating/stopping/error connections. Using first record (ID: ${representativeConnection.id}) status: ${representativeStatus}`);
+                 }
+            }
+          }
+        }
+
+        // Set state based on the representative connection found (or the first one)
         setDiscordConnectionData({
-          id: connectionData.id,
+          id: representativeConnection.id, // Store the ID of the connection we used for status/details
           agent_id: agentId,
-          inactivity_timeout_minutes: connectionData.inactivity_timeout_minutes ?? 10,
-          worker_status: connectionData.worker_status || 'inactive',
-          discord_app_id: connectionData.discord_app_id || '',
-          discord_public_key: connectionData.discord_public_key || '',
+          inactivity_timeout_minutes: representativeConnection.inactivity_timeout_minutes ?? 10,
+          worker_status: representativeStatus, // Use the derived representative status
+          discord_app_id: representativeConnection.discord_app_id || '',
+          discord_public_key: representativeConnection.discord_public_key || '',
         });
+
       } else {
+        // No connection records found, set defaults
+        console.log(`[fetchAgent] No connection records found for agent ${agentId}. Setting defaults.`);
         setDiscordConnectionData({
           id: undefined,
           agent_id: agentId,
@@ -455,7 +499,7 @@ export function AgentEdit() {
            ...g,
            discord_app_id: discordConnectionData.discord_app_id || '',
            discord_public_key: discordConnectionData.discord_public_key || '',
-           inactivity_timeout_ms: (discordConnectionData.inactivity_timeout_minutes ?? 10) * 60 * 1000, 
+           inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes ?? 10, 
        }));
 
       const { error: invokeError } = await supabase.functions.invoke('update-enabled-guilds', {
@@ -507,87 +551,88 @@ export function AgentEdit() {
     setSaveSuccess(false);
     console.log(`Form submitted. ${isEditing ? 'Updating' : 'Creating'} agent...`);
 
-    const agentPayload: Partial<AgentType> & { user_id: string } = {
-      name: agentFormData.name,
-      description: agentFormData.description,
-      personality: agentFormData.personality,
-      system_instructions: agentFormData.system_instructions,
-      assistant_instructions: agentFormData.assistant_instructions,
-      active: agentFormData.active,
-      user_id: user.id,
-      discord_bot_key: discordBotKey || undefined,
-    };
-
-    const connectionPayload: Partial<AgentDiscordConnection> = {
-        discord_app_id: discordConnectionData.discord_app_id,
-        discord_public_key: discordConnectionData.discord_public_key,
-        inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
-    };
-
-    try {
-      let agentId = id;
-      if (isEditing && agentId) {
-        console.log(`Updating agent ${agentId}`);
-        const { error: updateAgentError } = await supabase
-          .from('agents')
-          .update(agentPayload)
-          .eq('id', agentId);
-        if (updateAgentError) throw updateAgentError;
-        console.log(`Agent ${agentId} updated successfully.`);
-
-        if (discordConnectionData.id) {
-            console.log(`Updating connection record ${discordConnectionData.id}`);
-             const { error: updateConnectionError } = await supabase
-                .from('agent_discord_connections')
-                .update(connectionPayload)
-                .eq('id', discordConnectionData.id);
-             if (updateConnectionError) {
-                 console.warn(`Failed to update main connection record ${discordConnectionData.id}: ${updateConnectionError.message}`);
-             }
-        } else {
-             console.warn(`No existing connection record ID found for agent ${agentId} to update main settings.`);
-        }
-
-      } else {
-        console.log('Creating new agent');
-        const { data: newAgent, error: createAgentError } = await supabase
-          .from('agents')
-          .insert(agentPayload)
-          .select()
-          .single();
-        if (createAgentError) throw createAgentError;
-        if (!newAgent) throw new Error('Failed to create agent.');
-        agentId = newAgent.id;
-        console.log(`Agent created successfully with ID: ${agentId}.`);
-        
-        const initialConnectionPayload = {
-             ...connectionPayload,
-             agent_id: agentId,
-             worker_status: 'inactive',
-             guild_id: null
+    // Use setTimeout to ensure state is fully updated before proceeding
+    setTimeout(async () => {
+      try {
+        const agentPayload: Partial<AgentType> & { user_id: string } = {
+          name: agentFormData.name,
+          description: agentFormData.description,
+          personality: agentFormData.personality,
+          system_instructions: agentFormData.system_instructions,
+          assistant_instructions: agentFormData.assistant_instructions,
+          active: agentFormData.active,
+          user_id: user.id,
+          discord_bot_key: discordBotKey || undefined,
         };
-        console.log(`Creating initial connection record for agent ${agentId}`);
-        const { error: createConnectionError } = await supabase
+
+        const connectionPayload: Partial<AgentDiscordConnection> = {
+          discord_app_id: discordConnectionData.discord_app_id,
+          discord_public_key: discordConnectionData.discord_public_key,
+          inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
+        };
+          
+        let agentId = id;
+        if (isEditing && agentId) {
+          console.log(`Updating agent ${agentId}`);
+          const { error: updateAgentError } = await supabase
+            .from('agents')
+            .update(agentPayload)
+            .eq('id', agentId);
+          if (updateAgentError) throw updateAgentError;
+          console.log(`Agent ${agentId} updated successfully.`);
+
+          if (discordConnectionData.id) {
+            console.log(`Updating connection record ${discordConnectionData.id}`);
+            const { error: updateConnectionError } = await supabase
+              .from('agent_discord_connections')
+              .update(connectionPayload)
+              .eq('id', discordConnectionData.id);
+            if (updateConnectionError) {
+              console.warn(`Failed to update main connection record ${discordConnectionData.id}: ${updateConnectionError.message}`);
+            }
+          } else {
+            console.warn(`No existing connection record ID found for agent ${agentId} to update main settings.`);
+          }
+        } else {
+          console.log('Creating new agent');
+          const { data: newAgent, error: createAgentError } = await supabase
+            .from('agents')
+            .insert(agentPayload)
+            .select()
+            .single();
+          if (createAgentError) throw createAgentError;
+          if (!newAgent) throw new Error('Failed to create agent.');
+          agentId = newAgent.id;
+          console.log(`Agent created successfully with ID: ${agentId}.`);
+          
+          const initialConnectionPayload = {
+            ...connectionPayload,
+            agent_id: agentId,
+            worker_status: 'inactive',
+            guild_id: null
+          };
+          console.log(`Creating initial connection record for agent ${agentId}`);
+          const { error: createConnectionError } = await supabase
             .from('agent_discord_connections')
             .insert(initialConnectionPayload);
-        if (createConnectionError) {
+          if (createConnectionError) {
             console.warn(`Failed to create initial connection record for agent ${agentId}: ${createConnectionError.message}`);
+          }
+
+          navigate(`/agent/${agentId}`);
         }
 
-        navigate(`/agent/${agentId}`);
+        await handleConnectDatastores(); 
+        
+        setSaveSuccess(true);
+        console.log(`Agent ${isEditing ? 'update' : 'create'} process completed successfully for ID: ${agentId}`);
+      } catch (err: any) {
+        console.error(`Error saving agent: ${err.message}`, { error: err });
+        setError(`Failed to save agent: ${err.message}`);
+      } finally {
+        setSaving(false);
       }
-
-      await handleConnectDatastores(); 
-
-      setSaveSuccess(true);
-      console.log(`Agent ${isEditing ? 'update' : 'create'} process completed successfully for ID: ${agentId}`);
-
-    } catch (err: any) {
-      console.error(`Error saving agent: ${err.message}`, { error: err });
-      setError(`Failed to save agent: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
+    }, 100); // Small delay to ensure state synchronization
   };
 
   const handleActivateAgent = async () => {
@@ -1068,6 +1113,18 @@ export function AgentEdit() {
             </div>
           </div>
         </div>
+      )}
+
+      {isGuildModalOpen && (
+          <GuildSelectionModal
+              isOpen={isGuildModalOpen}
+              onClose={handleCloseGuildModal}
+              onSave={handleSaveEnabledGuilds}
+              allGuilds={allGuilds}
+              enabledGuilds={enabledGuilds}
+              loading={guildsLoading}
+              isSaving={guildsLoading}
+          />
       )}
     </div>
   );

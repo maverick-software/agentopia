@@ -101,33 +101,77 @@ serve(async (req) => {
        });
     }
 
-    // *** MODIFIED: Step 4.5: Fetch Connection details (id, guild_id, timeout) ***
+    // *** NEW: Update DB status BEFORE calling manager ***
+    if (action === 'start') {
+        console.log(`[FUNC PRE-MANAGER] Setting status to 'activating' for enabled connections of agent ${agentId}...`);
+        const { error: updateActivatingError } = await supabaseAdmin
+            .from('agent_discord_connections')
+            .update({ worker_status: 'activating' })
+            .eq('agent_id', agentId)
+            .eq('is_enabled', true); // Only target enabled guilds
+
+        if (updateActivatingError) {
+            // Log the error but potentially proceed? Or should this be fatal?
+            // If manager can't start without status being activating, this should be fatal.
+            console.error(`[FUNC PRE-MANAGER] Error setting status to 'activating' for agent ${agentId}:`, updateActivatingError);
+            // Decide if we should return an error here or just log
+            return new Response(JSON.stringify({ error: "Failed to update initial activating status." }), { 
+                 status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+             });
+        }
+         console.log(`[FUNC PRE-MANAGER] Status set to 'activating' for enabled connections.`);
+    } else if (action === 'stop') {
+        console.log(`[FUNC PRE-MANAGER] Setting status to 'stopping' for active connections of agent ${agentId}...`);
+         const { error: updateStoppingError } = await supabaseAdmin
+            .from('agent_discord_connections')
+            .update({ worker_status: 'stopping' })
+            .eq('agent_id', agentId)
+            .eq('worker_status', 'active'); // Only target currently active connections
+
+        if (updateStoppingError) {
+            // Log the error but proceed - stopping should still be attempted
+            console.error(`[FUNC PRE-MANAGER] Error setting status to 'stopping' for agent ${agentId}:`, updateStoppingError);
+        }
+        console.log(`[FUNC PRE-MANAGER] Status set to 'stopping' for active connections.`);
+    }
+    // *** END NEW DB UPDATE ***
+
+    // *** MODIFIED: Step 4.5: Fetch *A* Connection detail (id, timeout) ***
     let connectionDetails: any = null;
-    // We need connection ID and potentially timeout for START
-    // We only strictly need agentId for STOP
-    // Fetch details ONLY if starting or if needed for consistency check later
+    let connectionId: string | null = null;
+    // We need AN id and the timeout for START.
+    // Fetch the first connection record found for the agent.
     console.log(`[FUNC FETCH] Fetching agent ${agentId} connection details (needed for start)...`);
-    const { data: connData, error: connError } = await supabaseAdmin
+    const { data: connDataArray, error: connError } = await supabaseAdmin
         .from('agent_discord_connections')
-        .select('id, guild_id, inactivity_timeout_minutes') 
+        .select('id, inactivity_timeout_minutes') 
         .eq('agent_id', agentId)
-        .maybeSingle(); 
+        .limit(1); // Fetch only one record
 
     if (connError) {
         console.error(`Error fetching discord connection details for agent ${agentId}:`, connError);
-        // Don't fail the whole function if just fetching fails, manager might handle it
-        // But log that we couldn't fetch it
+        // Log error but don't necessarily fail immediately
         connectionDetails = null;
     }
-    if (action === 'start' && !connData) { // Connection record MUST exist to start
-         console.error(`Discord connection record not found for agent ${agentId}. Required for start action.`);
+
+    // Check if we actually got a record
+    if (connDataArray && connDataArray.length > 0) {
+        connectionDetails = connDataArray[0]; // Get the first record
+        connectionId = connectionDetails.id;
+    } else {
+        connectionDetails = null;
+        connectionId = null;
+    }
+
+    // Connection record *must* exist to start
+    if (action === 'start' && !connectionId) { 
+         console.error(`No Discord connection records found for agent ${agentId}. Required for start action.`);
          return new Response(JSON.stringify({ error: "Bad Request: Discord connection record missing for agent." }), { 
              status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
          });
     }
-    connectionDetails = connData; // Store fetched data (could be null if not found)
-    connectionId = connectionDetails?.id || null; // Use optional chaining
-    console.log(`[FUNC POST-FETCH] Fetched connection details for agent ${agentId}: ID=${connectionId}, Guild=${connectionDetails?.guild_id}, Timeout=${connectionDetails?.inactivity_timeout_minutes}`);
+    
+    console.log(`[FUNC POST-FETCH] Using connection details for agent ${agentId}: ID=${connectionId}, Timeout=${connectionDetails?.inactivity_timeout_minutes}`);
     // *** END MODIFIED FETCH ***
 
     // 5. Forward request to Worker Manager service
@@ -229,4 +273,4 @@ serve(async (req) => {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
-}); 
+});
