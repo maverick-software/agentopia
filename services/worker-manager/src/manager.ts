@@ -185,7 +185,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                                  pm2.stop(workerName, (stopErr: any, stopProc: any) => {
                                      if (stopErr) {
                                          logger.error(`[MANAGER START FAIL CLEANUP ERR ${agentId}] Failed to stop worker ${workerName} after start failure: ${stopErr.message}`, { error: stopErr });
-                                     } else {
+                            } else {
                                          logger.info(`[MANAGER START FAIL CLEANUP OK ${agentId}] Stopped worker ${workerName} after start failure.`);
                                      }
                                      // No need to resolve/reject here, just perform cleanup

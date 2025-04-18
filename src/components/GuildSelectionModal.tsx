@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Check, AlertTriangle } from 'lucide-react';
 
 interface BotGuild {
     id: string;
@@ -14,11 +14,10 @@ interface EnabledGuildStatus {
 interface GuildSelectionModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (enabledList: EnabledGuildStatus[]) => Promise<void>; // Assuming onSave is async
+    onSave: (enabledList: EnabledGuildStatus[]) => Promise<void>;
     allGuilds: BotGuild[];
     enabledGuilds: EnabledGuildStatus[];
     loading: boolean;
-    isSaving: boolean;
 }
 
 export function GuildSelectionModal({ 
@@ -28,40 +27,68 @@ export function GuildSelectionModal({
     allGuilds,
     enabledGuilds,
     loading,
-    isSaving
 }: GuildSelectionModalProps) {
     const [enabledState, setEnabledState] = useState<Record<string, boolean>>({});
+    const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+    const [internalSaving, setInternalSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (isOpen && allGuilds.length > 0) {
-            const initialEnabledState: Record<string, boolean> = {};
-            const enabledMap = new Map(enabledGuilds.map(g => [g.guild_id, g.is_enabled]));
+        if (isOpen) {
+            setShowSaveSuccess(false);
+            setInternalSaving(false);
+            setSaveError(null);
             
-            allGuilds.forEach(guild => {
-                // Default to true if not found in enabledGuilds (newly joined servers)
-                initialEnabledState[guild.id] = enabledMap.get(guild.id) ?? true;
-            });
-            setEnabledState(initialEnabledState);
+            if (allGuilds.length > 0) {
+                const initialEnabledState: Record<string, boolean> = {};
+                const enabledMap = new Map(enabledGuilds.map(g => [g.guild_id, g.is_enabled]));
+                allGuilds.forEach(guild => {
+                    initialEnabledState[guild.id] = enabledMap.get(guild.id) ?? true;
+                });
+                setEnabledState(initialEnabledState);
+            }
+        } else {
+            
         }
     }, [isOpen, allGuilds, enabledGuilds]);
 
     const handleToggle = useCallback((guildId: string) => {
+        if (internalSaving || showSaveSuccess) return;
         setEnabledState(prev => ({ ...prev, [guildId]: !prev[guildId] }));
-    }, []);
+    }, [internalSaving, showSaveSuccess]);
 
     const handleSave = useCallback(async () => {
+        console.log("[Modal Save] Start");
+        setInternalSaving(true);
+        setShowSaveSuccess(false);
+        setSaveError(null);
         const updatedEnabledList: EnabledGuildStatus[] = Object.entries(enabledState)
             .map(([guild_id, is_enabled]) => ({ guild_id, is_enabled }));
         try {
+            console.log("[Modal Save] Calling onSave prop...");
             await onSave(updatedEnabledList);
-            // onClose will likely be called by the parent component on successful save
-        } catch (error) {
-            console.error("Error saving enabled guilds:", error);
-            // Optionally show an error message within the modal
+            console.log("[Modal Save] onSave prop completed successfully.");
+            
+            setInternalSaving(false);
+            setShowSaveSuccess(true);
+            console.log("[Modal Save] Set showSaveSuccess = true, internalSaving = false. State should update.");
+            
+            setTimeout(() => {
+                console.log("[Modal Save] Timeout triggered. Resetting success state and closing.");
+                setShowSaveSuccess(false); 
+                onClose(); 
+            }, 1500);
+        } catch (error: any) {
+            console.error("[Modal Save] Error during onSave call:", error);
+            setSaveError(error?.message || "An unknown error occurred while saving.");
+            setInternalSaving(false);
+            setShowSaveSuccess(false); 
         }
-    }, [enabledState, onSave]);
+    }, [enabledState, onSave, onClose]);
 
     if (!isOpen) return null;
+
+    const disableActions = loading || (internalSaving && !showSaveSuccess) || allGuilds.length === 0;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 transition-opacity duration-300">
@@ -71,7 +98,7 @@ export function GuildSelectionModal({
                     <button
                         onClick={onClose}
                         className="text-gray-400 hover:text-white disabled:opacity-50"
-                        disabled={isSaving}
+                        disabled={disableActions}
                     >
                         <X className="w-6 h-6" />
                     </button>
@@ -101,7 +128,7 @@ export function GuildSelectionModal({
                                         className="sr-only peer"
                                         checked={enabledState[guild.id] ?? true}
                                         onChange={() => handleToggle(guild.id)}
-                                        disabled={isSaving}
+                                        disabled={disableActions}
                                     />
                                     <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                 </label>
@@ -110,25 +137,35 @@ export function GuildSelectionModal({
                     </div>
                 )}
 
+                {saveError && (
+                    <div className="mt-4 p-3 bg-red-900/50 border border-red-700 rounded-md text-red-300 flex items-center">
+                        <AlertTriangle size={18} className="mr-2 flex-shrink-0" />
+                        <span className="text-sm">{saveError}</span>
+                    </div>
+                )}
+
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
                     <button
                         type="button"
                         onClick={onClose}
-                        disabled={isSaving}
+                        disabled={disableActions}
                         className="px-4 py-2 text-gray-300 bg-gray-600 rounded-md hover:bg-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                        disabled={isSaving || loading || allGuilds.length === 0}
+                        className={`px-4 py-2 rounded-md transition-colors flex items-center ${ 
+                            showSaveSuccess 
+                                ? 'bg-green-600 cursor-default'
+                                : 'bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                        } text-white`}
+                        disabled={disableActions}
                     >
-                        {isSaving ? (
-                            <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Saving...
-                            </>
+                        {internalSaving && !showSaveSuccess ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                        ) : showSaveSuccess ? (
+                            <><Check className="w-4 h-4 mr-2" /> Saved!</>
                         ) : (
                             'Save Changes'
                         )}

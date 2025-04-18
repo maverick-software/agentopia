@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw, Save, Server, Settings, Link as LinkIcon, Play, StopCircle } from 'lucide-react';
 import type { AgentDiscordConnection } from '../types';
 
@@ -20,7 +20,7 @@ interface DiscordConnectProps {
   className?: string;
 }
 
-export function DiscordConnect({ 
+function DiscordConnectComponent({ 
   connection,
   botKey,
   onBotKeyChange,
@@ -269,3 +269,15 @@ export function DiscordConnect({
     </div>
   );
 }
+
+// Export the memoized version
+export const DiscordConnect = React.memo(DiscordConnectComponent);
+
+// Or alternatively, directly wrap the function expression if you prefer:
+/*
+export const DiscordConnect = React.memo(function DiscordConnect({ 
+  // ... props ... 
+}: DiscordConnectProps) {
+  // ... component logic ... 
+});
+*/

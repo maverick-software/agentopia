@@ -140,7 +140,7 @@ let inactivityTimer: NodeJS.Timeout | null = null;
     }
     try {
          // *** REINSTATED: Update status on shutdown ***
-         await updateStatus(finalStatus, errorMessage);
+        await updateStatus(finalStatus, errorMessage); 
         logger.info(`Destroying Discord client for connection ${CONNECTION_ID}...`);
         client.destroy();
             logger.info(`Shutdown complete for connection ${CONNECTION_ID}.`);

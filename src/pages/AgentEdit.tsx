@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, Trash2, Loader2, CheckCircle, AlertTriangle, X, Server, Settings, Link as LinkIcon } from 'lucide-react';
+import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, Trash2, Loader2, CheckCircle, AlertTriangle, X, Server, Settings, Link as LinkIcon, Bot } from 'lucide-react';
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -110,6 +110,9 @@ export function AgentEdit() {
     deleteMcpServer,
     testMcpConnection 
   } = useAgentMcp(id);
+
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollAttemptsRef = useRef(0);
 
   const fetchBotGuilds = useCallback(async () => {
     if (!id) {
@@ -356,6 +359,14 @@ export function AgentEdit() {
       fetchAgentAttempts.current = 0;
       setLoading(false);
 
+      // Ensure polling is stopped if agent is fetched manually
+      if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+          pollAttemptsRef.current = 0;
+          console.log("[fetchAgent] Cleared any active worker status polling.");
+      }
+
     } catch (err: any) {
       console.error(`[fetchAgent] Error fetching agent ${agentId} (Attempt ${currentAttempt}): ${err.message}`, { error: err });
       fetchAgentAttempts.current = currentAttempt;
@@ -422,19 +433,28 @@ export function AgentEdit() {
     }
   }, [id, isEditing, fetchAgent, fetchDatastores]);
 
-  const handleAgentFormChange = (field: keyof AgentType, value: any) => {
-    setAgentFormData(prev => ({ ...prev, [field]: value }));
-  };
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        console.log("[Unmount] Cleared worker status polling interval.");
+      }
+    };
+  }, []);
 
-  const handleConnectionChange = (field: keyof AgentDiscordConnection, value: any) => {
+  const handleAgentFormChange = useCallback((field: keyof AgentType, value: any) => {
+    setAgentFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const handleConnectionChange = useCallback((field: keyof AgentDiscordConnection, value: any) => {
     let processedValue = value;
     if (field === 'inactivity_timeout_minutes') {
       processedValue = parseInt(value, 10) || 0;
     }
     setDiscordConnectionData(prev => ({ ...prev, [field]: processedValue }));
-  };
+  }, []);
 
-  const handleConnectDatastores = async () => {
+  const handleConnectDatastores = useCallback(async () => {
     if (!id || !user?.id) return;
 
     try {
@@ -477,73 +497,97 @@ export function AgentEdit() {
     } finally {
       setConnectingDatastores(false);
     }
-  };
+  }, [id, selectedDatastores.knowledge, selectedDatastores.vector]);
 
-  const handleOpenGuildModal = () => {
-    fetchBotGuilds(); 
-    fetchEnabledGuildStatus();
+  const handleOpenGuildModal = useCallback(() => {
+    if (!discordBotKey) {
+      setError('Please enter and save a Discord Bot Token first.');
+        return;
+    }
     setIsGuildModalOpen(true);
-  };
+  }, [discordBotKey]);
 
-  const handleCloseGuildModal = () => {
+  const handleCloseGuildModal = useCallback(() => {
     setIsGuildModalOpen(false);
-  };
+  }, []);
 
-  const handleSaveEnabledGuilds = async (updatedEnabledList: EnabledGuildStatus[]) => {
-    if (!id) return;
-    console.log(`Saving enabled guilds for agent ${id}...`);
+  const handleSaveEnabledGuilds = useCallback(async (updatedEnabledList: EnabledGuildStatus[]) => {
+    if (!id) {
+      setError("Agent ID is missing.");
+          return;
+      }
+    console.log(`Saving enabled guilds for agent ${id}...`, updatedEnabledList);
     setGuildsLoading(true);
       setError(null);
     try {
-       const payloadList = updatedEnabledList.map(g => ({
-           ...g,
-           discord_app_id: discordConnectionData.discord_app_id || '',
-           discord_public_key: discordConnectionData.discord_public_key || '',
-           inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes ?? 10, 
-       }));
+      const functionName = 'update-enabled-guilds';
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) throw new Error('Supabase URL VITE_SUPABASE_URL missing');
+      const invokeUrl = `${supabaseUrl}/functions/v1/${functionName}`;
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      if (!accessToken) throw new Error('User not authenticated');
 
-      const { error: invokeError } = await supabase.functions.invoke('update-enabled-guilds', {
-        body: {
+      const payload = {
           agentId: id,
-          enabledGuilds: payloadList
-        }
-      });
-      if (invokeError) throw invokeError;
+          enabledGuilds: updatedEnabledList.map(g => ({
+              ...g,
+              discord_app_id: discordConnectionData.discord_app_id || '',
+              discord_public_key: discordConnectionData.discord_public_key || '',
+              inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes ?? 10,
+          }))
+      }
 
-      console.log(`Enabled guilds saved successfully for agent ${id}.`);
+      const response = await fetch(invokeUrl, {
+         method: 'POST',
+              headers: {
+          'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+              const errorBody = await response.text();
+         let detail = `Status ${response.status}`;
+         try { detail = JSON.parse(errorBody).error || detail; } catch(e) {}
+         throw new Error(`Failed to save enabled guilds: ${detail}`);
+      }
+      
+      const result = await response.json();
+      console.log("Enabled guilds saved successfully:", result);
       setEnabledGuilds(updatedEnabledList);
-      handleCloseGuildModal();
-
-    } catch (err: any) {
-      console.error(`Error saving enabled guilds for agent ${id}: ${err.message}`, { error: err });
-      setError(`Failed to save server enablement status: ${err.message}`);
-    } finally {
+      } catch (err: any) {
+      console.error("Error saving enabled guilds:", err);
+      setError(`Error saving server settings: ${err.message}`);
+      throw err;
+      } finally {
       setGuildsLoading(false);
     }
-  };
+  }, [id, discordConnectionData]);
 
-  const handleGenerateInviteLink = () => {
+  const handleGenerateInviteLink = useCallback(() => {
     if (!discordConnectionData.discord_app_id) {
-      setError('Discord Application ID is required to generate an invite link.');
-          return;
-      }
-    console.log(`Generating invite link for App ID: ${discordConnectionData.discord_app_id}`);
+      setError("Discord Application ID is missing. Please save it first.");
+        return;
+    }
     setIsGeneratingInvite(true);
-      setError(null); 
+    const permissions = '277025400896';
+    const scope = 'bot%20applications.commands';
+    const inviteLink = `https://discord.com/api/oauth2/authorize?client_id=${discordConnectionData.discord_app_id}&permissions=${permissions}&scope=${scope}`;
     
-    const appId = discordConnectionData.discord_app_id;
-    const permissions = 274877975552;
-    const scopes = 'bot applications.commands';
-    
-    const url = `https://discord.com/api/oauth2/authorize?client_id=${appId}&permissions=${permissions}&scope=${scopes.replace(/ /g, '%20')}`;
-    
-    window.open(url, '_blank');
-    
-    setTimeout(() => setIsGeneratingInvite(false), 500);
-  };
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      console.log('Invite link copied to clipboard:', inviteLink);
+      setTimeout(() => setIsGeneratingInvite(false), 1500);
+    }).catch(err => {
+      console.error('Failed to copy invite link:', err);
+      setError("Failed to copy invite link to clipboard.");
+      setIsGeneratingInvite(false);
+    });
+  }, [discordConnectionData.discord_app_id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!user?.id) return;
 
     setSaving(true);
@@ -551,7 +595,6 @@ export function AgentEdit() {
     setSaveSuccess(false);
     console.log(`Form submitted. ${isEditing ? 'Updating' : 'Creating'} agent...`);
 
-    // Use setTimeout to ensure state is fully updated before proceeding
     setTimeout(async () => {
       try {
         const agentPayload: Partial<AgentType> & { user_id: string } = {
@@ -632,10 +675,80 @@ export function AgentEdit() {
     } finally {
       setSaving(false);
     }
-    }, 100); // Small delay to ensure state synchronization
-  };
+    }, 100);
+  }, [isEditing, id, agentFormData, discordConnectionData, discordBotKey, user?.id, navigate]);
 
-  const handleActivateAgent = async () => {
+  const debouncedSave = useDebouncedCallback(handleSubmit, 1500);
+
+  useEffect(() => {
+    if (agentFormData.name || agentFormData.description || agentFormData.personality || agentFormData.system_instructions || agentFormData.assistant_instructions || discordConnectionData.discord_app_id || discordConnectionData.discord_public_key || discordConnectionData.inactivity_timeout_minutes || isEditing) {
+      debouncedSave();
+    }
+  }, [agentFormData, discordConnectionData, isEditing, debouncedSave]);
+
+  const pollWorkerStatus = useCallback(async (connectionId: string, targetStatus: AgentDiscordConnection['worker_status']) => {
+      console.log(`[Poll] Checking status for connection ${connectionId}, target: ${targetStatus}`);
+      pollAttemptsRef.current += 1;
+      const MAX_POLL_ATTEMPTS = 15; // e.g., 15 attempts * 3 seconds = 45 seconds timeout
+      const POLL_INTERVAL_MS = 3000;
+      
+      try {
+          const { data, error } = await supabase
+              .from('agent_discord_connections')
+              .select('worker_status')
+              .eq('id', connectionId)
+              .single();
+
+          if (error) throw error;
+          
+          const currentStatus = data?.worker_status;
+          console.log(`[Poll] Current status for ${connectionId}: ${currentStatus}`);
+
+          if (currentStatus === targetStatus || currentStatus === 'error' || currentStatus === 'inactive') { // Reached final state or error/inactive
+              console.log(`[Poll] Reached final status (${currentStatus}) for ${connectionId}. Stopping poll.`);
+              if (pollingIntervalRef.current) {
+                  clearInterval(pollingIntervalRef.current);
+                  pollingIntervalRef.current = null;
+              }
+              pollAttemptsRef.current = 0;
+              // Update state with the final fetched status
+              setDiscordConnectionData(prev => ({
+                  ...prev,
+                  worker_status: currentStatus || 'error' // Default to error if null/undefined
+              }));
+              setIsActivating(false); // Ensure loading states are off
+              setIsDeactivating(false);
+          } else if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
+              console.warn(`[Poll] Max poll attempts (${MAX_POLL_ATTEMPTS}) reached for ${connectionId}. Stopping poll.`);
+              if (pollingIntervalRef.current) {
+                  clearInterval(pollingIntervalRef.current);
+                  pollingIntervalRef.current = null;
+              }
+              pollAttemptsRef.current = 0;
+              setError(`Worker status update timed out. Current status: ${currentStatus}. Please refresh manually.`);
+              setDiscordConnectionData(prev => ({ ...prev, worker_status: 'error' })); // Set to error on timeout
+              setIsActivating(false); 
+              setIsDeactivating(false);
+          } else {
+             // Continue polling - interval should already be running
+             console.log(`[Poll] Status (${currentStatus}) not final yet for ${connectionId}. Continuing poll.`);
+          }
+
+      } catch (err: any) {
+          console.error(`[Poll] Error polling status for ${connectionId}: ${err.message}`);
+          if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+          }
+          pollAttemptsRef.current = 0;
+          setError(`Error checking worker status: ${err.message}`);
+          setDiscordConnectionData(prev => ({ ...prev, worker_status: 'error' })); // Set to error on poll failure
+          setIsActivating(false);
+          setIsDeactivating(false);
+      }
+  }, []);
+
+  const handleActivateAgent = useCallback(async () => {
     if (!id || !discordConnectionData.id) {
       setError('Agent or Connection ID is missing, cannot activate.');
       return;
@@ -649,15 +762,22 @@ export function AgentEdit() {
       return;
     }
     
-    console.log(`Activating agent ${id}...`);
+    const connectionIdToPoll = discordConnectionData.id;
+    console.log(`Activating agent ${id}, connection ${connectionIdToPoll}...`);
     setIsActivating(true);
+    setDiscordConnectionData(prev => ({ ...prev, worker_status: 'activating' }));
     setError(null);
+
+    // Clear any existing poll before starting a new one
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    pollAttemptsRef.current = 0;
+    
     try {
       const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
         body: { 
           action: 'start',
           agentId: id,
-          connectionDbId: discordConnectionData.id,
+          connectionDbId: connectionIdToPoll,
           botToken: discordBotKey,
           inactivityTimeout: discordConnectionData.inactivity_timeout_minutes,
           agentName: agentFormData.name,
@@ -667,66 +787,61 @@ export function AgentEdit() {
       });
       if (invokeError) throw invokeError;
   
-      console.log(`Agent ${id} activation request sent successfully.`);
-      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'activating' })); 
-
-      // Add a delay then refetch agent status to update UI
-      setTimeout(() => {
-        if (id) {
-          console.log('Refetching agent status after activation attempt...');
-          fetchAgent(id);
-        }
-      }, 5000); // Refetch after 5 seconds
+      console.log(`Agent ${id} activation request sent successfully. Starting status poll for ${connectionIdToPoll}.`);
+      
+      // Start polling immediately and repeat
+      pollingIntervalRef.current = setInterval(() => {
+        pollWorkerStatus(connectionIdToPoll, 'active'); 
+      }, 3000); // Poll every 3 seconds
+      pollWorkerStatus(connectionIdToPoll, 'active'); // Initial check immediately
       
     } catch (err: any) {
       console.error(`Error activating agent ${id}: ${err.message}`, { error: err });
       setError(`Activation failed: ${err.message}`);
-    } finally {
       setIsActivating(false);
+      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'error' }));
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
     }
-  };
+  }, [id, discordConnectionData, discordBotKey, agentFormData.name, agentFormData.system_instructions, agentFormData.assistant_instructions, enabledGuilds, pollWorkerStatus]);
 
-  const handleDeactivateAgent = async () => {
+  const handleDeactivateAgent = useCallback(async () => {
     if (!id || !discordConnectionData.id) {
       setError('Agent or Connection ID is missing, cannot deactivate.');
       return;
     }
-    console.log(`Deactivating agent ${id}...`);
+
+    const connectionIdToPoll = discordConnectionData.id;
+    console.log(`Deactivating agent ${id}, connection ${connectionIdToPoll}...`);
     setIsDeactivating(true);
+    setDiscordConnectionData(prev => ({ ...prev, worker_status: 'stopping' }));
     setError(null);
+
+    // Clear any existing poll before starting a new one
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    pollAttemptsRef.current = 0;
+
     try {
       const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
-        body: { 
-          action: 'stop',
-          agentId: id,
-          connectionDbId: discordConnectionData.id
-        }
+        body: { action: 'stop', agentId: id, connectionDbId: connectionIdToPoll }
       });
       if (invokeError) throw invokeError;
   
-      console.log(`Agent ${id} deactivation request sent successfully.`);
-      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'stopping' }));
-
-      // Add a delay then refetch agent status to update UI
-      setTimeout(() => {
-        if (id) {
-          console.log('Refetching agent status after deactivation attempt...');
-          fetchAgent(id);
-        }
-      }, 5000); // Refetch after 5 seconds
+      console.log(`Agent ${id} deactivation request sent successfully. Starting status poll for ${connectionIdToPoll}.`);
+      
+      // Start polling immediately and repeat
+      pollingIntervalRef.current = setInterval(() => {
+        pollWorkerStatus(connectionIdToPoll, 'inactive'); 
+      }, 3000); // Poll every 3 seconds
+      pollWorkerStatus(connectionIdToPoll, 'inactive'); // Initial check immediately
       
     } catch (err: any) {
       console.error(`Error deactivating agent ${id}: ${err.message}`, { error: err });
       setError(`Deactivation failed: ${err.message}`);
-    } finally {
       setIsDeactivating(false);
+      setDiscordConnectionData(prev => ({ ...prev, worker_status: 'error' }));
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
     }
-  };
-
-  const generateInteractionEndpointUrl = (): string => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    return `${supabaseUrl}/functions/v1/discord-interaction-handler`;
-  };
+  }, [id, discordConnectionData.id, pollWorkerStatus]);
 
   if (!user) {
     return (
@@ -744,8 +859,7 @@ export function AgentEdit() {
     );
   }
 
-  const interactionEndpointUrl = generateInteractionEndpointUrl();
-
+  const interactionEndpointUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
   const isFullyConnected = !!(discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key);
 
   const selectedGuildName = allGuilds.find(g => g.id === discordConnectionData.guild_id)?.name;
@@ -823,7 +937,7 @@ export function AgentEdit() {
                   type="text"
                   required
                   value={agentFormData.name}
-                  onChange={(e) => setAgentFormData({ ...agentFormData, name: e.target.value })}
+                  onChange={(e) => handleAgentFormChange('name', e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Enter agent name"
                 />
@@ -836,7 +950,7 @@ export function AgentEdit() {
                 <textarea
                   required
                   value={agentFormData.description}
-                  onChange={(e) => setAgentFormData({ ...agentFormData, description: e.target.value })}
+                  onChange={(e) => handleAgentFormChange('description', e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Enter agent description"
                   rows={3}
@@ -850,7 +964,7 @@ export function AgentEdit() {
                 <select
                   required
                   value={agentFormData.personality}
-                  onChange={(e) => setAgentFormData({ ...agentFormData, personality: e.target.value })}
+                  onChange={(e) => handleAgentFormChange('personality', e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select a template</option>
@@ -1047,7 +1161,7 @@ export function AgentEdit() {
                 language="markdown"
                 theme="vs-dark"
                 value={agentFormData.system_instructions}
-                onChange={(value) => setAgentFormData({ ...agentFormData, system_instructions: value })}
+                onChange={(value) => handleAgentFormChange('system_instructions', value)}
                 options={{
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,
@@ -1092,7 +1206,7 @@ export function AgentEdit() {
                 language="markdown"
                 theme="vs-dark"
                 value={agentFormData.assistant_instructions}
-                onChange={(value) => setAgentFormData({ ...agentFormData, assistant_instructions: value })}
+                onChange={(value) => handleAgentFormChange('assistant_instructions', value)}
                 options={{
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,
@@ -1123,7 +1237,6 @@ export function AgentEdit() {
               allGuilds={allGuilds}
               enabledGuilds={enabledGuilds}
               loading={guildsLoading}
-              isSaving={guildsLoading}
           />
       )}
     </div>
