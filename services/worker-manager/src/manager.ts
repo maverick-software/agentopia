@@ -181,11 +181,20 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
                             // Attempt cleanup if start fails
                              try {
                                  logger.warn(`[MANAGER START FAIL CLEANUP ${agentId}] Attempting pm2.stop for ${workerName} after start failure.`);
-                                 await pm2.stop(workerName);
-                                 logger.info(`[MANAGER START FAIL CLEANUP OK ${agentId}] Stopped worker ${workerName} after start failure.`);
+                                 // Ensure the callback signature is correct: (err, proc)
+                                 pm2.stop(workerName, (stopErr: any, stopProc: any) => {
+                                     if (stopErr) {
+                                         logger.error(`[MANAGER START FAIL CLEANUP ERR ${agentId}] Failed to stop worker ${workerName} after start failure: ${stopErr.message}`, { error: stopErr });
+                                     } else {
+                                         logger.info(`[MANAGER START FAIL CLEANUP OK ${agentId}] Stopped worker ${workerName} after start failure.`);
+                                     }
+                                     // No need to resolve/reject here, just perform cleanup
+                                 });
                              } catch (cleanupErr: any) {
-                                 logger.error(`[MANAGER START FAIL CLEANUP ERR ${agentId}] Failed to stop worker ${workerName} after start failure: ${cleanupErr.message}`, { error: cleanupErr });
+                                 // This catch might not be reachable if pm2.stop callback handles error
+                                 logger.error(`[MANAGER START FAIL CLEANUP CATCH ERR ${agentId}] Failed to stop worker ${workerName} after start failure: ${cleanupErr.message}`, { error: cleanupErr });
                              }
+                             // Reject the main promise because pm2.start failed
                              return reject(new Error(`PM2 start error: ${startErr.message}`));
                          }
 
