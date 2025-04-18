@@ -175,66 +175,39 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
 
                     // --- Execute PM2 Start using Programmatic API --- 
                     pm2.start(startOptions, async (startErr: any, apps: any) => { // Callback for pm2.start
-                        try { 
+                        // Restore original check for start error
                             if (startErr) {
-                                logger.error(`[MANAGER PM2 START ERR ${agentId}] pm2.start failed for ${workerName}: ${startErr.message}`, { error: startErr });
-                                return reject(new Error(`Failed to start worker via PM2 API: ${startErr.message}`));
-                            }
-                            logger.info(`[MANAGER PM2 START OK ${agentId}] pm2.start command successful for ${workerName}. Apps: ${apps?.[0]?.pm2_env?.name}`);
+                             logger.error(`[MANAGER START ERR - PM2 START ${agentId}] pm2.start failed: ${startErr.message}`, { error: startErr });
+                            // Attempt cleanup if start fails
+                             try {
+                                 logger.warn(`[MANAGER START FAIL CLEANUP ${agentId}] Attempting pm2.stop for ${workerName} after start failure.`);
+                                 await pm2.stop(workerName);
+                                 logger.info(`[MANAGER START FAIL CLEANUP OK ${agentId}] Stopped worker ${workerName} after start failure.`);
+                             } catch (cleanupErr: any) {
+                                 logger.error(`[MANAGER START FAIL CLEANUP ERR ${agentId}] Failed to stop worker ${workerName} after start failure: ${cleanupErr.message}`, { error: cleanupErr });
+                             }
+                             return reject(new Error(`PM2 start error: ${startErr.message}`));
+                         }
 
-                            logger.info(`[MANAGER START ${agentId}] PM2 start initiated. Starting DB polling for ${connectionDbId}...`);
+                         // PM2 start command succeeded
+                         logger.info(`[MANAGER PM2 START OK ${agentId}] pm2.start command successful for ${workerName}. Apps: ${apps?.[0]?.name || 'N/A'}`);
 
-                            // --- Polling Logic (Unchanged) --- 
-                            const MAX_POLL_ATTEMPTS = 8;
-                            const POLL_INTERVAL_MS = 2500;
-                            let attempts = 0;
+                         // *** REMOVED Polling Logic ***
+                         // We now assume pm2.start success means the worker WILL eventually be active.
+                         // The manage-discord-worker function will handle setting the final DB status.
+                         logger.info(`[MANAGER START OK ${agentId}] Worker ${workerName} start process initiated successfully.`);
+                         resolve(); // Resolve the main promise immediately after successful PM2 start
 
-                            const pollForActiveStatusImpl = async (): Promise<boolean> => {
-                                attempts++;
-                                logger.debug(`[MANAGER START POLL ${attempts}/${MAX_POLL_ATTEMPTS} ${agentId}] Checking DB status for connection ${connectionDbId}...`);
-                                if (!supabaseAdmin) { logger.error(`[MANAGER START POLL ${agentId}] Supabase admin client not available.`); return false; }
-                                try {
-                                    const { data, error } = await supabaseAdmin
-                                        .from('agent_discord_connections') 
-                                        .select('worker_status')           
-                                        .eq('id', connectionDbId)
-                                        .single();
-                                    if (error) { logger.error(`[MANAGER START POLL ${agentId}] Polling error: ${error.message}`, { error }); return false; }
-                                    if (data?.worker_status === 'active') { logger.info(`[MANAGER START POLL ${agentId}] Polling success: status is active.`); return true; }
-                                    logger.debug(`[MANAGER START POLL ${agentId}] Polling status: ${data?.worker_status}`); 
-                                    if (attempts >= MAX_POLL_ATTEMPTS) { logger.warn(`[MANAGER START POLL ${agentId}] Polling timeout.`); return false; }
-                                    await new Promise(resolvePoll => setTimeout(resolvePoll, POLL_INTERVAL_MS)); 
-                                    return pollForActiveStatusImpl();
-                                } catch (pollErr: any) { logger.error(`[MANAGER START POLL ${agentId}] Polling exception: ${pollErr.message}`, { error: pollErr }); return false; }
-                            };
-
-                            const confirmedActive = await pollForActiveStatusImpl();
-                            // --- End Polling --- 
-
-                            if (confirmedActive) {
-                                logger.info(`[MANAGER START OK ${agentId}] Worker ${agentId} confirmed active.`);
-                                resolve(); // Resolve the outer promise on success
-                            } else {
-                                logger.error(`[MANAGER START FAIL ${agentId}] Worker ${agentId} failed polling. Attempting cleanup...`);
-                                pm2.stop(workerName, (stopErr: any) => {
-                                    if (stopErr) logger.error(`[MANAGER START FAIL CLEANUP ERR ${agentId}] Failed to stop worker ${workerName} after polling failure: ${stopErr.message}`, { error: stopErr });
-                                    else logger.warn(`[MANAGER START FAIL CLEANUP OK ${agentId}] Stopped worker ${workerName} after polling failure.`);
-                                });
-                                reject(new Error(`Worker started but failed to activate.`)); 
-                            }
-                        } catch (startCallbackError: any) {
-                            logger.error(`[MANAGER START ERR - PM2 START CALLBACK ${agentId}] Uncaught exception: ${startCallbackError.message}`, { error: startCallbackError });
-                            reject(startCallbackError instanceof Error ? startCallbackError : new Error('Error in pm2.start callback'));
-                        }
-                    }); // End of pm2.start callback
-                } catch (describeCallbackError: any) {
-                    logger.error(`[MANAGER START ERR - DESCRIBE CALLBACK ${agentId}] Uncaught exception: ${describeCallbackError.message}`, { error: describeCallbackError });
-                    reject(describeCallbackError instanceof Error ? describeCallbackError : new Error('Error in describe callback'));
+                    }); // End pm2.start callback
+                } catch (innerErr: any) { // Catch sync errors within the describe callback
+                    logger.error(`[MANAGER START ERR - DESCRIBE INNER ${agentId}] ${innerErr.message}`, { error: innerErr });
+                    reject(innerErr);
                 }
-            }); // End of pm2.describe callback
-        }); // End of new Promise wrapper
+            }); // End pm2.describe callback
+        }); // End new Promise for start logic
 
-        logger.info(`[MANAGER START OK ${agentId}] Worker ${agentId} activation process completed successfully.`);
+        // If promise resolved successfully
+        logger.info(`[MANAGER START OK ${agentId}] Worker ${agentId} start process completed.`);
         res.status(200).json({ message: `Worker ${agentId} started successfully.` });
 
     } catch (error: any) {
@@ -248,7 +221,7 @@ app.post('/start-worker', authenticate, async (req: Request, res: Response, next
 });
 
 app.post('/stop-worker', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const { agentId, connectionDbId } = req.body;
+    const { agentId } = req.body; // Only agentId is strictly needed now
     if (!agentId) {
         logger.warn(`[MANAGER STOP REQ] Missing agentId`);
         res.status(400).json({ error: 'Missing agentId' });
@@ -264,74 +237,31 @@ app.post('/stop-worker', authenticate, async (req: Request, res: Response, next:
             pm2.stop(workerName, async (stopErr: any) => {
                 if (stopErr && !stopErr.message.toLowerCase().includes('not found')) {
                     logger.error(`[MANAGER STOP ERR - PM2 STOP ${agentId}] pm2.stop failed for ${workerName}: ${stopErr.message}`, { error: stopErr });
-                    return reject(new Error(`PM2 stop error: ${stopErr.message}`));
+                    // Don't necessarily reject the whole request, manager tried its best.
+                    // But log the error.
+                     // Proceed to resolve, the function will handle DB status.
                 }
                 if (stopErr && stopErr.message.toLowerCase().includes('not found')) {
                      logger.warn(`[MANAGER STOP ${agentId}] Worker ${workerName} was already stopped or not found.`);
-                     // Still proceed to polling to ensure DB status is correct
+                     // Proceed to resolve
                 } else {
-                    logger.info(`[MANAGER STOP OK - PM2 STOP ${agentId}] pm2.stop command successful for ${workerName}.`);
+                    logger.info(`[MANAGER STOP OK - PM2 STOP ${agentId}] pm2.stop command successful or worker already stopped for ${workerName}.`);
                 }
 
-                // --- Poll for Inactive Status --- 
-                logger.info(`[MANAGER STOP ${agentId}] PM2 stop initiated/confirmed. Starting DB polling for ${connectionDbId}...`);
-                const MAX_POLL_ATTEMPTS = 8;
-                const POLL_INTERVAL_MS = 2500;
-                let attempts = 0;
+                // *** REMOVED Polling Logic ***
+                // Assume pm2.stop is sufficient. The manage-discord-worker function handles final DB status.
+                logger.info(`[MANAGER STOP OK ${agentId}] Worker ${workerName} stop process completed.`);
+                resolve(); // Resolve the promise immediately after pm2.stop callback
 
-                const pollForInactiveStatusImpl = async (): Promise<boolean> => {
-                    attempts++;
-                    logger.debug(`[MANAGER STOP POLL ${attempts}/${MAX_POLL_ATTEMPTS} ${agentId}] Checking DB status for connection ${connectionDbId}...`);
-                    if (!supabaseAdmin) { logger.error(`[MANAGER STOP POLL ${agentId}] Supabase admin client not available.`); return false; }
-                    if (!connectionDbId) { logger.warn(`[MANAGER STOP POLL ${agentId}] No connectionDbId provided, cannot verify DB status.`); return true; } // Assume success if no ID
-                    try {
-                        const { data, error } = await supabaseAdmin
-                            .from('agent_discord_connections')
-                            .select('worker_status')
-                            .eq('id', connectionDbId)
-                            .single();
-                        if (error && !error.message.includes('JSON object requested')) { // Ignore '0 rows' error if already deleted
-                            logger.error(`[MANAGER STOP POLL ${agentId}] Polling error: ${error.message}`, { error });
-                            return false;
-                        }
-                        // If no data (already deleted) or status is inactive, polling is successful
-                        if (!data || data.worker_status === 'inactive') {
-                            logger.info(`[MANAGER STOP POLL ${agentId}] Polling success: status is inactive or row deleted.`);
-                            return true;
-                        }
-                        logger.debug(`[MANAGER STOP POLL ${agentId}] Polling status: ${data.worker_status}`);
-                        if (attempts >= MAX_POLL_ATTEMPTS) { logger.warn(`[MANAGER STOP POLL ${agentId}] Polling timeout.`); return false; }
-                        await new Promise(resolvePoll => setTimeout(resolvePoll, POLL_INTERVAL_MS));
-                        return pollForInactiveStatusImpl();
-                    } catch (pollErr: any) {
-                        logger.error(`[MANAGER STOP POLL ${agentId}] Polling exception: ${pollErr.message}`, { error: pollErr });
-                        return false;
-                    }
-                };
-
-                const confirmedInactive = await pollForInactiveStatusImpl();
-                // --- End Polling ---
-
-                if (confirmedInactive) {
-                    logger.info(`[MANAGER STOP OK ${agentId}] Worker ${agentId} confirmed inactive.`);
-                    resolve();
-                } else {
-                     logger.error(`[MANAGER STOP FAIL ${agentId}] Worker ${agentId} failed polling for inactive status.`);
-                    resolve(); // Resolve anyway
-                }
             }); // End pm2.stop callback
-        }); // End Promise wrapper
+        }); // End new Promise for stop logic
 
-        logger.info(`[MANAGER STOP OK ${agentId}] Worker ${agentId} stop process completed.`);
+        // If promise resolved successfully
         res.status(200).json({ message: `Worker ${agentId} stopped successfully.` });
 
     } catch (error: any) {
         logger.error(`[MANAGER STOP ERR - GLOBAL ${agentId}] Error in /stop-worker: ${error.message}`, { error });
-         if (!res.headersSent) {
-            res.status(500).json({ error: error.message || 'Failed to stop worker' });
-         }
-       // next(error);
-       return;
+        res.status(500).json({ error: error.message || 'Failed to stop worker.' });
     }
 });
 
@@ -384,7 +314,7 @@ app.post('/restart-worker', authenticate, async (req: Request, res: Response): P
 app.get('/list-workers', authenticate, (req: Request, res: Response) => {
     logger.info(`[MANAGER LIST REQ] Received /list-workers request`);
     pm2.list((err: any, list: any[]) => {
-        if (err) {
+             if (err) {
             logger.error(`[MANAGER LIST ERR] Failed to list workers: ${err.message}`, { error: err });
             return res.status(500).json({ error: 'Failed to list workers' });
         }
@@ -425,4 +355,4 @@ const cleanup = () => {
 };
 
 process.on('SIGTERM', cleanup);
-process.on('SIGINT', cleanup); 
+process.on('SIGINT', cleanup);

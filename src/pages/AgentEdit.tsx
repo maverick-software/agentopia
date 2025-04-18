@@ -209,7 +209,7 @@ export function AgentEdit() {
       fetchEnabledGuildStatus();
     }
   }, [id, fetchEnabledGuildStatus]);
-
+  
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     if (saveSuccess) {
@@ -362,9 +362,9 @@ export function AgentEdit() {
       if (currentAttempt < MAX_FETCH_ATTEMPTS) {
         setTimeout(() => fetchAgent(agentId), 1000 * currentAttempt);
       } else {
-        setError(`Failed to load agent data: ${err.message}`);
-        setLoading(false);
-      }
+      setError(`Failed to load agent data: ${err.message}`);
+      setLoading(false);
+    }
     }
   }, [user?.id]);
 
@@ -493,7 +493,7 @@ export function AgentEdit() {
     if (!id) return;
     console.log(`Saving enabled guilds for agent ${id}...`);
     setGuildsLoading(true);
-    setError(null);
+      setError(null);
     try {
        const payloadList = updatedEnabledList.map(g => ({
            ...g,
@@ -525,11 +525,11 @@ export function AgentEdit() {
   const handleGenerateInviteLink = () => {
     if (!discordConnectionData.discord_app_id) {
       setError('Discord Application ID is required to generate an invite link.');
-      return;
-    }
+          return;
+      }
     console.log(`Generating invite link for App ID: ${discordConnectionData.discord_app_id}`);
     setIsGeneratingInvite(true);
-    setError(null);
+      setError(null); 
     
     const appId = discordConnectionData.discord_app_id;
     const permissions = 274877975552;
@@ -555,12 +555,12 @@ export function AgentEdit() {
     setTimeout(async () => {
       try {
         const agentPayload: Partial<AgentType> & { user_id: string } = {
-          name: agentFormData.name,
-          description: agentFormData.description,
-          personality: agentFormData.personality,
-          system_instructions: agentFormData.system_instructions,
-          assistant_instructions: agentFormData.assistant_instructions,
-          active: agentFormData.active,
+      name: agentFormData.name,
+      description: agentFormData.description,
+      personality: agentFormData.personality,
+      system_instructions: agentFormData.system_instructions,
+      assistant_instructions: agentFormData.assistant_instructions,
+      active: agentFormData.active,
           user_id: user.id,
           discord_bot_key: discordBotKey || undefined,
         };
@@ -571,11 +571,11 @@ export function AgentEdit() {
           inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
         };
           
-        let agentId = id;
-        if (isEditing && agentId) {
+      let agentId = id;
+      if (isEditing && agentId) {
           console.log(`Updating agent ${agentId}`);
           const { error: updateAgentError } = await supabase
-            .from('agents')
+          .from('agents')
             .update(agentPayload)
             .eq('id', agentId);
           if (updateAgentError) throw updateAgentError;
@@ -590,19 +590,19 @@ export function AgentEdit() {
             if (updateConnectionError) {
               console.warn(`Failed to update main connection record ${discordConnectionData.id}: ${updateConnectionError.message}`);
             }
-          } else {
+      } else {
             console.warn(`No existing connection record ID found for agent ${agentId} to update main settings.`);
           }
         } else {
           console.log('Creating new agent');
           const { data: newAgent, error: createAgentError } = await supabase
-            .from('agents')
+          .from('agents')
             .insert(agentPayload)
             .select()
-            .single();
+          .single();
           if (createAgentError) throw createAgentError;
           if (!newAgent) throw new Error('Failed to create agent.');
-          agentId = newAgent.id;
+        agentId = newAgent.id;
           console.log(`Agent created successfully with ID: ${agentId}.`);
           
           const initialConnectionPayload = {
@@ -623,15 +623,15 @@ export function AgentEdit() {
         }
 
         await handleConnectDatastores(); 
-        
-        setSaveSuccess(true);
+      
+      setSaveSuccess(true);
         console.log(`Agent ${isEditing ? 'update' : 'create'} process completed successfully for ID: ${agentId}`);
-      } catch (err: any) {
+    } catch (err: any) {
         console.error(`Error saving agent: ${err.message}`, { error: err });
         setError(`Failed to save agent: ${err.message}`);
-      } finally {
-        setSaving(false);
-      }
+    } finally {
+      setSaving(false);
+    }
     }, 100); // Small delay to ensure state synchronization
   };
 
@@ -646,16 +646,16 @@ export function AgentEdit() {
     }
     if (!enabledGuilds.some(g => g.is_enabled)) {
         setError('No servers are enabled for this agent. Please enable at least one server in "Manage Servers" before activating.');
-        return;
+      return;
     }
-
+    
     console.log(`Activating agent ${id}...`);
     setIsActivating(true);
     setError(null);
     try {
       const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
         body: { 
-          action: 'start', 
+          action: 'start',
           agentId: id,
           connectionDbId: discordConnectionData.id,
           botToken: discordBotKey,
@@ -677,7 +677,7 @@ export function AgentEdit() {
           fetchAgent(id);
         }
       }, 5000); // Refetch after 5 seconds
-  
+      
     } catch (err: any) {
       console.error(`Error activating agent ${id}: ${err.message}`, { error: err });
       setError(`Activation failed: ${err.message}`);
@@ -697,7 +697,7 @@ export function AgentEdit() {
     try {
       const { error: invokeError } = await supabase.functions.invoke('manage-discord-worker', {
         body: { 
-          action: 'stop', 
+          action: 'stop',
           agentId: id,
           connectionDbId: discordConnectionData.id
         }
@@ -714,7 +714,7 @@ export function AgentEdit() {
           fetchAgent(id);
         }
       }, 5000); // Refetch after 5 seconds
-  
+      
     } catch (err: any) {
       console.error(`Error deactivating agent ${id}: ${err.message}`, { error: err });
       setError(`Deactivation failed: ${err.message}`);

@@ -288,7 +288,7 @@ client.on(Events.MessageCreate, async (message: any) => {
                     logger.error(`[AGENT ${AGENT_ID}] Error processing message: ${error.message}`, { error });
                     await message.reply({ content: "Oops! Something went wrong while I was thinking." });
                 }
-        } else {
+            } else {
                 logger.info(`Bot mentioned by ${message.author.tag} with no message content.`);
             await message.reply({ content: "Hello there! How can I help you today?" });
                 resetInactivityTimer(); // Also reset timer if mentioned with no content
