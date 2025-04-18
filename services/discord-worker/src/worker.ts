@@ -90,12 +90,20 @@ let inactivityTimer: NodeJS.Timeout | null = null;
 // --- Functions --- 
     logger.info(`Defining functions (updateStatus, resetInactivityTimer, shutdown, checkDbRecord, handleShutdown) for connection ${CONNECTION_ID}...`);
 
-    // *** REMOVED: updateStatus function is no longer called by worker ***
-    /*
+    // *** REINSTATED: Worker uses RPC to update its own status ***
     async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string): Promise<void> {
         logger.info(`Attempting RPC update_worker_status for connection ${CONNECTION_ID} to status: ${status}. Error msg (if any): ${errorMessage}`);
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!SUPABASE_URL || !serviceKey) {
+            logger.error(`[WORKER UPDATE STATUS ${CONNECTION_ID}] Supabase URL or Service Key missing in env. Cannot update status.`);
+            return; 
+        }
         try {
-            const { error: rpcError } = await supabase.rpc('update_worker_status', {
+            // Use Service Role Key for status updates
+            const supabaseAdmin = createClient(SUPABASE_URL, serviceKey, { // Use validated key
+                 auth: { persistSession: false } 
+             });
+            const { error: rpcError } = await supabaseAdmin.rpc('update_worker_status', {
                 connection_id_in: CONNECTION_ID, 
                 new_status_in: status
             });
@@ -108,7 +116,6 @@ let inactivityTimer: NodeJS.Timeout | null = null;
             logger.error(`Exception during RPC call update_worker_status for connection ${CONNECTION_ID}: ${err.message}`, { error: err });
         }
     }
-    */
 
     function resetInactivityTimer(): void {
     if (inactivityTimer) {
@@ -132,7 +139,8 @@ let inactivityTimer: NodeJS.Timeout | null = null;
             inactivityTimer = null; // Explicitly nullify
     }
     try {
-        // *** REMOVED: await updateStatus(finalStatus, errorMessage); ***
+         // *** REINSTATED: Update status on shutdown ***
+         await updateStatus(finalStatus, errorMessage);
         logger.info(`Destroying Discord client for connection ${CONNECTION_ID}...`);
         client.destroy();
             logger.info(`Shutdown complete for connection ${CONNECTION_ID}.`);
@@ -212,7 +220,9 @@ client.once(Events.ClientReady, async (readyClient: any) => {
         await checkDbRecord('agent', AGENT_ID);
         const connectionExists = await checkDbRecord('connection', CONNECTION_ID);
         logger.info(`[WORKER PRE-STATUS-UPDATE ${CONNECTION_ID}] Attempting to update status to active. Connection exists: ${connectionExists}`);
-        resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
+         // *** REINSTATED: Update own status to active ***
+         await updateStatus('active'); 
+        resetInactivityTimer(); 
 });
 
 client.on(Events.MessageCreate, async (message: any) => {

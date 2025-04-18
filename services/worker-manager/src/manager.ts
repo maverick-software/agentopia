@@ -234,24 +234,20 @@ app.post('/stop-worker', authenticate, async (req: Request, res: Response, next:
     try {
         await new Promise<void>((resolve, reject) => {
             logger.info(`[MANAGER STOP ${agentId}] Attempting pm2.stop for ${workerName}...`);
-            pm2.stop(workerName, async (stopErr: any) => {
+            pm2.stop(workerName, async (stopErr: any, proc: any) => { 
                 if (stopErr && !stopErr.message.toLowerCase().includes('not found')) {
                     logger.error(`[MANAGER STOP ERR - PM2 STOP ${agentId}] pm2.stop failed for ${workerName}: ${stopErr.message}`, { error: stopErr });
-                    // Don't necessarily reject the whole request, manager tried its best.
-                    // But log the error.
-                     // Proceed to resolve, the function will handle DB status.
+                    // Don't reject, just log and resolve.
                 }
                 if (stopErr && stopErr.message.toLowerCase().includes('not found')) {
                      logger.warn(`[MANAGER STOP ${agentId}] Worker ${workerName} was already stopped or not found.`);
-                     // Proceed to resolve
                 } else {
                     logger.info(`[MANAGER STOP OK - PM2 STOP ${agentId}] pm2.stop command successful or worker already stopped for ${workerName}.`);
                 }
 
-                // *** REMOVED Polling Logic ***
-                // Assume pm2.stop is sufficient. The manage-discord-worker function handles final DB status.
+                // Polling logic remains removed.
                 logger.info(`[MANAGER STOP OK ${agentId}] Worker ${workerName} stop process completed.`);
-                resolve(); // Resolve the promise immediately after pm2.stop callback
+                resolve(); // Resolve the promise immediately 
 
             }); // End pm2.stop callback
         }); // End new Promise for stop logic
