@@ -201,7 +201,11 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .eq('agent_id', agentId);
 
     if (error) {
-      console.error('Error fetching MCP configurations:', JSON.stringify(error, null, 2));
+      if (error.message.includes('column') && error.message.includes('does not exist')){
+          console.error(`Database Schema Mismatch: Check columns in mcp_configurations select. Error: ${error.message}`);
+      } else {
+          console.error('Error fetching MCP configurations:', JSON.stringify(error, null, 2));
+      }
       return [];
     }
 
@@ -211,14 +215,14 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
     }
 
     // Transform to MCPServerConfig format
-    return configs.map((config: MCPConfigurationWithServer): MCPServerConfig => ({
+    return configs.map((config: any): MCPServerConfig => ({
       id: config.server.id,
       config_id: config.id,
       endpoint_url: config.server.endpoint_url,
       vault_api_key_id: config.server.vault_api_key_id,
-      timeout_ms: 30000,
-      max_retries: 1,
-      retry_backoff_ms: 100
+      timeout_ms: 30000, 
+      max_retries: 1, 
+      retry_backoff_ms: 100 
     }));
   } catch (error) {
     console.error('Error in getMCPConfigurations:', error);
@@ -522,7 +526,8 @@ Deno.serve(async (req) => {
         contextMessages.push({ role: 'user', content: userMessage }); 
 
         // Create chat completion stream
-        console.log('Calling OpenAI chat.completions.create...');
+        console.log(`[Agent: ${agentId}] Calling OpenAI chat.completions.create...`);
+        console.log("[Agent: ${agentId}] OpenAI Request Messages:", JSON.stringify(contextMessages, null, 2));
         const stream = await openai.chat.completions.create({
           model: 'gpt-4-turbo-preview',
           messages: contextMessages,
@@ -536,50 +541,36 @@ Deno.serve(async (req) => {
           async start(controller) {
             const encoder = new TextEncoder();
             let fullResponse = '';
+            let chunkCounter = 0;
+            console.log(`[Agent: ${agentId}, Stream] Starting OpenAI response stream processing...`);
 
             try {
               for await (const chunk of stream) {
+                chunkCounter++;
                 const content = chunk.choices[0]?.delta?.content || '';
+                console.log(`[Agent: ${agentId}, Stream] Received chunk ${chunkCounter}. Has content: ${!!content}. Content snippet: "${content.substring(0, 30)}..."`);
                 if (content) {
                   fullResponse += content;
                   controller.enqueue(encoder.encode(content));
                 }
               }
+              console.log(`[Agent: ${agentId}, Stream] Finished iterating OpenAI stream after ${chunkCounter} chunks.`);
             } catch (error) {
-              console.error('Error during streaming:', error);
-              // Encode error as SSE data
+              console.error(`[Agent: ${agentId}, Stream] Error during streaming:`, error);
               const errorMessage = JSON.stringify({
                 error: 'Error during streaming',
                 details: error.message
               });
               controller.enqueue(encoder.encode(`data: ${errorMessage}\n\n`));
             } finally {
-              // --- REMOVE Interaction Storing Block ---
-              /* 
-              try {
-                console.log(`[Agent: ${agentId}] Storing interaction in database...`);
-                // ... (data preparation) ...
-                console.log("[Agent: ...] Data to insert:", JSON.stringify(interactionData, null, 2));
-                const { error: insertError } = await supabaseClient
-                  .from('agent_interactions') // <<< This table doesn't exist
-                  .insert(interactionData); 
-                if (insertError) {
-                  console.error(`[Agent: ${agentId}] Error storing interaction:`, JSON.stringify(insertError, null, 2));
-                } else {
-                  console.log(`[Agent: ${agentId}] Interaction stored successfully.`);
-                }
-              } catch (dbError) {
-                console.error(`[Agent: ${agentId}] Database exception storing interaction:`, dbError);
-              }
-              */ 
-             // --- END REMOVE ---
-
-              controller.close(); // Keep controller.close()
+              console.log(`[Agent: ${agentId}, Stream] Final accumulated response length: ${fullResponse.length}`);
+              console.log(`[Agent: ${agentId}, Stream] Closing stream controller.`);
+              controller.close();
             }
           },
 
           cancel(reason) {
-            console.log('Stream cancelled:', reason);
+            console.log(`[Agent: ${agentId}, Stream] Stream cancelled:`, reason);
           },
         });
 

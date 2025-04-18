@@ -201,82 +201,12 @@ function DiscordConnectComponent({
   const canActivate = !!connection?.discord_app_id && !!connection?.discord_public_key && !!botKey && !!currentGuildId;
   const isWorkerBusy = isActivating || isDeactivating || workerStatus === 'activating' || workerStatus === 'stopping';
 
-  // --- NEW: Helper function for rendering the connected UI ---
-  const renderFullUI = () => (
-    <>
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium text-white">Discord Configuration</h3>
-        <div className="flex items-center space-x-2">
-          {renderWorkerStatus()}
-          <button 
-            type="button"
-            id="activationToggle"
-            role="switch"
-            aria-checked={workerStatus === 'active'}
-            onClick={() => {
-              if (isWorkerBusy) return; 
-              if (workerStatus === 'active') {
-                onDeactivate();
-              } else if (canActivate) { 
-                onActivate();
-              }
-            }}
-            disabled={!canActivate || isWorkerBusy}
-            title={!canActivate ? "Configure Credentials and Settings first" : (workerStatus === 'active' ? "Click to Deactivate" : "Click to Activate")}
-            className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${workerStatus === 'active' ? 'bg-green-600' : 'bg-gray-600'}`}
-          >
-            <span className="sr-only">Activate/Deactivate Agent</span>
-            <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform duration-200 ease-in-out ${workerStatus === 'active' ? 'translate-x-6' : 'translate-x-1'}`} />
-            {(isActivating || isDeactivating) && (
-              <span className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="h-4 w-4 text-white animate-spin" />
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-      
-      <div className="flex space-x-3 pt-4 border-t border-gray-600">
-        <button
-          type="button"
-          onClick={handleOpenCredentialsModal}
-          className="flex items-center justify-center flex-grow px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors text-sm font-medium"
-        >
-          <Key size={16} className="mr-2" /> Manage Credentials
-        </button>
-        <button
-          type="button"
-          onClick={handleOpenSettingsModal}
-          className="flex items-center justify-center flex-grow px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors text-sm font-medium"
-        >
-          <Settings size={16} className="mr-2" /> Settings
-        </button>
-        <button 
-          type="button"
-          onClick={onGenerateInviteLink}
-          disabled={!connection?.discord_app_id || isGeneratingInvite}
-          title={!connection?.discord_app_id ? "Enter Application ID in Credentials first" : "Generate bot invite link"}
-          className="flex items-center justify-center flex-grow px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isGeneratingInvite ? <Loader2 className="animate-spin mr-2" size={16} /> : <LinkIcon size={16} className="mr-2" />}
-          Generate Invite
-        </button>
-      </div>
-      
-      {!canActivate && workerStatus === 'inactive' && (
-        <p className="text-sm text-gray-400">
-          Configure Credentials and Settings (select server) before activating.
-        </p>
-      )}
-    </>
-  );
-
-  // Main return statement - Simplified structure
+  // Main return statement - Simplified structure with inline JSX
   return (
     <> {/* Top-level Fragment for Modals */}
       {/* Conditionally render Initial or Full UI View */}
       {!showFullUI ? (
-        <div className={`space-y-4 ${className}`}> {/* Apply styling here */} 
+        <div className={`space-y-4 ${className}`}>
           {/* --- Initial Bot Token Input View --- */}
           <>
             <div> 
@@ -311,9 +241,77 @@ function DiscordConnectComponent({
           </>
         </div>
       ) : (
-        <div className={`space-y-4 ${className}`}> {/* Apply styling here */} 
-          {/* --- Render Full Connection Management View via helper function --- */}
-          {renderFullUI()} 
+        <div className={`space-y-4 ${className}`}>
+          {/* --- Full Connection Management View (Inlined) --- */}
+          <>
+            {/* Top row: Title and Status/Toggle Area */}
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium text-white">Discord Configuration</h3>
+              <div className="flex items-center space-x-2">
+                {renderWorkerStatus()}
+                <button 
+                  type="button"
+                  id="activationToggle"
+                  role="switch"
+                  aria-checked={workerStatus === 'active'}
+                  onClick={() => {
+                    if (isWorkerBusy) return; 
+                    if (workerStatus === 'active') {
+                      onDeactivate();
+                    } else if (canActivate) { 
+                      onActivate();
+                    }
+                  }}
+                  disabled={!canActivate || isWorkerBusy}
+                  title={!canActivate ? "Configure Credentials and Settings first" : (workerStatus === 'active' ? "Click to Deactivate" : "Click to Activate")}
+                  className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${workerStatus === 'active' ? 'bg-green-600' : 'bg-gray-600'}`}
+                >
+                  <span className="sr-only">Activate/Deactivate Agent</span>
+                  <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform duration-200 ease-in-out ${workerStatus === 'active' ? 'translate-x-6' : 'translate-x-1'}`} />
+                  {(isActivating || isDeactivating) && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <Loader2 className="h-4 w-4 text-white animate-spin" />
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {/* Management Buttons */}
+            <div className="flex space-x-3 pt-4 border-t border-gray-600">
+              <button
+                type="button"
+                onClick={handleOpenCredentialsModal}
+                className="flex items-center justify-center flex-grow px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors text-sm font-medium"
+              >
+                <Key size={16} className="mr-2" /> Manage Credentials
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenSettingsModal}
+                className="flex items-center justify-center flex-grow px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors text-sm font-medium"
+              >
+                <Settings size={16} className="mr-2" /> Settings
+              </button>
+              <button 
+                type="button"
+                onClick={onGenerateInviteLink}
+                disabled={!connection?.discord_app_id || isGeneratingInvite}
+                title={!connection?.discord_app_id ? "Enter Application ID in Credentials first" : "Generate bot invite link"}
+                className="flex items-center justify-center flex-grow px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeneratingInvite ? <Loader2 className="animate-spin mr-2" size={16} /> : <LinkIcon size={16} className="mr-2" />}
+                Generate Invite
+              </button>
+            </div>
+            
+            {/* Warning text */}
+            {!canActivate && workerStatus === 'inactive' && (
+              <p className="text-sm text-gray-400">
+                Configure Credentials and Settings (select server) before activating.
+              </p>
+            )}
+          </>
         </div>
       )}
 
