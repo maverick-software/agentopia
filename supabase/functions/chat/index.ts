@@ -526,62 +526,30 @@ Deno.serve(async (req) => {
         contextMessages.push({ role: 'user', content: userMessage }); 
 
         // Create chat completion stream
-        console.log(`[Agent: ${agentId}] Calling OpenAI chat.completions.create...`);
-        console.log("[Agent: ${agentId}] OpenAI Request Messages:", JSON.stringify(contextMessages, null, 2));
-        const stream = await openai.chat.completions.create({
+        console.log(`[Agent: ${agentId}] Calling OpenAI chat.completions.create (stream: false)...`);
+        const completion = await openai.chat.completions.create({
           model: 'gpt-4-turbo-preview',
           messages: contextMessages,
           temperature: 0.7,
           max_tokens: 500,
-          stream: true,
+          stream: false,
         });
 
-        // Create and configure the stream response
-        const responseStream = new ReadableStream({
-          async start(controller) {
-            const encoder = new TextEncoder();
-            let fullResponse = '';
-            let chunkCounter = 0;
-            console.log(`[Agent: ${agentId}, Stream] Starting OpenAI response stream processing...`);
+        // MODIFIED: Get the full response directly
+        const fullResponse = completion.choices[0]?.message?.content || '';
+        console.log(`[Agent: ${agentId}] Received full response from OpenAI. Length: ${fullResponse.length}`);
 
-            try {
-              for await (const chunk of stream) {
-                chunkCounter++;
-                const content = chunk.choices[0]?.delta?.content || '';
-                console.log(`[Agent: ${agentId}, Stream] Received chunk ${chunkCounter}. Has content: ${!!content}. Content snippet: "${content.substring(0, 30)}..."`);
-                if (content) {
-                  fullResponse += content;
-                  controller.enqueue(encoder.encode(content));
-                }
-              }
-              console.log(`[Agent: ${agentId}, Stream] Finished iterating OpenAI stream after ${chunkCounter} chunks.`);
-            } catch (error) {
-              console.error(`[Agent: ${agentId}, Stream] Error during streaming:`, error);
-              const errorMessage = JSON.stringify({
-                error: 'Error during streaming',
-                details: error.message
-              });
-              controller.enqueue(encoder.encode(`data: ${errorMessage}\n\n`));
-            } finally {
-              console.log(`[Agent: ${agentId}, Stream] Final accumulated response length: ${fullResponse.length}`);
-              console.log(`[Agent: ${agentId}, Stream] Closing stream controller.`);
-              controller.close();
-            }
-          },
-
-          cancel(reason) {
-            console.log(`[Agent: ${agentId}, Stream] Stream cancelled:`, reason);
-          },
-        });
-
-        return new Response(responseStream, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-          },
-        });
+        // MODIFIED: Return a standard JSON response
+        return new Response(
+          JSON.stringify({ reply: fullResponse }), // Return full response in JSON
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json', // <--- CHANGED Content-Type
+            },
+            status: 200 // Explicitly set status to 200 OK
+          }
+        );
 
       } catch (error) { // Outer catch block
         console.error("Error processing request:", error);

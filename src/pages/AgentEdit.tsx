@@ -151,7 +151,13 @@ export function AgentEdit() {
       
     } catch (err: any) {
       console.error('Discord guilds fetch error:', err);
-      setError(`Error fetching Discord servers: ${err.message}. Ensure bot token is correct & saved, and bot is in servers.`); 
+      let userErrorMessage = `Error fetching Discord servers: ${err.message}.`;
+      if (err.message.includes('Too Many Requests') || err.message.includes('429')) {
+        userErrorMessage += ' Discord API rate limit hit. Please wait a minute and try refreshing the server list (if available) or the page.';
+      } else {
+         userErrorMessage += ' Ensure bot token is correct & saved, and bot is in servers.';
+      }
+      setError(userErrorMessage); 
       setAllGuilds([]); 
     } finally {
       setGuildsLoading(false);
@@ -200,10 +206,10 @@ export function AgentEdit() {
   }, [id]);
 
   useEffect(() => {
-    if (id && discordBotKey) {
+    if (id && discordBotKey && allGuilds.length === 0) { 
       fetchBotGuilds();
     }
-  }, [id, discordBotKey, fetchBotGuilds]);
+  }, [id, discordBotKey, fetchBotGuilds, allGuilds.length]);
 
   useEffect(() => {
     if (id) {
@@ -260,7 +266,7 @@ export function AgentEdit() {
       // Fetch ALL connection records for the agent
       const { data: allConnections, error: connectionError } = await supabase
         .from('agent_discord_connections')
-        .select('id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
+        .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
         .eq('agent_id', agentId);
 
       console.log(`[fetchAgent] Received all connection records for ${agentId}:`, allConnections);
@@ -317,6 +323,7 @@ export function AgentEdit() {
           worker_status: representativeStatus, // Use the derived representative status
           discord_app_id: representativeConnection.discord_app_id || '',
           discord_public_key: representativeConnection.discord_public_key || '',
+          guild_id: representativeConnection.guild_id ?? undefined,
         });
 
       } else {
@@ -581,11 +588,12 @@ export function AgentEdit() {
           discord_app_id: discordConnectionData.discord_app_id,
           discord_public_key: discordConnectionData.discord_public_key,
           inactivity_timeout_minutes: discordConnectionData.inactivity_timeout_minutes,
-          guild_id: selectedGuildId, // Ensure guild_id is included
+          guild_id: discordConnectionData.guild_id,
           // worker_status should likely NOT be saved here - it's managed by the worker
         };
 
-        console.log(`[handleSubmit] Upserting discord connection for agent ${savedAgentId}:`, connectionPayload);
+        // ADDED: Log the exact payload before upserting
+        console.log(`[handleSubmit] Payload for connection upsert:`, JSON.stringify(connectionPayload, null, 2));
 
         // Since we now enforce ONE connection per agent_id via DB constraint,
         // we can use upsert with agent_id as the conflict target.
