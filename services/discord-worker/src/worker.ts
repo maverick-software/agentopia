@@ -90,28 +90,25 @@ let inactivityTimer: NodeJS.Timeout | null = null;
 // --- Functions --- 
     logger.info(`Defining functions (updateStatus, resetInactivityTimer, shutdown, checkDbRecord, handleShutdown) for connection ${CONNECTION_ID}...`);
 
-    // *** REFACTORED: Use RPC call to database function ***
+    // *** REMOVED: updateStatus function is no longer called by worker ***
+    /*
     async function updateStatus(status: 'active' | 'inactive' | 'stopping' | 'error', errorMessage?: string): Promise<void> {
-        // The errorMessage is not directly used by the RPC function but good to log
         logger.info(`Attempting RPC update_worker_status for connection ${CONNECTION_ID} to status: ${status}. Error msg (if any): ${errorMessage}`);
-        
         try {
             const { error: rpcError } = await supabase.rpc('update_worker_status', {
                 connection_id_in: CONNECTION_ID, 
                 new_status_in: status
             });
-
             if (rpcError) {
                 logger.error(`Supabase RPC error calling update_worker_status for connection ${CONNECTION_ID}: ${JSON.stringify(rpcError)}`, { error: rpcError });
             } else {
                  logger.info(`Successfully called RPC update_worker_status for connection ${CONNECTION_ID} to status ${status}.`);
             }
-            // Note: RPC call doesn't return data like .update().select(), so we can't check row count here.
-            // The database function handles the update internally.
         } catch (err: any) {
             logger.error(`Exception during RPC call update_worker_status for connection ${CONNECTION_ID}: ${err.message}`, { error: err });
         }
     }
+    */
 
     function resetInactivityTimer(): void {
     if (inactivityTimer) {
@@ -135,8 +132,8 @@ let inactivityTimer: NodeJS.Timeout | null = null;
             inactivityTimer = null; // Explicitly nullify
     }
     try {
-        await updateStatus(finalStatus, errorMessage); 
-            logger.info(`Destroying Discord client for connection ${CONNECTION_ID}...`);
+        // *** REMOVED: await updateStatus(finalStatus, errorMessage); ***
+        logger.info(`Destroying Discord client for connection ${CONNECTION_ID}...`);
         client.destroy();
             logger.info(`Shutdown complete for connection ${CONNECTION_ID}.`);
         process.exit(0); // Exit cleanly
@@ -215,7 +212,6 @@ client.once(Events.ClientReady, async (readyClient: any) => {
         await checkDbRecord('agent', AGENT_ID);
         const connectionExists = await checkDbRecord('connection', CONNECTION_ID);
         logger.info(`[WORKER PRE-STATUS-UPDATE ${CONNECTION_ID}] Attempting to update status to active. Connection exists: ${connectionExists}`);
-    await updateStatus('active'); // Set status to active in DB
         resetInactivityTimer(); // Start the inactivity timer (or confirm it's disabled)
 });
 
