@@ -5,10 +5,11 @@ import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { Agent as AgentType, Datastore, AgentDiscordConnection } from '../types';
-import { DiscordConnect } from '../components/DiscordConnect';
+import { DiscordConnect, DiscordStatusToggle } from '../components/DiscordConnect';
 import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
+import { FaDiscord } from 'react-icons/fa';
 
 interface BotGuild {
   id: string;
@@ -835,7 +836,7 @@ export function AgentEdit() {
   }
 
   const interactionEndpointUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
-  const isFullyConnected = !!(discordBotKey && discordConnectionData.discord_app_id && discordConnectionData.discord_public_key);
+  const isFullyConnected = !!(discordBotKey || discordConnectionData.discord_app_id || discordConnectionData.discord_public_key);
 
   const selectedGuildName = allGuilds.find(g => g.id === discordConnectionData.guild_id)?.name;
 
@@ -849,9 +850,20 @@ export function AgentEdit() {
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-3xl font-bold">
-            {isEditing ? 'Edit Agent' : 'Create New Agent'}
-          </h1>
+          <div>
+            <div className="flex items-center space-x-3">
+              <h1 className="text-3xl font-bold">
+                {isEditing ? 'Edit Agent' : 'Create New Agent'}
+              </h1>
+            </div>
+            
+            {isEditing && selectedGuildName && (
+              <div className="mt-2 flex items-center space-x-2">
+                <FaDiscord className="text-[#5865F2]" size={14} />
+                <span className="text-sm text-gray-300">Connected to: <strong>{selectedGuildName}</strong></span>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex space-x-4">
           {isEditing && (
@@ -981,7 +993,18 @@ export function AgentEdit() {
           <div className="space-y-6">
             {id ? (
               <div className="bg-gray-800 rounded-lg p-6">
-                <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">Discord Configuration</h2>
+                  <AgentStatusToggle
+                    workerStatus={discordConnectionData.worker_status || 'inactive'}
+                    isWorkerBusy={isActivating || isDeactivating}
+                    canActivate={!!(discordConnectionData.discord_app_id && discordConnectionData.discord_public_key && discordBotKey && discordConnectionData.guild_id)}
+                    onActivate={handleActivateAgent}
+                    onDeactivate={handleDeactivateAgent}
+                    isActivating={isActivating}
+                    isDeactivating={isDeactivating}
+                  />
+                </div>
                 <DiscordConnect
                   connection={discordConnectionData}
                   botKey={discordBotKey}
@@ -998,6 +1021,7 @@ export function AgentEdit() {
                   allGuilds={allGuilds}
                   currentGuildId={discordConnectionData.guild_id}
                   className="mt-6"
+                  showStatusToggle={false}
                 />
               </div>
             ) : (
@@ -1102,6 +1126,7 @@ export function AgentEdit() {
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleConnectDatastores}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={connectingDatastores}
@@ -1121,6 +1146,7 @@ export function AgentEdit() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">System Instructions</h2>
               <button
+                type="button"
                 onClick={() => setShowSystemModal(false)}
                 className="text-gray-400 hover:text-white"
               >
@@ -1150,6 +1176,7 @@ export function AgentEdit() {
             
             <div className="flex justify-end">
               <button
+                type="button"
                 onClick={() => setShowSystemModal(false)}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
               >
@@ -1166,6 +1193,7 @@ export function AgentEdit() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold">Assistant Instructions</h2>
               <button
+                type="button"
                 onClick={() => setShowAssistantModal(false)}
                 className="text-gray-400 hover:text-white"
               >
@@ -1195,6 +1223,7 @@ export function AgentEdit() {
             
             <div className="flex justify-end">
               <button
+                type="button"
                 onClick={() => setShowAssistantModal(false)}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
               >
@@ -1205,5 +1234,76 @@ export function AgentEdit() {
         </div>
       )}
     </div>
+  );
+}
+
+// Replace the existing AgentStatusToggle function (around line 1240) with this updated version:
+function AgentStatusToggle({ 
+  workerStatus, 
+  onActivate, 
+  onDeactivate, 
+  isActivating, 
+  isDeactivating,
+  isWorkerBusy,
+  canActivate
+}: { 
+  workerStatus: string; 
+  onActivate: () => void; 
+  onDeactivate: () => void;
+  isActivating: boolean;
+  isDeactivating: boolean;
+  isWorkerBusy: boolean;
+  canActivate: boolean;
+}) {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (workerStatus === 'active') {
+      onDeactivate();
+    } else if (canActivate) {
+      onActivate();
+    }
+  };
+
+  const isActive = workerStatus === 'active';
+  const isTransitioning = isActivating || isDeactivating || workerStatus === 'activating' || workerStatus === 'stopping';
+  
+  // No longer needed: console.log(...)
+  
+  return (
+    <button
+      type="button"
+      onClick={handleToggle}
+      // Disable if transitioning, or if inactive and cannot be activated
+      disabled={isWorkerBusy || (!isActive && !canActivate)}
+      className={`
+        flex items-center space-x-2 px-3 py-1.5 rounded-md transition-all duration-200
+        border border-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500
+        ${isActive 
+          ? 'bg-indigo-600 text-white shadow-inner' // Active state: Indigo background, white text
+          : 'bg-gray-700 text-gray-300 hover:bg-gray-600' // Inactive state: Gray background, lighter gray text
+        }
+        ${isTransitioning ? 'opacity-80' : 'opacity-100'} // Dim slightly when transitioning
+        ${(!isActive && !canActivate) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} // Gray out if cannot activate
+      `}
+    >
+      {/* Status indicator dot */}
+      <div 
+        className={`w-2.5 h-2.5 rounded-full transition-colors duration-200 ${
+          isTransitioning ? 'animate-pulse' : '' // Pulse during transitions
+        } ${
+          isActive ? 'bg-white' : 'bg-gray-400' // White dot when active, gray when inactive
+        }`}
+      />
+      {/* Status text */}
+      <span className="text-xs font-medium">
+        {isActivating ? 'Activating...' : 
+         isDeactivating ? 'Stopping...' : 
+         isActive ? 'Active' : 'Inactive'}
+      </span>
+      {/* Loading spinner during transitions */}
+      {isTransitioning && <Loader2 size={12} className="animate-spin ml-1" />}
+    </button>
   );
 }

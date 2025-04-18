@@ -1,38 +1,79 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw, Save, Server, Settings, Link as LinkIcon, Play, StopCircle, Trash2, Key, Edit } from 'lucide-react';
 import type { AgentDiscordConnection } from '../types';
+import { FaDiscord } from 'react-icons/fa';
+import { CredentialsModal, SettingsModal, TIMEOUT_OPTIONS } from './DiscordModals';
+import { BotGuild, DiscordConnectProps, DiscordStatusToggleProps } from './DiscordTypes';
 
-interface BotGuild {
-  id: string;
-  name: string;
+// Temporary cn function until the correct import is fixed
+const cn = (...classes: (string | undefined | null | boolean)[]) => {
+  return classes.filter(Boolean).join(' ');
+};
+
+// Status toggle component
+export function DiscordStatusToggle({ 
+  workerStatus, 
+  onActivate, 
+  onDeactivate, 
+  isActivating, 
+  isDeactivating,
+  isWorkerBusy,
+  canActivate
+}: DiscordStatusToggleProps) {
+  // Add function to prevent form submission
+  const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
+    e.preventDefault();
+    e.stopPropagation();
+    action();
+  };
+
+  // Add console log to debug
+  console.log("DiscordStatusToggle rendering with:", { 
+    workerStatus, isWorkerBusy, canActivate, isActivating, isDeactivating 
+  });
+
+  return (
+    <div className="flex items-center justify-between bg-gray-900 p-3 rounded-md border border-gray-700 min-w-[200px] shadow-md">
+      <div className="flex items-center space-x-3">
+        <div 
+          className={`w-4 h-4 rounded-full ${
+            workerStatus === 'active' ? 'bg-green-500 animate-pulse' : 
+            workerStatus === 'activating' || workerStatus === 'stopping' ? 'bg-yellow-500 animate-pulse' : 
+            'bg-red-500'
+          }`}
+        />
+        <span className="text-sm font-medium text-white">
+          {workerStatus === 'active' ? 'Active' : 
+           workerStatus === 'activating' ? 'Activating...' : 
+           workerStatus === 'stopping' ? 'Stopping...' : 
+           'Inactive'}
+        </span>
+      </div>
+      
+      <div className="ml-4">
+        {workerStatus === 'active' ? (
+          <button
+            type="button"
+            onClick={(e) => handleButtonClick(e, onDeactivate)}
+            disabled={isWorkerBusy}
+            className="px-3 py-1 text-xs font-medium rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed border border-red-800"
+          >
+            {isDeactivating ? <Loader2 size={14} className="animate-spin" /> : 'Stop Bot'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => handleButtonClick(e, onActivate)}
+            disabled={!canActivate || isWorkerBusy}
+            className="px-3 py-1 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed border border-green-800"
+          >
+            {isActivating ? <Loader2 size={14} className="animate-spin" /> : 'Start Bot'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
-
-// --- Props Interface Aligned with Plan Phase 7 ---
-interface DiscordConnectProps {
-  connection: Partial<AgentDiscordConnection>;
-  botKey: string;
-  onBotKeyChange: (key: string) => void;
-  onConnectionChange: (field: keyof AgentDiscordConnection | 'guild_id' | 'discord_app_id' | 'discord_public_key', value: any) => void;
-  discord_app_id?: string;
-  onGenerateInviteLink: () => void;
-  isGeneratingInvite: boolean;
-  workerStatus?: AgentDiscordConnection['worker_status'];
-  onActivate: () => Promise<void>;
-  onDeactivate: () => Promise<void>;
-  isActivating: boolean;
-  isDeactivating: boolean;
-  className?: string;
-  allGuilds: BotGuild[];
-  currentGuildId?: string | null;
-}
-
-// Define timeout options
-const TIMEOUT_OPTIONS = [
-  { label: '10 minutes', value: 10 },
-  { label: '20 minutes', value: 20 },
-  { label: '30 minutes', value: 30 },
-  { label: 'Never', value: 0 }, // Map 'Never' to 0
-];
 
 function DiscordConnectComponent({ 
   connection,
@@ -49,47 +90,49 @@ function DiscordConnectComponent({
   isDeactivating,
   className = '',
   allGuilds,
-  currentGuildId
+  currentGuildId,
+  showStatusToggle = true
 }: DiscordConnectProps) {
   
-  // --- State ---
-  const [showFullUI, setShowFullUI] = useState(!!botKey); // NEW: Controls overall UI display
-  const [initialBotKey, setInitialBotKey] = useState(''); // NEW: For the initial token input
+  // State management
+  const [showFullUI, setShowFullUI] = useState(!!botKey);
+  const [initialBotKey, setInitialBotKey] = useState('');
 
-  // Modal States
-  const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  // Modal states
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isSavingCredentials, setIsSavingCredentials] = useState(false); // NEW: For save state
+  const [isSavingCredentials, setIsSavingCredentials] = useState(false);
 
-  // Local state for modal inputs (to avoid prop drilling complexities for simple inputs)
+  // Local state for modal inputs
   const [modalBotKey, setModalBotKey] = useState(botKey);
   const [modalAppId, setModalAppId] = useState(connection?.discord_app_id || '');
   const [modalPublicKey, setModalPublicKey] = useState(connection?.discord_public_key || '');
-
-  // Update local modal state when props change (e.g., after external save)
-  useEffect(() => { 
-    setModalBotKey(botKey); 
-    setShowFullUI(!!botKey); // NEW: Ensure UI state matches prop
-  }, [botKey]);
-  useEffect(() => { setModalAppId(connection?.discord_app_id || ''); }, [connection?.discord_app_id]);
-  useEffect(() => { setModalPublicKey(connection?.discord_public_key || ''); }, [connection?.discord_public_key]);
-
   const [localTimeout, setLocalTimeout] = useState(connection?.inactivity_timeout_minutes ?? 10);
   
-  const MASK_CHAR = '•';
-  const [isBotKeyVisible, setIsBotKeyVisible] = useState(false);
-  const [isAppIdVisible, setIsAppIdVisible] = useState(false);
-  const [isPublicKeyVisible, setIsPublicKeyVisible] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Update local state when props change
+  useEffect(() => { 
+    setModalBotKey(botKey); 
+    setShowFullUI(!!botKey);
+  }, [botKey]);
+  
+  useEffect(() => { 
+    setModalAppId(connection?.discord_app_id || ''); 
+  }, [connection?.discord_app_id]);
+  
+  useEffect(() => { 
+    setModalPublicKey(connection?.discord_public_key || ''); 
+  }, [connection?.discord_public_key]);
 
   useEffect(() => {
     setLocalTimeout(connection?.inactivity_timeout_minutes ?? 10);
   }, [connection?.inactivity_timeout_minutes]); 
 
-  // --- Modal Handlers ---
-  const handleOpenCredentialsModal = () => setIsCredentialsModalOpen(true);
-  const handleCloseCredentialsModal = () => setIsCredentialsModalOpen(false);
+  // Computed values
+  const canActivate = !!connection?.discord_app_id && !!connection?.discord_public_key && !!botKey && !!currentGuildId;
+  const isWorkerBusy = isActivating || isDeactivating || workerStatus === 'activating' || workerStatus === 'stopping';
+
+  // Modal handlers
   const handleOpenSettingsModal = () => setIsSettingsModalOpen(true);
   const handleCloseSettingsModal = () => setIsSettingsModalOpen(false);
 
@@ -101,11 +144,10 @@ function DiscordConnectComponent({
     onConnectionChange('discord_app_id', modalAppId);
     onConnectionChange('discord_public_key', modalPublicKey);
     
-    // Simulate save and close after delay
+    // Just set saving to false after a delay without closing the modal
     setTimeout(() => {
-      setIsSavingCredentials(false); // Finish saving
-      handleCloseCredentialsModal(); // Close modal
-    }, 1000); // 1 second delay
+      setIsSavingCredentials(false);
+    }, 1000);
   };
   
   const handleClearCredentials = () => {
@@ -114,7 +156,7 @@ function DiscordConnectComponent({
     setModalAppId('');
     setModalPublicKey('');
     
-    // Actually update parent state
+    // Update parent state
     onBotKeyChange('');
     onConnectionChange('discord_app_id', '');
     onConnectionChange('discord_public_key', '');
@@ -124,15 +166,10 @@ function DiscordConnectComponent({
       onDeactivate();
     }
     
-    // Close the modal after clearing
-    handleCloseCredentialsModal();
-    setShowFullUI(false); // NEW: Revert to initial input view
-    setInitialBotKey(''); // NEW: Clear initial input field as well
-  };
-
-  const handleSaveChangesFromSettingsModal = () => {
-      // Guild and Timeout are already updated via onConnectionChange in their inputs
-      handleCloseSettingsModal();
+    // Close the modal and reset UI state
+    handleCloseSettingsModal();
+    setShowFullUI(false);
+    setInitialBotKey('');
   };
 
   const handleTimeoutChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -144,356 +181,118 @@ function DiscordConnectComponent({
     }
   };
 
-  const copyToClipboard = (text: string | undefined | null) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+  const handleGuildChange = (value: string | null) => {
+    onConnectionChange('guild_id', value);
   };
 
-  // --- NEW: Handle Initial Connection ---
+  // Initial connection handler
   const handleInitialConnect = () => {
     if (!initialBotKey) return;
-    onBotKeyChange(initialBotKey); // Update parent state
-    setModalBotKey(initialBotKey); // Also update local modal state for consistency when modal opens
-    setShowFullUI(true);          // Show the full UI
-    // Consider automatically opening the Credentials modal here if desired
-    // handleOpenCredentialsModal(); 
+    onBotKeyChange(initialBotKey);
+    setModalBotKey(initialBotKey);
+    setShowFullUI(true);
   };
 
-  // --- Render Logic ---
-
-  // Re-add renderWorkerStatus function
-  const renderWorkerStatus = () => {
-    const status = workerStatus || 'inactive'; 
-    let icon = <StopCircle size={16} />;
-    let text = 'Inactive';
-    switch (status) {
-      case 'active': text = 'Active'; icon = <Check size={16} />; break;
-      case 'activating': text = 'Activating...'; icon = <Loader2 size={16} className="animate-spin" />; break;
-      case 'stopping': text = 'Stopping...'; icon = <Loader2 size={16} className="animate-spin" />; break;
-      case 'error': text = 'Error'; icon = <X size={16} />; break;
-      case 'inactive':
-      default: text = 'Inactive'; icon = <StopCircle size={16} />; break;
-    }
-    return (
-        <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium ${statusBadgeClass()}`}>
-            {icon}
-            <span>{text}</span>
-        </div>
-    );
+  // Handle Generate Invite Link
+  const handleGenerateInvite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onGenerateInviteLink();
   };
 
-  // Re-add statusBadgeClass function
-  const statusBadgeClass = () => {
-    const status = workerStatus || 'inactive'; 
-    switch (status) {
-      case 'active': return 'bg-green-900/50 text-green-300';
-      case 'activating':
-      case 'stopping': return 'bg-yellow-900/50 text-yellow-300';
-      case 'error': return 'bg-red-900/50 text-red-300';
-      case 'inactive':
-      default: return 'bg-gray-600 text-gray-300';
-    }
+  // Find the selected server name
+  const selectedServer = allGuilds.find(guild => guild.id === currentGuildId);
+  
+  // Compute interaction endpoint URL
+  const interactionEndpointUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`;
+
+  // Stop event propagation and prevent default on modal-related interactions
+  const handleModalClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
   };
 
-  const canActivate = !!connection?.discord_app_id && !!connection?.discord_public_key && !!botKey && !!currentGuildId;
-  const isWorkerBusy = isActivating || isDeactivating || workerStatus === 'activating' || workerStatus === 'stopping';
-
-  // Main return statement - Simplified structure with inline JSX
   return (
-    <> {/* Top-level Fragment for Modals */}
-      {/* Conditionally render Initial or Full UI View */}
-      {!showFullUI ? (
-        <div className={`space-y-4 ${className}`}>
-          {/* --- Initial Bot Token Input View --- */}
-          <>
-            <div> 
-              <label htmlFor="initialBotToken" className="block text-sm font-medium text-gray-300 mb-1">Bot Token *</label>
-              <div className="flex space-x-2">
-                <input
-                  id="initialBotToken"
-                  type="password"
-                  value={initialBotKey}
-                  onChange={(e) => setInitialBotKey(e.target.value)}
-                  placeholder="Paste your Discord Bot Token here"
-                  className="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
+    <div className={cn("w-full space-y-6", className)}>
+      <div className="flex flex-col space-y-4">
+        {selectedServer && (
+          <div 
+            className="relative flex items-center p-4 bg-[#2e3543] rounded-lg border border-[#484f5c] shadow-md overflow-hidden cursor-pointer hover:bg-[#333a4a] transition-colors"
+            onClick={handleModalClick}
+            onMouseDown={handleOpenSettingsModal}
+            title="Click to change server"
+          >
+            <div className="absolute top-2 right-2 text-gray-400 hover:text-white">
+              <Settings size={16} />
+            </div>
+            <div className="flex-shrink-0 mr-4 bg-gray-800 p-2.5 rounded-md">
+              <Server size={22} className="text-[#5865F2]" />
+            </div>
+            <div className="flex-grow">
+              <div className="text-sm font-medium text-gray-400">Connected to server:</div>
+              <div className="text-lg font-semibold text-white">{selectedServer.name}</div>
+            </div>
+            {showStatusToggle && (
+              <div className="flex-shrink-0 ml-auto">
+                <DiscordStatusToggle
+                  workerStatus={workerStatus || 'inactive'}
+                  canActivate={canActivate}
+                  isWorkerBusy={isWorkerBusy}
+                  onActivate={onActivate}
+                  onDeactivate={onDeactivate}
+                  isActivating={isActivating}
+                  isDeactivating={isDeactivating}
                 />
-                <button
-                  type="button"
-                  onClick={handleInitialConnect}
-                  disabled={!initialBotKey}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Connect
-                </button>
               </div>
-            </div>
-            <p className="text-sm text-gray-400">
-              Enter your Discord Bot Token below to connect your agent. 
-              You can create a bot and get a token from the{' '}
-              <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline">
-                Discord Developer Portal
-              </a>.
-            </p>
-          </>
-        </div>
-      ) : (
-        <div className={`space-y-4 ${className}`}>
-          {/* --- Full Connection Management View (Inlined) --- */}
-          <>
-            {/* Top row: Title and Status/Toggle Area */}
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-white">Discord Configuration</h3>
-              <div className="flex items-center space-x-2">
-                {renderWorkerStatus()}
-                <button 
-                  type="button"
-                  id="activationToggle"
-                  role="switch"
-                  aria-checked={workerStatus === 'active'}
-                  onClick={() => {
-                    if (isWorkerBusy) return; 
-                    if (workerStatus === 'active') {
-                      onDeactivate();
-                    } else if (canActivate) { 
-                      onActivate();
-                    }
-                  }}
-                  disabled={!canActivate || isWorkerBusy}
-                  title={!canActivate ? "Configure Credentials and Settings first" : (workerStatus === 'active' ? "Click to Deactivate" : "Click to Activate")}
-                  className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${workerStatus === 'active' ? 'bg-green-600' : 'bg-gray-600'}`}
-                >
-                  <span className="sr-only">Activate/Deactivate Agent</span>
-                  <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform duration-200 ease-in-out ${workerStatus === 'active' ? 'translate-x-6' : 'translate-x-1'}`} />
-                  {(isActivating || isDeactivating) && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <Loader2 className="h-4 w-4 text-white animate-spin" />
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            {/* Management Buttons */}
-            <div className="flex space-x-3 pt-4 border-t border-gray-600">
-              <button
-                type="button"
-                onClick={handleOpenCredentialsModal}
-                className="flex items-center justify-center flex-grow px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors text-sm font-medium"
-              >
-                <Key size={16} className="mr-2" /> Manage Credentials
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenSettingsModal}
-                className="flex items-center justify-center flex-grow px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 transition-colors text-sm font-medium"
-              >
-                <Settings size={16} className="mr-2" /> Settings
-              </button>
-              <button 
-                type="button"
-                onClick={onGenerateInviteLink}
-                disabled={!connection?.discord_app_id || isGeneratingInvite}
-                title={!connection?.discord_app_id ? "Enter Application ID in Credentials first" : "Generate bot invite link"}
-                className="flex items-center justify-center flex-grow px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isGeneratingInvite ? <Loader2 className="animate-spin mr-2" size={16} /> : <LinkIcon size={16} className="mr-2" />}
-                Generate Invite
-              </button>
-            </div>
-            
-            {/* Warning text */}
-            {!canActivate && workerStatus === 'inactive' && (
-              <p className="text-sm text-gray-400">
-                Configure Credentials and Settings (select server) before activating.
-              </p>
             )}
-          </>
-        </div>
-      )}
-
-      {/* Credentials Modal */}
-      {isCredentialsModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg space-y-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Manage Credentials</h2>
-              <button onClick={handleCloseCredentialsModal} className="text-gray-400 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div>
-              <label htmlFor="modalBotTokenKey" className="block text-sm font-medium text-gray-300 mb-1">Discord Bot Token *</label>
-              <div className="flex items-center space-x-2">
-                <input
-                  id="modalBotTokenKey"
-                  type={isBotKeyVisible ? 'text' : 'password'}
-                  value={modalBotKey}
-                  onChange={(e) => setModalBotKey(e.target.value)}
-                  placeholder="Paste Bot Token here"
-                  className="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button type="button" onClick={() => setIsBotKeyVisible(!isBotKeyVisible)} className="p-2 text-gray-400 hover:text-white">
-                  {isBotKeyVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="modalAppId" className="block text-sm font-medium text-gray-300 mb-1">Application ID *</label>
-              <div className="flex items-center space-x-2">
-                <input
-                  id="modalAppId"
-                  type={isAppIdVisible ? 'text' : 'password'}
-                  value={modalAppId}
-                  onChange={(e) => setModalAppId(e.target.value)}
-                  placeholder="Enter Discord Application ID"
-                  className="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button type="button" onClick={() => setIsAppIdVisible(!isAppIdVisible)} className="p-2 text-gray-400 hover:text-white">
-                  {isAppIdVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="modalPublicKey" className="block text-sm font-medium text-gray-300 mb-1">Public Key *</label>
-              <div className="flex items-center space-x-2">
-                <input
-                  id="modalPublicKey"
-                  type={isPublicKeyVisible ? 'text' : 'password'}
-                  value={modalPublicKey}
-                  onChange={(e) => setModalPublicKey(e.target.value)}
-                  placeholder="Enter Discord App Public Key"
-                  className="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button type="button" onClick={() => setIsPublicKeyVisible(!isPublicKeyVisible)} className="p-2 text-gray-400 hover:text-white">
-                  {isPublicKeyVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-4">
-              <button 
-                type="button"
-                onClick={handleClearCredentials}
-                className="flex items-center px-3 py-1.5 text-red-400 hover:text-red-300 text-sm"
-              >
-                <Trash2 size={14} className="mr-1"/> Disconnect
-              </button>
-              <button 
-                type="button"
-                onClick={handleSaveChangesFromCredentialsModal}
-                disabled={isSavingCredentials}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center min-w-[80px]"
-              >
-                {isSavingCredentials ? (
-                  <><Loader2 size={16} className="animate-spin mr-2"/> Saving...</>
-                ) : (
-                  'Save'
-                )}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Settings Modal */}
-      {isSettingsModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg space-y-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Settings</h2>
-              <button onClick={handleCloseSettingsModal} className="text-gray-400 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div>
-              <label htmlFor="modalGuildSelect" className="block text-sm font-medium text-gray-300 mb-1">
-                Active Discord Server
-              </label>
-              <select 
-                id="modalGuildSelect" 
-                value={currentGuildId ?? ''} 
-                onChange={(e) => onConnectionChange('guild_id', e.target.value || null)} 
-                disabled={isWorkerBusy} 
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="">-- Select a Server --</option>
-                {allGuilds && allGuilds.map((guild) => (
-                  <option key={guild.id} value={guild.id}>
-                    {guild.name} ({guild.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label htmlFor="modalInactivityTimeout" className="block text-sm font-medium text-gray-300 mb-1">
-                Inactivity Timeout
-              </label>
-              <select 
-                id="modalInactivityTimeout" 
-                value={localTimeout} 
-                onChange={handleTimeoutChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {TIMEOUT_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-400">Time before the agent worker stops due to inactivity.</p>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Interaction Endpoint URL</label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`}
-                  className="flex-grow px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-400"
-                />
-                <button 
-                  type="button" 
-                  onClick={() => copyToClipboard(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler`)} 
-                  className="p-2 text-gray-400 hover:text-white"
-                >
-                  {copied ? <Check size={18} className="text-green-400"/> : <Copy size={18} />}
-                </button>
-              </div>
-              <p className="mt-1 text-xs text-gray-400">Copy this URL into your Discord App settings.</p>
-            </div>
+        {/* Button removed as settings are now accessible via server display */}
+      </div>
 
-            <div className="flex justify-end pt-4">
-              <button 
-                type="button" 
-                onClick={handleSaveChangesFromSettingsModal} 
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+      <div className="text-sm text-gray-400 bg-gray-800 p-4 rounded-md border border-gray-700">
+        <p>
+          Manage your Discord bot configuration and settings here. Visit the{" "}
+          <a 
+            href="https://discord.com/developers/applications" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline"
+          >
+            Discord Developer Portal
+          </a>{" "}
+          to create or edit your bot application.
+        </p>
+      </div>
+
+      {/* Modals */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={handleCloseSettingsModal}
+        currentGuildId={currentGuildId}
+        onGuildChange={handleGuildChange}
+        localTimeout={localTimeout}
+        onTimeoutChange={handleTimeoutChange}
+        allGuilds={allGuilds}
+        isWorkerBusy={isWorkerBusy}
+        interactionEndpointUrl={interactionEndpointUrl}
+        onGenerateInviteLink={onGenerateInviteLink}
+        isGeneratingInvite={isGeneratingInvite}
+        modalBotKey={modalBotKey}
+        setModalBotKey={setModalBotKey}
+        modalAppId={modalAppId}
+        setModalAppId={setModalAppId}
+        modalPublicKey={modalPublicKey}
+        setModalPublicKey={setModalPublicKey}
+        onSave={handleSaveChangesFromCredentialsModal}
+        onClear={handleClearCredentials}
+        isSavingCredentials={isSavingCredentials}
+        initialTab="server"
+      />
+    </div>
   );
 }
 
-// Export the memoized version
+// Export the memo-wrapped component
 export const DiscordConnect = React.memo(DiscordConnectComponent);
-
-// Or alternatively, directly wrap the function expression if you prefer:
-/*
-export const DiscordConnect = React.memo(function DiscordConnect({ 
-  // ... props ... 
-}: DiscordConnectProps) {
-  // ... component logic ... 
-});
-*/
