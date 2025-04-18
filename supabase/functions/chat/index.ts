@@ -192,7 +192,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .select(`
         id,
         agent_id,
-        timeout_ms,
         max_retries,
         retry_backoff_ms,
         server:mcp_servers (
@@ -219,7 +218,6 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       config_id: config.id,
       endpoint_url: config.server.endpoint_url,
       vault_api_key_id: config.server.vault_api_key_id,
-      timeout_ms: config.timeout_ms,
       max_retries: config.max_retries,
       retry_backoff_ms: config.retry_backoff_ms,
     }));
