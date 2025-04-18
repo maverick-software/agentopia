@@ -225,7 +225,13 @@ export function SettingsModal({
   isSavingCredentials,
   initialTab = 'server'
 }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState(initialTab);
+  // Check if credentials are complete
+  const hasCredentials = !!modalBotKey && !!modalAppId && !!modalPublicKey;
+  
+  // Determine the initial active tab based on credential status
+  const defaultTab = hasCredentials ? initialTab : 'credentials';
+  
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [copied, setCopied] = useState(false);
   
   const [isBotKeyVisible, setIsBotKeyVisible] = useState(false);
@@ -251,6 +257,14 @@ export function SettingsModal({
   const handleSaveAndExit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Check if credentials are filled in sufficiently
+    const credentialsValid = !!modalBotKey && !!modalAppId && !!modalPublicKey;
+    
+    if (!credentialsValid && activeTab === 'credentials') {
+      alert("Please fill in all required credential fields before saving.");
+      return;
+    }
     
     // Start saving
     setSaveState('saving');
@@ -291,18 +305,27 @@ export function SettingsModal({
         </div>
         
         {/* Tab Navigation - Reordered tabs + added danger tab */}
-        <div className="flex flex-wrap border-b border-gray-700 mb-4 gap-1">
+        <div className="flex border-b border-gray-700 mb-4">
           <button
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setActiveTab('server');
+              if (hasCredentials) {
+                setActiveTab('server');
+              } else {
+                // Show a tooltip or message indicating credentials are needed first
+                alert("Please save your Discord credentials before configuring server settings.");
+              }
             }}
             className={`px-3 py-2 text-xs font-medium ${
               activeTab === 'server' 
                 ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-gray-400 hover:text-gray-200'
+                : hasCredentials 
+                  ? 'text-gray-400 hover:text-gray-200' 
+                  : 'text-gray-600 opacity-60'
             }`}
+            disabled={!hasCredentials}
+            title={!hasCredentials ? "Save credentials first" : "Server configuration"}
           >
             <Server size={14} className="inline mr-1" />
             Server
@@ -311,13 +334,21 @@ export function SettingsModal({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setActiveTab('integration');
+              if (hasCredentials) {
+                setActiveTab('integration');
+              } else {
+                alert("Please save your Discord credentials before configuring integration settings.");
+              }
             }}
             className={`px-3 py-2 text-xs font-medium ${
               activeTab === 'integration' 
                 ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-gray-400 hover:text-gray-200'
+                : hasCredentials 
+                  ? 'text-gray-400 hover:text-gray-200' 
+                  : 'text-gray-600 opacity-60'
             }`}
+            disabled={!hasCredentials}
+            title={!hasCredentials ? "Save credentials first" : "Integration settings"}
           >
             <Link size={14} className="inline mr-1" />
             Integration
@@ -341,16 +372,24 @@ export function SettingsModal({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setActiveTab('danger');
+              if (hasCredentials) {
+                setActiveTab('danger');
+              } else {
+                alert("Please save your Discord credentials before accessing danger zone options.");
+              }
             }}
             className={`px-3 py-2 text-xs font-medium ${
               activeTab === 'danger' 
                 ? 'text-red-400 border-b-2 border-red-400' 
-                : 'text-gray-400 hover:text-gray-200'
+                : hasCredentials 
+                  ? 'text-gray-400 hover:text-gray-200' 
+                  : 'text-gray-600 opacity-60'
             }`}
+            disabled={!hasCredentials}
+            title={!hasCredentials ? "Save credentials first" : "Danger zone options"}
           >
             <Trash2 size={14} className="inline mr-1" />
-            Danger Zone
+            Danger
           </button>
         </div>
         
@@ -443,22 +482,25 @@ export function SettingsModal({
                   </p>
                 </div>
                 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onGenerateInviteLink();
-                  }}
-                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 border border-blue-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!currentGuildId || isGeneratingInvite}
-                >
-                  <Link size={16} className="mr-2" />
-                  <span>{isGeneratingInvite ? 'Copied!' : 'Generate & Copy Invite Link'}</span>
-                </button>
-                <p className="text-xs text-gray-400">
-                  This will generate and copy an invite URL for your Discord bot with all required permissions. Share this link with server administrators to add your bot to their Discord server. After clicking, the link will be copied to your clipboard.
-                </p>
+                <div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onGenerateInviteLink();
+                    }}
+                    className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 border border-blue-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isGeneratingInvite}
+                  >
+                    <Link size={16} className="mr-2" />
+                    <span>{isGeneratingInvite ? 'Copied!' : 'Generate & Copy Invite Link'}</span>
+                  </button>
+                  
+                  <p className="mt-2 text-xs text-gray-400">
+                    This will generate and copy an authorization URL for your Discord bot with all required permissions. Use this link to add your bot to any Discord server where you have admin permissions. After clicking, the link will be copied to your clipboard.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
