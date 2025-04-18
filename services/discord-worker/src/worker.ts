@@ -243,7 +243,8 @@ client.on(Events.MessageCreate, async (message: any) => {
         if (messageContent) {
                 logger.info(`Processing message for agent core. Agent ID: ${AGENT_ID}, Connection ID: ${CONNECTION_ID}`);
                 try {
-                    // *** NEW: Fetch agent details ***
+                    // *** REMOVED: Worker no longer fetches agent details directly ***
+                    /* 
                     const { data: agentData, error: agentFetchError } = await supabase
                         .from('agents')
                         .select('name, personality, system_instructions, assistant_instructions') // Added system/assistant instructions
@@ -251,52 +252,47 @@ client.on(Events.MessageCreate, async (message: any) => {
                         .single();
 
                     if (agentFetchError || !agentData) {
-                         logger.error(`[AGENT ${AGENT_ID}] Error fetching agent details: ${agentFetchError?.message || 'No agent data found'}`, { error: agentFetchError });
-                         await message.reply({ content: "Sorry, I encountered an internal error retrieving my configuration." });
-                         return;
+                        logger.error(`[WORKER MSG ${CONNECTION_ID}] Failed to fetch agent details for ${AGENT_ID}: ${agentFetchError?.message}`, { error: agentFetchError });
+                        await message.reply('Sorry, I encountered an internal error retrieving my configuration.'); // Respond with error
+                        return; // Stop processing if config fails
                     }
-                    logger.debug(`[AGENT ${AGENT_ID}] Fetched agent details.`);
-
-                    // *** NEW: Call chat function ***
-                    const chatFunctionName = 'chat'; // Name of your Supabase chat function
-                    logger.info(`[AGENT ${AGENT_ID}] Invoking Supabase function: ${chatFunctionName}`);
-                    const { data: chatResponse, error: functionError } = await supabase.functions.invoke(chatFunctionName, {
-                        body: {
-                            agent_id: AGENT_ID,
-                            agent_name: agentData.name,
-                            system_prompt: agentData.system_instructions, // Use fetched value
-                            assistant_prompt: agentData.assistant_instructions, // Use fetched value
-                            user_message: messageContent,
-                            user_id: message.author.id, // Pass invoking user ID
-                            channel_id: message.channelId, // Pass channel ID
-                            guild_id: message.guildId, // Pass guild ID
-                            // Add any other relevant context here
+                    */
+                    logger.info(`[WORKER MSG ${CONNECTION_ID}] Invoking 'chat' function for agent ${AGENT_ID}...`);
+                    
+                    // Call the 'chat' Supabase edge function 
+                    const { data: responseData, error: functionError } = await supabase.functions.invoke('chat', {
+                         body: {
+                            agentId: AGENT_ID, // Pass agent ID
+                            // agentPersonality: agentData.personality, // REMOVED
+                            // systemInstructions: agentData.system_instructions, // REMOVED
+                            // assistantInstructions: agentData.assistant_instructions, // REMOVED
+                            message: messageContent, // Pass message content
+                            authorId: message.author.id, // Pass author ID
+                            channelId: message.channelId, // Pass channel ID
+                            guildId: message.guildId, // Pass guild ID
                         }
                     });
 
                     if (functionError) {
-                        logger.error(`[AGENT ${AGENT_ID}] Error invoking ${chatFunctionName} function: ${functionError.message}`, { error: functionError });
-                        // More specific error checking
-                        let replyMessage = "Sorry, I had trouble generating a response.";
-                        if (functionError.message.includes('Failed to fetch')) {
-                            replyMessage = "Sorry, I couldn't reach my core processing unit. Please try again later.";
-                        } else if (functionError.message.includes('timeout')) {
-                             replyMessage = "Sorry, my thought process timed out. Could you try asking again?";
-                        }
-                        await message.reply({ content: replyMessage });
+                        logger.error(`[WORKER MSG ${CONNECTION_ID}] Error invoking chat function for agent ${AGENT_ID}: ${functionError.message}`, { error: functionError });
+                        // Use a slightly more specific error message if the function fails
+                        await message.reply('Sorry, I encountered an error processing your request.');
                         return;
                     }
 
-                    const reply = chatResponse?.reply || "Sorry, I couldn't think of anything to say.";
-                    logger.info(`[AGENT ${AGENT_ID}] Received reply from ${chatFunctionName}: ${reply.substring(0, 50)}...`);
-
-                    // Send the reply back to the Discord channel
-                    await message.reply({ content: reply });
-                    logger.debug(`[AGENT ${AGENT_ID}] Reply sent successfully.`);
+                    const reply = responseData?.reply || '...'; // Use optional chaining and fallback
+                    logger.info(`[WORKER MSG ${CONNECTION_ID}] Received reply from chat function for agent ${AGENT_ID}: "${reply.substring(0,50)}..."`);
+                    // Send the response back to the Discord channel
+                    if (reply) { // Ensure reply is not empty
+                        await message.reply(reply);
+                    } else {
+                        logger.warn(`[WORKER MSG ${CONNECTION_ID}] Chat function returned empty reply for agent ${AGENT_ID}.`);
+                         await message.reply('...'); // Send a default if empty
+                    }
 
                 } catch (error: any) {
-                    logger.error(`[AGENT ${AGENT_ID}] Error processing message: ${error.message}`, { error });
-                    await message.reply({ content: "Oops! Something went wrong while I was thinking." });
+                    logger.error(`[WORKER MSG ${CONNECTION_ID}] Unexpected error during message processing for agent ${AGENT_ID}: ${error.message}`, { error: error });
+                    await message.reply('Sorry, an unexpected error occurred.');
                 }
             } else {
                 logger.info(`Bot mentioned by ${message.author.tag} with no message content.`);
@@ -331,16 +327,25 @@ process.on('uncaughtException', (error: Error) => {
 });
 
 // --- Login --- 
-    logger.info("Attempting to log in to Discord...");
-client.login(BOT_TOKEN).then(() => {
-        logger.info("Discord login promise resolved."); // Login itself is async
-}).catch((error: Error) => {
-        logger.error("Discord login failed:", error);
-    shutdown('error', 'Login Failure'); // Shutdown if login fails
+    logger.info("Attempting to log in with token for Agent ID: ${AGENT_ID}");
+client.login(BOT_TOKEN).catch(async (error) => {
+    logger.error(`[WORKER LOGIN FAILED ${CONNECTION_ID}] Failed to log in for agent ${AGENT_ID}: ${error.message}`, { error });
+    await updateStatus('error', 'Login Failed'); // Update status to error on login failure
+    process.exit(1); // Exit if login fails
 });
 
-} catch (initError: any) {
-    // Catch errors during initial setup (config loading, client init)
-    logger.error("FATAL: Error during worker initialization:", initError);
-    process.exit(1); // Exit immediately on initialization failure
-} 
+} catch (error: any) {
+    logger.error(`[WORKER FATAL ${process.env.CONNECTION_DB_ID ?? 'UNKNOWN'}] Unhandled exception during worker initialization: ${error.message}`, {
+         error: error,
+         stack: error.stack
+     });
+    // Try to update status if possible, though supabase client might not be init
+    // await updateStatus('error', 'Initialization Failed'); 
+    process.exit(1);
+}
+
+logger.info("Worker script execution reached end (should be running now).");
+
+// --- DIAGNOSTIC LOGGING --- 
+logger.debug(`--- Worker process ending (graceful shutdown or error) ---`);
+// --- END DIAGNOSTIC LOGGING --- 
