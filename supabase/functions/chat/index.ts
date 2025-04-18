@@ -366,31 +366,58 @@ Deno.serve(async (req) => {
 
         // Parse request body
         parsedBody = await req.json(); // Parse into a variable
-        const { messages, agentId, agentName, agentPersonality, systemInstructions, assistantInstructions } = parsedBody; // Destructure
+        // MODIFIED: Expect payload sent by worker
+        const { agentId, message: userMessage, authorId, channelId, guildId } = parsedBody; 
         agentIdFromRequest = agentId; // Store agentId for catch block
 
         // *** ADDED LOGGING ***
         console.log("Received Payload Body:", JSON.stringify(parsedBody, null, 2)); 
-        console.log(`Extracted - messages type: ${typeof messages}, isArray: ${Array.isArray(messages)}, agentId: ${agentId}`);
+        console.log(`Extracted - agentId: ${agentId}, userMessage: ${userMessage ? userMessage.substring(0, 50) + '...' : 'null'}`);
         // *** END ADDED LOGGING ***
 
         // Validate required fields
-        if (!messages || !Array.isArray(messages) || !agentId) {
-          // *** ADDED DETAIL TO ERROR ***
-          throw new Error(`Invalid request format. Messages valid: ${!!messages && Array.isArray(messages)}. AgentId valid: ${!!agentId}.`);
+        if (!userMessage || !agentId) {
+          throw new Error(`Invalid request format. UserMessage valid: ${!!userMessage}. AgentId valid: ${!!agentId}.`);
         }
+
+        // *** NEW: Fetch agent details from DB ***
+        console.log(`[Agent: ${agentId}] Fetching agent details from database...`);
+        const { data: agentData, error: agentFetchError } = await supabaseClient
+          .from('agents')
+          .select('name, personality, system_instructions, assistant_instructions') 
+          .eq('id', agentId)
+          .single();
+
+        if (agentFetchError || !agentData) {
+          console.error(`[Agent: ${agentId}] Error fetching agent details: ${agentFetchError?.message || 'Agent not found'}`, { error: agentFetchError });
+          // Return a specific error if agent details can't be fetched
+          return new Response(
+            JSON.stringify({ error: 'Internal Server Error: Could not retrieve agent configuration.' }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+        console.log(`[Agent: ${agentId}] Successfully fetched agent details. Name: ${agentData.name}`);
+        // Store fetched details in constants for clarity
+        const fetchedAgentName = agentData.name;
+        const fetchedPersonality = agentData.personality;
+        const fetchedSystemInstructions = agentData.system_instructions;
+        const fetchedAssistantInstructions = agentData.assistant_instructions;
+        // *** END NEW: Fetch agent details ***
 
         // Initialize context array for the LLM
         const contextMessages: ChatMessage[] = [];
 
         // Add system message if provided
-        if (systemInstructions) {
-          contextMessages.push({ role: 'system', content: systemInstructions });
+        if (fetchedSystemInstructions) {
+          contextMessages.push({ role: 'system', content: fetchedSystemInstructions });
         }
 
         // Add assistant instructions if provided
-        if (assistantInstructions) {
-          contextMessages.push({ role: 'system', content: assistantInstructions });
+        if (fetchedAssistantInstructions) {
+          contextMessages.push({ role: 'system', content: fetchedAssistantInstructions });
         }
 
         // Process MCP context if available
@@ -438,12 +465,12 @@ Deno.serve(async (req) => {
               console.log(`[Agent: ${agentId}] Preparing MCP context for ${validConfigs.length} servers.`);
               // Prepare context data for MCP
               const contextData = await prepareMCPContext(
-                messages,
+                [{ role: 'user', content: userMessage, timestamp: new Date().toISOString() }], 
                 agentId,
-                agentName,
-                agentPersonality,
-                systemInstructions,
-                assistantInstructions
+                fetchedAgentName, // Use fetched data
+                fetchedPersonality, // Use fetched data
+                fetchedSystemInstructions, // Use fetched data
+                fetchedAssistantInstructions // Use fetched data
               );
 
               // Initialize MCPManager and process context
@@ -489,13 +516,13 @@ Deno.serve(async (req) => {
         }
 
         // Get vector search results
-        const vectorContext = await getVectorSearchResults(messages[messages.length - 1].content, agentId);
+        const vectorContext = await getVectorSearchResults(userMessage, agentId);
         if (vectorContext) {
           contextMessages.push({ role: 'system', content: vectorContext });
         }
 
-        // Add conversation messages
-        contextMessages.push(...messages);
+        // Add conversation messages (just the current user message for now)
+        contextMessages.push({ role: 'user', content: userMessage }); 
 
         // Create chat completion stream
         console.log('Calling OpenAI chat.completions.create...');
