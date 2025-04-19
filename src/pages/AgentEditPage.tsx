@@ -44,7 +44,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
     .replace(/=/g, '');
 }
 
-export function AgentEdit() {
+export function AgentEditPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();

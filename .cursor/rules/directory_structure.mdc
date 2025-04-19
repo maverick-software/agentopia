@@ -5,4 +5,8 @@ alwaysApply: false
 ---
 When you are considering how to architect your folder and file structure, keep the following in mind:
 
-1. Keep the Front-end, Backend and Database files separated into their own folders and subfolders. This way if we need to separate out the program into different programs, it becomes easy to understand  how to do it.
+Keep the Front-end, Backend and Database files separated into their own folders and subfolders. This way if we need to separate out the program into different programs, it becomes easy to understand  how to do it.
+
+Organize files in an easy to maintain and find manner. For example, if there are admin pages and user pages, organize them like: /src/pages/admin/ and /src/pages/users/ to make it clear.
+
+

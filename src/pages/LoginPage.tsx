@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-export function Login() {
+export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);

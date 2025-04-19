@@ -12,7 +12,7 @@ interface DashboardStats {
   loading: boolean;
 }
 
-export function Dashboard() {
+export function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     activeAgents: 0,

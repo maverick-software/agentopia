@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard,
   Users, Database, Brain, Activity, Settings,
-  LogOut, Bot, PanelLeftClose, PanelRightClose
+  ShieldCheck, LogOut, Bot, PanelLeftClose, PanelRightClose
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,18 +15,20 @@ interface SidebarProps {
   triggerRef: React.RefObject<HTMLButtonElement>;
 }
 
-const navItems = [
+const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/agents', icon: Users, label: 'Agents' },
   { to: '/datastores', icon: Database, label: 'Datastores' },
   { to: '/mcp', icon: Brain, label: 'MCP' },
   { to: '/monitoring', icon: Activity, label: 'Monitoring' },
-  { to: '/settings', icon: Settings, label: 'Settings' }
 ];
+
+const settingsNavItem = { to: '/settings', icon: Settings, label: 'Settings' };
+const adminNavItem = { to: '/admin/dashboard', icon: ShieldCheck, label: 'Admin' };
 
 // Accept new props
 export function Sidebar({ isCollapsed, setIsCollapsed, setIsMenuOpen, triggerRef }: SidebarProps) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -37,6 +39,14 @@ export function Sidebar({ isCollapsed, setIsCollapsed, setIsMenuOpen, triggerRef
       console.error("Sign out failed:", error);
     }
   };
+
+  // Conditionally build the nav items array
+  const navItems = [
+      ...baseNavItems,
+      // Add admin link if user is admin
+      ...(isAdmin ? [adminNavItem] : []),
+      settingsNavItem // Settings always last (or adjust order as needed)
+  ];
 
   return (
     <nav 
