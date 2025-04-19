@@ -3,12 +3,12 @@ import 'winston-daily-rotate-file';
 import path from 'path';
 
 // Ensure logs are stored relative to the project root, not the service directory
-const logDirectory = path.resolve(__dirname, '../../../logs'); // Resolves to project_root/logs
+const logDirectory = path.resolve(__dirname, '../../../docs/console/logs'); // Resolves to project_root/docs/console/logs
 
 const dailyRotateFileTransport = new winston.transports.DailyRotateFile({
   level: 'info', // Log info level and above to file
   dirname: logDirectory,
-  filename: 'agentopia-%DATE%.log',
+  filename: 'worker-manager-%DATE%.log',
   datePattern: 'YYYY-MM-DD',
   zippedArchive: true,
   maxSize: '20m', // Max size of each log file

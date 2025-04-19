@@ -122,9 +122,6 @@ export function AgentChat() {
 
       abortControllerRef.current = new AbortController();
 
-      const chatMessages = messages.map(({ role, content }) => ({ role, content }));
-      chatMessages.push({ role: userMessage.role, content: userMessage.content });
-
       // Get the current session and access token
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
@@ -133,6 +130,15 @@ export function AgentChat() {
         throw new Error('Authentication error: User not logged in?');
       }
 
+      // --- MODIFIED: Send payload expected by the updated backend ---
+      const requestBody = {
+        agentId: agent.id,
+        message: userMessage.content // Send only the latest user message content
+        // authorId, channelId, guildId are not available/relevant here
+      };
+      console.log("Sending request body:", requestBody);
+      // --- END MODIFICATION ---
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
         method: 'POST',
         headers: {
@@ -140,10 +146,7 @@ export function AgentChat() {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: chatMessages,
-          agentId: agent.id,
-        }),
+        body: JSON.stringify(requestBody), // Use the modified request body
         signal: abortControllerRef.current.signal,
       });
 
@@ -157,43 +160,23 @@ export function AgentChat() {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body received');
+      const responseData = await response.json();
+      const assistantReply = responseData.reply; 
+
+      if (typeof assistantReply !== 'string') {
+          throw new Error('Invalid response format from chat API');
       }
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: '',
+        content: assistantReply,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-
-        setMessages(prev => {
-          // Map to a new array to ensure immutability for React.memo
-          return prev.map((msg, index) => {
-            // If this is the last message and it's the assistant message we are updating
-            if (index === prev.length - 1 && msg.role === 'assistant') {
-              // Return a *new* message object with the appended content
-              return { ...msg, content: msg.content + chunk }; 
-            }
-            // Otherwise, return the original message object
-            return msg;
-          });
-        });
-      }
-
       scrollToBottom();
-    } catch (err) {
+    } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('Request was cancelled');
       } else {

@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Agentopia Tech Stack Document
 
 This document explains the technologies chosen for the Agentopia project in simple, everyday language. It breaks down the frontend, backend, infrastructure, integrations, security, and performance considerations so that anyone—even non-technical readers—can understand what each component does and why it was chosen.

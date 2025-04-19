@@ -4,6 +4,9 @@ import { supabase as supabaseClient } from '../lib/supabase';
 
 interface AuthContextType {
   user: User | null;
+  userRoles: string[];
+  isAdmin: boolean;
+  rolesLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -19,18 +22,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+
+  const fetchUserRoles = useCallback(async (userId: string | undefined) => {
+    if (!userId) {
+      setUserRoles([]);
+      setRolesLoading(false);
+      return;
+    }
+    setRolesLoading(true);
+    try {
+      const { data, error } = await supabaseClient
+        .from('user_roles')
+        .select('roles!inner(name)')
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error("Error fetching user roles:", error);
+        setError(`Failed to fetch user roles: ${error.message}`);
+        setUserRoles([]);
+      } else {
+        const roles = data?.map(item => item.roles?.name).filter(Boolean) as string[] || [];
+        setUserRoles(roles);
+      }
+    } catch (err: any) {
+      console.error("Error in fetchUserRoles:", err);
+      setError(err instanceof Error ? `Error fetching roles: ${err.message}` : 'An unknown error occurred fetching roles.');
+      setUserRoles([]);
+    } finally {
+      setRolesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
+    setLoading(true);
+
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
-        setUser(session?.user ?? null);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        fetchUserRoles(currentUser?.id);
         setLoading(false);
       }
     });
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
-        setUser(session?.user ?? null);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        fetchUserRoles(currentUser?.id);
       }
     });
 
@@ -38,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchUserRoles]);
 
   const handleAuthError = useCallback((error: AuthError) => {
     switch (error.message) {
@@ -95,20 +137,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearError]);
 
+  const isAdmin = useMemo(() => userRoles.includes('admin'), [userRoles]);
+
   const value = useMemo(() => ({
     user,
+    userRoles,
+    isAdmin,
+    rolesLoading,
     signIn,
     signUp,
     signOut,
     loading,
     error,
     clearError
-  }), [user, loading, error, signIn, signUp, signOut, clearError]);
+  }), [user, userRoles, isAdmin, rolesLoading, loading, error, signIn, signUp, signOut, clearError]);
 
-  if (loading) {
+  const initialLoading = loading || rolesLoading;
+
+  if (initialLoading && !user) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white">Loading Session...</div>
       </div>
     );
   }

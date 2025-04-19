@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: How to handle/ Implement OpenAI API
 globs: 
 alwaysApply: false

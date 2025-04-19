@@ -90,12 +90,13 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   **Frontend (`src/`):**
     *   Built with React, Vite, and TypeScript.
     *   Styled with Tailwind CSS.
+    *   **Entry Point:** `src/main.tsx` renders `src/App.tsx`, which handles routing.
     *   Allows users to log in (via Supabase Auth), create/edit agents (name, personality, instructions), and configure Discord connection details (Bot Token, App ID, Public Key, timeout).
     *   Initiates activation/deactivation requests via the `manage-discord-worker` Supabase function.
     *   Interacts with the Supabase database via the Supabase JS client.
     *   **Note:** The previous functionality to select a specific Discord channel for the agent has been removed. Future updates will allow managing the agent's presence across multiple servers via a dedicated interface.
 *   **Supabase Backend (`supabase/`):**
-    *   **Database:** Stores agent configurations (`agents` table), Discord connection details and status (`agent_discord_connections` table), user data, etc. Uses Row Level Security (RLS), with specific bypasses managed via `SECURITY DEFINER` functions.
+    *   **Database:** Stores agent configurations (`agents` table), Discord connection details and status (`agent_discord_connections` table), user data, etc. Uses Row Level Security (RLS), with specific bypasses managed via `SECURITY DEFINER` functions. RLS policies are confirmed enabled and correctly implemented (see RLS section below).
     *   **Authentication:** Handles user login/signup.
     *   **Edge Functions:** Serverless functions for handling specific backend tasks.
         *   `manage-discord-worker`: Receives requests from the frontend UI to start or stop a specific agent's Discord worker. Calls the `worker-manager` service.
@@ -189,20 +190,25 @@ Based on the provided schema diagram, the core tables are:
 *   An `mcp_configurations` record can have multiple `mcp_servers`.
 *   An `mcp_server` references secrets likely detailed further via `user_secrets` and the associated user.
 
-### Row Level Security (RLS) Policies (Current State as of 2025-04-17)
+### Row Level Security (RLS) Policies (Verified 2025-04-18)
 
-**Important Note:** The following policies were observed in the Supabase Studio. RLS is enabled, but the policies require review and correction as outlined in the [Multi-Server Management Plan](docs/plans/multi_server_management_plan.md). They contain redundancies, overly broad permissions (e.g., applied to `public` or `anon` roles), and may conflict with intended secure RPC mechanisms.
+RLS is confirmed ENABLED and correctly implemented on the relevant tables:
 
 **`agents` Table:**
-*   `(SELECT, anon role)` `Allow anon worker read access`: Allows anonymous processes to read agent details. (Potentially insecure).
-*   `(CRUD, public role)` `Allow individual user ...`: Grants full CRUD operations to any public user. (Highly insecure).
-*   `(INSERT/DELETE/SELECT/UPDATE, authenticated role)` `Users can ... agents`: Allows authenticated users basic CRUD, but lack specific `USING`/`WITH CHECK` clauses to strictly enforce ownership (`auth.uid() = user_id`).
+*   Policy: `Allow full access to own agents`
+*   Role: `authenticated`
+*   Commands: `ALL`
+*   Expression: `auth.uid() = user_id` (for both `USING` and `WITH CHECK`)
+*   *Ensures users can only interact with their own agents.*
 
 **`agent_discord_connections` Table:**
-*   `(CRUD, public role)` `Allow owner ... via agent` / `Allow users to ... connections for their own agents`: Multiple redundant policies intended for owner-based access but incorrectly applied to the `public` role.
-*   `(SELECT, anon role)` `Allow worker read own connection`: Allows anonymous processes to read connection details.
-*   `(UPDATE, public role)` `Allow worker self-update`: Unclear purpose, wrong role.
-*   `(UPDATE, anon role)` `Allow worker update own status`: Allows anonymous processes direct table update access, bypassing the intended `update_worker_status` RPC function. (Conflicts with design).
+*   Policy: `Allow full access to connections for own agents`
+*   Role: `authenticated`
+*   Commands: `ALL`
+*   Expression: `is_agent_owner(agent_id)` (for both `USING` and `WITH CHECK`)
+*   *Ensures users can only interact with connections belonging to agents they own (via the `is_agent_owner` SQL function).*
+
+*(Previous documentation noting multiple insecure policies was outdated/incorrect).*
 
 ## Core Workflows
 
@@ -436,3 +442,14 @@ To ensure type safety when interacting with the Supabase database from the front
     *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
     *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
 *   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point.
+
+## Known Issues & Current Priorities (as of 2025-04-18)
+
+Based on the latest analysis (`docs/context/ai_context_2025-04-18_1919.mdc`):
+
+1.  ~~RLS Policies Need Review (Critical): Row Level Security is enabled for `agents` and `agent_discord_connections`, but the existing policies require review and correction in Supabase to ensure security and proper function.~~ *(Resolved: RLS Verified Correct)*
+2.  **Missing Standard Logging:** ~~The expected logging directory (`docs/console/logs/`) does not exist.~~ Structured logging needs implementation across backend services/functions. *(Partially resolved: Directory created, service loggers updated, function logging basic)*.
+3.  **Documentation Mismatch:** `docs/index.md` lists an incorrect frontend entry point (`page.tsx` instead of `src/main.tsx`). (Corrected in this README).
+4.  **Informal Bug Tracking:** The `docs/bugs/` directory currently contains log dumps rather than structured bug reports. A formal process/template is needed.
+5.  **Testing Required:** The recently refactored Discord configuration UI (`DiscordConnect.tsx`, `DiscordModals.tsx`) requires thorough end-to-end testing.
+6.  **Potential Code Cleanup:** Review needed to remove any leftover diagnostic code from previous debugging sessions.
