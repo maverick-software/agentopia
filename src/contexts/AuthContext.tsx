@@ -43,7 +43,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError(`Failed to fetch user roles: ${error.message}`);
         setUserRoles([]);
       } else {
-        const roles = data?.map(item => item.roles?.name).filter(Boolean) as string[] || [];
+        const roles = data
+          ?.map(item => (item.roles as any)?.name) 
+          .filter(Boolean) as string[] || [];
+        console.log(`Fetched roles for ${userId}:`, roles);
         setUserRoles(roles);
       }
     } catch (err: any) {
@@ -61,18 +64,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (isMounted) {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        fetchUserRoles(currentUser?.id);
+        const fetchedUserId = session?.user?.id;
+        setUser(currentUser => {
+          if(currentUser?.id !== fetchedUserId) {
+            return session?.user ?? null;
+          }
+          return currentUser;
+        });
+        fetchUserRoles(fetchedUserId);
         setLoading(false);
       }
     });
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        fetchUserRoles(currentUser?.id);
+        const fetchedUserId = session?.user?.id;
+        setUser(currentUser => {
+          if(currentUser?.id !== fetchedUserId) {
+            return session?.user ?? null;
+          }
+          return currentUser;
+        });
+        fetchUserRoles(fetchedUserId);
       }
     });
 

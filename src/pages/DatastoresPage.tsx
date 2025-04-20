@@ -8,7 +8,7 @@ type ExtendedDatastore = DatastoreType & {
   agent_datastores?: Array<{ agent_id: string }>;
 };
 
-export function Datastores() {
+export function DatastoresPage() {
   const { user } = useAuth();
   const [datastores, setDatastores] = useState<ExtendedDatastore[]>([]);
   const [loading, setLoading] = useState(true);

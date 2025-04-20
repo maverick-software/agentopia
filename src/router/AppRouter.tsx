@@ -14,6 +14,13 @@ const HomePage = lazy(() => import('../pages/HomePage').then(module => ({ defaul
 const DashboardPage = lazy(() => import('../pages/DashboardPage').then(module => ({ default: module.DashboardPage })) );
 const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })) );
 
+// Add imports for AgentsPage and DatastoresPage
+const AgentsPage = lazy(() => import('../pages/AgentsPage').then(module => ({ default: module.AgentsPage })) );
+const DatastoresPage = lazy(() => import('../pages/DatastoresPage').then(module => ({ default: module.DatastoresPage })) );
+
+// Uncomment AgentChatPage import
+const AgentChatPage = lazy(() => import('../pages/AgentChatPage').then(module => ({ default: module.AgentChatPage })) );
+
 // Admin Pages (Lazy Loaded)
 const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })) );
 const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement').then(module => ({ default: module.AdminUserManagement })) );
@@ -58,8 +65,12 @@ export function AppRouter() {
 
                 {/* Protected Routes (Regular Users) - Use main Layout */}
                 <Route path="/dashboard" element={<Layout><ProtectedRoute><DashboardPage /></ProtectedRoute></Layout>} />
+                <Route path="/agents" element={<Layout><ProtectedRoute><AgentsPage /></ProtectedRoute></Layout>} />
+                <Route path="/datastores" element={<Layout><ProtectedRoute><DatastoresPage /></ProtectedRoute></Layout>} />
                 <Route path="/agent/create" element={<Layout><ProtectedRoute><AgentEditPage /></ProtectedRoute></Layout>} />
                 <Route path="/agent/:agentId" element={<Layout><ProtectedRoute><AgentEditPage /></ProtectedRoute></Layout>} />
+                {/* Restore Layout wrapper for chat page */}
+                <Route path="/agent/:agentId/chat" element={<Layout><ProtectedRoute><AgentChatPage /></ProtectedRoute></Layout>} />
                 {/* Add other protected user routes within Layout */}
                 {/* Example: Ensure SettingsPage, etc., are imported if needed */}
                 {/* <Route path="/settings" element={<Layout><ProtectedRoute><SettingsPage /></ProtectedRoute></Layout>} /> */}

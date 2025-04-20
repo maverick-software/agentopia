@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import type { Agent } from '../types';
 
-export function Agents() {
+export function AgentsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -152,7 +152,7 @@ export function Agents() {
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={() => navigate(`/agents/${agent.id}/chat`)}
+              onClick={() => navigate(`/agent/${agent.id}/chat`)}
               className="p-2 text-gray-400 hover:text-blue-400 rounded-md transition-colors"
               title="Chat with agent"
             >
@@ -168,7 +168,7 @@ export function Agents() {
               <Power className="w-5 h-5" />
             </button>
             <button
-              onClick={() => navigate(`/agents/${agent.id}`)}
+              onClick={() => navigate(`/agent/${agent.id}`)}
               className="p-2 text-gray-400 hover:text-blue-400 rounded-md transition-colors"
               title="Edit agent"
             >

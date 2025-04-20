@@ -23,19 +23,17 @@ export interface Datastore {
   id: string;
   name: string;
   description?: string;
-  type: 'vector' | 'knowledge' | 'file'; 
-  config?: any; // Adjust type as needed
+  type: 'vector' | 'knowledge' | 'file' | 'pinecone' | 'getzep';
+  config?: DatastoreConfig;
   created_at?: string;
 }
 
 export interface DatastoreConfig {
   apiKey?: string;
-  // Pinecone Serverless
   region?: string;
   host?: string;
   indexName?: string;
   dimensions?: number;
-  // GetZep
   projectId?: string;
   collectionName?: string;
 }

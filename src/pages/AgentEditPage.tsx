@@ -47,8 +47,12 @@ function bytesToBase64Url(bytes: Uint8Array): string {
 export function AgentEditPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
+  const { agentId: id } = useParams<{ agentId: string }>();
   const isEditing = Boolean(id);
+
+  // --- DIAGNOSTIC LOGS ---
+  console.log(`[AgentEditPage] Rendering - ID: ${id}, IsEditing: ${isEditing}`);
+  // --- END LOGS ---
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -238,7 +242,7 @@ export function AgentEditPage() {
       setLoading(false);
       return;
     }
-    console.log(`Fetching agent ${agentId}... Attempt ${currentAttempt}`);
+    console.log(`[AgentEditPage] fetchAgent called for ${agentId} (Attempt ${currentAttempt})`);
 
     try {
       setLoading(true);
@@ -251,17 +255,21 @@ export function AgentEditPage() {
         .eq('user_id', user.id)
         .single();
 
-      console.log(`[fetchAgent] Received agent data from Supabase:`, agentData);
+      console.log(`[AgentEditPage] Fetched agent data from DB:`, agentData);
 
       if (agentError) throw new Error(agentError.message);
       if (!agentData) throw new Error('Agent not found or access denied');
 
-      setAgentFormData({
+      const formDataToSet = {
         ...agentData,
         system_instructions: agentData.system_instructions || '',
         assistant_instructions: agentData.assistant_instructions || '',
         active: agentData.active,
-      });
+      };
+      setAgentFormData(formDataToSet);
+      // --- DIAGNOSTIC LOG --- 
+      console.log('[AgentEditPage] Called setAgentFormData with:', formDataToSet);
+      // --- END LOG ---
       setDiscordBotKey(agentData.discord_bot_key || '');
 
       // Fetch ALL connection records for the agent
@@ -374,7 +382,7 @@ export function AgentEditPage() {
       }
 
     } catch (err: any) {
-      console.error(`[fetchAgent] Error fetching agent ${agentId} (Attempt ${currentAttempt}): ${err.message}`, { error: err });
+      console.error(`[AgentEditPage] Error in fetchAgent (Attempt ${currentAttempt}):`, err);
       fetchAgentAttempts.current = currentAttempt;
       if (currentAttempt < MAX_FETCH_ATTEMPTS) {
         setTimeout(() => fetchAgent(agentId), 1000 * currentAttempt);
@@ -426,10 +434,19 @@ export function AgentEditPage() {
   }, [user?.id]);
 
   useEffect(() => {
+    // --- DIAGNOSTIC LOG ---
+    console.log(`[AgentEditPage] Main useEffect running - ID: ${id}, IsEditing: ${isEditing}`);
+    // --- END LOG ---
     if (isEditing && id) {
-      fetchAgent(id);
+      // --- DIAGNOSTIC LOG ---
+      console.log('[AgentEditPage] useEffect - Calling fetchAgent and fetchDatastores');
+      // --- END LOG ---
+      fetchAgent(id); 
       fetchDatastores(); 
     } else {
+      // --- DIAGNOSTIC LOG ---
+      console.log('[AgentEditPage] useEffect - Resetting form for new agent');
+      // --- END LOG ---
       setAgentFormData({ name: '', description: '', personality: '', system_instructions: '', assistant_instructions: '', active: true });
       setDiscordConnectionData({ inactivity_timeout_minutes: 10, worker_status: 'inactive', discord_app_id: '', discord_public_key: '' });
       setDiscordBotKey('');
