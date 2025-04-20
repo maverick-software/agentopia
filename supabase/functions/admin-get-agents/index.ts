@@ -53,74 +53,116 @@ serve(async (req) => {
 
     console.log(`Fetching agents page: ${pageNum}, perPage: ${perPageNum}, search: '${search}'`);
 
-    // --- Fetch Agents ---
     const supabaseAdmin = createClient(
         Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    let query = supabaseAdmin
+    // --- Step 1: Fetch Agents (without automatic join for user_profiles) ---
+    let agentQuery = supabaseAdmin
         .from('agents')
         .select(`
             id,
             name,
             description,
             created_at,
-            active, 
-            user_id, 
-            user_profiles!inner( id, email, username, full_name ),
-            agent_discord_connections ( id, guild_id, worker_status, is_enabled )
-        `, { count: 'exact' }) // Request total count
+            active,
+            user_id 
+        `, { count: 'exact' }) 
         .order('created_at', { ascending: false })
         .range(rangeStart, rangeEnd);
 
-    // Apply search filter if searchTerm is provided
+    // Apply search filter (only on agent fields now)
     if (search) {
         const lowerSearch = `%${search.toLowerCase()}%`;
-        // Match against agent name, description, OR owner's email/username/full_name
-        query = query.or(`name.ilike.${lowerSearch},description.ilike.${lowerSearch},user_profiles.email.ilike.${lowerSearch},user_profiles.username.ilike.${lowerSearch},user_profiles.full_name.ilike.${lowerSearch}`);
+        // Only search agent name/description directly
+        // Searching owner fields requires fetching profiles first or a more complex query
+        agentQuery = agentQuery.or(`name.ilike.${lowerSearch},description.ilike.${lowerSearch}`);
+        // TODO: Enhance search later if needed to include owner after fetching profiles
     }
 
-    const { data: agents, error, count } = await query;
+    const { data: agentsData, error: agentError, count } = await agentQuery;
 
-    if (error) {
-        console.error("Error fetching agents:", error);
-        // Attempt to provide more specific feedback for common issues
-        if (error.message.includes('relation "public.user_profiles" does not exist')) {
-             throw new Error(`Database error: Check if 'user_profiles' table exists and foreign key 'user_id' on 'agents' table correctly references 'user_profiles(id)'. The join syntax might be incorrect if the FK relationship isn't standard.`);
-        } else if (error.message.includes('missing FROM-clause entry for table "user_profiles"')) {
-            throw new Error(`Database error: Cannot filter directly on joined 'user_profiles' fields in .or(). Adjust filter logic.`);
-        } else if (error.message.includes('relation "public.agent_discord_connections" does not exist')) {
-             throw new Error(`Database error: Check if 'agent_discord_connections' table exists.`);
+    if (agentError) {
+        console.error("Error fetching agents data:", agentError);
+        throw new Error(`Failed to fetch agents: ${agentError.message}`);
+    }
+    
+    if (!agentsData || agentsData.length === 0) {
+         return new Response(JSON.stringify({ agents: [], total: count ?? 0 }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+        });
+    }
+
+    // --- Step 2: Get IDs for subsequent queries ---
+    const agentIds = agentsData.map(a => a.id);
+    const userIds = agentsData.map(a => a.user_id).filter(id => id); // Filter out potential null/undefined user_ids
+
+    // --- Step 3 & 4: Fetch Profiles and Connections in parallel ---
+    const [profilesResult, connectionsResult] = await Promise.all([
+        // Fetch profiles based on userIds from agents
+        userIds.length > 0 ? supabaseAdmin
+            .from('user_profiles')
+            .select(`id, email, username, full_name`)
+            .in('id', userIds) : Promise.resolve({ data: [], error: null }), // Avoid query if no userIds
+        
+        // Fetch connections based on agentIds
+        supabaseAdmin
+            .from('agent_discord_connections')
+            .select(`id, agent_id, guild_id, worker_status, is_enabled`)
+            .in('agent_id', agentIds)
+    ]);
+
+    if (profilesResult.error) {
+        console.error("Error fetching user profiles:", profilesResult.error);
+        // Continue but owner info might be missing
+    }
+     if (connectionsResult.error) {
+        console.error("Error fetching agent connections:", connectionsResult.error);
+        // Continue but connection info might be missing
+    }
+
+    // --- Add Explicit Type to Map --- 
+    // Define Profile type inline or import from shared types if available
+    type UserProfile = { id: string; email: string | null; username: string | null; full_name: string | null; };
+    const userProfilesMap = new Map<string, UserProfile>(profilesResult.data?.map(p => [p.id, p as UserProfile]) || []);
+    // -----
+
+    const agentConnectionsMap = new Map<string, any[]>();
+    connectionsResult.data?.forEach(c => {
+        if (!agentConnectionsMap.has(c.agent_id)) {
+            agentConnectionsMap.set(c.agent_id, []);
         }
-        throw new Error(`Failed to fetch agents: ${error.message}`);
-    }
+        agentConnectionsMap.get(c.agent_id)?.push(c);
+    });
 
-    // Simplify the owner info and connection status
-    const processedAgents = agents?.map(agent => {
-        // Handle potential null from join (though !inner should prevent it)
-        const ownerProfile = agent.user_profiles;
-        const connections = agent.agent_discord_connections || [];
+    // --- Step 5: Combine data manually ---
+    const processedAgents = agentsData.map(agent => {
+        // Now TS knows the type of ownerProfile from the typed map
+        const ownerProfile = agent.user_id ? userProfilesMap.get(agent.user_id) : null;
+        const connections = agentConnectionsMap.get(agent.id) || [];
+
+        // Determine representative discord status (same logic as before)
+        const discord_status = connections.find(c => c.worker_status === 'active' || c.worker_status === 'connecting')?.worker_status || 'inactive';
+        const enabled_guild_count = connections.filter(c => c.is_enabled).length || 0;
+        const total_guild_count = connections.length || 0;
 
         return {
             id: agent.id,
             name: agent.name,
             description: agent.description,
             created_at: agent.created_at,
-            active: agent.active, // Agent's own active flag
+            active: agent.active,
             owner: ownerProfile ? { 
                 id: ownerProfile.id,
                 email: ownerProfile.email,
                 username: ownerProfile.username,
                 full_name: ownerProfile.full_name
-             } : null, // Provide null if join failed unexpectedly
-            // Aggregate connection status (example: find first 'active' or 'connecting')
-            discord_status: connections.find(c => c.worker_status === 'active' || c.worker_status === 'connecting')?.worker_status || 'inactive',
-            // Count enabled connections
-            enabled_guild_count: connections.filter(c => c.is_enabled).length || 0,
-            total_guild_count: connections.length || 0,
+             } : null,
+            discord_status: discord_status,
+            enabled_guild_count: enabled_guild_count,
+            total_guild_count: total_guild_count,
         };
-    }) || [];
-
+    });
 
     return new Response(JSON.stringify({ agents: processedAgents, total: count ?? 0 }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

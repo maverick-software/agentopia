@@ -1,71 +1,91 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { HomeIcon, UsersIcon, CogIcon, ShieldCheckIcon, ServerIcon, LifebuoyIcon } from '@heroicons/react/24/outline'; // Example icons
+// Replace Heroicons with Lucide icons
+import { 
+  LayoutDashboard, 
+  Users, 
+  Bot, // Using Bot icon for Agent Management
+  PanelLeftClose, 
+  PanelRightClose 
+} from 'lucide-react';
+
+// Define props for the component
+interface AdminSidebarProps {
+  isCollapsed: boolean;
+  setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+}
 
 const navigation = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: HomeIcon },
-    { name: 'User Management', href: '/admin/users', icon: UsersIcon },
-    { name: 'Agent Management', href: '/admin/agents', icon: ServerIcon }, // <-- New Item
-    // Add other admin navigation items here
-    // { name: 'Role Management', href: '/admin/roles', icon: ShieldCheckIcon },
-    // { name: 'System Health', href: '/admin/health', icon: LifebuoyIcon },
-    // { name: 'Settings', href: '/admin/settings', icon: CogIcon },
+    // Update icons to Lucide components
+    { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'User Management', href: '/admin/users', icon: Users },
+    { name: 'Agent Management', href: '/admin/agents', icon: Bot }, 
+    // Add other admin items here if needed
 ];
 
 function classNames(...classes: string[]) {
     return classes.filter(Boolean).join(' ');
 }
 
-export const AdminSidebar: React.FC = () => {
+// Accept props
+export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isCollapsed, setIsCollapsed }) => {
     return (
-        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-900 px-6 pb-4">
-            <div className="flex h-16 shrink-0 items-center text-white">
-                {/* Replace with your logo or admin panel name */}
-                <img
-                    className="h-8 w-auto"
-                    src="/logo.png" // Make sure you have a logo image
-                    alt="Your Company"
-                />
-                <span className="ml-3 text-xl font-semibold">Admin Panel</span>
+        // Apply dynamic padding and background like user sidebar
+        <nav 
+            className={`relative flex flex-col bg-gray-800 h-full overflow-y-auto transition-all duration-300 ease-in-out ${isCollapsed ? 'p-2' : 'p-4'}`}
+        >
+            {/* Use flex-1 to push button to bottom */}
+            <div className="flex-1 mb-4 flex flex-col">
+                {/* Top section (Logo/Title and Nav Links) */}
+                <div>
+                    {/* Logo/Title section - adjust styling based on isCollapsed */}
+                    <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
+                        {/* Use a generic icon or replace img src */}
+                        <Bot size={isCollapsed ? 28 : 24} className="text-indigo-400" />
+                        <span className={`ml-2 text-xl font-bold transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
+                            Admin Panel
+                        </span>
+                    </div>
+                    
+                    {/* Navigation Links - adjust styling based on isCollapsed */}
+                    <ul role="list" className="space-y-2">
+                        {navigation.map((item) => (
+                            <li key={item.name}>
+                                <NavLink
+                                    to={item.href}
+                                    title={isCollapsed ? item.name : undefined}
+                                    className={({ isActive }) =>
+                                        `flex items-center space-x-3 rounded-md transition-colors ${
+                                            isCollapsed ? 'px-2 justify-center py-3' : 'px-4 py-3' // Adjust padding/justify
+                                        } ${
+                                            isActive 
+                                                ? 'bg-indigo-600 text-white' 
+                                                : 'text-gray-300 hover:bg-gray-700'
+                                        }`
+                                    }
+                                >
+                                    <item.icon className="w-5 h-5 shrink-0" aria-hidden="true" />
+                                    {/* Hide text when collapsed */}
+                                    <span className={`font-medium transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>{item.name}</span>
+                                </NavLink>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                
+                {/* Collapse Button - pushed to bottom */}
+                <button 
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    className={`mt-auto text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700 transition-colors duration-200 mb-2 ${ 
+                        isCollapsed ? 'self-center' : 'self-start ml-1' // Adjust positioning
+                    }`}
+                    title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                >
+                    {isCollapsed ? <PanelRightClose size={20} /> : <PanelLeftClose size={20} />}
+                </button>
             </div>
-            <nav className="flex flex-1 flex-col">
-                <ul role="list" className="flex flex-1 flex-col gap-y-7">
-                    <li>
-                        <ul role="list" className="-mx-2 space-y-1">
-                            {navigation.map((item) => (
-                                <li key={item.name}>
-                                    <NavLink
-                                        to={item.href}
-                                        className={({ isActive }) =>
-                                            classNames(
-                                                isActive
-                                                    ? 'bg-gray-800 text-white'
-                                                    : 'text-gray-400 hover:text-white hover:bg-gray-800',
-                                                'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold'
-                                            )
-                                        }
-                                    >
-                                        <item.icon className="h-6 w-6 shrink-0" aria-hidden="true" />
-                                        {item.name}
-                                    </NavLink>
-                                </li>
-                            ))}
-                        </ul>
-                    </li>
-                    {/* Optional: Add other sections like Settings, Profile links here */}
-                    {/* Example:
-                    <li className="mt-auto">
-                        <a
-                            href="#"
-                            className="group -mx-2 flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6 text-gray-400 hover:bg-gray-800 hover:text-white"
-                        >
-                            <CogIcon className="h-6 w-6 shrink-0" aria-hidden="true" />
-                            Settings
-                        </a>
-                    </li>
-                    */}
-                </ul>
-            </nav>
-        </div>
+
+            {/* Remove user profile section for now, keep it simpler */}
+        </nav>
     );
 }; 

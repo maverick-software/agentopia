@@ -1,16 +1,17 @@
 import React from 'react';
-import { Layout } from './components/Layout';
+// import { Layout } from './components/Layout';
 import { AuthProvider } from './contexts/AuthContext';
 import { DatabaseProvider } from './contexts/DatabaseContext';
 import { AppRouter } from './router/AppRouter';
+// import { BrowserRouter } from 'react-router-dom';
 
 function App() {
   return (
     <AuthProvider>
       <DatabaseProvider>
-        <Layout>
+        {/* <Layout> */}
           <AppRouter />
-        </Layout>
+        {/* </Layout> */}
       </DatabaseProvider>
     </AuthProvider>
   );
