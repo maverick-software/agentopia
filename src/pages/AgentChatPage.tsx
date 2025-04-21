@@ -23,6 +23,7 @@ export function AgentChatPage() {
   const fetchAgentAttempts = useRef(0);
   const MAX_FETCH_ATTEMPTS = 5;
   const isMounted = useRef(true); // Track mount status for async operations
+  const fetchInProgress = useRef(false); // Ref to track if a fetch is already in progress
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -43,19 +44,32 @@ export function AgentChatPage() {
     };
   }, []);
 
-  // Main Effect for Fetching Agent Data
+  // Main Effect for Fetching Agent Data - Modified to run on render and use fetchInProgress guard
   useEffect(() => {
     // console.log("[AgentFetchEffect] Running due to render/mount.") // Debug log
+
+    // Guard against multiple simultaneous fetches
+    if (fetchInProgress.current) {
+      // console.log("[AgentFetchEffect] Skipping: Fetch already in progress.");
+      return;
+    }
 
     // Define the fetch function directly inside the effect
     const fetchAgent = async (attempt = 1) => {
       // Check using the correct parameter name: agentId
+      // This check is crucial now as the effect runs more often
       if (!agentId || !user?.id) {
         // console.log("[fetchAgent] Skipping: missing agentId or user.id"); // Cleaned log
-        // If called without agentId/user, set loading to false if it's the first attempt condition check
-        if(attempt === 1) setLoading(false);
+        // Only set loading false if we *know* we shouldn't fetch yet.
+        // Don't set loading=false here unconditionally, as a valid fetch might start later.
+        // Consider setting loading only when a fetch *starts* or definitively *fails*.
         return;
       }
+
+      // If we proceed, mark fetch as in progress
+      fetchInProgress.current = true;
+      setLoading(true); // Set loading true when a valid fetch attempt starts
+      setError(null); // Clear previous errors on new attempt
 
       if (attempt > MAX_FETCH_ATTEMPTS) {
         console.warn(`[fetchAgent] Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for agent ${agentId}.`);
@@ -67,8 +81,6 @@ export function AgentChatPage() {
       }
 
       // console.log(`[fetchAgent] Attempt ${attempt} for agent ${agentId}`); // Cleaned log
-      setLoading(true);
-      setError(null); // Clear previous errors on new attempt
 
       // Use a local abort controller for this specific fetch attempt
       const controller = new AbortController();
@@ -150,23 +162,37 @@ export function AgentChatPage() {
          if (isMounted.current && abortControllerRef.current === controller) {
             abortControllerRef.current = null;
          }
+         // IMPORTANT: Reset fetchInProgress flag only when fetch completes (success or final error)
+         if (isMounted.current) {
+             fetchInProgress.current = false;
+         }
+         // setLoading(false); // Loading is handled within try/catch/retry logic now
       }
     };
 
-    // Trigger the fetch
-    fetchAgentAttempts.current = 0; // Reset attempts count when dependencies change
-    fetchAgent(1); // Start fetch with attempt 1
+    // Trigger the fetch only if agentId and user.id are available
+    if (agentId && user?.id) {
+        // Reset attempts count *only* when we initiate a new fetch sequence
+        fetchAgentAttempts.current = 0;
+        fetchAgent(1); // Start fetch with attempt 1
+    } else {
+        // If required IDs aren't present yet, ensure loading is false
+        setLoading(false);
+    }
 
-    // Return a cleanup function to abort the fetch if dependencies change or component unmounts
+    // Cleanup function still relevant for aborting on unmount
     return () => {
       if (abortControllerRef.current) {
-        // console.log('[AgentFetchEffect Cleanup] Aborting active fetch.'); // Optional log
+        // console.log('[AgentFetchEffect Cleanup] Aborting active fetch on unmount/re-render.'); // Optional log
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      // Reset fetch in progress flag if the effect re-runs and cancels an ongoing fetch
+      // Although the guard should prevent re-entry, this is a safeguard
+      // fetchInProgress.current = false; // Let the finally block handle this
     };
-  // Restore dependencies: Effect runs when agentId or user.id changes.
-  }, [agentId, user?.id]);
+  // NO DEPENDENCIES: Effect runs on every render. Guarded by fetchInProgress and agentId/user.id checks.
+  }, []); // <-- Dependency array removed
 
   // Effect for scrolling messages
   useEffect(() => {

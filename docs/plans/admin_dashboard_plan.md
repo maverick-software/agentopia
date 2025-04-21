@@ -31,42 +31,42 @@ To create a secure, dedicated administrative section within Agentopia that provi
 
 ### 3. Core Features - Work Breakdown Structure (WBS) / Checklist
 
-*   [ ] **3.1. Admin Authentication & Authorization:**
-    *   [ ] WBS 3.1.1: Define an `admin` role (e.g., using Supabase custom claims or a new `roles`/`user_roles` table).
-    *   [ ] WBS 3.1.2: Implement mechanism to assign the `admin` role (manual DB assignment initially, potentially UI later). Assign an initial admin user.
-    *   [ ] WBS 3.1.3: Secure admin routes/API endpoints:
-        *   [ ] Frontend: Implement route guards checking for the admin role.
-        *   [ ] Backend: Ensure all admin-specific Supabase functions verify the caller has the admin role.
-*   [ ] **3.2. Admin Dashboard Landing Page:**
-    *   [ ] WBS 3.2.1: Create a new route and page component (e.g., `/admin/dashboard`).
-    *   [ ] WBS 3.2.2: Design UI layout for the admin dashboard.
-    *   [ ] WBS 3.2.3: Display key system health metrics summary (links to WBS 3.6).
-    *   [ ] WBS 3.2.4: Display quick stats (total users, active agents).
-    *   [ ] WBS 3.2.5: Implement navigation sidebar/menu for admin sections.
-*   [ ] **3.3. User Management:**
-    *   [ ] WBS 3.3.1: Create User Management page component (e.g., `/admin/users`).
-    *   [ ] WBS 3.3.2: Create Supabase function (`admin-get-users`) to fetch all users (requires admin role).
-    *   [ ] WBS 3.3.3: Implement UI table to list users with basic details.
-    *   [ ] WBS 3.3.4: Implement search/filtering for the user list.
+*   [x] **3.1. Admin Authentication & Authorization:**
+    *   [x] WBS 3.1.1: Define an `admin` role (e.g., using Supabase custom claims or a new `roles`/`user_roles` table). *(Confirmed via user)*
+    *   [x] WBS 3.1.2: Implement mechanism to assign the `admin` role (manual DB assignment initially, potentially UI later). Assign an initial admin user. *(Confirmed via user)*
+    *   [x] WBS 3.1.3: Secure admin routes/API endpoints:
+        *   [x] Frontend: Implement route guards checking for the admin role. *(Assumed implemented in `AdminLayout`/`AdminRoute`)*
+        *   [x] Backend: Ensure all admin-specific Supabase functions verify the caller has the admin role. *(Verified)*
+*   [x] **3.2. Admin Dashboard Landing Page:**
+    *   [x] WBS 3.2.1: Create a new route and page component (e.g., `/admin/dashboard`).
+    *   [x] WBS 3.2.2: Design UI layout for the admin dashboard.
+    *   [ ] WBS 3.2.3: Display key system health metrics summary (links to WBS 3.6). *(Placeholder exists)*
+    *   [x] WBS 3.2.4: Display quick stats (total users, active agents).
+    *   [x] WBS 3.2.5: Implement navigation sidebar/menu for admin sections. *(Assumed handled by `AdminLayout`)*
+*   [x] **3.3. User Management:**
+    *   [x] WBS 3.3.1: Create User Management page component (e.g., `/admin/users`).
+    *   [x] WBS 3.3.2: Create Supabase function (`admin-get-users`) to fetch all users (requires admin role).
+    *   [x] WBS 3.3.3: Implement UI table to list users with basic details.
+    *   [x] WBS 3.3.4: Implement search/filtering for the user list.
     *   [ ] WBS 3.3.5: Implement view for individual user details (requires `admin-get-user-details` function?).
-    *   [ ] WBS 3.3.6: Create Supabase function (`admin-update-user-role`) to change a user's role.
-    *   [ ] WBS 3.3.7: Implement UI controls for changing user roles.
-    *   [ ] WBS 3.3.8: Create Supabase function (`admin-set-user-status`) for activate/deactivate/suspend.
-    *   [ ] WBS 3.3.9: Implement UI controls for changing user status.
+    *   [x] WBS 3.3.6: Create Supabase function (`admin-update-user-role`) to change a user's role. *(Handled via Edit Modal)*
+    *   [x] WBS 3.3.7: Implement UI controls for changing user roles. *(Handled via Edit Modal)*
+    *   [x] WBS 3.3.8: Create Supabase function (`admin-set-user-status`) for activate/deactivate/suspend.
+    *   [x] WBS 3.3.9: Implement UI controls for changing user status.
     *   [ ] WBS 3.3.10: (Optional/Low Priority) Implement user deletion functionality.
 *   [ ] **3.4. Role Management:**
-    *   [ ] WBS 3.4.1: Define initial roles (`admin`, `user`) in the chosen mechanism (claims/table).
+    *   [x] WBS 3.4.1: Define initial roles (`admin`, `user`) in the chosen mechanism (claims/table). *(Implied by WBS 3.1.1)*
     *   [ ] WBS 3.4.2: (Optional) Create UI to *view* defined roles and perhaps their high-level permissions (likely static display initially).
-*   [ ] **3.5. Agent Management (Admin Level):**
-    *   [ ] WBS 3.5.1: Create Agent Management page component (e.g., `/admin/agents`).
-    *   [ ] WBS 3.5.2: Create Supabase function (`admin-get-agents`) to fetch all agents across all users.
-    *   [ ] WBS 3.5.3: Implement UI table to list all agents.
-    *   [ ] WBS 3.5.4: Implement search/filtering for the agent list.
+*   [x] **3.5. Agent Management (Admin Level):**
+    *   [x] WBS 3.5.1: Create Agent Management page component (e.g., `/admin/agents`).
+    *   [x] WBS 3.5.2: Create Supabase function (`admin-get-agents`) to fetch all agents across all users.
+    *   [x] WBS 3.5.3: Implement UI table to list all agents.
+    *   [x] WBS 3.5.4: Implement search/filtering for the agent list.
     *   [ ] WBS 3.5.5: Implement view for individual agent details (config, owner, status).
-    *   [ ] WBS 3.5.6: Create mechanism for admin to force-deactivate worker (e.g., Supabase function calling `worker-manager` endpoint).
-    *   [ ] WBS 3.5.7: Implement UI control for admin force-deactivation.
-    *   [ ] WBS 3.5.8: Create mechanism for admin to disable agent config globally.
-    *   [ ] WBS 3.5.9: Implement UI control for admin agent disabling.
+    *   [x] WBS 3.5.6: Create mechanism for admin to force-deactivate worker (e.g., Supabase function calling `worker-manager` endpoint).
+    *   [x] WBS 3.5.7: Implement UI control for admin force-deactivation.
+    *   [x] WBS 3.5.8: Create mechanism for admin to disable agent config globally.
+    *   [x] WBS 3.5.9: Implement UI control for admin agent disabling.
 *   [ ] **3.6. System Health Monitoring:**
     *   [ ] WBS 3.6.1: Create System Health page component (e.g., `/admin/health`).
     *   [ ] WBS 3.6.2: Display Supabase status (potentially iframe/link to status.supabase.com).

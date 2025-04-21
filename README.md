@@ -27,6 +27,8 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
     *   `/activate` slash command to bring agents online in a server.
     *   Agent responses when mentioned (`@AgentName`).
     *   Management of agent worker processes.
+    *   **User Account Management:** Supports user registration, login, and profile management (via Supabase Auth).
+    *   **Admin Interface:** Provides administrative controls for managing users and system settings (details pending).
     *   Digital Ocean Login -     ssh -i c:/users/<user>/ssh_key_filename root@165.22.172.98
 
 ## Project Structure
@@ -90,8 +92,9 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   **Frontend (`src/`):**
     *   Built with React, Vite, and TypeScript.
     *   Styled with Tailwind CSS.
-    *   **Entry Point:** `src/main.tsx` renders `src/App.tsx`, which handles routing.
-    *   Allows users to log in (via Supabase Auth), create/edit agents (name, personality, instructions), and configure Discord connection details (Bot Token, App ID, Public Key, timeout).
+    *   **Entry Point:** `src/main.tsx` renders `src/App.tsx`, which handles routing and context providers (like `AuthContext`).
+    *   **User Features:** Allows users to register, log in (via Supabase Auth), create/edit agents (name, personality, instructions), and configure Discord connection details (Bot Token, App ID, Public Key, timeout).
+    *   **Admin Features:** Includes an admin interface for user management and potentially other system-level configurations.
     *   Initiates activation/deactivation requests via the `manage-discord-worker` Supabase function.
     *   Interacts with the Supabase database via the Supabase JS client.
     *   **Note:** The previous functionality to select a specific Discord channel for the agent has been removed. Future updates will allow managing the agent's presence across multiple servers via a dedicated interface.
