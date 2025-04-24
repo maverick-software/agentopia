@@ -1,0 +1,10 @@
+- [ ] Delegated access for users.
+- [ ] MCP Tool Belts for agents.
+- [ ] Default optimized prompt listing available MCP servers.
+- [ ] Optional Chain of Thought / Advanced Reasoning for agents.
+- [ ] Project creation and management with agent access control (CRUD/partial CRUD).
+- [ ] Web Chatbots installable via script, assignable to agents.
+- [ ] Email, SMS, and additional communication channel notifications.
+- [ ] Voice capabilities for agents.
+- [ ] 3D visualization component for agent interaction.
+- [ ] Data ingestion (PDF, DOC, TXT, etc.) for agent memory/datastore. 
