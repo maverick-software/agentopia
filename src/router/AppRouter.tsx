@@ -9,6 +9,7 @@ import AdminLayout from '../layouts/AdminLayout'; // Assuming an AdminLayout exi
 // Public Pages (Lazy Loaded)
 const LoginPage = lazy(() => import('../pages/LoginPage').then(module => ({ default: module.LoginPage })) );
 const HomePage = lazy(() => import('../pages/HomePage').then(module => ({ default: module.HomePage })) );
+const RegisterPage = lazy(() => import('../pages/RegisterPage').then(module => ({ default: module.RegisterPage })) );
 
 // Protected Pages (Lazy Loaded)
 const DashboardPage = lazy(() => import('../pages/DashboardPage').then(module => ({ default: module.DashboardPage })) );
@@ -28,6 +29,19 @@ const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement').
 
 // Loading fallback
 const LoadingSpinner = () => <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div></div>;
+
+// --- Root Redirect Component ---
+const RootRedirect: React.FC = () => {
+    const { user, loading } = useAuth(); // Assuming useAuth provides a loading state
+
+    if (loading) {
+        return <LoadingSpinner />; // Show loading indicator while checking auth
+    }
+
+    // If loading is false, we know the user state
+    return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
+};
+// --- End Root Redirect Component ---
 
 // Custom Route Wrappers
 const PublicRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
@@ -58,10 +72,14 @@ export function AppRouter() {
     return (
         <Suspense fallback={<LoadingSpinner />}>
             <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<PublicLayout><PublicRoute><HomePage /></PublicRoute></PublicLayout>} />
-                <Route path="/login" element={<PublicLayout><PublicRoute><LoginPage /></PublicRoute></PublicLayout>} />
-                {/* Add other public routes like /register, /about here */}
+                {/* Root Route - Use the new RootRedirect component */}
+                <Route path="/" element={<RootRedirect />} />
+
+                {/* Public Routes - Render LoginPage directly without PublicLayout */}
+                <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+                <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+                {/* If HomePage should still be accessible elsewhere, define a new path for it */}
+                {/* <Route path="/home" element={<PublicLayout><PublicRoute><HomePage /></PublicRoute></PublicLayout>} /> */}
 
                 {/* Protected Routes (Regular Users) - Use main Layout */}
                 <Route path="/dashboard" element={<Layout><ProtectedRoute><DashboardPage /></ProtectedRoute></Layout>} />

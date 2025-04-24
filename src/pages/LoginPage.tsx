@@ -1,31 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Bot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const { signIn, signUp, error, clearError } = useAuth();
+  const { signIn, error, clearError } = useAuth();
+  const navigate = useNavigate();
 
-  // Clear error when switching between sign in and sign up
   useEffect(() => {
     clearError();
-  }, [isSignUp, clearError]);
+  }, [clearError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      if (isSignUp) {
-        await signUp(email, password);
-      } else {
-        await signIn(email, password);
-      }
+      await signIn(email, password);
     } catch (err) {
-      // Error is already handled in AuthContext
-      console.error('Authentication error:', err);
+      console.error('Sign in error:', err);
     }
+  };
+
+  const handleSignUpClick = () => {
+    navigate('/register');
   };
 
   return (
@@ -34,7 +33,7 @@ export function LoginPage() {
         <div className="flex flex-col items-center">
           <Bot className="w-12 h-12 text-indigo-500" />
           <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-            {isSignUp ? 'Create your account' : 'Sign in to your account'}
+            Sign in to your account
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -71,19 +70,17 @@ export function LoginPage() {
               type="submit"
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              {isSignUp ? 'Sign up' : 'Sign in'}
+              Sign in
             </button>
           </div>
 
           <div className="text-center">
             <button
               type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={handleSignUpClick}
               className="text-indigo-400 hover:text-indigo-500 text-sm"
             >
-              {isSignUp
-                ? 'Already have an account? Sign in'
-                : "Don't have an account? Sign up"}
+              Don't have an account? Sign up
             </button>
           </div>
         </form>

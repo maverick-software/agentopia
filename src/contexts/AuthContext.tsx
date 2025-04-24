@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { User, AuthError } from '@supabase/supabase-js';
-import { supabase as supabaseClient } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -8,19 +8,21 @@ interface AuthContextType {
   isAdmin: boolean;
   rolesLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
   error: string | null;
   clearError: () => void;
+  updateProfile: (profileData: Partial<Omit<Profile, 'id' | 'created_at' | 'updated_at'>>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
@@ -33,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setRolesLoading(true);
     try {
-      const { data, error } = await supabaseClient
+      const { data, error } = await supabase
         .from('user_roles')
         .select('roles!inner(name)')
         .eq('user_id', userId);
@@ -59,41 +61,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
     setLoading(true);
-
-    supabaseClient.auth.getSession().then(({ data: { session } }) => {
-      if (isMounted) {
-        const fetchedUserId = session?.user?.id;
-        setUser(currentUser => {
-          if(currentUser?.id !== fetchedUserId) {
-            return session?.user ?? null;
-          }
-          return currentUser;
-        });
-        fetchUserRoles(fetchedUserId);
-        setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('[AuthContext] onAuthStateChange event:', _event, 'Session exists:', !!session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        try {
+            const { data, error: rpcError } = await supabase.rpc('is_admin');
+            if (rpcError) throw rpcError;
+            console.log('[AuthContext] is_admin check result:', data);
+            setIsAdmin(data === true); 
+        } catch (e: any) {
+            console.error('[AuthContext] Error checking admin status:', e.message);
+            setIsAdmin(false); 
+        }
+      } else {
+         setIsAdmin(false); 
       }
+
+      setLoading(false);
     });
 
-    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (isMounted) {
-        const fetchedUserId = session?.user?.id;
-        setUser(currentUser => {
-          if(currentUser?.id !== fetchedUserId) {
-            return session?.user ?? null;
-          }
-          return currentUser;
-        });
-        fetchUserRoles(fetchedUserId);
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!user && session) {
+            console.log('[AuthContext] Setting user from initial getSession');
+            setUser(session.user);
+        }
+        if(loading) setLoading(false); 
     });
 
     return () => {
-      isMounted = false;
-      subscription.unsubscribe();
+      console.log('[AuthContext] Unsubscribing from onAuthStateChange');
+      subscription?.unsubscribe();
     };
-  }, [fetchUserRoles]);
+  }, []);
 
   const handleAuthError = useCallback((error: AuthError) => {
     switch (error.message) {
@@ -111,48 +113,120 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      clearError();
-      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw signInError;
     } catch (err: any) {
-      handleAuthError(err as AuthError);
+      console.error('Sign in error:', err);
+      setError(err.message || 'Failed to sign in.');
       throw err;
+    } finally {
+      setLoading(false);
     }
-  }, [clearError, handleAuthError]);
+  };
 
-  const signUp = useCallback(async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      clearError();
-      const { error } = await supabaseClient.auth.signUp({ 
-        email, 
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/login` }
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({ 
+          email, 
+          password 
       });
-      if (error) throw error;
-    } catch (err: any) {
-      handleAuthError(err as AuthError);
-      throw err;
-    }
-  }, [clearError, handleAuthError]);
+      if (signUpError) throw signUpError;
+      if (!authData.user) throw new Error('Sign up successful but no user data returned.');
 
-  const signOut = useCallback(async () => {
-    try {
-      clearError();
-      const { error } = await supabaseClient.auth.signOut();
-      if (error) throw error;
+      console.log(`[AuthContext] User ${authData.user.id} signed up. Creating profile...`);
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({ 
+            id: authData.user.id,
+            full_name: fullName 
+        });
+
+      if (profileError) {
+        console.error('[AuthContext] CRITICAL: Profile creation failed after sign up:', profileError);
+        throw new Error(`Account created, but failed to initialize profile: ${profileError.message}. Please contact support.`);
+      }
+
+      console.log(`[AuthContext] Profile created successfully for user ${authData.user.id}`);
+
     } catch (err: any) {
-      setError(err instanceof Error ? err.message : 'An error occurred during sign out.');
+      console.error('[AuthContext] Sign up or profile creation error:', err);
+      setError(err.message || 'Failed to sign up.');
       throw err;
+    } finally {
+      setLoading(false);
     }
-  }, [clearError]);
+  };
+
+  const signOut = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) throw signOutError;
+      setUser(null);
+      setIsAdmin(false);
+    } catch (err: any) {
+      console.error('Sign out error:', err);
+      setError(err.message || 'Failed to sign out.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateProfile = async (profileData: Partial<Omit<Profile, 'id' | 'created_at' | 'updated_at'>>) => {
+    setLoading(true);
+    setError(null);
+    try {
+        const session = await supabase.auth.getSession();
+        const currentUserId = session?.data?.session?.user?.id;
+
+        if (!currentUserId) {
+            throw new Error('User not authenticated to update profile.');
+        }
+
+        console.log(`[AuthContext] Updating profile for user ${currentUserId} with:`, profileData);
+        
+        const cleanProfileData = Object.entries(profileData).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = value;
+            }
+            return acc;
+        }, {} as any);
+
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update(cleanProfileData)
+            .eq('id', currentUserId);
+        
+        if (updateError) {
+            console.error('[AuthContext] Profile update error:', updateError);
+            throw updateError;
+        }
+
+        console.log(`[AuthContext] Profile updated successfully for user ${currentUserId}`);
+
+    } catch (err: any) {
+        console.error('[AuthContext] updateProfile function error:', err);
+        setError(err.message || 'Failed to update profile.');
+        throw err;
+    } finally {
+        setLoading(false);
+    }
+  };
 
   const isAdmin = useMemo(() => userRoles.includes('admin'), [userRoles]);
 
-  const value = useMemo(() => ({
+  const value = {
     user,
     userRoles,
     isAdmin,
@@ -162,8 +236,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     loading,
     error,
-    clearError
-  }), [user, userRoles, isAdmin, rolesLoading, loading, error, signIn, signUp, signOut, clearError]);
+    clearError,
+    updateProfile
+  };
 
   const initialLoading = loading || rolesLoading;
 
@@ -180,7 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
 export function useAuth() {
   const context = useContext(AuthContext);
