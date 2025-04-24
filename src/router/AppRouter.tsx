@@ -1,14 +1,12 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-import PublicLayout from '../layouts/PublicLayout';
 import { Layout } from '../components/Layout';
 import AdminLayout from '../layouts/AdminLayout'; // Assuming an AdminLayout exists
 
 // Public Pages (Lazy Loaded)
 const LoginPage = lazy(() => import('../pages/LoginPage').then(module => ({ default: module.LoginPage })) );
-const HomePage = lazy(() => import('../pages/HomePage').then(module => ({ default: module.HomePage })) );
 const RegisterPage = lazy(() => import('../pages/RegisterPage').then(module => ({ default: module.RegisterPage })) );
 
 // Protected Pages (Lazy Loaded)
@@ -77,8 +75,9 @@ export function AppRouter() {
 
                 {/* Public Routes - Render LoginPage directly without PublicLayout */}
                 <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-                <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-                {/* If HomePage should still be accessible elsewhere, define a new path for it */}
+                {/* Remove PublicRoute wrapper from /register */}
+                <Route path="/register" element={<RegisterPage />} />
+                {/* Remove commented-out HomePage route */}
                 {/* <Route path="/home" element={<PublicLayout><PublicRoute><HomePage /></PublicRoute></PublicLayout>} /> */}
 
                 {/* Protected Routes (Regular Users) - Use main Layout */}

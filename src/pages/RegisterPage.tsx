@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Bot, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
@@ -29,14 +29,60 @@ export function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { signUp, updateProfile } = useAuth(); // Get signUp and updateProfile from context
+  const { user, loading: authLoading, signUp, updateProfile } = useAuth();
+  const initialCheckDoneRef = useRef(false); // Ref to track initial check
+
+  console.log(`[RegisterPage Render] Current Step: ${currentStep}, User: ${user ? user.id : 'null'}, AuthLoading: ${authLoading}, InitialCheckDone: ${initialCheckDoneRef.current}`);
+
+  // Effect 1: Check on mount if user is *already* logged in
+  useEffect(() => {
+    // Only perform the check logic once after initial auth state is resolved
+    if (!initialCheckDoneRef.current && !authLoading) {
+      // Mark check as done immediately after auth is resolved
+      initialCheckDoneRef.current = true; 
+      console.log('[RegisterPage Effect 1] Initial auth loaded. Marking check as done.');
+
+      // Now, check if user exists at this initial point
+      if (user) {
+        // Check if we are not already on step 4 (completion step)
+        if (currentStep < 4) { 
+            console.log('RegisterPage initial mount with existing user (and not step 4), redirecting.');
+            navigate('/dashboard', { replace: true });
+        }
+      }
+    }
+    // This effect runs when authLoading changes, ensuring the check runs once after loading is false.
+  }, [authLoading, user, currentStep, navigate]); 
+
+  // Effect 2: Handle redirection *after* completing step 3
+  useEffect(() => {
+    if (currentStep === 4) {
+      if (user) { 
+          console.log('Registration complete (step 4), redirecting after delay.');
+          const timer = setTimeout(() => {
+              navigate('/dashboard', { replace: true });
+          }, 2000); 
+          return () => clearTimeout(timer);
+      } else {
+          console.warn('Reached step 4 but user is not defined. Cannot redirect.');
+          setError('Registration completed, but there was an issue retrieving your session. Please try logging in.');
+      }
+    }
+  }, [currentStep, user, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const nextStep = () => setCurrentStep(prev => prev + 1);
+  const nextStep = () => {
+    console.log('[RegisterPage] nextStep called');
+    setCurrentStep(prev => {
+        const next = prev + 1;
+        console.log(`[RegisterPage] Updating step from ${prev} to ${next}`);
+        return next;
+    });
+  }
   const prevStep = () => setCurrentStep(prev => prev - 1);
 
   const handleStep1Submit = async (e: React.FormEvent) => {
@@ -47,16 +93,14 @@ export function RegisterPage() {
       return;
     }
     setLoading(true);
+    console.log('[RegisterPage] handleStep1Submit: Calling signUp...');
     try {
-      // Call the modified signUp function from context
       await signUp(formData.email, formData.password, formData.fullName);
-      // If signUp is successful (no error thrown), proceed to the next step
+      console.log('[RegisterPage] handleStep1Submit: signUp successful. Calling nextStep...');
       nextStep(); 
     } catch (err: any) {
-        // Error is already set within the signUp function in AuthContext
-        // We could potentially add more specific handling here if needed
         console.error("Registration Step 1 Error:", err);
-        setError(err.message || 'An error occurred during sign up.'); // Ensure error state is set locally too
+        setError(err.message || 'An error occurred during sign up.');
     } finally {
         setLoading(false);
     }
@@ -319,18 +363,11 @@ export function RegisterPage() {
            </form>
         )}
 
-         {/* Step 4: Completion */} 
+         {/* Step 4: Completion - Just display message, effect handles redirect */} 
          {currentStep === 4 && (
             <div className="text-center space-y-4">
                 <h3 className="text-2xl font-semibold text-green-400">Registration Complete!</h3>
                 <p className="text-gray-300">Redirecting you to the dashboard...</p>
-                {/* Redirect after a short delay */} 
-                {React.useEffect(() => {
-                    const timer = setTimeout(() => {
-                        navigate('/dashboard');
-                    }, 2000); // 2-second delay
-                    return () => clearTimeout(timer);
-                }, [navigate])}
             </div>
          )}
 
