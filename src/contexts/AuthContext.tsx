@@ -25,6 +25,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   const fetchUserRoles = useCallback(async (userId: string | undefined) => {
     if (!userId) {
@@ -49,11 +50,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .filter(Boolean) as string[] || [];
         console.log(`Fetched roles for ${userId}:`, roles);
         setUserRoles(roles);
+        setIsAdmin(roles.includes('admin'));
       }
     } catch (err: any) {
       console.error("Error in fetchUserRoles:", err);
       setError(err instanceof Error ? `Error fetching roles: ${err.message}` : 'An unknown error occurred fetching roles.');
       setUserRoles([]);
+      setIsAdmin(false);
     } finally {
       setRolesLoading(false);
     }
@@ -69,6 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("[AuthContext] No user detected, clearing roles and setting rolesLoading=false.");
       setUserRoles([]); 
       setRolesLoading(false); 
+      setIsAdmin(false);
     }
   }, [user, fetchUserRoles]); // Keep fetchUserRoles in dependency array
 
@@ -78,19 +82,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log(`[AuthContext] onAuthStateChange event: ${_event}, session: ${session ? 'exists' : 'null'}`);
       setUser(session?.user ?? null);
       
-      if (session?.user) {
-        try {
-            // We will rely on userRoles now, so remove direct admin check/set
-            // const { data, error: rpcError } = await supabase.rpc('is_admin');
-            // if (rpcError) throw rpcError;
-            // console.log('[AuthContext] is_admin check result:', data);
-            // setIsAdmin(data === true); 
-        } catch (e: any) {
-            console.error('[AuthContext] Error checking admin status:', e.message);
-            // setIsAdmin(false); 
-        }
-      } else {
-         // setIsAdmin(false); 
+      if (!session?.user) {
+        setIsAdmin(false);
       }
 
       setLoading(false);
@@ -187,8 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
       setUser(null);
-      // Remove this setIsAdmin call
-      // setIsAdmin(false);
+      setIsAdmin(false);
     } catch (err: any) {
       console.error('Sign out error:', err);
       setError(err.message || 'Failed to sign out.');
@@ -238,7 +230,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const isAdmin = useMemo(() => userRoles.includes('admin'), [userRoles]);
+  // Update isAdmin based on userRoles using useMemo
+  useEffect(() => {
+    setIsAdmin(userRoles.includes('admin'));
+  }, [userRoles]);
 
   const value = {
     user,
