@@ -7,4 +7,8 @@
 - [ ] Email, SMS, and additional communication channel notifications.
 - [ ] Voice capabilities for agents.
 - [ ] 3D visualization component for agent interaction.
-- [ ] Data ingestion (PDF, DOC, TXT, etc.) for agent memory/datastore. 
+- [ ] Data ingestion (PDF, DOC, TXT, etc.) for agent memory/datastore.
+- [ ] API endpoint for agents to connect external platforms.
+- [ ] Custom prompts savable and usable as tools for agents.
+- [ ] Integration/management of external agent information.
+- [ ] Desktop client for local agent authentication and usage. 
