@@ -43,7 +43,8 @@ New Chat Protocol
    - Entry points for the application
 5. Ensure all old context documents are in .gitignore except the most recent five.
 6. Delete the new_chat_protol_checklist once complete.
-7. Provide a summary of your understanding of the software and entry points, and request the plan moving forward.
+7. Update the README.md if you have found anything new.
+8. Provide a summary of your understanding of the software and entry points, and request the plan moving forward.
 `
 `
 `

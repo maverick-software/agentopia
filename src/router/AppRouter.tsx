@@ -25,8 +25,12 @@ const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then
 const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement').then(module => ({ default: module.AdminUserManagement })) );
 const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement').then(module => ({ default: module.AdminAgentManagement })) ); // <-- New import
 
-// Loading fallback
-const LoadingSpinner = () => <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div></div>;
+// Loading fallback - Updated with background color to match theme
+const LoadingSpinner = () => (
+  <div className="fixed inset-0 z-50 flex justify-center items-center bg-white dark:bg-gray-900 transition-opacity duration-300">
+    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+  </div>
+);
 
 // --- Root Redirect Component ---
 const RootRedirect: React.FC = () => {

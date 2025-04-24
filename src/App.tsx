@@ -3,9 +3,13 @@ import React from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { DatabaseProvider } from './contexts/DatabaseContext';
 import { AppRouter } from './router/AppRouter';
+import { useRoutePrefetch } from './hooks/useRoutePrefetch';
 // import { BrowserRouter } from 'react-router-dom';
 
-function App() {
+// Wrapper component that uses the prefetch hook
+const AppWithPrefetch = () => {
+  useRoutePrefetch();
+  
   return (
     <AuthProvider>
       <DatabaseProvider>
@@ -15,6 +19,10 @@ function App() {
       </DatabaseProvider>
     </AuthProvider>
   );
+}
+
+function App() {
+  return <AppWithPrefetch />;
 }
 
 export default App;

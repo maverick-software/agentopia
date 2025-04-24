@@ -7,6 +7,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 - [Project Overview](#project-overview)
 - [Project Structure](#project-structure)
 - [Key Components](#key-components)
+- [Frontend Performance Optimizations](#frontend-performance-optimizations)
 - [Deployed Endpoints & Services](#deployed-endpoints--services)
 - [Database Schema](#database-schema)
 - [Core Workflows](#core-workflows)
@@ -14,6 +15,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
   - [Agent Deactivation Flow](#agent-deactivation-flow)
   - [Agent Message Handling Flow](#agent-message-handling-flow)
 - [Development & Setup](#development--setup)
+- [Known Issues](#known-issues)
 - [Current Status & Next Steps](#current-status--next-steps)
 - [Deployment](#deployment)
 
@@ -38,8 +40,11 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 ├── .cursor/              # Cursor AI configuration/rules
 ├── .git/                 # Git repository data
 ├── docs/                 # Project documentation (protocols, context, checklists, bugs)
-│   ├── bugs/
-│   ├── context/
+│   ├── bugs/             # Bug reports and issues
+│   ├── console/          # Console logs directory
+│   │   └── logs/         # Logs from console operations
+│   ├── context/          # AI context documents and checklists
+│   │   └── checklists/   # Task checklists for AI assistants
 │   ├── features/
 │   ├── plans/
 │   ├── project/
@@ -47,6 +52,8 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 │   ├── __ai__.md
 │   ├── _change.logs
 │   └── index.md          # Index for docs folder
+├── logs/                 # Application logs directory
+│   └── README.md         # Logging guide and structure
 ├── node_modules/         # Node.js dependencies (managed by package.json)
 ├── public/               # Static assets for Vite frontend
 ├── scripts/              # Utility scripts
@@ -65,7 +72,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 │   │   ├── discord-interaction-handler/ # Handles incoming interactions (commands, autocomplete) from Discord
 │   │   ├── manage-discord-worker/     # Handles start/stop requests from the UI
 │   │   ├── register-agent-commands/     # Registers slash commands with Discord
-│   │   └── chat/                        # (Likely) Handles generating agent responses
+│   │   └── chat/                        # Handles generating agent responses
 │   └── migrations/       # Database migration files
 │   └── seed.sql          # Initial database seeding (if applicable)
 ├── utils/                # General utility functions (shared across project if needed)
@@ -77,7 +84,6 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 ├── logs.txt              # Temporary log file used during recent debugging
 ├── package-lock.json     # NPM dependency lock file
 ├── package.json          # Project dependencies and scripts
-├── page.tsx              # Root frontend component/entry point
 ├── postcss.config.js     # PostCSS configuration (for Tailwind)
 ├── README.md             # This file
 ├── tailwind.config.js    # Tailwind CSS configuration
@@ -105,7 +111,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
         *   `manage-discord-worker`: Receives requests from the frontend UI to start or stop a specific agent's Discord worker. Calls the `worker-manager` service.
         *   `discord-interaction-handler`: Receives HTTPS requests from Discord for interactions (e.g., slash commands like `/activate`). Verifies request signatures, fetches data from Supabase DB, and may also call the `worker-manager` service (e.g., for activation via slash command).
         *   `register-agent-commands`: Registers the necessary slash commands (e.g., `/activate`) with Discord's API for specific agents/guilds.
-        *   `chat`: (Presumed) Contains the logic for generating an agent's response when it's mentioned, likely involving calls to an LLM API (e.g., OpenAI).
+        *   `chat`: Contains the logic for generating an agent's response when it's mentioned, involving calls to an LLM API (like OpenAI) and potentially utilizing RAG with vector stores.
     *   **Database Functions:**
         *   `update_worker_status` (`SECURITY DEFINER`): Allows the `discord-worker` (running potentially with limited Supabase permissions/anon key) to update its own status in the `agent_discord_connections` table, bypassing RLS for this specific action. Called via RPC (`supabase.rpc(...)`).
 *   **Backend Services (`services/`):**
@@ -120,9 +126,81 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
         *   A Node.js process launched and managed by the `worker-manager` via PM2.
         *   Connects to the Discord Gateway using a specific agent's bot token.
         *   Listens for mentions of the agent within Discord channels.
-        *   Calls the Supabase `chat` function (presumably) to get responses.
+        *   Calls the Supabase `chat` function to get responses.
         *   Handles inactivity timeouts (configured via UI/DB).
         *   Updates its status (`active`, `inactive`, `terminating`, `error`) in the `agent_discord_connections` table via the `update_worker_status` RPC function upon startup, shutdown, or error.
+*   **Logging Infrastructure (`logs/`):**
+    *   Provides dedicated storage for application logs.
+    *   Critical for monitoring, debugging, and system maintenance.
+    *   Expected log files:
+        *   `worker-manager.log` - Logs from the worker manager service
+        *   `discord-worker-[agentId].log` - Logs from individual Discord worker processes
+        *   `supabase-functions.log` - Logs from Supabase Edge Functions
+
+## Frontend Performance Optimizations
+
+To improve the user experience and eliminate the white flash when navigating between pages, the application implements a multi-layered performance optimization strategy:
+
+### Page Transition Handling
+
+1. **Global Background Color**:
+   - HTML and body elements are set with dark backgrounds in `index.css` to eliminate white flashes during initial load or transitions
+   - CSS classes apply consistent theme colors to prevent jarring visual changes
+
+2. **Enhanced Loading Indicators**:
+   - The `LoadingSpinner` component in `AppRouter.tsx` uses fixed positioning with theme-matched backgrounds
+   - Transition opacity effects create smooth fades instead of abrupt content changes
+   - The spinner appears during component lazy-loading and page transitions
+
+3. **Layout-level Transition Detection**:
+   - The `Layout` component monitors route changes via `useLocation()` from React Router
+   - Activates a transitioning state during navigation to show consistent loading indicators
+   - Times out automatically to ensure the UI never gets stuck in a loading state
+
+4. **Route Prefetching**:
+   - Custom `useRoutePrefetch` hook preloads commonly accessed routes
+   - Implemented in `src/hooks/useRoutePrefetch.ts` and applied in `App.tsx`
+   - Reduces load time by fetching JavaScript chunks before they're needed
+
+5. **CSS Animation Consistency**:
+   - Page transition classes in `index.css` provide standardized animations
+   - Components fade in/out with consistent timing and easing functions
+   - Prevents layout shifts during transitions
+
+### Implementation Details
+
+Each optimization layer works together to create a seamless experience:
+
+```tsx
+// Example: LoadingSpinner with theme-matching background
+const LoadingSpinner = () => (
+  <div className="fixed inset-0 z-50 flex justify-center items-center 
+                  bg-white dark:bg-gray-900 transition-opacity duration-300">
+    <div className="animate-spin rounded-full h-16 w-16 
+                    border-t-2 border-b-2 border-indigo-500"></div>
+  </div>
+);
+```
+
+```tsx
+// Example: Layout transition detection
+useEffect(() => {
+  setIsTransitioning(true);
+  const timer = setTimeout(() => setIsTransitioning(false), 300);
+  return () => clearTimeout(timer);
+}, [location.pathname]);
+```
+
+### Future Maintenance
+
+When modifying the routing or adding new pages:
+
+1. Add new frequently-accessed routes to the `routesToPrefetch` array in `useRoutePrefetch.ts`
+2. Maintain consistent loading indicators across all route transitions
+3. Ensure new components respect the transition animations and timing
+4. Test navigation paths in both light and dark modes to verify no white flashes occur
+
+These optimizations follow React best practices for handling component lazy-loading and route transitions, delivering a polished and professional user experience.
 
 ## Deployed Endpoints & Services
 
@@ -301,124 +379,29 @@ sequenceDiagram
     Discord API / Gateway->>User in Discord: Displays agent's message
 ```
 
-## Development & Setup
+## Known Issues
 
-To set up and run this project locally for development purposes, follow these steps:
+1. **AuthContext.tsx Duplicate Variable Issue:**
+   - Error: `Identifier 'isAdmin' has already been declared` in `AuthContext.tsx`
+   - The `isAdmin` variable is defined twice in the file, causing a compilation error
+   - This is preventing the application from running properly
 
-**Prerequisites:**
+2. **Missing Logging Infrastructure:**
+   - Log directories have been created, but no actual log files exist yet
+   - Logging implementation is needed to follow Rule #2 (Review the logs)
 
-*   **Node.js:** (Version 18.x or later recommended) - Download from [nodejs.org](https://nodejs.org/)
-*   **npm:** (Usually included with Node.js)
-*   **Git:** For cloning the repository.
-*   **Supabase Account:** Required for the database, auth, and edge functions. Get started at [supabase.com](https://supabase.com/).
-*   **Supabase CLI:** (Optional but recommended for local function development) Install via npm: `npm install supabase --save-dev` or follow [official instructions](https://supabase.com/docs/guides/cli).
-*   **Discord Application & Bot:** You'll need a Discord application with a bot user created. Find instructions in the [Discord Developer Portal](https://discord.com/developers/docs/intro).
+3. **Discord Integration Errors:**
+   - Issues with the Discord interaction handler shown in bug reports
+   - Several "Interaction secret missing or URL format incorrect" errors
 
-**1. Clone the Repository:**
+4. **Oversized Files:**
+   - `AgentEditPage.tsx` (1326 lines) - Well over the 500-line limit
+   - `DatastoresPage.tsx` (664 lines) - Over the 500-line limit
+   - These files need refactoring according to Philosophy #1 (file size limits)
 
-```bash
-git clone [Your Git Repository URL] # Replace with actual URL
-cd [repository-directory-name]
-```
-
-**2. Install Dependencies:**
-
-Install dependencies for the root (frontend), worker-manager, and discord-worker.
-
-```bash
-# From the root directory
-npm install
-
-# Navigate to worker-manager service
-cd services/worker-manager
-npm install
-cd ../..
-
-# Navigate to discord-worker service
-cd services/discord-worker
-npm install
-cd ../..
-```
-
-**3. Environment Variables:**
-
-Environment variables are crucial for connecting services. Create `.env` files in the following locations and populate them with your specific keys and URLs. **Never commit `.env` files to Git.**
-
-*   **Root Directory (`./.env`):** For the Vite frontend.
-    *   `VITE_SUPABASE_URL`: Your Supabase project URL.
-    *   `VITE_SUPABASE_ANON_KEY`: Your Supabase project anonymous key.
-
-*   **Worker Manager (`./services/worker-manager/.env`):**
-    *   `PORT`: Port the manager service will listen on (e.g., `8000`).
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key (**Keep this secret!**).
-    *   `MANAGER_SECRET_KEY`: A secret key shared between the manager and Supabase functions for authentication (**Generate a strong secret**).
-    *   `WORKER_SCRIPT_PATH`: Path to the discord-worker entry point (e.g., `../discord-worker/src/worker.ts`). Used by PM2.
-
-*   **Discord Worker (`./services/discord-worker/.env`):**
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_ANON_KEY`: Your Supabase project **anonymous key** (used for calling the `update_worker_status` RPC function).
-    *   `OPENAI_API_KEY`: (If using OpenAI for the `chat` function) Your OpenAI API key.
-
-*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
-    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key.
-    *   `DISCORD_APP_ID`: Your Discord application's ID.
-    *   `SUPABASE_URL`: Your Supabase project URL.
-    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key.
-    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
-    *   `MANAGER_SECRET_KEY`: The same secret key used in the `worker-manager` .env.
-    *   `OPENAI_API_KEY`: (For the `chat` function, if applicable) Your OpenAI API key.
-
-**4. Running Locally:**
-
-*   **Frontend (Vite Dev Server):**
-    ```bash
-    # From the root directory
-    npm run dev
-    ```
-    Access the frontend at `http://localhost:5173` (or the port specified by Vite).
-
-*   **Worker Manager (using ts-node for development):**
-    ```bash
-    # From the root directory
-    cd services/worker-manager
-    npx ts-node src/manager.ts
-    ```
-
-*   **Discord Worker:** This is typically *not* run directly in development, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point (either compiled JS or TS source if using ts-node).
-
-*   **Supabase Edge Functions (using Supabase CLI):**
-    ```bash
-    # From the root directory
-    # Ensure Docker Desktop is running
-    supabase start # Starts local Supabase instance (DB, Auth, Storage)
-    supabase functions serve --env-file ./supabase/functions/.env
-    ```
-    This serves your functions locally, typically accessible via `http://localhost:54321/functions/v1/`. Update `MANAGER_URL` in function envs accordingly.
-
-**5. Supabase Database Types:**
-
-To ensure type safety when interacting with the Supabase database from the frontend, TypeScript types are generated based on your database schema.
-
-*   **Location:** The generated types are stored in `src/types/database.types.ts`.
-*   **Generation/Update:** Run the following command whenever your database schema changes:
-    ```bash
-    supabase gen types typescript --linked > src/types/database.types.ts
-    ```
-    *(Note: This requires you to be logged in (`supabase login`) and linked to your project (`supabase link`)).*
-*   **Automation (Recommended):** Add a script to your root `package.json` for convenience:
-    ```json
-    // package.json
-    {
-      "scripts": {
-        // ... other scripts
-        "sync-types": "supabase gen types typescript --linked > src/types/database.types.ts"
-      }
-    }
-    ```
-    Then you can simply run `npm run sync-types`.
-
-**Note:** For local development involving Discord interactions, you'll need a way to expose your local Supabase functions endpoint and potentially your worker-manager service to the internet so Discord can send webhooks. Tools like `ngrok` or the `Cloudflare Tunnel` can achieve this.
+5. **Previous AgentChatPage Issue:**
+   - Previous work involved fixing an issue where `AgentChatPage.tsx` failed to reliably fetch agent data
+   - A backup file `AgentChatPage.tsx.bak` exists, suggesting recent changes to fix this issue
 
 ## Current Status & Next Steps
 
@@ -445,14 +428,3 @@ To ensure type safety when interacting with the Supabase database from the front
     *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
     *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
 *   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point.
-
-## Known Issues & Current Priorities (as of 2025-04-18)
-
-Based on the latest analysis (`docs/context/ai_context_2025-04-18_1919.mdc`):
-
-1.  ~~RLS Policies Need Review (Critical): Row Level Security is enabled for `agents` and `agent_discord_connections`, but the existing policies require review and correction in Supabase to ensure security and proper function.~~ *(Resolved: RLS Verified Correct)*
-2.  **Missing Standard Logging:** ~~The expected logging directory (`docs/console/logs/`) does not exist.~~ Structured logging needs implementation across backend services/functions. *(Partially resolved: Directory created, service loggers updated, function logging basic)*.
-3.  **Documentation Mismatch:** `docs/index.md` lists an incorrect frontend entry point (`page.tsx` instead of `src/main.tsx`). (Corrected in this README).
-4.  **Informal Bug Tracking:** The `docs/bugs/` directory currently contains log dumps rather than structured bug reports. A formal process/template is needed.
-5.  **Testing Required:** The recently refactored Discord configuration UI (`DiscordConnect.tsx`, `DiscordModals.tsx`) requires thorough end-to-end testing.
-6.  **Potential Code Cleanup:** Review needed to remove any leftover diagnostic code from previous debugging sessions.

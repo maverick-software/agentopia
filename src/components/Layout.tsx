@@ -4,7 +4,7 @@ import { Header } from './Header';
 import { DatabaseStatus } from './DatabaseStatus';
 import { PanelLeftClose, PanelRightClose, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,12 +13,21 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Handle page transitions
+  useEffect(() => {
+    setIsTransitioning(true);
+    const timer = setTimeout(() => setIsTransitioning(false), 300);
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
 
   const updateMenuPosition = () => {
     if (triggerRef.current) {
@@ -62,6 +71,13 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Page transition loading indicator */}
+      {isTransitioning && (
+        <div className="fixed inset-0 z-50 bg-gray-900 bg-opacity-80 flex items-center justify-center transition-opacity duration-300">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+        </div>
+      )}
+      
       {!user && <Header />}
       
       <div className="flex h-screen overflow-hidden">
