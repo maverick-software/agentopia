@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { Profile } from '../types';
 
 interface AuthContextType {
   user: User | null;
@@ -20,12 +21,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-
   const [userRoles, setUserRoles] = useState<string[]>([]);
-  const [rolesLoading, setRolesLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchUserRoles = useCallback(async (userId: string | undefined) => {
     if (!userId) {
@@ -60,24 +59,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // Fetch user roles when user changes OR on initial load
+  useEffect(() => {
+    if (user) {
+      console.log(`[AuthContext] User detected (${user.id}), fetching roles...`);
+      fetchUserRoles(user.id);
+    } else {
+      // Explicitly set rolesLoading to false if no user
+      console.log("[AuthContext] No user detected, clearing roles and setting rolesLoading=false.");
+      setUserRoles([]); 
+      setRolesLoading(false); 
+    }
+  }, [user, fetchUserRoles]); // Keep fetchUserRoles in dependency array
+
   useEffect(() => {
     setLoading(true);
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('[AuthContext] onAuthStateChange event:', _event, 'Session exists:', !!session);
+      console.log(`[AuthContext] onAuthStateChange event: ${_event}, session: ${session ? 'exists' : 'null'}`);
       setUser(session?.user ?? null);
       
       if (session?.user) {
         try {
-            const { data, error: rpcError } = await supabase.rpc('is_admin');
-            if (rpcError) throw rpcError;
-            console.log('[AuthContext] is_admin check result:', data);
-            setIsAdmin(data === true); 
+            // We will rely on userRoles now, so remove direct admin check/set
+            // const { data, error: rpcError } = await supabase.rpc('is_admin');
+            // if (rpcError) throw rpcError;
+            // console.log('[AuthContext] is_admin check result:', data);
+            // setIsAdmin(data === true); 
         } catch (e: any) {
             console.error('[AuthContext] Error checking admin status:', e.message);
-            setIsAdmin(false); 
+            // setIsAdmin(false); 
         }
       } else {
-         setIsAdmin(false); 
+         // setIsAdmin(false); 
       }
 
       setLoading(false);
@@ -174,7 +187,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
       setUser(null);
-      setIsAdmin(false);
+      // Remove this setIsAdmin call
+      // setIsAdmin(false);
     } catch (err: any) {
       console.error('Sign out error:', err);
       setError(err.message || 'Failed to sign out.');
@@ -240,9 +254,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateProfile
   };
 
-  const initialLoading = loading || rolesLoading;
+  // Logging for debugging
+  console.log('[AuthContext Render Check]', {
+    loading, // Tracks initial auth check
+    rolesLoading, // Tracks role fetching for logged-in user
+    user: user ? user.id : null,
+  });
 
-  if (initialLoading && !user) {
+  // Only block render while waiting for the initial session check
+  if (loading) { 
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white">Loading Session...</div>
@@ -250,6 +270,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }
 
+  // If loading is false, render the provider. 
+  // Downstream components will check user and rolesLoading as needed.
   return (
     <AuthContext.Provider value={value}>
       {children}

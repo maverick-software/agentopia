@@ -72,3 +72,15 @@ export interface AgentDiscordConnection {
 // AgentEdit.tsx modifications done previously
 
 // DiscordConnect.tsx modifications done previously
+
+export interface Profile {
+  id: string; // UUID referencing auth.users
+  full_name: string;
+  mobile?: string | null;
+  company_name?: string | null;
+  title?: string | null;
+  usage_reason?: any | null; // JSONB can be complex, using 'any' for now
+  hopes_goals?: string | null;
+  created_at?: string; // timestamptz
+  updated_at?: string; // timestamptz
+}

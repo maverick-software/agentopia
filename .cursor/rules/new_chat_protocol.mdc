@@ -17,7 +17,7 @@ New Chat Protocol
 ### **Phase Two - Detailed System Analysis**  
 
 1. Read the `README.md` file to gain a high-level understanding of the project’s purpose, architecture, and key components. 
-2. Read `\docs\index.md` to understand the system’s structure, relationships between files, and the primary functions within the project.  
+2. Read `\docs\plans\[checklists]` to understand what we have been working on and where we are at in our plan.
 3. Identify and analyze **core files** that define the system’s key operations, dependencies, and interactions with external systems.  
 4. Examine the **database schema** and **data relationships** to understand how data is stored, retrieved, and manipulated. This includes reviewing database models, migration files, and any SQL queries used within the project.  
 5. Check for **API endpoints**, and **Entry Points** if applicable, to determine how the system communicates with external services or clients.  
@@ -26,7 +26,9 @@ New Chat Protocol
 
 **IMPORTANT: USE CORRECT DATE AND TIME STAMP. GET DATE FROM COMPUTER SYSTEM VIA THE COMMAND SHELL USING `echo %DATE% %TIME%*`**
 
-1. Review `\docs\console\logs\` for system errors, warnings, and anomalies that might indicate operational issues.  
+1. Review `\docs\console\logs\` for system errors, warnings, and anomalies that might indicate operational issues. 
+   a) If the directory does not exist, create it.
+   b) After the new chat protocol is finished, recommend to the user to implement logging.
 2. Check `\docs\bugs\` to identify **reported bugs, unresolved issues, and past debugging efforts**.  
 3. Summarize findings in a **structured overview** that includes:  
    - The **project’s structure and key components**  
@@ -39,8 +41,9 @@ New Chat Protocol
    - Any inconsistencies or issues detected  
    - Areas requiring further investigation
    - Entry points for the application
-5. Delete all previous context documents and context checklists
-6. Provide a summary of your understanding of the software and entry points.
+5. Ensure all old context documents are in .gitignore except the most recent five.
+6. Delete the new_chat_protol_checklist once complete.
+7. Provide a summary of your understanding of the software and entry points, and request the plan moving forward.
 `
 `
 `

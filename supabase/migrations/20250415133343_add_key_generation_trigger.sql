@@ -1,7 +1,10 @@
 -- Migration to automatically generate and store encryption key on user signup
 
 -- Ensure pgsodium is available (usually enabled on Supabase)
-CREATE EXTENSION IF NOT EXISTS pgsodium WITH SCHEMA pgsodium;
+-- CREATE EXTENSION IF NOT EXISTS pgsodium WITH SCHEMA pgsodium; -- Keep commented out or remove if pgsodium is broken
+
+-- Ensure pgcrypto is available
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 -- Create the function to generate and insert the key
 CREATE OR REPLACE FUNCTION public.handle_new_user_key_generation()
@@ -13,8 +16,9 @@ DECLARE
   generated_key_bytes bytea;
   generated_key_base64 text;
 BEGIN
-  -- Generate 32 random bytes for AES-256 key
-  generated_key_bytes := pgsodium.crypto_aead_aes256gcm_keygen(); 
+  -- Generate 32 random bytes using pgcrypto
+  -- generated_key_bytes := pgsodium.crypto_aead_aes256gcm_keygen(); -- Old problematic line
+  generated_key_bytes := public.gen_random_bytes(32); -- New line using pgcrypto
   
   -- Encode the bytes as base64 for text storage
   generated_key_base64 := encode(generated_key_bytes, 'base64');
