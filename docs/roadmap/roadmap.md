@@ -1,6 +1,9 @@
 - [ ] Create Team Rooms
+- [ ] Password resets, Email verification, MFA via Authenticator, SMS
+- [ ] oAuth via Google
 - [ ] Delegated access for users.
-- [ ] MCP Tool Belts for agents.
+- [ ] MCP Tool Belts for agents (Zapier, Make.com Automation)
+- [ ] Invite External Agents (Make.com, n8n)
 - [ ] Default optimized prompt listing available MCP servers.
 - [ ] Optional Chain of Thought / Advanced Reasoning for agents.
 - [ ] Project creation and management with agent access control (CRUD/partial CRUD).
@@ -13,3 +16,4 @@
 - [ ] Custom prompts savable and usable as tools for agents.
 - [ ] Integration/management of external agent information.
 - [ ] Desktop client for local agent authentication and usage. 
+- [ ] Add a UI spot kind of like 'gem slots' where a user can choose to integrate Long Term Memory, Semantic Memory and Short Term Working Memory

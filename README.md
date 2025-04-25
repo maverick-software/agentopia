@@ -428,3 +428,16 @@ sequenceDiagram
     *   Start the `worker-manager` using PM2: `pm2 start path/to/services/worker-manager/dist/manager.js --name worker-manager` (or similar, potentially using an `ecosystem.config.js` file for more options).
     *   Ensure the server's firewall allows traffic on the port the `worker-manager` listens on (e.g., 8000).
 *   **Discord Worker:** This is typically *not* run directly in production, as the `worker-manager` spawns it. Ensure the `WORKER_SCRIPT_PATH` in the manager's `.env` points correctly to the worker's entry point.
+
+## Development & Setup
+
+*   **Supabase Edge Functions:** Environment variables for functions (`discord-interaction-handler`, `chat`, `generate-embedding`, etc.) are set in the Supabase project dashboard under Settings -> Edge Functions, or locally via `supabase/functions/.env` if using the CLI.
+    *   `SUPABASE_URL`: Your Supabase project URL.
+    *   `SUPABASE_ANON_KEY`: Your Supabase project anonymous key (used by functions called with user context).
+    *   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase project service role key (used for admin-level operations).
+    *   `SUPABASE_DB_URL`: Your Supabase database connection URL (useful for some DB clients).
+    *   `OPENAI_API_KEY`: Your OpenAI API key (used for `chat` and `generate-embedding` functions).
+    *   `DISCORD_PUBLIC_KEY`: Your Discord application's public key (for interaction verification).
+    *   `DISCORD_APP_ID`: Your Discord application's ID.
+    *   `MANAGER_URL`: The URL where your `worker-manager` service is accessible (e.g., `http://localhost:8000` for local dev, or your DigitalOcean Droplet URL).
+    *   `MANAGER_SECRET_KEY`: A secret key shared between the manager and Supabase functions for authentication.

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, Trash2, Loader2, CheckCircle, AlertTriangle, X, Server, Settings, Link as LinkIcon, Bot } from 'lucide-react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { ArrowLeft, Save, Database, Check, ChevronDown, ChevronUp, Plus, Edit, Trash2, Loader2, CheckCircle, AlertTriangle, X, Server, Settings, Link as LinkIcon, Bot, Users } from 'lucide-react';
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,7 @@ import { useAgentMcp } from '../hooks/useAgentMcp';
 import { AgentMcpSection } from '../components/AgentMcpSection';
 import { useDebouncedCallback } from 'use-debounce';
 import { FaDiscord } from 'react-icons/fa';
+import { useAgents } from '../hooks/useAgents';
 
 interface BotGuild {
   id: string;
@@ -50,9 +51,7 @@ export function AgentEditPage() {
   const { agentId: id } = useParams<{ agentId: string }>();
   const isEditing = Boolean(id);
 
-  // --- DIAGNOSTIC LOGS ---
-  console.log(`[AgentEditPage] Rendering - ID: ${id}, IsEditing: ${isEditing}`);
-  // --- END LOGS ---
+  console.log(`[AgentEditPage] START Render - User: ${user?.id}, AgentID: ${id}, IsEditing: ${isEditing}`);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,6 +115,13 @@ export function AgentEditPage() {
 
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollAttemptsRef = useRef(0);
+
+  const {
+    teamDetails,
+    teamDetailsLoading,
+    teamDetailsError,
+    fetchAgentTeamDetails
+  } = useAgents();
 
   const fetchBotGuilds = useCallback(async () => {
     if (!id) {
@@ -233,165 +239,153 @@ export function AgentEditPage() {
   }, [saveSuccess]);
 
   const fetchAgent = useCallback(async (agentId: string) => {
-    if (!user?.id) return;
-
-    let currentAttempt = fetchAgentAttempts.current + 1;
-    if (currentAttempt > MAX_FETCH_ATTEMPTS) {
-      console.warn(`Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for agent ${agentId}. Aborting.`);
-      setError(`Failed to load agent after ${MAX_FETCH_ATTEMPTS} attempts.`);
-      setLoading(false);
-      return;
+    if (!user?.id) {
+        console.warn("[fetchAgent] Aborted: user.id is missing.");
+        setLoading(false); // Ensure loading is turned off
+        setError("User not authenticated."); // Set an error state
+        return;
     }
-    console.log(`[AgentEditPage] fetchAgent called for ${agentId} (Attempt ${currentAttempt})`);
+    console.log(`[fetchAgent] START for agent ${agentId}, user ${user.id}`);
+    setLoading(true);
+    setError(null);
+    fetchAgentAttempts.current += 1;
 
     try {
-      setLoading(true);
-      setError(null);
-
       const { data: agentData, error: agentError } = await supabase
         .from('agents')
-        .select('*, discord_bot_key')
+        .select('*, discord_bot_key') // Still fetch bot key if needed later
         .eq('id', agentId)
-        .eq('user_id', user.id)
-        .single();
+        .eq('user_id', user.id) // Ensure user can only fetch their own agent
+        .single(); // Use single() as we expect one agent or error
 
-      console.log(`[AgentEditPage] Fetched agent data from DB:`, agentData);
-
-      if (agentError) throw new Error(agentError.message);
-      if (!agentData) throw new Error('Agent not found or access denied');
-
-      const formDataToSet = {
+      if (agentError) {
+          console.error("[fetchAgent] Supabase agent fetch error:", agentError);
+          let navigateReason = 'Agent fetch failed';
+          if (agentError.code === 'PGRST116') {
+              navigateReason = 'Agent not found or permission denied';
+              throw new Error('Agent not found or you do not have permission to view it.');
+          } else {
+              throw new Error(`Agent fetch failed: ${agentError.message}`);
+          }
+      }
+      
+      if (!agentData) { // Should be handled by .single() error, but good to double-check
+          console.warn("[fetchAgent] No agent data returned. Potential issue.");
+          throw new Error('Agent not found.'); 
+      }
+      
+      console.log(`[fetchAgent] SUCCESS fetching core agent data for ${agentId}.`);
+      
+      // Set core form data
+      setAgentFormData({
         ...agentData,
         system_instructions: agentData.system_instructions || '',
         assistant_instructions: agentData.assistant_instructions || '',
         active: agentData.active,
-      };
-      setAgentFormData(formDataToSet);
-      // --- DIAGNOSTIC LOG --- 
-      console.log('[AgentEditPage] Called setAgentFormData with:', formDataToSet);
-      // --- END LOG ---
+      });
       setDiscordBotKey(agentData.discord_bot_key || '');
-
-      // Fetch ALL connection records for the agent
+      
+      // Fetch related data *after* core agent data is confirmed
+      console.log(`[fetchAgent] Fetching related data (connections, datastores) for ${agentId}`);
+      
+      // Fetch ALL connection records (simplified logging)
       const { data: allConnections, error: connectionError } = await supabase
         .from('agent_discord_connections')
         .select('id, guild_id, inactivity_timeout_minutes, worker_status, discord_app_id, discord_public_key')
         .eq('agent_id', agentId);
 
-      console.log(`[fetchAgent] Received all connection records for ${agentId}:`, allConnections);
-
-      if (connectionError) throw new Error(connectionError.message);
-
-      // Determine representative status and details
-      let representativeStatus: AgentDiscordConnection['worker_status'] = 'inactive';
-      let representativeConnection: Partial<AgentDiscordConnection> | null = null;
-
-      if (allConnections && allConnections.length > 0) {
-        // Prioritize showing 'active' if any connection is active
-        const activeConnection = allConnections.find(c => c.worker_status === 'active');
-        if (activeConnection) {
-          representativeStatus = 'active';
-          representativeConnection = activeConnection;
-          console.log(`[fetchAgent] Found active connection (ID: ${activeConnection.id})`);
-        } else {
-          // If none are active, check for 'activating'
-          const activatingConnection = allConnections.find(c => c.worker_status === 'activating');
-          if (activatingConnection) {
-            representativeStatus = 'activating';
-            representativeConnection = activatingConnection;
-            console.log(`[fetchAgent] Found activating connection (ID: ${activatingConnection.id})`);
-          } else {
-             // If none active/activating, check for 'stopping'
-            const stoppingConnection = allConnections.find(c => c.worker_status === 'stopping');
-            if (stoppingConnection) {
-                representativeStatus = 'stopping';
-                representativeConnection = stoppingConnection;
-                console.log(`[fetchAgent] Found stopping connection (ID: ${stoppingConnection.id})`);
-            } else {
-                // If none active/activating/stopping, check for 'error'
-                 const errorConnection = allConnections.find(c => c.worker_status === 'error');
-                 if (errorConnection) {
-                    representativeStatus = 'error';
-                    representativeConnection = errorConnection;
-                    console.log(`[fetchAgent] Found error connection (ID: ${errorConnection.id})`);
-                 } else {
-                    // Otherwise, use the first record found as representative for details (status is inactive)
-                    representativeConnection = allConnections[0];
-                    representativeStatus = representativeConnection.worker_status || 'inactive'; // Default to inactive
-                    console.log(`[fetchAgent] No active/activating/stopping/error connections. Using first record (ID: ${representativeConnection.id}) status: ${representativeStatus}`);
-                 }
-            }
-          }
-        }
-
-        // Set state based on the representative connection found (or the first one)
-        setDiscordConnectionData({
-          id: representativeConnection.id, // Store the ID of the connection we used for status/details
-          agent_id: agentId,
-          inactivity_timeout_minutes: representativeConnection.inactivity_timeout_minutes ?? 10,
-          worker_status: representativeStatus, // Use the derived representative status
-          discord_app_id: representativeConnection.discord_app_id || '',
-          discord_public_key: representativeConnection.discord_public_key || '',
-          guild_id: representativeConnection.guild_id ?? undefined,
-        });
-
+      if (connectionError) {
+          console.error("[fetchAgent] Supabase connection fetch error:", connectionError);
+          // Don't throw here, maybe just log and continue? Or set a partial error?
+          // Depending on requirements, missing connection info might be acceptable.
+          setError("Could not load Discord connection details."); // Set a non-fatal error?
       } else {
-        // No connection records found, set defaults
-        console.log(`[fetchAgent] No connection records found for agent ${agentId}. Setting defaults.`);
-        setDiscordConnectionData({
-          id: undefined,
-          agent_id: agentId,
-          inactivity_timeout_minutes: 10,
-          worker_status: 'inactive',
-          discord_app_id: '',
-          discord_public_key: '',
-        });
+          console.log(`[fetchAgent] Fetched ${allConnections?.length || 0} connection records.`);
+          // Process connections (determine representative status, etc.)
+          let representativeStatus: AgentDiscordConnection['worker_status'] = 'inactive';
+          let representativeConnection: Partial<AgentDiscordConnection> | null = null;
+          if (allConnections && allConnections.length > 0) {
+                const activeConnection = allConnections.find(c => c.worker_status === 'active');
+                if (activeConnection) {
+                representativeStatus = 'active';
+                representativeConnection = activeConnection;
+                } else {
+                const activatingConnection = allConnections.find(c => c.worker_status === 'activating');
+                if (activatingConnection) {
+                    representativeStatus = 'activating';
+                    representativeConnection = activatingConnection;
+                } else {
+                    const stoppingConnection = allConnections.find(c => c.worker_status === 'stopping');
+                    if (stoppingConnection) {
+                        representativeStatus = 'stopping';
+                        representativeConnection = stoppingConnection;
+                    } else {
+                        const errorConnection = allConnections.find(c => c.worker_status === 'error');
+                        if (errorConnection) {
+                            representativeStatus = 'error';
+                            representativeConnection = errorConnection;
+                        } else {
+                            representativeConnection = allConnections[0];
+                            representativeStatus = representativeConnection.worker_status || 'inactive';
+                        }
+                    }
+                }
+                }
+                setDiscordConnectionData({
+                  id: representativeConnection?.id, 
+                  agent_id: agentId,
+                  inactivity_timeout_minutes: representativeConnection?.inactivity_timeout_minutes ?? 10,
+                  worker_status: representativeStatus,
+                  discord_app_id: representativeConnection?.discord_app_id || '',
+                  discord_public_key: representativeConnection?.discord_public_key || '',
+                  guild_id: representativeConnection?.guild_id ?? undefined,
+                });
+          } else {
+              setDiscordConnectionData({
+                  id: undefined, agent_id: agentId, inactivity_timeout_minutes: 10,
+                  worker_status: 'inactive', discord_app_id: '', discord_public_key: '', guild_id: undefined
+              });
+          }
       }
 
+      // Fetch datastores
       const { data: agentDatastores, error: dsError } = await supabase
         .from('agent_datastores')
         .select('datastore_id, datastores(type)')
         .eq('agent_id', agentId);
       
-      if (dsError) throw dsError;
-
-      const initialSelected: { vector?: string; knowledge?: string } = {};
-      agentDatastores?.forEach(ad => {
-          if (ad.datastores && Array.isArray(ad.datastores)) {
-             const ds = ad.datastores[0];
-             if (ds && ds.type === 'vector') {
-                 initialSelected.vector = ad.datastore_id;
-             }
-             if (ds && ds.type === 'knowledge') {
-                 initialSelected.knowledge = ad.datastore_id;
-             }
-          }
-      });
-      setSelectedDatastores(initialSelected);
-      console.log(`[fetchAgent] Fetched selected datastores for ${agentId}.`);
-
-      fetchAgentAttempts.current = 0;
-      setLoading(false);
-
-      // Ensure polling is stopped if agent is fetched manually
-      if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-          pollAttemptsRef.current = 0;
-          console.log("[fetchAgent] Cleared any active worker status polling.");
+      if (dsError) {
+          console.error("[fetchAgent] Supabase datastore fetch error:", dsError);
+          setError("Could not load connected datastores."); // Non-fatal?
+      } else {
+          console.log(`[fetchAgent] Fetched ${agentDatastores?.length || 0} datastore connection records.`);
+          const initialSelected: { vector?: string; knowledge?: string } = {};
+          agentDatastores?.forEach(ad => {
+              // Original logic had potential issue if ad.datastores wasn't an array or was null
+              const ds = Array.isArray(ad.datastores) ? ad.datastores[0] : ad.datastores; // Handle object or array
+              if (ds && ds.type === 'vector') {
+                  initialSelected.vector = ad.datastore_id;
+              }
+              if (ds && ds.type === 'knowledge') {
+                  initialSelected.knowledge = ad.datastore_id;
+              }
+          });
+          setSelectedDatastores(initialSelected);
       }
 
+      fetchAgentAttempts.current = 0; // Reset attempts on success
+      console.log(`[fetchAgent] SUCCESS finished fetching all data for ${agentId}`);
+
     } catch (err: any) {
-      console.error(`[AgentEditPage] Error in fetchAgent (Attempt ${currentAttempt}):`, err);
-      fetchAgentAttempts.current = currentAttempt;
-      if (currentAttempt < MAX_FETCH_ATTEMPTS) {
-        setTimeout(() => fetchAgent(agentId), 1000 * currentAttempt);
-      } else {
+      console.error(`[fetchAgent] CRITICAL ERROR for agent ${agentId} (Attempt ${fetchAgentAttempts.current}):`, err);
       setError(`Failed to load agent data: ${err.message}`);
-      setLoading(false);
+      console.log(`[fetchAgent] Navigating to /dashboard due to critical error: ${err.message}`);
+      navigate('/dashboard', { replace: true });
+    } finally {
+      console.log(`[fetchAgent] FINALLY block for agent ${agentId}`);
+      setLoading(false); // Ensure loading is always set to false
     }
-    }
-  }, [user?.id]);
+  }, [user?.id, supabase, navigate]);
 
   const fetchDatastores = useCallback(async () => {
     if (!user?.id) return;
@@ -434,54 +428,49 @@ export function AgentEditPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    // --- DIAGNOSTIC LOG ---
-    console.log(`[AgentEditPage] Main useEffect running - ID: ${id}, IsEditing: ${isEditing}`);
-    // --- END LOG ---
-    if (isEditing && id) {
-      // --- DIAGNOSTIC LOG ---
-      console.log('[AgentEditPage] useEffect - Calling fetchAgent and fetchDatastores');
-      // --- END LOG ---
-      fetchAgent(id); 
-      fetchDatastores(); 
+    console.log(`[useEffect Main] Running - AgentID: ${id}, IsEditing: ${isEditing}, User: ${user?.id}`);
+    if (isEditing && id && user?.id) { // Added user?.id check
+      console.log("[useEffect Main] Conditions met. Calling fetchAgent and fetchDatastores.");
+      fetchAgent(id);
+      fetchDatastores(); // Fetch the list of available datastores for the modal
+    } else if (!isEditing) {
+        console.log("[useEffect Main] Not editing. Resetting form.");
+        setLoading(false);
+        // Reset state for 'create new agent' page
+        setAgentFormData({ name: '', description: '', personality: '', system_instructions: '', assistant_instructions: '', active: true });
+        setDiscordConnectionData({ inactivity_timeout_minutes: 10, worker_status: 'inactive', discord_app_id: '', discord_public_key: '' });
+        setDiscordBotKey('');
+        setSelectedDatastores({});
+        setAllGuilds([]);
+        setEnabledGuilds([]);
     } else {
-      // --- DIAGNOSTIC LOG ---
-      console.log('[AgentEditPage] useEffect - Resetting form for new agent');
-      // --- END LOG ---
-      setAgentFormData({ name: '', description: '', personality: '', system_instructions: '', assistant_instructions: '', active: true });
-      setDiscordConnectionData({ inactivity_timeout_minutes: 10, worker_status: 'inactive', discord_app_id: '', discord_public_key: '' });
-      setDiscordBotKey('');
-      setSelectedDatastores({});
-      setAllGuilds([]);
-      setEnabledGuilds([]);
+        // Handle cases where isEditing is true but id or user.id is missing
+        console.warn(`[useEffect Main] Conditions not fully met (isEditing: ${isEditing}, id: ${id}, user: ${user?.id}). Setting loading false.`);
+        setLoading(false); 
+        if (!user?.id) {
+             setError("Authentication error. Please log in again.");
+             // Consider redirecting to login here
+        } else if (!id) {
+             setError("Agent ID is missing.");
+             // Consider redirecting to agent list
+        }
     }
-  }, [id, isEditing, fetchAgent, fetchDatastores]);
-
-  useEffect(() => {
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        console.log("[Unmount] Cleared worker status polling interval.");
-      }
-    };
-  }, []);
+  }, [id, isEditing, user?.id, fetchAgent, fetchDatastores]);
 
   const handleAgentFormChange = useCallback((field: keyof AgentType, value: any) => {
     setAgentFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
   const handleConnectionChange = useCallback((
-    field: keyof Omit<AgentDiscordConnection, 'guild_id'> | 'guild_id', // Explicitly add guild_id
+    field: keyof Omit<AgentDiscordConnection, 'guild_id'> | 'guild_id',
     value: any
   ) => {
     let processedValue = value;
-    // Find the actual DB column name if it differs from 'guild_id' in the state
-    // Assuming the state directly uses 'guild_id' based on previous analysis
     const stateField = field as keyof AgentDiscordConnection;
 
     if (stateField === 'inactivity_timeout_minutes') {
       processedValue = parseInt(value, 10) || 0;
     }
-    // Update the state, including the potentially new guild_id field
     setDiscordConnectionData(prev => ({ ...prev, [stateField]: processedValue }));
   }, []);
 
@@ -659,26 +648,6 @@ export function AgentEditPage() {
 
   const debouncedSave = useDebouncedCallback(handleSubmit, 1500);
 
-  // --- Comment out this useEffect block to disable auto-save ---
-  // useEffect(() => {
-  //   // Check if any relevant field has been touched or changed
-  //   // This condition might need refinement depending on desired auto-save trigger
-  //   const hasChanges = agentFormData.name || agentFormData.description || 
-  //                      agentFormData.personality || agentFormData.system_instructions || 
-  //                      agentFormData.assistant_instructions || 
-  //                      discordConnectionData.discord_app_id || 
-  //                      discordConnectionData.discord_public_key || 
-  //                      discordConnectionData.inactivity_timeout_minutes || 
-  //                      (isEditing && discordConnectionData.guild_id); // Only trigger on guild_id change if editing
-
-  //   // Only trigger if editing an existing agent or if creating a new one and fields have values
-  //   if ((isEditing || hasChanges) && !loading && !saving) {
-  //     console.log("[Debounce] Change detected, scheduling save...");
-  //     debouncedSave();
-  //   }
-  // }, [agentFormData, discordConnectionData, isEditing, debouncedSave, loading, saving]);
-  // --- End of commented out block ---
-
   const pollWorkerStatus = useCallback(async (connectionId: string, targetStatus: AgentDiscordConnection['worker_status']) => {
       console.log(`[Poll] Checking status for connection ${connectionId}, target: ${targetStatus}`);
       pollAttemptsRef.current += 1;
@@ -836,6 +805,38 @@ export function AgentEditPage() {
     }
   }, [id, discordConnectionData.id, pollWorkerStatus]);
 
+  const renderTeamInfo = () => {
+      if (teamDetailsLoading) {
+          return <div className="flex items-center text-sm text-gray-400"><Loader2 className="animate-spin h-4 w-4 mr-2" />Loading team info...</div>;
+      }
+      if (teamDetailsError) {
+          return <div className="flex items-center text-sm text-red-400"><AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" /> Error loading team info.</div>;
+      }
+      if (!teamDetails) {
+          return <p className="text-sm text-gray-400">This agent is not currently assigned to a team.</p>;
+      }
+
+      // TODO: Fetch the name of the agent being reported to, if applicable
+      const reportsToDisplay = teamDetails.reports_to_user 
+          ? 'User' 
+          : teamDetails.reports_to_agent_id 
+              ? `Agent (${teamDetails.reports_to_agent_id.substring(0, 8)}...)` // Placeholder
+              : 'N/A';
+
+      return (
+          <div className="space-y-2">
+              <p className="text-sm">
+                  <span className="font-medium text-gray-300">Team:</span> 
+                  <Link to={`/teams/${teamDetails.team_id}`} className="ml-1 text-indigo-400 hover:text-indigo-300 hover:underline">
+                     {teamDetails.team_name || teamDetails.team_id}
+                  </Link>
+              </p>
+              <p className="text-sm"><span className="font-medium text-gray-300">Role:</span> {teamDetails.team_role || 'N/A'}</p>
+              <p className="text-sm"><span className="font-medium text-gray-300">Reports To:</span> {reportsToDisplay}</p>
+          </div>
+      );
+  };
+
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -858,8 +859,8 @@ export function AgentEditPage() {
   const selectedGuildName = allGuilds.find(g => g.id === discordConnectionData.guild_id)?.name;
 
   return (
-    <div className="p-6 overflow-x-hidden">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigate('/agents')}
@@ -1005,6 +1006,16 @@ export function AgentEditPage() {
                 </button>
               </div>
             </div>
+
+            {/* Add Team Information Section */}
+            {isEditing && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-lg font-medium text-gray-200 flex items-center">
+                  <Users className="w-5 h-5 mr-2" /> Team Membership
+                </h3>
+                {renderTeamInfo()}
+              </div>
+            )}
           </div>
 
           <div className="space-y-6">
@@ -1254,7 +1265,6 @@ export function AgentEditPage() {
   );
 }
 
-// Replace the existing AgentStatusToggle function (around line 1240) with this updated version:
 function AgentStatusToggle({ 
   workerStatus, 
   onActivate, 

@@ -6,7 +6,7 @@
 2. **Tool Validation:** Verify installation of Python (3.11+) and Docker. Run `python --version` and `docker --version` to ensure compliance (Reference: Technical Stack).
 3. **Directory Structure:** Create project directories:
    - `/backend` for FastAPI server code
-   - `/frontend` for Streamlit UI code
+   - `/frontend` for Next.js UI code
    - Optionally, `/infra` for deployment configurations (Reference: Technical Stack, Next Steps).
 4. **MCP Integration Setup (Cursor):**
    - Check if a `.cursor` directory exists at the project root. If not, create it.
@@ -25,17 +25,11 @@
 
 ## Phase 2: Frontend Development
 
-6. **Streamlit Setup:** Initialize a Streamlit project in the `/frontend` directory. Create a file named `main.py`.
-7. **UI Theme Implementation:** Configure Streamlit to use a dark theme and set the font to Poppins. This can be done in the Streamlit configuration file (`.streamlit/config.toml`) with the following entries:
-   ```toml
-   [theme]
-   base="dark"
-   font="Poppins"
-   ```
-   (Reference: Key Features, UI Theme).
-8. **Admin Dashboard Components:** Develop the initial admin dashboard interface, including key elements to manage agents and view logs. Create a file `/frontend/components/Dashboard.py` (Reference: Key Features, Phase 6: UI Development).
-9. **Login Interface:** Build a login form in Streamlit that connects with Supabase authentication. Create `/frontend/components/LoginForm.py` and integrate input fields for email and password with proper validation (Reference: User Personas & Workflows, Authentication).
-10. **Validation:** Run Streamlit locally using `streamlit run main.py` to test UI components and theme consistency (Reference: Phase 2 Milestones).
+6. **Next.js Setup:** Initialize a Next.js project in the `/frontend` directory. Use `npx create-next-app@latest frontend`.
+7. **UI Theme Implementation:** Configure Next.js to use a dark theme and set the font to Poppins. This typically involves setting up a theme provider (e.g., using styled-components or Tailwind CSS configuration) and applying global styles. Define base theme settings in `/frontend/styles/theme.ts` or equivalent CSS/Tailwind config.
+8. **Admin Dashboard Components:** Develop the initial admin dashboard interface using React components. Create key elements to manage agents and view logs in `/frontend/components/Dashboard.tsx` (Reference: Key Features, Phase 6: UI Development).
+9. **Login Interface:** Build a login form component in Next.js that connects with Supabase authentication. Create `/frontend/components/LoginForm.tsx` and integrate input fields for email and password with proper validation using React state management (Reference: User Personas & Workflows, Authentication).
+10. **Validation:** Run the Next.js development server locally using `npm run dev` (or `yarn dev`) to test UI components and theme consistency (Reference: Phase 2 Milestones).
 
 ## Phase 3: Backend Development
 
@@ -57,14 +51,14 @@
 
 ## Phase 4: Integration
 
-21. **Frontend-Backend Connection:** Integrate the Streamlit frontend with the FastAPI backend by setting API calls from the UI to the authentication and agent management endpoints. Update endpoints in `/frontend/services/api.py` (Reference: Phase 4 Integration).
+21. **Frontend-Backend Connection:** Integrate the Next.js frontend with the FastAPI backend by setting API calls from the UI to the authentication and agent management endpoints. Update endpoints in `/frontend/services/api.ts` (or similar) (Reference: Phase 4 Integration).
 22. **Discord Bot Setup:** Configure the Discord bot with webhook endpoints pointing to the `/backend/routes/discord.py`. Make sure the bot is registered with Discord and using secure tokens (Reference: Key Features, Discord Integration).
 23. **LLM Provider Integration:** Wire up configuration settings for each LLM provider in the backend. Securely load API keys from environment variables and ensure endpoints use these keys when forwarding requests (Reference: Key Features, LLM Integration).
 24. **Validation:** Trigger a simulated Discord event and confirm the backend logs the message correctly and the corresponding agent response is generated (Reference: Phase 4 Milestones).
 
 ## Phase 5: Deployment
 
-25. **Docker Configuration:** Create Dockerfiles for both backend and frontend. For the FastAPI backend, create `/backend/Dockerfile` with appropriate Python 3.11 base image; for Streamlit in `/frontend/Dockerfile`, use a compatible base image (Reference: DevOps, Technical Stack).
+25. **Docker Configuration:** Create Dockerfiles for both backend and frontend. For the FastAPI backend, create `/backend/Dockerfile` with appropriate Python 3.11 base image; for Next.js in `/frontend/Dockerfile`, use a compatible Node.js base image (Reference: DevOps, Technical Stack).
 26. **Digital Ocean Setup:** Prepare deployment scripts for Digital Ocean. Ensure the frontend and key backend services are configured to deploy on Digital Ocean droplets. Document the steps in `/infra/do-deploy.md` (Reference: Key Features, Deployment).
 27. **CI/CD Pipeline:** Set up a CI/CD workflow (using GitHub Actions or similar) to automatically build and deploy containers upon commit. Place configuration in `.github/workflows/deploy.yml` (Reference: DevOps, Deployment).
 28. **Supabase Integration Validation:** Re-run the MCP configuration check by verifying the connection status in the MCP settings within Cursor (Reference: Phase 1, MCP Integration).

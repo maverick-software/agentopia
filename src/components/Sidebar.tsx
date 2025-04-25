@@ -18,6 +18,7 @@ interface SidebarProps {
 const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/agents', icon: Users, label: 'Agents' },
+  { to: '/teams', icon: ShieldCheck, label: 'Teams' },
   { to: '/datastores', icon: Database, label: 'Datastores' },
   { to: '/mcp', icon: Brain, label: 'MCP' },
   { to: '/monitoring', icon: Activity, label: 'Monitoring' },

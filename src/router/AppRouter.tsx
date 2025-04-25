@@ -1,111 +1,85 @@
-import React, { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-
 import { Layout } from '../components/Layout';
-import AdminLayout from '../layouts/AdminLayout'; // Assuming an AdminLayout exists
+import LoadingSpinner from '../components/LoadingSpinner';
+import { AdminRoute } from './AdminRoute';
+import { LoginPage } from '../pages/LoginPage';
+import { RegisterPage } from '../pages/RegisterPage';
+import UnauthorizedPage from '../pages/UnauthorizedPage';
 
-// Public Pages (Lazy Loaded)
-const LoginPage = lazy(() => import('../pages/LoginPage').then(module => ({ default: module.LoginPage })) );
-const RegisterPage = lazy(() => import('../pages/RegisterPage').then(module => ({ default: module.RegisterPage })) );
+// Lazy load page components
+const DashboardPage = lazy(() => import('../pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
+const AgentsPage = lazy(() => import('../pages/AgentsPage').then(module => ({ default: module.AgentsPage })));
+const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })));
+const AgentChatPage = lazy(() => import('../pages/AgentChatPage').then(module => ({ default: module.AgentChatPage })));
+const DatastoresPage = lazy(() => import('../pages/DatastoresPage').then(module => ({ default: module.DatastoresPage })));
+const DatastoreEditPage = lazy(() => import('../pages/DatastoreEditPage'));
+const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
+// --- Add Teams Pages --- 
+const TeamsPage = lazy(() => import('../pages/TeamsPage').then(module => ({ default: module.TeamsPage })));
+const CreateTeamPage = lazy(() => import('../pages/CreateTeamPage').then(module => ({ default: module.CreateTeamPage })));
+const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage').then(module => ({ default: module.TeamDetailsPage })));
+const EditTeamPage = lazy(() => import('../pages/EditTeamPage').then(module => ({ default: module.EditTeamPage })));
+// --- End Add Teams Pages ---
 
-// Protected Pages (Lazy Loaded)
-const DashboardPage = lazy(() => import('../pages/DashboardPage').then(module => ({ default: module.DashboardPage })) );
-const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })) );
 
-// Add imports for AgentsPage and DatastoresPage
-const AgentsPage = lazy(() => import('../pages/AgentsPage').then(module => ({ default: module.AgentsPage })) );
-const DatastoresPage = lazy(() => import('../pages/DatastoresPage').then(module => ({ default: module.DatastoresPage })) );
-
-// Uncomment AgentChatPage import
-const AgentChatPage = lazy(() => import('../pages/AgentChatPage').then(module => ({ default: module.AgentChatPage })) );
-
-// Admin Pages (Lazy Loaded)
-const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })) );
-const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement').then(module => ({ default: module.AdminUserManagement })) );
-const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement').then(module => ({ default: module.AdminAgentManagement })) ); // <-- New import
-
-// Loading fallback - Updated with background color to match theme
-const LoadingSpinner = () => (
-  <div className="fixed inset-0 z-50 flex justify-center items-center bg-white dark:bg-gray-900 transition-opacity duration-300">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
-  </div>
-);
-
-// --- Root Redirect Component ---
-const RootRedirect: React.FC = () => {
-    const { user, loading } = useAuth(); // Assuming useAuth provides a loading state
-
-    if (loading) {
-        return <LoadingSpinner />; // Show loading indicator while checking auth
-    }
-
-    // If loading is false, we know the user state
-    return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
-};
-// --- End Root Redirect Component ---
-
-// Custom Route Wrappers
-const PublicRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
-    const { user } = useAuth();
-    return !user ? children : <Navigate to="/dashboard" replace />;
-};
-
-const ProtectedRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
-    const { user } = useAuth();
-    return user ? children : <Navigate to="/login" replace />;
-};
-
-// We'll assume a function getUserRoles() exists in useAuth or is fetched elsewhere
-// For now, simplify: Check if user exists (real check needed later)
-const AdminRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
-    const { user, isAdmin } = useAuth(); // Assuming useAuth provides isAdmin flag
-    if (!user) {
-        return <Navigate to="/login" replace />;
-    }
-    if (!isAdmin) {
-        // Redirect non-admins away, maybe to their dashboard or a specific "access denied" page
-        return <Navigate to="/dashboard" replace />;
-    }
-    return children;
-};
-
-export function AppRouter() {
-    return (
-        <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
-                {/* Root Route - Use the new RootRedirect component */}
-                <Route path="/" element={<RootRedirect />} />
-
-                {/* Public Routes - Render LoginPage directly without PublicLayout */}
-                <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-                {/* Remove PublicRoute wrapper from /register */}
-                <Route path="/register" element={<RegisterPage />} />
-                {/* Remove commented-out HomePage route */}
-                {/* <Route path="/home" element={<PublicLayout><PublicRoute><HomePage /></PublicRoute></PublicLayout>} /> */}
-
-                {/* Protected Routes (Regular Users) - Use main Layout */}
-                <Route path="/dashboard" element={<Layout><ProtectedRoute><DashboardPage /></ProtectedRoute></Layout>} />
-                <Route path="/agents" element={<Layout><ProtectedRoute><AgentsPage /></ProtectedRoute></Layout>} />
-                <Route path="/datastores" element={<Layout><ProtectedRoute><DatastoresPage /></ProtectedRoute></Layout>} />
-                <Route path="/agent/create" element={<Layout><ProtectedRoute><AgentEditPage /></ProtectedRoute></Layout>} />
-                <Route path="/agent/:agentId" element={<Layout><ProtectedRoute><AgentEditPage /></ProtectedRoute></Layout>} />
-                {/* Restore Layout wrapper for chat page */}
-                <Route path="/agent/:agentId/chat" element={<Layout><ProtectedRoute><AgentChatPage /></ProtectedRoute></Layout>} />
-                {/* Add other protected user routes within Layout */}
-                {/* Example: Ensure SettingsPage, etc., are imported if needed */}
-                {/* <Route path="/settings" element={<Layout><ProtectedRoute><SettingsPage /></ProtectedRoute></Layout>} /> */}
-
-                {/* Admin Routes - Use AdminLayout */}
-                <Route path="/admin" element={<AdminLayout><AdminRoute><Navigate to="/admin/dashboard" replace /></AdminRoute></AdminLayout>} />
-                <Route path="/admin/dashboard" element={<AdminLayout><AdminRoute><AdminDashboardPage /></AdminRoute></AdminLayout>} />
-                <Route path="/admin/users" element={<AdminLayout><AdminRoute><AdminUserManagement /></AdminRoute></AdminLayout>} />
-                <Route path="/admin/agents" element={<AdminLayout><AdminRoute><AdminAgentManagement /></AdminRoute></AdminLayout>} /> {/* <-- New route */}
-                {/* Add other admin routes here */}
-
-                {/* Fallback for unmatched routes */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-        </Suspense>
-    );
+// Protective Route Component
+interface ProtectedRouteProps {
+  children: React.ReactNode;
 }
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { user, loading } = useAuth(); // Assuming useAuth provides a loading state
+
+  if (loading) {
+    return <LoadingSpinner />; // Show loading spinner while checking auth
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+
+const AppRouter: React.FC = () => {
+  const { user } = useAuth();
+
+  return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+          <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <RegisterPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+          {/* Protected routes */}
+          <Route path="/dashboard" element={<Layout><ProtectedRoute><DashboardPage /></ProtectedRoute></Layout>} />
+          <Route path="/agents" element={<Layout><ProtectedRoute><AgentsPage /></ProtectedRoute></Layout>} />
+          <Route path="/agents/new" element={<Layout><ProtectedRoute><AgentEditPage /></ProtectedRoute></Layout>} />
+          <Route path="/agents/:agentId/edit" element={<Layout><ProtectedRoute><AgentEditPage /></ProtectedRoute></Layout>} />
+          <Route path="/agents/:agentId/chat" element={<Layout><ProtectedRoute><AgentChatPage /></ProtectedRoute></Layout>} />
+          <Route path="/datastores" element={<Layout><ProtectedRoute><DatastoresPage /></ProtectedRoute></Layout>} />
+          <Route path="/datastores/new" element={<Layout><ProtectedRoute><DatastoreEditPage /></ProtectedRoute></Layout>} />
+          <Route path="/datastores/:datastoreId/edit" element={<Layout><ProtectedRoute><DatastoreEditPage /></ProtectedRoute></Layout>} />
+
+          {/* --- Add Teams Routes --- */}
+          <Route path="/teams" element={<Layout><ProtectedRoute><TeamsPage /></ProtectedRoute></Layout>} />
+          <Route path="/teams/new" element={<Layout><ProtectedRoute><CreateTeamPage /></ProtectedRoute></Layout>} />
+          <Route path="/teams/:teamId" element={<Layout><ProtectedRoute><TeamDetailsPage /></ProtectedRoute></Layout>} />
+          <Route path="/teams/:teamId/edit" element={<Layout><ProtectedRoute><EditTeamPage /></ProtectedRoute></Layout>} />
+          {/* --- End Add Teams Routes --- */}
+
+          {/* Admin routes */}
+          <Route path="/admin" element={<Layout><AdminRoute><AdminDashboardPage /></AdminRoute></Layout>} />
+
+          {/* Default route */}
+          <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
+        </Routes>
+      </Suspense>
+  );
+};
+
+export default AppRouter;

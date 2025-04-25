@@ -84,3 +84,49 @@ export interface Profile {
   created_at?: string; // timestamptz
   updated_at?: string; // timestamptz
 }
+
+// New type for Agent Teams
+export interface Team {
+  id: string; // uuid
+  owner_user_id?: string; // uuid, nullable
+  name: string; // text
+  description?: string | null; // text, nullable
+  created_at?: string; // timestamptz
+  updated_at?: string; // timestamptz
+}
+
+// New type for Team Members (combines Agent info with team-specific details)
+export interface TeamMember {
+  team_id: string; // uuid
+  agent_id: string; // uuid
+  team_role?: string | null; // text, e.g., 'project_manager'
+  team_role_description?: string | null; // text
+  reports_to_agent_id?: string | null; // uuid
+  reports_to_user?: boolean | null; // boolean
+  joined_at?: string; // timestamptz
+  // Include agent details by embedding the Agent type or relevant fields
+  agent: Agent; // Embed the full Agent object for convenience
+}
+
+// New type for Chat Sessions
+export interface ChatSession {
+  id: string; // uuid
+  team_id: string; // uuid, FK to teams
+  session_name?: string | null; // text
+  session_summary?: string | null; // text
+  session_summary_embedding?: string | null; // vector(1536), Assuming text-embedding-3-small
+  created_at?: string; // timestamptz
+  updated_at?: string; // timestamptz
+}
+
+// New type for Chat Messages
+export interface ChatMessage {
+  id: string; // uuid
+  session_id: string; // uuid, FK to chat_sessions
+  sender_user_id?: string | null; // uuid, FK to auth.users
+  sender_agent_id?: string | null; // uuid, FK to agents
+  content: string; // text
+  embedding?: string | null; // vector(1536)
+  metadata?: Record<string, any> | null; // jsonb, for mentions, etc.
+  created_at?: string; // timestamptz
+}
