@@ -1,3 +1,4 @@
+- [ ] Create Team Rooms
 - [ ] Delegated access for users.
 - [ ] MCP Tool Belts for agents.
 - [ ] Default optimized prompt listing available MCP servers.

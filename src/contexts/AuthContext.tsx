@@ -25,7 +25,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   const fetchUserRoles = useCallback(async (userId: string | undefined) => {
     if (!userId) {
@@ -50,13 +49,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .filter(Boolean) as string[] || [];
         console.log(`Fetched roles for ${userId}:`, roles);
         setUserRoles(roles);
-        setIsAdmin(roles.includes('admin'));
       }
     } catch (err: any) {
       console.error("Error in fetchUserRoles:", err);
       setError(err instanceof Error ? `Error fetching roles: ${err.message}` : 'An unknown error occurred fetching roles.');
       setUserRoles([]);
-      setIsAdmin(false);
     } finally {
       setRolesLoading(false);
     }
@@ -72,7 +69,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("[AuthContext] No user detected, clearing roles and setting rolesLoading=false.");
       setUserRoles([]); 
       setRolesLoading(false); 
-      setIsAdmin(false);
     }
   }, [user, fetchUserRoles]); // Keep fetchUserRoles in dependency array
 
@@ -82,10 +78,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log(`[AuthContext] onAuthStateChange event: ${_event}, session: ${session ? 'exists' : 'null'}`);
       setUser(session?.user ?? null);
       
-      if (!session?.user) {
-        setIsAdmin(false);
-      }
-
       setLoading(false);
     });
 
@@ -180,7 +172,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
       setUser(null);
-      setIsAdmin(false);
     } catch (err: any) {
       console.error('Sign out error:', err);
       setError(err.message || 'Failed to sign out.');
@@ -230,10 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Update isAdmin based on userRoles using useMemo
-  useEffect(() => {
-    setIsAdmin(userRoles.includes('admin'));
-  }, [userRoles]);
+  const isAdmin = useMemo(() => userRoles.includes('admin'), [userRoles]);
 
   const value = {
     user,

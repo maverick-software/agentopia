@@ -1,6 +1,0 @@
-## 2025-04-09 - Refactor Fetch Logic & Limit Attempts
-- Applied strict fetch attempt limits (max 5) using `useRef` to `Agents.tsx`, `Datastores.tsx`, `AgentEdit.tsx`, `AgentChat.tsx`, `Dashboard.tsx`.
-- Refactored `useEffect` hooks in these components to define fetch logic internally, simplifying dependencies.
-- Removed `useCallback` wrapper around fetch functions.
-- Updated retry button logic to reset state appropriately.
-- *Goal: Prevent excessive API requests caused by fetch loops.* 
