@@ -70,23 +70,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUserRoles([]); 
       setRolesLoading(false); 
     }
-  }, [user, fetchUserRoles]); // Keep fetchUserRoles in dependency array
+  }, [user?.id, fetchUserRoles]); // Depend on user.id instead of the whole user object
 
   useEffect(() => {
-    setLoading(true);
+    setLoading(true); 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log(`[AuthContext] onAuthStateChange event: ${_event}, session: ${session ? 'exists' : 'null'}`);
-      setUser(session?.user ?? null);
-      
-      setLoading(false);
+      setUser(session?.user ?? null); 
+      // Set loading false *only* here, after auth state is confirmed by the listener
+      if (loading) { // Optional: Check to avoid redundant sets if listener fires multiple times quickly
+        console.log('[AuthContext] Setting loading = false inside onAuthStateChange');
+        setLoading(false); 
+      }
     });
 
+    // Still attempt to get session early, but don't set loading state here
     supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!user && session) {
-            console.log('[AuthContext] Setting user from initial getSession');
-            setUser(session.user);
+        // Check if user state is still null from initial useState
+        // AND session exists AND listener hasn't set user yet
+        if (!user && session) { 
+            console.log('[AuthContext] Pre-setting user from initial getSession (listener might update again)');
+            setUser(session.user); 
         }
-        if(loading) setLoading(false); 
+        // REMOVED: if(loading) setLoading(false); 
     });
 
     return () => {

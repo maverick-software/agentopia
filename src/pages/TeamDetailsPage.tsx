@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTeams } from '../hooks/useTeams';
 import { ArrowLeft, Edit, Loader2, AlertCircle, Users, MessageSquare } from 'lucide-react';
 import type { Team } from '../types';
-import { TeamMemberList } from '../../components/teams/TeamMemberList';
+import { TeamMemberList } from '../components/teams/TeamMemberList';
 
 // Placeholder components until created
 // Placeholder for TeamMemberList removed

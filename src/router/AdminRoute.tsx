@@ -10,10 +10,12 @@ export function AdminRoute({}: AdminRouteProps) {
   const { user, isAdmin, loading, rolesLoading } = useAuth();
 
   const isLoading = loading || rolesLoading;
+  
+  // Add detailed logging
+  console.log(`[AdminRoute V1] State: isLoading=${isLoading}, user=${user?.id}, isAdmin=${isAdmin}`);
 
   if (isLoading) {
-    // Optional: Show a loading indicator while checking auth/roles
-    // Or return null/empty fragment to prevent brief flashes of content
+    console.log('[AdminRoute V1] Decision: Checking permissions...');
     return (
         <div className="min-h-screen bg-gray-900 flex items-center justify-center">
             <div className="text-white">Checking permissions...</div>
@@ -22,16 +24,16 @@ export function AdminRoute({}: AdminRouteProps) {
   }
 
   if (!user) {
-    // If user is not logged in, redirect to login
+    console.log('[AdminRoute V1] Decision: No user found. Redirecting to /login.');
     return <Navigate to="/login" replace />;
   }
 
   if (!isAdmin) {
-    // If user is logged in but not an admin, redirect to dashboard (or show an unauthorized page)
-    console.warn('AdminRoute: User is not an admin. Redirecting.');
-    return <Navigate to="/" replace />;
+    console.warn('[AdminRoute V1] Decision: User is not an admin. Redirecting to /dashboard.');
+    // Redirect to dashboard explicitly instead of /
+    return <Navigate to="/dashboard" replace />;
   }
 
-  // If user is logged in and is an admin, render the child route component
+  console.log('[AdminRoute V1] Decision: User is admin. Rendering Outlet.');
   return <Outlet />;
 } 

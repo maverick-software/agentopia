@@ -136,10 +136,10 @@ export const useAgentMcp = (agentId: string | undefined) => {
     }
   }, [agentId, user?.id]);
 
-  // Effect to fetch data when agentId changes
+  // Effect to fetch data when agentId or user changes
   useEffect(() => {
     fetchMcpConfigurations();
-  }, [fetchMcpConfigurations]);
+  }, [agentId, user?.id, fetchMcpConfigurations]);
 
   // --- Mutation Functions ---
 
