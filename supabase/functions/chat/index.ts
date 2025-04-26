@@ -192,13 +192,20 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       .select(`
         id,
         agent_id,
+        timeout_ms,
+        max_retries,
+        retry_backoff_ms,
+        priority,
+        is_active,
         server:mcp_servers (
           id,
+          name,
           endpoint_url,
           vault_api_key_id
         )
       `)
-      .eq('agent_id', agentId);
+      .eq('agent_id', agentId)
+      .eq('is_active', true);
 
     if (error) {
       if (error.message.includes('column') && error.message.includes('does not exist')){
@@ -214,15 +221,21 @@ async function getMCPConfigurations(agentId: string): Promise<MCPServerConfig[]>
       return [];
     }
 
-    // Transform to MCPServerConfig format
-    return configs.map((config: any): MCPServerConfig => ({
+    // Filter out entries where server might be null (shouldn't happen with inner join default)
+    const validConfigs = configs.filter(config => !!config.server);
+
+    // Transform to MCPServerConfig format, now including all fields
+    return validConfigs.map((config: any): MCPServerConfig => ({
       id: config.server.id,
       config_id: config.id,
+      name: config.server.name,
       endpoint_url: config.server.endpoint_url,
       vault_api_key_id: config.server.vault_api_key_id,
-      timeout_ms: 30000, 
-      max_retries: 1, 
-      retry_backoff_ms: 100 
+      timeout_ms: config.timeout_ms ?? 30000,
+      max_retries: config.max_retries ?? 1,
+      retry_backoff_ms: config.retry_backoff_ms ?? 100,
+      priority: config.priority ?? 0,
+      is_active: config.is_active,
     }));
   } catch (error) {
     console.error('Error in getMCPConfigurations:', error);
@@ -312,6 +325,23 @@ async function prepareMCPContext(
   return contextData;
 }
 
+// Assume ChatRoomMember and MemberType are defined appropriately elsewhere or define inline
+// If reusing frontend types isn't feasible, define simplified versions here:
+type MemberType = 'user' | 'agent' | 'team';
+interface BasicRoomMember {
+    member_id: string; // uuid
+    member_type: MemberType;
+    // Add name/details if the worker sends them
+}
+interface ChatRequestBody {
+    agentId: string;
+    message: string;
+    authorId?: string; // Keep if used elsewhere
+    roomId?: string; // NEW
+    channelId?: string; // NEW
+    members?: BasicRoomMember[]; // NEW (Optional)
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -338,10 +368,8 @@ Deno.serve(async (req) => {
 
     // Handle Chat POST request
     if (req.method === 'POST') {
-      // --- Define variables outside try block for catch block access ---
-      let parsedBody: any = null; 
-      let agentIdFromRequest: string | null = null; 
-      // --- End Define ---
+      let parsedBody: ChatRequestBody | null = null;
+      let agentIdFromRequest: string | null = null;
       try {
         console.log('Chat POST request received');
         // Validate OpenAI API key
@@ -366,26 +394,24 @@ Deno.serve(async (req) => {
         }
 
         // Parse request body
-        parsedBody = await req.json(); // Parse into a variable
-        // MODIFIED: Expect payload sent by worker
-        const { agentId, message: userMessage, authorId, channelId, guildId } = parsedBody; 
-        agentIdFromRequest = agentId; // Store agentId for catch block
+        parsedBody = await req.json();
+        // Destructure NEW fields
+        const { agentId, message: userMessage, authorId, roomId, channelId, members } = parsedBody as ChatRequestBody;
+        agentIdFromRequest = agentId;
 
-        // *** ADDED LOGGING ***
-        console.log("Received Payload Body:", JSON.stringify(parsedBody, null, 2)); 
-        console.log(`Extracted - agentId: ${agentId}, userMessage: ${userMessage ? userMessage.substring(0, 50) + '...' : 'null'}`);
-        // *** END ADDED LOGGING ***
+        console.log("Received Payload Body:", JSON.stringify(parsedBody, null, 2));
+        console.log(`Extracted - agentId: ${agentId}, roomId: ${roomId}, channelId: ${channelId}, userMessage: ${userMessage ? userMessage.substring(0, 50) + '...' : 'null'}`);
 
-        // Validate required fields
         if (!userMessage || !agentId) {
           throw new Error(`Invalid request format. UserMessage valid: ${!!userMessage}. AgentId valid: ${!!agentId}.`);
         }
 
-        // *** NEW: Fetch agent details from DB ***
+        // Fetch agent details (ensure active column is included if needed by logic below)
         console.log(`[Agent: ${agentId}] Fetching agent details from database...`);
         const { data: agentData, error: agentFetchError } = await supabaseClient
           .from('agents')
-          .select('name, personality, system_instructions, assistant_instructions') 
+          // Select all potentially relevant fields based on diagram/corrections
+          .select('name, system_instructions, assistant_instructions, active')
           .eq('id', agentId)
           .single();
 
@@ -401,21 +427,34 @@ Deno.serve(async (req) => {
           );
         }
         console.log(`[Agent: ${agentId}] Successfully fetched agent details. Name: ${agentData.name}`);
-        // Store fetched details in constants for clarity
         const fetchedAgentName = agentData.name;
-        const fetchedPersonality = agentData.personality;
+        // NOTE: fetchedPersonality was dropped from select, adjust if needed
         const fetchedSystemInstructions = agentData.system_instructions;
         const fetchedAssistantInstructions = agentData.assistant_instructions;
-        // *** END NEW: Fetch agent details ***
+        // const fetchedIsActive = agentData.active; // If needed
 
         // Initialize context array for the LLM
         const contextMessages: ChatMessage[] = [];
+
+        // --- NEW: Add Room/Channel/Member Context --- 
+        if (roomId && channelId) {
+            let roomContext = `You are currently in chat room ID ${roomId}, channel ID ${channelId}.`;
+            // Optional: Add member info if provided
+            if (members && members.length > 0) {
+                // Basic member summary (adjust formatting as needed)
+                const memberSummary = members
+                    .map(m => `${m.member_type}:${m.member_id}`)
+                    .join(', ');
+                roomContext += ` Current members in the room include: ${memberSummary}.`;
+            }
+            contextMessages.push({ role: 'system', content: roomContext });
+        }
+        // --- END NEW Context ---
 
         // Add system message if provided
         if (fetchedSystemInstructions) {
           contextMessages.push({ role: 'system', content: fetchedSystemInstructions });
         }
-
         // Add assistant instructions if provided
         if (fetchedAssistantInstructions) {
           contextMessages.push({ role: 'system', content: fetchedAssistantInstructions });
@@ -469,9 +508,9 @@ Deno.serve(async (req) => {
                 [{ role: 'user', content: userMessage, timestamp: new Date().toISOString() }], 
                 agentId,
                 fetchedAgentName, // Use fetched data
-                fetchedPersonality, // Use fetched data
-                fetchedSystemInstructions, // Use fetched data
-                fetchedAssistantInstructions // Use fetched data
+                "", // Personality removed, pass empty or adjust function
+                fetchedSystemInstructions,
+                fetchedAssistantInstructions
               );
 
               // Initialize MCPManager and process context
@@ -523,7 +562,7 @@ Deno.serve(async (req) => {
         }
 
         // Add conversation messages (just the current user message for now)
-        contextMessages.push({ role: 'user', content: userMessage }); 
+        contextMessages.push({ role: 'user', content: userMessage });
 
         // Create chat completion stream
         console.log(`[Agent: ${agentId}] Calling OpenAI chat.completions.create (stream: false)...`);
@@ -553,16 +592,12 @@ Deno.serve(async (req) => {
 
       } catch (error) { // Outer catch block
         console.error("Error processing request:", error);
-        // --- MODIFIED: Use agentIdFromRequest from outer scope ---
-        const agentIdForErrorLog = agentIdFromRequest; 
-        // --- END MODIFIED ---
+        const agentIdForErrorLog = agentIdFromRequest;
         // --- Add error logging to database ---
         try {
             // Attempt to stringify the raw body if available, otherwise the parsed body
-            let requestBodyString = null;
+            let requestBodyString: string | null = null; // Initialize as string | null
             try {
-                // req.body might not be directly available or easily stringifiable in Deno serve
-                // Using the parsedBody is safer if parsing succeeded at least partially
                  requestBodyString = parsedBody ? JSON.stringify(parsedBody) : 'Could not read request body';
             } catch (stringifyError) {
                  requestBodyString = `Error stringifying request body: ${stringifyError.message}`;
@@ -570,12 +605,10 @@ Deno.serve(async (req) => {
             
             await supabaseClient.from('function_errors').insert({ 
                 function_name: 'chat',
-                // --- MODIFIED: Use variable from outer scope ---
-                agent_id: agentIdForErrorLog, 
-                // --- END MODIFIED ---
+                agent_id: agentIdForErrorLog,
                 error_message: error.message,
                 stack_trace: error.stack,
-                request_body: requestBodyString 
+                request_body: requestBodyString
             });
         } catch (dbError) {
             console.error("Database error while storing interaction error:", dbError);

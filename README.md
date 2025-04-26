@@ -218,65 +218,17 @@ These optimizations follow React best practices for handling component lazy-load
 
 ## Database Schema
 
-Based on the provided schema diagram, the core tables are:
+The database utilizes PostgreSQL managed by Supabase. Key schemas include `auth` (for user authentication) and `public` (for application data).
 
-*   **`auth.users`**: Standard Supabase table for user authentication.
-*   **`agents`**: Stores the main configuration for each AI agent.
-    *   `id`: Primary Key.
-    *   `user_id`: Foreign Key referencing `auth.users.id` (owner of the agent).
-    *   `name`: Agent's display name.
-    *   `description`: Description of the agent.
-    *   `personality`: Instructions defining the agent's behavior/persona.
-    *   `active`: Boolean indicating if the agent is generally active (may not reflect Discord connection status).
-    *   `discord_channel`, `system_instructions`, `discord_bot_token_id`, `discord_user_id`: Fields likely related to Discord setup, potentially including secrets or IDs.
-    *   `created_at`, `updated_at`: Timestamps.
-*   **`agent_discord_connections`**: Tracks the specific connection details and status for an agent within a Discord server (guild). **Note:** This table is being modified to support multi-server enabling/disabling instead of a single guild/channel connection per agent.
-    *   `id`: Primary Key.
-    *   `agent_id`: Foreign Key referencing `agents.id`.
-    *   `guild_id`: The ID of the Discord server (guild) the agent is connected to.
-    *   `is_enabled`: (New) Boolean indicating if the connection for this specific guild is active.
-    *   `discord_app_id`, `discord_public_key`: Discord application credentials.
-    *   `inactivity_timeout_ms`: Timeout duration for the worker process.
-    *   `worker_status`: Tracks the current state of the `discord-worker` process (e.g., `inactive`, `connecting`, `active`, `terminating`, `error`). Updated via RPC.
-    *   `created_at`: Timestamp.
-*   **`datastores`**: Represents collections of data (e.g., documents for RAG).
-    *   `id`: Primary Key.
-    *   `user_id`: Foreign Key referencing `auth.users.id` (owner of the datastore).
-    *   `name`, `description`, `type`, `config`: Configuration details for the datastore.
-    *   `similarity_metric`, `similarity_threshold`, `max_results`: Parameters likely for vector search/RAG.
-    *   `created_at`, `updated_at`: Timestamps.
-*   **`agent_datastores`**: A join table linking agents to the datastores they can access.
-    *   `agent_id`: Foreign Key referencing `agents.id`.
-    *   `datastore_id`: Foreign Key referencing `datastores.id`.
-    *   `created_at`: Timestamp.
-*   **`mcp_configurations`**: (MCP likely stands for 'Multi-Cloud Proxy' or similar) Configuration settings for agents related to backend infrastructure/proxying.
-    *   `id`: Primary Key.
-    *   `agent_id`: Foreign Key referencing `agents.id`.
-    *   `is_enabled`: Whether this configuration is active.
-    *   `created_at`, `updated_at`: Timestamps.
-*   **`mcp_servers`**: Defines available backend servers/endpoints the MCP can use.
-    *   `id`: Primary Key.
-    *   `config_id`: Foreign Key referencing `mcp_configurations.id`.
-    *   `name`: Server name.
-    *   `endpoint_url`: The URL of the backend server.
-    *   `vault_id`, `vault_item_id`: References to secrets stored potentially in HashiCorp Vault (or similar).
-    *   `timeout_ms`, `max_retries`, `retry_backoff_ms`, `priority`, `is_active`, `capabilities`: Parameters defining server behavior, health, and features.
-    *   `created_at`, `updated_at`: Timestamps.
-*   **`user_secrets`**: Seems to link users to secrets stored in a vault, likely referenced by `mcp_servers`.
-    *   `id`: Primary Key.
-    *   `user_id`: Foreign Key referencing `auth.users.id`.
-    *   `vault_id`, `vault_item_id`: References to secrets.
-    *   `created_at`, `updated_at`: Timestamps.
+**Core entities include:**
+*   Users, Profiles, Roles
+*   Teams, Team Memberships
+*   Agents, Agent Discord Connections
+*   Datastores (for RAG)
+*   Chat Rooms, Channels, Members, and Messages
+*   MCP (Multi-Cloud Proxy) configurations
 
-**Relationships:**
-
-*   A `user` can have multiple `agents`, `datastores`, and `user_secrets`.
-*   An `agent` belongs to one `user`.
-*   An `agent` can have multiple `agent_discord_connections` (one per guild/connection).
-*   An `agent` can be associated with multiple `datastores` via `agent_datastores`.
-*   An `agent` can have one `mcp_configurations` record.
-*   An `mcp_configurations` record can have multiple `mcp_servers`.
-*   An `mcp_server` references secrets likely detailed further via `user_secrets` and the associated user.
+**For a detailed breakdown of tables, columns, relationships, and keys, please refer to the dedicated schema documentation:** [`database/README.md`](./database/README.md)
 
 ### Row Level Security (RLS) Policies (Verified 2025-04-18)
 

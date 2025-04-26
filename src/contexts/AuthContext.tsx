@@ -39,6 +39,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select('roles!inner(name)')
         .eq('user_id', userId);
 
+      console.log(`[AuthContext fetchUserRoles] Raw data for ${userId}:`, data);
+      console.log(`[AuthContext fetchUserRoles] Error for ${userId}:`, error);
+
       if (error) {
         console.error("Error fetching user roles:", error);
         setError(`Failed to fetch user roles: ${error.message}`);
@@ -248,6 +251,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading, // Tracks initial auth check
     rolesLoading, // Tracks role fetching for logged-in user
     user: user ? user.id : null,
+    userRoles, // Log the actual roles array
+    isAdmin,   // Log the calculated isAdmin value
   });
 
   // Only block render while waiting for the initial session check

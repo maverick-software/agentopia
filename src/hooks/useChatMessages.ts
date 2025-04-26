@@ -1,22 +1,23 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { ChatMessage } from '../types';
+import { type ChatMessage } from '../types/chat';
 import { PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
 
 interface UseChatMessagesReturn {
   messages: ChatMessage[];
   loading: boolean;
   error: PostgrestError | string | null;
-  fetchMessages: (sessionId: string, offset?: number, limit?: number) => Promise<void>;
-  createMessage: (sessionId: string, content: string, sender: { senderUserId?: string; senderAgentId?: string }, metadata?: Record<string, any>) => Promise<ChatMessage | null>;
-  subscribeToNewMessages: (sessionId: string, handler: (newMessage: ChatMessage) => void) => RealtimeChannel | null;
+  fetchMessages: (channelId: string, offset?: number, limit?: number) => Promise<void>;
+  createMessage: (channelId: string, content: string, sender: { senderUserId?: string; senderAgentId?: string }, metadata?: Record<string, any>) => Promise<ChatMessage | null>;
+  subscribeToNewMessages: (channelId: string, handler: (newMessage: ChatMessage) => void) => RealtimeChannel | null;
   unsubscribeFromMessages: (channel: RealtimeChannel | null) => Promise<void>;
 }
 
-export function useChatMessages(): UseChatMessagesReturn {
+export function useChatMessages(channelId: string | null): UseChatMessagesReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<PostgrestError | string | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<RealtimeChannel | null>(null);
 
   // Implement fetchMessages
   const fetchMessages = useCallback(async (sessionId: string, offset: number = 0, limit: number = 50) => {

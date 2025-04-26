@@ -1,4 +1,5 @@
 import React from 'react';
+import { Navigate } from 'react-router-dom'; // Import Navigate
 
 // Define the types for route protection
 export type ProtectionType = 'public' | 'protected' | 'admin';
@@ -41,6 +42,10 @@ import {
     AgentEditPage // Now imported here
 } from './lazyComponents';
 
+// Manually import the new non-lazy pages
+import { WorkflowsPage } from '../pages/WorkflowsPage';
+import { ProjectsPage } from '../pages/ProjectsPage';
+
 // Define the application routes using the RouteConfig structure
 export const appRoutes: RouteConfig[] = [
   // Public routes (no layout, no protection needed beyond AppRouter logic)
@@ -51,20 +56,24 @@ export const appRoutes: RouteConfig[] = [
   // Protected routes (require layout)
   { path: '/dashboard', element: DashboardPage, protection: 'protected', layout: true },
   { path: '/agents', element: AgentsPage, protection: 'protected', layout: true },
-  { path: '/agents/new', element: AgentEditPage, protection: 'protected', layout: true }, // Using direct import
-  { path: '/agents/:agentId', element: AgentEditPage, protection: 'protected', layout: true }, // Using direct import
-  { path: '/agents/:agentId/edit', element: AgentEditPage, protection: 'protected', layout: true }, // Using direct import
+  { path: '/agents/new', element: AgentEditPage, protection: 'protected', layout: true },
+  { path: '/agents/:agentId', element: AgentEditPage, protection: 'protected', layout: true },
+  { path: '/agents/:agentId/edit', element: AgentEditPage, protection: 'protected', layout: true },
   { path: '/agents/:agentId/chat', element: AgentChatPage, protection: 'protected', layout: true },
-  { path: '/datastores', element: DatastoresPage, protection: 'protected', layout: true },
-  { path: '/datastores/new', element: DatastoreEditPage, protection: 'protected', layout: true },
-  { path: '/datastores/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
+  { path: '/memory', element: DatastoresPage, protection: 'protected', layout: true },
+  { path: '/memory/new', element: DatastoreEditPage, protection: 'protected', layout: true },
+  { path: '/memory/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
   { path: '/teams', element: TeamsPage, protection: 'protected', layout: true },
   { path: '/teams/new', element: CreateTeamPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId', element: TeamDetailsPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId/edit', element: EditTeamPage, protection: 'protected', layout: true },
+  { path: '/workspaces', element: () => <Navigate to="/dashboard" replace />, protection: 'protected', layout: true },
+  { path: '/workspaces/:roomId', element: AgentChatPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
-  { path: '/mcp', element: MCPPage, protection: 'protected', layout: true },
+  { path: '/tools', element: MCPPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
+  { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
+  { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
   
   // Admin routes (nested under a protected layout)
   {
