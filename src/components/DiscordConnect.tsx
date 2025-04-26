@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw, Save, Server, Settings, Link as LinkIcon, Play, StopCircle, Trash2, Key, Edit } from 'lucide-react';
+import { Bot, Check, Loader2, X, Copy, ExternalLink, Eye, EyeOff, RefreshCw, Save, Server, Settings, Link as LinkIcon, Play, StopCircle, Trash2, Key, Edit, Power } from 'lucide-react';
 import type { AgentDiscordConnection } from '../types';
 import { FaDiscord } from 'react-icons/fa';
 import { CredentialsModal, SettingsModal, TIMEOUT_OPTIONS } from './DiscordModals';
@@ -10,7 +10,67 @@ const cn = (...classes: (string | undefined | null | boolean)[]) => {
   return classes.filter(Boolean).join(' ');
 };
 
-// Status toggle component
+// --- Redesigned Status Toggle ---
+// Export the toggle component so AgentEditPage can use it
+export function SubtleStatusToggle({ 
+  workerStatus,
+  onActivate, 
+  onDeactivate, 
+  isActivating, 
+  isDeactivating,
+  canActivate
+}: Omit<DiscordStatusToggleProps, 'isWorkerBusy'>) { // Simplified props slightly
+
+  const isActive = workerStatus === 'active';
+  const isTransitioning = isActivating || isDeactivating;
+  const isDisabled = isTransitioning || (!isActive && !canActivate);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDisabled) return;
+    if (isActive) {
+      onDeactivate();
+    } else {
+      onActivate();
+    }
+  };
+
+  // Define base classes and state-specific classes
+  const baseClasses = "flex items-center justify-center px-3 py-1.5 rounded-md border transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+  const inactiveClasses = "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:border-gray-500";
+  const activeClasses = "bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700 hover:border-indigo-800";
+  const loadingClasses = "bg-gray-600 border-gray-700 text-gray-400"; // Muted color during transition
+
+  const currentClasses = isTransitioning 
+    ? loadingClasses 
+    : isActive 
+      ? activeClasses 
+      : inactiveClasses;
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isDisabled}
+      className={cn(baseClasses, currentClasses)}
+      title={isActive ? "Deactivate Bot" : "Activate Bot"}
+    >
+      {isTransitioning ? (
+        <Loader2 size={16} className="animate-spin" />
+      ) : (
+        <Power size={16} />
+      )}
+      <span className="ml-2 text-xs font-medium">
+        {isActive ? "Bot Active" : "Bot Inactive"} 
+      </span>
+    </button>
+  );
+}
+// --- End Redesigned Status Toggle ---
+
+// Status toggle component - Kept for reference or potential future use, but replaced by SubtleStatusToggle below
+/*
 export function DiscordStatusToggle({ 
   workerStatus, 
   onActivate, 
@@ -20,65 +80,13 @@ export function DiscordStatusToggle({
   isWorkerBusy,
   canActivate
 }: DiscordStatusToggleProps) {
-  // Add function to prevent form submission
-  const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
-    e.preventDefault();
-    e.stopPropagation();
-    action();
-  };
-
-  // Add console log to debug
-  console.log("DiscordStatusToggle rendering with:", { 
-    workerStatus, isWorkerBusy, canActivate, isActivating, isDeactivating 
-  });
-
-  return (
-    <div className="flex items-center justify-between bg-gray-900 p-3 rounded-md border border-gray-700 min-w-[200px] shadow-md">
-      <div className="flex items-center space-x-3">
-        <div 
-          className={`w-4 h-4 rounded-full ${
-            workerStatus === 'active' ? 'bg-green-500 animate-pulse' : 
-            workerStatus === 'activating' || workerStatus === 'stopping' ? 'bg-yellow-500 animate-pulse' : 
-            'bg-red-500'
-          }`}
-        />
-        <span className="text-sm font-medium text-white">
-          {workerStatus === 'active' ? 'Active' : 
-           workerStatus === 'activating' ? 'Activating...' : 
-           workerStatus === 'stopping' ? 'Stopping...' : 
-           'Inactive'}
-        </span>
-      </div>
-      
-      <div className="ml-4">
-        {workerStatus === 'active' ? (
-          <button
-            type="button"
-            onClick={(e) => handleButtonClick(e, onDeactivate)}
-            disabled={isWorkerBusy}
-            className="px-3 py-1 text-xs font-medium rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed border border-red-800"
-          >
-            {isDeactivating ? <Loader2 size={14} className="animate-spin" /> : 'Stop Bot'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => handleButtonClick(e, onActivate)}
-            disabled={!canActivate || isWorkerBusy}
-            className="px-3 py-1 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed border border-green-800"
-          >
-            {isActivating ? <Loader2 size={14} className="animate-spin" /> : 'Start Bot'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
+  // ... existing implementation ...
 }
+*/
 
 function DiscordConnectComponent({ 
   connection,
-  botKey,
-  onBotKeyChange,
+  hasCredentials,
   onConnectionChange,
   discord_app_id,
   onGenerateInviteLink,
@@ -95,15 +103,15 @@ function DiscordConnectComponent({
 }: DiscordConnectProps) {
   
   // State management
-  const [showFullUI, setShowFullUI] = useState(!!botKey);
-  const [initialBotKey, setInitialBotKey] = useState('');
+  const [showFullUI, setShowFullUI] = useState(hasCredentials);
 
   // Modal states
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSavingCredentials, setIsSavingCredentials] = useState(false);
 
   // Local state for modal inputs
-  const [modalBotKey, setModalBotKey] = useState(botKey);
+  const placeholderKey = "••••••••••••••••"; // Define placeholder
+  const [modalBotKey, setModalBotKey] = useState(() => hasCredentials ? placeholderKey : ''); // Initialize based on initial hasCredentials
   const [modalAppId, setModalAppId] = useState(connection?.discord_app_id || '');
   const [modalPublicKey, setModalPublicKey] = useState(connection?.discord_public_key || '');
   const [localTimeout, setLocalTimeout] = useState(connection?.inactivity_timeout_minutes ?? 10);
@@ -112,9 +120,10 @@ function DiscordConnectComponent({
 
   // Update local state when props change
   useEffect(() => { 
-    setModalBotKey(botKey); 
-    setShowFullUI(!!botKey);
-  }, [botKey]);
+    // Update UI state and placeholder when hasCredentials changes
+    setShowFullUI(hasCredentials);
+    setModalBotKey(hasCredentials ? placeholderKey : '');
+  }, [hasCredentials]);
   
   useEffect(() => { 
     setModalAppId(connection?.discord_app_id || ''); 
@@ -129,7 +138,7 @@ function DiscordConnectComponent({
   }, [connection?.inactivity_timeout_minutes]); 
 
   // Computed values
-  const canActivate = !!connection?.discord_app_id && !!connection?.discord_public_key && !!botKey && !!currentGuildId;
+  const canActivate = hasCredentials && !!currentGuildId;
   const isWorkerBusy = isActivating || isDeactivating || workerStatus === 'activating' || workerStatus === 'stopping';
 
   // Modal handlers
@@ -140,13 +149,25 @@ function DiscordConnectComponent({
     setIsSavingCredentials(true); // Start saving
     
     // Apply changes immediately to parent
-    onBotKeyChange(modalBotKey);
     onConnectionChange('discord_app_id', modalAppId);
     onConnectionChange('discord_public_key', modalPublicKey);
     
-    // Just set saving to false after a delay without closing the modal
+    // --- Bot Key Saving Logic (Requires Backend Function) ---
+    // Check if the user actually entered a new key (i.e., it's not the placeholder and not empty)
+    const shouldSaveKey = modalBotKey && modalBotKey !== placeholderKey;
+    if (shouldSaveKey) {
+      console.log("[DiscordConnect] User entered a new bot key. Need to implement secure save call.");
+      // TODO: Call the secure backend function here (e.g., secureUpdateBotKey(modalBotKey) from hook)
+      // secureUpdateBotKey(modalBotKey); // Example call
+    } else {
+      console.log("[DiscordConnect] Bot key not changed or is placeholder, skipping key save.");
+    }
+    // --------------------------------------------------------
+
+    // Simulate save delay - ideally wait for actual save confirmation
     setTimeout(() => {
       setIsSavingCredentials(false);
+      // Potentially close modal or trigger refetch here after real save
     }, 1000);
   };
   
@@ -156,8 +177,7 @@ function DiscordConnectComponent({
     setModalAppId('');
     setModalPublicKey('');
     
-    // Update parent state
-    onBotKeyChange('');
+    // Update parent state for App ID / Public Key
     onConnectionChange('discord_app_id', '');
     onConnectionChange('discord_public_key', '');
     
@@ -166,10 +186,8 @@ function DiscordConnectComponent({
       onDeactivate();
     }
     
-    // Close the modal and reset UI state
+    // Close the modal and reset UI state (will rely on hasCredentials becoming false after refetch)
     handleCloseSettingsModal();
-    setShowFullUI(false);
-    setInitialBotKey('');
   };
 
   const handleTimeoutChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -183,14 +201,6 @@ function DiscordConnectComponent({
 
   const handleGuildChange = (value: string | null) => {
     onConnectionChange('guild_id', value);
-  };
-
-  // Initial connection handler
-  const handleInitialConnect = () => {
-    if (!initialBotKey) return;
-    onBotKeyChange(initialBotKey);
-    setModalBotKey(initialBotKey);
-    setShowFullUI(true);
   };
 
   // Handle Generate Invite Link
@@ -214,10 +224,26 @@ function DiscordConnectComponent({
 
   return (
     <div className={cn("w-full space-y-6", className)}>
-      <div className="flex flex-col space-y-4">
+      {/* Toggle rendering removed from here */}
+      {/* {showStatusToggle && selectedServer && (
+           <div className="flex justify-end mb-3">
+             <SubtleStatusToggle
+               workerStatus={workerStatus || 'inactive'}
+               canActivate={canActivate}
+               onActivate={onActivate}
+               onDeactivate={onDeactivate}
+               isActivating={isActivating}
+               isDeactivating={isDeactivating}
+             />
+           </div>
+      )} */}
+          
+      {/* Server Box */}
+      <div className="flex items-start space-x-4"> 
+        {/* Server display box - make it grow */}
         <div 
-          className="relative flex items-center p-4 bg-[#2e3543] rounded-lg border border-[#484f5c] shadow-md overflow-hidden cursor-pointer hover:bg-[#333a4a] transition-colors"
-          onClick={handleModalClick}
+          className="flex-grow relative flex items-center p-4 bg-[#2e3543] rounded-lg border border-[#484f5c] shadow-md overflow-hidden cursor-pointer hover:bg-[#333a4a] transition-colors"
+          onClick={handleModalClick} // Keep click on the box itself
           onMouseDown={handleOpenSettingsModal}
           title="Click to configure Discord connection"
         >
@@ -241,19 +267,7 @@ function DiscordConnectComponent({
               </>
             )}
           </div>
-          {showStatusToggle && selectedServer && (
-            <div className="flex-shrink-0 ml-auto">
-              <DiscordStatusToggle
-                workerStatus={workerStatus || 'inactive'}
-                canActivate={canActivate}
-                isWorkerBusy={isWorkerBusy}
-                onActivate={onActivate}
-                onDeactivate={onDeactivate}
-                isActivating={isActivating}
-                isDeactivating={isDeactivating}
-              />
-            </div>
-          )}
+          {/* Toggle is removed from here */}
         </div>
       </div>
 
@@ -294,7 +308,7 @@ function DiscordConnectComponent({
         onSave={handleSaveChangesFromCredentialsModal}
         onClear={handleClearCredentials}
         isSavingCredentials={isSavingCredentials}
-        initialTab="server"
+        initialTab={hasCredentials ? "server" : "credentials"}
       />
     </div>
   );

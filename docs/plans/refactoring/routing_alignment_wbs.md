@@ -36,16 +36,16 @@
 
 ## Phase 3: Testing & Documentation
 
-- [ ] **Comprehensive Testing:**
+- [-] **Comprehensive Testing:** // Blocked by AgentEditPage restoration & DiscordConnect integration
     - [ ] Run the application (`npm run dev` or similar).
     - [ ] Test navigation to **all** defined routes, paying close attention to previously problematic ones:
         - [ ] `/` (logged in / logged out)
         - [ ] `/login`, `/register`, `/unauthorized`
         - [ ] `/dashboard`
-        - [ ] `/agents`, `/agents/new`
-        - [ ] `/agents/:agentId` (e.g., `/agents/some-uuid-here`) - **CRITICAL CHECK**
-        - [ ] `/agents/:agentId/edit`
-        - [ ] `/agents/:agentId/chat` - **CRITICAL CHECK**
+        - [ ] `/agents`, `/agents/new` // Now testable with restored AgentEditPage
+        - [ ] `/agents/:agentId` (e.g., `/agents/some-uuid-here`) - **CRITICAL CHECK** // Now testable
+        - [ ] `/agents/:agentId/edit` // Now testable
+        - [ ] `/agents/:agentId/chat` - **CRITICAL CHECK** // Testable, depends on AgentChatPage logic
         - [ ] `/datastores`, `/datastores/new`, `/datastores/:datastoreId/edit`
         - [ ] `/teams`, `/teams/new`, `/teams/:teamId`, `/teams/:teamId/edit`
         - [ ] `/settings`, `/mcp`, `/monitoring`

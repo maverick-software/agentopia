@@ -4,8 +4,10 @@ import { ArrowLeft, Save, Database, Check } from 'lucide-react'; // Use icons fr
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Agent, Datastore } from '../types'; // Import Agent and Datastore types
+import type { Agent, Datastore, AgentDiscordConnection } from '../types'; // Import Agent and Datastore types
 import { DiscordConnect } from '../components/DiscordConnect'; // Import DiscordConnect
+import { SubtleStatusToggle } from '../components/DiscordConnect'; // Import the new toggle
+import { useAgentDiscordConnection } from '../hooks/useAgentDiscordConnection'; // Import the new hook
 
 // Removed conflicting local Agent interface
 
@@ -25,6 +27,27 @@ export function AgentEditPage() { // Keep existing export name
   const navigate = useNavigate();
   const { agentId } = useParams<{ agentId: string }>(); // Renamed id to agentId for clarity
   const isEditing = Boolean(agentId);
+
+  // Discord Connection Hook
+  const {
+    connection: discordConnectionData, // Renamed to avoid conflict with DB connection variable naming conventions
+    hasCredentials, // Added
+    workerStatus,
+    allGuilds,
+    isActivating,
+    isDeactivating,
+    isGeneratingInvite,
+    loading: discordLoading,
+    error: discordError,
+    // fetchConnectionDetails, // Called automatically by the hook
+    updateConnectionField,
+    activate,
+    deactivate,
+    generateInviteLink,
+  } = useAgentDiscordConnection(agentId);
+
+  // Calculate canActivate here based on hook state for the toggle
+  const canActivateToggle = hasCredentials && !!discordConnectionData?.guild_id;
 
   // State from AgentEdit
   const [loading, setLoading] = useState(false);
@@ -121,10 +144,9 @@ export function AgentEditPage() { // Keep existing export name
       if (connectionsError) throw new Error(connectionsError.message);
 
       if (connections) {
-        // Corrected linter error: Check datastores object exists before accessing type
-        // Ensure c.datastores itself is truthy before accessing its type property
-        const vectorStore = connections.find(c => c.datastores && typeof c.datastores === 'object' && c.datastores.type === 'pinecone');
-        const knowledgeStore = connections.find(c => c.datastores && typeof c.datastores === 'object' && c.datastores.type === 'getzep');
+        // Corrected linter error: Check datastores object exists AND has 'type' property before accessing
+        const vectorStore = connections.find(c => c.datastores && typeof c.datastores === 'object' && 'type' in c.datastores && c.datastores.type === 'pinecone');
+        const knowledgeStore = connections.find(c => c.datastores && typeof c.datastores === 'object' && 'type' in c.datastores && c.datastores.type === 'getzep');
 
         setSelectedDatastores({
           vector: vectorStore?.datastore_id,
@@ -414,21 +436,45 @@ export function AgentEditPage() { // Keep existing export name
 
           {/* Discord Configuration */} 
           <div className="bg-gray-800 rounded-lg p-6 space-y-4">
-            <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
+            {/* Heading and Toggle Row */}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Discord Configuration</h2>
+              {/* Conditionally render toggle if credentials seem complete and server selected */}
+              {hasCredentials && discordConnectionData?.guild_id && (
+                <SubtleStatusToggle
+                   workerStatus={workerStatus || 'inactive'}
+                   canActivate={canActivateToggle} // Use calculated value
+                   onActivate={activate}
+                   onDeactivate={deactivate}
+                   isActivating={isActivating}
+                   isDeactivating={isDeactivating}
+                 />
+              )}
+            </div>
             
-            {/* TODO: Re-integrate DiscordConnect with correct props */}
-            {/* <DiscordConnect
-              // Corrected linter error: Pass props expected by DiscordConnect if known, or adjust DiscordConnect
-              // Assuming DiscordConnect expects agentId and onChannelSelect for now
-              // Needs verification against DiscordConnect component definition
-              // agentId={agentId || ''} 
-              // onChannelSelect={(channelId: string | null) => setFormData({ // Added type annotation
-              //   ...formData, 
-              //   discord_channel: channelId || undefined // Store as undefined if null
-              // })}
-              // isConnected={Boolean(formData.discord_bot_key && formData.discord_channel)}
-            /> */}
-            <p className="text-sm text-gray-500">(Discord connection UI temporarily disabled - requires prop updates)</p>
+            { discordLoading ? (
+                <p className="text-sm text-gray-400">Loading Discord connection...</p>
+            ) : discordError ? (
+                 <p className="text-sm text-red-400">Error loading Discord info: {discordError}</p>
+            ) : (
+                 <DiscordConnect
+                    connection={discordConnectionData || {}} // Pass fetched connection or empty object
+                    hasCredentials={hasCredentials} // Pass credentials status
+                    onConnectionChange={updateConnectionField} // Pass handler
+                    discord_app_id={discordConnectionData?.discord_app_id} // Pass app_id
+                    onGenerateInviteLink={generateInviteLink} // Pass handler
+                    isGeneratingInvite={isGeneratingInvite} // Pass state
+                    workerStatus={workerStatus || 'inactive'} // Pass status
+                    onActivate={activate} // Pass handler
+                    onDeactivate={deactivate} // Pass handler
+                    isActivating={isActivating} // Pass state
+                    isDeactivating={isDeactivating} // Pass state
+                    allGuilds={allGuilds} // Pass guilds
+                    currentGuildId={discordConnectionData?.guild_id} // Pass current guild
+                    showStatusToggle={true} // Always show toggle on edit page
+                />
+            )}
+            {/* <p className="text-sm text-gray-500">(Discord connection UI temporarily disabled - requires prop updates)</p> */}
           </div>
         </div>
 

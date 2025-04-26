@@ -16,11 +16,13 @@ serve(async (req) => {
   }
 
   try {
-    // 1. Extract agentId from query params
-    const url = new URL(req.url);
-    const agentId = url.searchParams.get('agentId');
+    // 1. Extract agentId from request body
+    const body = await req.json();
+    const agentId = body?.agentId;
+    // const url = new URL(req.url);
+    // const agentId = url.searchParams.get('agentId'); // Old method: query param
     if (!agentId) {
-      throw new Error('agentId query parameter is required.');
+      throw new Error('agentId is required in the request body.');
     }
 
     // 2. Create Supabase client using Service Role Key to bypass RLS
