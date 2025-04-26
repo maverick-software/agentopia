@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, Trash2, Power, Edit2, MessageSquare, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Power, Edit2, MessageSquare, RefreshCw, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
@@ -152,11 +152,10 @@ export function AgentsPage() {
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={() => navigate(`/agent/${agent.id}/chat`)}
-              className="p-2 text-gray-400 hover:text-blue-400 rounded-md transition-colors"
-              title="Chat with agent"
+              onClick={() => navigate(`/agents/${agent.id}/chat`)}
+              className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
             >
-              <MessageSquare className="w-5 h-5" />
+              <MessageSquare className="h-5 w-5" />
             </button>
             <button
               onClick={() => toggleAgentStatus(agent.id, agent.active)}
@@ -168,11 +167,11 @@ export function AgentsPage() {
               <Power className="w-5 h-5" />
             </button>
             <button
-              onClick={() => navigate(`/agent/${agent.id}`)}
-              className="p-2 text-gray-400 hover:text-blue-400 rounded-md transition-colors"
+              onClick={() => navigate(`/agents/${agent.id}`)}
+              className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
               title="Edit agent"
             >
-              <Edit2 className="w-5 h-5" />
+              <Settings className="h-5 w-5" />
             </button>
             <button
               onClick={() => setShowDeleteConfirm(agent.id)}

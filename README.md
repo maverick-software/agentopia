@@ -66,6 +66,13 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 │   ├── hooks/            # Custom React hooks
 │   ├── lib/              # Library initializations (e.g., Supabase)
 │   ├── pages/            # Page components (e.g., AgentEdit, Dashboard)
+│   ├── routing/          # Application routing configuration and components
+│   │   ├── index.ts      # Exports main AppRouter
+│   │   ├── AppRouter.tsx # Main router component using routeConfig
+│   │   ├── ProtectedRoute.tsx # Authentication guard component
+│   │   ├── AdminRoute.tsx # Admin role guard component
+│   │   ├── routeConfig.tsx # Centralized route definitions
+│   │   └── lazyComponents.ts # Lazy loading definitions
 │   └── types/            # Shared TypeScript type definitions for frontend
 ├── supabase/             # Supabase specific files
 │   ├── functions/        # Supabase Edge Functions

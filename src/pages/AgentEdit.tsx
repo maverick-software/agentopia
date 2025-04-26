@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Database, Check } from 'lucide-react'; // Use icons from AgentEdit
+import { ArrowLeft, Save, Database, Check } from 'lucide-react';
 import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import type { Agent, Datastore } from '../types'; // Import Agent and Datastore types
-import { DiscordConnect } from '../components/DiscordConnect'; // Import DiscordConnect
+import type { Agent, Datastore } from '../types';
+import { DiscordConnect } from '../components/DiscordConnect';
 
-// Removed conflicting local Agent interface
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  personality: string;
+  active: boolean;
+  discord_channel?: string;
+  discord_bot_key?: string;
+  system_instructions?: string;
+  assistant_instructions?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
-// Define personality templates (copied from AgentEdit)
 const personalityTemplates = [
   { id: 'disc-d', name: 'DISC - Dominant', description: 'Direct, results-oriented, strong-willed' },
   { id: 'disc-i', name: 'DISC - Influential', description: 'Outgoing, enthusiastic, optimistic' },
@@ -20,13 +31,12 @@ const personalityTemplates = [
   { id: 'custom', name: 'Custom Template', description: 'Create your own personality template' },
 ];
 
-export function AgentEditPage() { // Keep existing export name
+export function AgentEdit() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { agentId } = useParams<{ agentId: string }>(); // Renamed id to agentId for clarity
-  const isEditing = Boolean(agentId);
+  const { id } = useParams();
+  const isEditing = Boolean(id);
 
-  // State from AgentEdit
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -42,7 +52,6 @@ export function AgentEditPage() { // Keep existing export name
     active: true
   });
 
-  // Datastore state from AgentEdit
   const [showDatastoreModal, setShowDatastoreModal] = useState(false);
   const [datastores, setDatastores] = useState<Datastore[]>([]);
   const [selectedDatastores, setSelectedDatastores] = useState<{
@@ -52,7 +61,7 @@ export function AgentEditPage() { // Keep existing export name
   const [loadingDatastores, setLoadingDatastores] = useState(false);
   const [connectingDatastores, setConnectingDatastores] = useState(false);
 
-  // Reset success message effect (from AgentEdit)
+  // Reset success message after 3 seconds
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     if (saveSuccess) {
@@ -63,32 +72,14 @@ export function AgentEditPage() { // Keep existing export name
     return () => clearTimeout(timeout);
   }, [saveSuccess]);
 
-  // Fetch datastores function (from AgentEdit)
-  const fetchDatastores = async () => {
-    if (!user?.id) return; // Added user check
-    try {
-      setLoadingDatastores(true);
-      setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('datastores')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (fetchError) throw fetchError;
-
-      setDatastores(data || []);
-    } catch (err: any) { // Added type any
-      console.error('Error fetching datastores:', err);
-      setError('Failed to load datastores. Please try again.');
-    } finally {
-      setLoadingDatastores(false);
+  // Fetch datastores on component mount if editing
+  useEffect(() => {
+    if (isEditing) {
+      fetchDatastores();
     }
-  };
+  }, [isEditing]);
 
-  // Fetch agent function (from AgentEdit)
-  const fetchAgent = async (currentAgentId: string) => {
-    if (!user?.id) return; // Added user check
+  const fetchAgent = async (agentId: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -97,8 +88,8 @@ export function AgentEditPage() { // Keep existing export name
       const { data: agentData, error: agentError } = await supabase
         .from('agents')
         .select('*')
-        .eq('id', currentAgentId)
-        .eq('user_id', user.id)
+        .eq('id', agentId)
+        .eq('user_id', user?.id)
         .single();
 
       if (agentError) throw new Error(agentError.message);
@@ -116,61 +107,50 @@ export function AgentEditPage() { // Keep existing export name
             type
           )
         `)
-        .eq('agent_id', currentAgentId);
+        .eq('agent_id', agentId);
 
       if (connectionsError) throw new Error(connectionsError.message);
 
       if (connections) {
-        // Corrected linter error: Check datastores object exists before accessing type
-        // Ensure c.datastores itself is truthy before accessing its type property
-        const vectorStore = connections.find(c => c.datastores && typeof c.datastores === 'object' && c.datastores.type === 'pinecone');
-        const knowledgeStore = connections.find(c => c.datastores && typeof c.datastores === 'object' && c.datastores.type === 'getzep');
+        const vectorStore = connections.find(c => c.datastores?.type === 'pinecone');
+        const knowledgeStore = connections.find(c => c.datastores?.type === 'getzep');
 
         setSelectedDatastores({
           vector: vectorStore?.datastore_id,
           knowledge: knowledgeStore?.datastore_id
         });
       }
-    } catch (err: any) { // Added type any
+    } catch (err) {
       console.error('Error fetching agent:', err);
-      setError(err.message || 'Failed to load agent. Please try again.'); // Use err.message
+      setError('Failed to load agent. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch datastores on component mount if editing (from AgentEdit)
-  useEffect(() => {
-    if (isEditing) {
-      fetchDatastores();
-    }
-  }, [isEditing]); // Removed fetchDatastores from dependency array as it's stable
-
-  // Fetch agent effect (combined logic from AgentEdit and previous AgentEditPage)
-  useEffect(() => {
-    if (isEditing && agentId) {
-      fetchAgent(agentId);
-    } else {
-      // Reset form for create mode
-      setFormData({
-          name: '',
-          description: '',
-          personality: '',
-          discord_channel: '',
-          discord_bot_key: '',
-          system_instructions: '',
-          assistant_instructions: '',
-          active: true
-      });
-      setSelectedDatastores({});
+  const fetchDatastores = async () => {
+    try {
+      setLoadingDatastores(true);
       setError(null);
-      setLoading(false); // Ensure loading is false in create mode
-    }
-  }, [agentId, isEditing]); // Removed fetchAgent from dependency array
 
-  // Handle datastore connection (from AgentEdit)
+      const { data, error: fetchError } = await supabase
+        .from('datastores')
+        .select('*')
+        .eq('user_id', user?.id);
+
+      if (fetchError) throw fetchError;
+
+      setDatastores(data || []);
+    } catch (err) {
+      console.error('Error fetching datastores:', err);
+      setError('Failed to load datastores. Please try again.');
+    } finally {
+      setLoadingDatastores(false);
+    }
+  };
+
   const handleConnectDatastores = async () => {
-    if (!agentId || !user?.id) return; // Use agentId
+    if (!id || !user?.id) return;
 
     try {
       setConnectingDatastores(true);
@@ -180,7 +160,7 @@ export function AgentEditPage() { // Keep existing export name
       const { error: deleteError } = await supabase
         .from('agent_datastores')
         .delete()
-        .eq('agent_id', agentId);
+        .eq('agent_id', id);
 
       if (deleteError) throw deleteError;
 
@@ -188,13 +168,13 @@ export function AgentEditPage() { // Keep existing export name
       const connections = [];
       if (selectedDatastores.vector) {
         connections.push({
-          agent_id: agentId,
+          agent_id: id,
           datastore_id: selectedDatastores.vector
         });
       }
       if (selectedDatastores.knowledge) {
         connections.push({
-          agent_id: agentId,
+          agent_id: id,
           datastore_id: selectedDatastores.knowledge
         });
       }
@@ -208,7 +188,7 @@ export function AgentEditPage() { // Keep existing export name
       }
 
       setShowDatastoreModal(false);
-    } catch (err: any) { // Added type any
+    } catch (err) {
       console.error('Error connecting datastores:', err);
       setError('Failed to connect datastores. Please try again.');
     } finally {
@@ -216,14 +196,14 @@ export function AgentEditPage() { // Keep existing export name
     }
   };
 
-  // Handle form submit (from AgentEdit, adapted)
+  useEffect(() => {
+    if (isEditing && id) {
+      fetchAgent(id);
+    }
+  }, [id, isEditing]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Basic validation
-    if (!formData.name || !formData.description || !formData.personality) {
-        setError('Name, Description, and Personality are required.');
-        return;
-    }
     try {
       setSaving(true);
       setError(null);
@@ -232,50 +212,43 @@ export function AgentEditPage() { // Keep existing export name
         throw new Error('User not authenticated');
       }
 
-      // Prepare data, removing potentially undefined fields handled by DB defaults
-      const agentDataToSave = { ...formData };
-      // Ensure user_id is correct, remove created_at/updated_at for insert/update
-      delete agentDataToSave.created_at;
-      delete agentDataToSave.updated_at;
-      // agentDataToSave.user_id = user.id; // This line is causing issues, user_id is added later
+      const agentData = {
+        ...formData,
+        user_id: user.id,
+      };
 
-      if (isEditing && agentId) {
-          // Don't send ID in update payload
-          delete agentDataToSave.id;
-          const { error: updateError } = await supabase
+      if (isEditing) {
+        const { error: updateError } = await supabase
           .from('agents')
-          .update(agentDataToSave)
-          .eq('id', agentId)
+          .update(agentData)
+          .eq('id', id)
           .eq('user_id', user.id);
 
         if (updateError) throw new Error(updateError.message);
       } else {
-         // Remove id if present from create payload
-         delete agentDataToSave.id;
-         const { data, error: insertError } = await supabase
+        const { data, error: insertError } = await supabase
           .from('agents')
-          .insert([{ ...agentDataToSave, user_id: user.id }]) // Add user_id here for insert
+          .insert([agentData])
           .select()
           .single();
 
         if (insertError) throw new Error(insertError.message);
         
-        // If creating new agent, update the URL to edit mode without full page reload
+        // If creating new agent, update the URL to edit mode
         if (data) {
           navigate(`/agents/${data.id}`, { replace: true });
         }
       }
 
       setSaveSuccess(true);
-    } catch (err: any) { // Added type any
+    } catch (err) {
       console.error('Error saving agent:', err);
-      setError(err.message || 'Failed to save agent. Please try again.');
+      setError('Failed to save agent. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  // Loading / Signed out states (from AgentEdit)
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -283,18 +256,17 @@ export function AgentEditPage() { // Keep existing export name
       </div>
     );
   }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading agent...</div> 
+        <div className="text-gray-400">Loading agent...</div>
       </div>
     );
   }
 
-  // Render UI (merged from AgentEdit)
   return (
-    <div className="space-y-6 p-6"> {/* Added padding */} 
-      {/* Header section from AgentEdit */} 
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-4">
           <button
@@ -318,9 +290,7 @@ export function AgentEditPage() { // Keep existing export name
             </button>
           )}
           <button
-            // onClick={handleSubmit} // Submit via form element
-            type="submit" // Make this button submit the form
-            form="agent-form" // Link button to form
+            onClick={handleSubmit}
             disabled={saving}
             className={`flex items-center px-4 py-2 rounded-md transition-colors ${
               saveSuccess
@@ -330,7 +300,6 @@ export function AgentEditPage() { // Keep existing export name
           >
             {saving ? (
               <>
-                {/* Using simpler spinner */} 
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                 Saving...
               </>
@@ -342,31 +311,28 @@ export function AgentEditPage() { // Keep existing export name
             ) : (
               <>
                 <Save className="w-5 h-5 mr-2" />
-                {isEditing ? 'Save Changes' : 'Create Agent'} {/* Updated text */} 
+                Save Agent
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* Error display from AgentEdit */} 
       {error && (
         <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md">
           {error}
-          {/* Removed close button for simplicity, error clears on save attempt */}
         </div>
       )}
 
-      {/* Form structure from AgentEdit */} 
-      <form id="agent-form" onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Basic Information */} 
+          {/* Basic Information */}
           <div className="bg-gray-800 rounded-lg p-6 space-y-4">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
             
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                Name *
+                Name
               </label>
               <input
                 type="text"
@@ -380,7 +346,7 @@ export function AgentEditPage() { // Keep existing export name
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                Description *
+                Description
               </label>
               <textarea
                 required
@@ -394,7 +360,7 @@ export function AgentEditPage() { // Keep existing export name
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                Personality Template *
+                Personality Template
               </label>
               <select
                 required
@@ -412,27 +378,22 @@ export function AgentEditPage() { // Keep existing export name
             </div>
           </div>
 
-          {/* Discord Configuration */} 
+          {/* Discord Configuration */}
           <div className="bg-gray-800 rounded-lg p-6 space-y-4">
             <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
             
-            {/* TODO: Re-integrate DiscordConnect with correct props */}
-            {/* <DiscordConnect
-              // Corrected linter error: Pass props expected by DiscordConnect if known, or adjust DiscordConnect
-              // Assuming DiscordConnect expects agentId and onChannelSelect for now
-              // Needs verification against DiscordConnect component definition
-              // agentId={agentId || ''} 
-              // onChannelSelect={(channelId: string | null) => setFormData({ // Added type annotation
-              //   ...formData, 
-              //   discord_channel: channelId || undefined // Store as undefined if null
-              // })}
-              // isConnected={Boolean(formData.discord_bot_key && formData.discord_channel)}
-            /> */}
-            <p className="text-sm text-gray-500">(Discord connection UI temporarily disabled - requires prop updates)</p>
+            <DiscordConnect
+              agentId={id || ''}
+              onChannelSelect={(channelId) => setFormData({ 
+                ...formData, 
+                discord_channel: channelId 
+              })}
+              isConnected={Boolean(formData.discord_bot_key && formData.discord_channel)}
+            />
           </div>
         </div>
 
-        {/* System Instructions */} 
+        {/* System Instructions */}
         <div className="bg-gray-800 rounded-lg p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">System Instructions</h2>
           <p className="text-sm text-gray-400 mb-4">
@@ -455,7 +416,7 @@ export function AgentEditPage() { // Keep existing export name
           </div>
         </div>
 
-        {/* Assistant Instructions */} 
+        {/* Assistant Instructions */}
         <div className="bg-gray-800 rounded-lg p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">Assistant Instructions</h2>
           <p className="text-sm text-gray-400 mb-4">
@@ -477,10 +438,9 @@ export function AgentEditPage() { // Keep existing export name
             />
           </div>
         </div>
-        {/* Removed redundant save/cancel buttons from here, moved to header */}
       </form>
 
-      {/* Datastore Connection Modal (from AgentEdit) */} 
+      {/* Datastore Connection Modal */}
       {showDatastoreModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl">
@@ -544,7 +504,7 @@ export function AgentEditPage() { // Keep existing export name
                   </select>
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-6 border-t border-gray-700"> {/* Added border */} 
+                <div className="flex justify-end space-x-3 pt-6">
                   <button
                     type="button"
                     onClick={() => setShowDatastoreModal(false)}
@@ -558,14 +518,7 @@ export function AgentEditPage() { // Keep existing export name
                     className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={connectingDatastores}
                   >
-                    {connectingDatastores ? (
-                        <>
-                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                             Connecting...
-                        </>
-                    ) : (
-                         'Connect Datastores'
-                    )}
+                    {connectingDatastores ? 'Connecting...' : 'Connect Datastores'}
                   </button>
                 </div>
               </div>
@@ -576,9 +529,3 @@ export function AgentEditPage() { // Keep existing export name
     </div>
   );
 }
-
-/*
-// --- ORIGINAL COMPONENT CODE START ---
-// ... (All the original code of AgentEditPage is now inside this comment) ...
-// --- ORIGINAL COMPONENT CODE END ---
-*/

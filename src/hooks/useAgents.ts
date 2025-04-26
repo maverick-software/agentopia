@@ -18,6 +18,11 @@ interface UseAgentsReturn {
   error: PostgrestError | null;
   fetchAllAgents: () => Promise<Agent[]>; // Returns the fetched agents
   
+  // Agent CRUD operations
+  fetchAgentById: (agentId: string) => Promise<Agent | null>;
+  createAgent: (agentData: Partial<Agent>) => Promise<Agent | null>;
+  updateAgent: (agentId: string, agentData: Partial<Agent>) => Promise<Agent | null>;
+
   // New state and function for specific agent team details
   teamDetails: AgentTeamDetails | null;
   teamDetailsLoading: boolean;
@@ -36,6 +41,85 @@ export function useAgents(): UseAgentsReturn {
   const [teamDetailsLoading, setTeamDetailsLoading] = useState<boolean>(false);
   const [teamDetailsError, setTeamDetailsError] = useState<PostgrestError | null>(null);
 
+  // --- CRUD Functions --- 
+
+  const fetchAgentById = useCallback(async (agentId: string): Promise<Agent | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('agents')
+        .select('*') // Select all fields for editing
+        .eq('id', agentId)
+        .maybeSingle(); // Expect 0 or 1 result
+
+      if (fetchError) throw fetchError;
+      return data || null;
+    } catch (err) {
+      console.error(`Error fetching agent by ID ${agentId}:`, err);
+      setError(err as PostgrestError);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []); // No user dependency, RLS should handle auth
+
+  const createAgent = useCallback(async (agentData: Partial<Agent>): Promise<Agent | null> => {
+     if (!user) {
+      console.error('Cannot create agent: User not logged in.');
+      setError(null);
+      return null;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // Ensure user_id is set
+      const dataToInsert = { ...agentData, user_id: user.id };
+      const { data, error: insertError } = await supabase
+        .from('agents')
+        .insert(dataToInsert as any)
+        .select()
+        .single(); // Return the created record
+
+      if (insertError) throw insertError;
+      return data || null;
+    } catch (err) {
+      console.error('Error creating agent:', err);
+      setError(err as PostgrestError);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const updateAgent = useCallback(async (agentId: string, agentData: Partial<Agent>): Promise<Agent | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Exclude id from update payload if it exists on agentData
+      const { id, ...updateData } = agentData; // Only destructure 'id'
+      
+      const { data, error: updateError } = await supabase
+        .from('agents')
+        .update(updateData as any)
+        .eq('id', agentId)
+        // Optional: Add .eq('user_id', user.id) if RLS doesn't cover updates strictly
+        .select()
+        .single(); // Return the updated record
+
+      if (updateError) throw updateError;
+      return data || null;
+    } catch (err) {
+      console.error(`Error updating agent ${agentId}:`, err);
+      setError(err as PostgrestError);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []); // No user dependency, RLS should handle auth
+
+  // --- Existing Functions --- 
+
   const fetchAllAgents = useCallback(async (): Promise<Agent[]> => {
     if (!user) {
       console.warn('fetchAllAgents called but user is not logged in.');
@@ -47,7 +131,7 @@ export function useAgents(): UseAgentsReturn {
     try {
       const { data, error: fetchError } = await supabase
         .from('agents')
-        .select('id, name') // Only fetch necessary fields for selector
+        .select('*') // Select all fields
         .eq('user_id', user.id)
         .order('name', { ascending: true });
 
@@ -101,7 +185,7 @@ export function useAgents(): UseAgentsReturn {
           // Transform the data slightly to match AgentTeamDetails interface
           const details: AgentTeamDetails = {
               team_id: data.team_id,
-              team_name: data.teams?.name || null, // Access nested team name
+              team_name: (data.teams && typeof data.teams === 'object' && 'name' in data.teams) ? data.teams.name as string : null,
               team_role: data.team_role,
               reports_to_user: data.reports_to_user,
               reports_to_agent_id: data.reports_to_agent_id,
@@ -131,6 +215,9 @@ export function useAgents(): UseAgentsReturn {
     loading,
     error,
     fetchAllAgents,
+    fetchAgentById, // Added
+    createAgent, // Added
+    updateAgent, // Added
     // Return new state and function
     teamDetails,
     teamDetailsLoading,
