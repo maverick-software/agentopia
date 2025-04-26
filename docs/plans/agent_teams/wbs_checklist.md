@@ -77,7 +77,7 @@
     - [X] Implement `createChatSession(teamId, sessionName)` function.
     - [X] Add `useState` for loading and error states.
     - [X] Export hook and types.
-- [ ] **Hook: `useChatMessages` (`src/hooks/useChatMessages.ts`)**
+- [X] **Hook: `useChatMessages` (`src/hooks/useChatMessages.ts`)**
     - [X] Create file and basic hook structure.
     - [X] Define `ChatMessage` interface in `src/types.ts`.
     - [X] Implement `fetchMessages(sessionId, offset, limit)` function.
@@ -186,21 +186,4 @@
 - [ ] **Component: `CreateChatSessionModal.tsx` (`src/components/chat/CreateChatSessionModal.tsx`)**
     - [ ] Create file and basic component structure (modal).
     - [ ] Accept `teamId`, `isOpen`, `onClose` props.
-    - [ ] Use `useState` for `sessionName` field.
-    - [ ] Call `useChatSessions` hook's `createChatSession`.
-    - [ ] Implement form submission handler.
-    - [ ] Handle loading/error states within the modal.
-    - [ ] Call `onClose` on success or dismissal.
-- [ ] **Component: `ChatRoomPage.tsx` (`src/pages/ChatRoomPage.tsx`)**
-    - [ ] Create file and basic component structure.
-    - [ ] Use `useParams` to get `teamId` and `sessionId`.
-    - [ ] Call `useChatMessages` hook, providing `sessionId`.
-    - [ ] Get `messages`, `loading`, `error`, `fetchMessages`, `createMessage`, `subscribeToNewMessages`, `unsubscribeFromMessages` from hook.
-    - [ ] Call `fetchMessages` on initial load.
-    - [ ] Call `subscribeToNewMessages` in `useEffect`, return `unsubscribeFromMessages` from cleanup.
-    - [ ] Render `MessageList` component, passing `messages`.
-    - [ ] Render `MessageInput` component, passing `sessionId` and `createMessage`.
-    - [ ] Display loading state (initial fetch) / error states.
-- [ ] **Component: `MessageList.tsx` (`src/components/chat/MessageList.tsx`)**
-    - [ ] Create file and basic component structure.
-    - [ ] Accept `messages`
+    - [ ] Use `useState` for `sessionName`

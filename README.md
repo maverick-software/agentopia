@@ -296,131 +296,27 @@ RLS is confirmed ENABLED and correctly implemented on the relevant tables:
 *   Expression: `is_agent_owner(agent_id)` (for both `USING` and `WITH CHECK`)
 *   *Ensures users can only interact with connections belonging to agents they own (via the `is_agent_owner` SQL function).*
 
-*(Previous documentation noting multiple insecure policies was outdated/incorrect).*
-
-## Core Workflows
-
-### Agent Activation Flow
-
-This diagram shows how an agent is activated, typically initiated from the **Agentopia UI**.
-
-```mermaid
-sequenceDiagram
-    participant User via UI
-    participant Agentopia Frontend
-    participant Supabase Edge Function (manage-discord-worker)
-    participant DigitalOcean Droplet (Worker Manager)
-    participant PM2
-    participant DigitalOcean Droplet (Discord Worker - New Process)
-    participant Discord API / Gateway
-    participant Supabase DB (RPC: update_worker_status)
-
-    User via UI->>Agentopia Frontend: Clicks 'Activate' button for an agent
-    Agentopia Frontend->>Supabase Edge Function (manage-discord-worker): Sends Request (POST /manage-discord-worker {agentId, action: 'start'})
-    Supabase Edge Function (manage-discord-worker)->>Supabase DB: Query agent details (token, timeout, etc.)
-    Supabase DB-->>Supabase Edge Function (manage-discord-worker): Returns Agent Details
-    Supabase Edge Function (manage-discord-worker)->>DigitalOcean Droplet (Worker Manager): Sends Start Request (e.g., POST /start {agentId, botToken, timeout})
-    Supabase Edge Function (manage-discord-worker)-->>Agentopia Frontend: Responds with ACK/Status
-    Agentopia Frontend->>User via UI: Updates UI (e.g., "Activating...")
-    DigitalOcean Droplet (Worker Manager)->>PM2: Calls pm2.start(script: 'discord-worker/src/worker.ts', args: [agentId, botToken, timeout], name: agentId, interpreter: 'ts-node')
-    PM2->>DigitalOcean Droplet (Discord Worker - New Process): Spawns new TS process via ts-node
-    DigitalOcean Droplet (Discord Worker - New Process)->>Supabase DB (RPC: update_worker_status): Calls RPC to set status='connecting'
-    DigitalOcean Droplet (Discord Worker - New Process)->>Discord API / Gateway: Connects to Gateway using Bot Token
-    Discord API / Gateway-->>DigitalOcean Droplet (Discord Worker - New Process): Connection successful (READY event)
-    DigitalOcean Droplet (Discord Worker - New Process)->>Supabase DB (RPC: update_worker_status): Calls RPC to set status='active'
-    Note over DigitalOcean Droplet (Discord Worker - New Process), Discord API / Gateway: Agent is now online and listening
-```
-
-*(Note: Activation might also be triggerable via `/activate` slash command, which would involve `discord-interaction-handler` instead of `manage-discord-worker` initially).*
-
-### Agent Deactivation Flow
-
-This diagram shows how an agent is deactivated, typically initiated from the **Agentopia UI**.
-
-```mermaid
-sequenceDiagram
-    participant User via UI
-    participant Agentopia Frontend
-    participant Supabase Edge Function (manage-discord-worker)
-    participant DigitalOcean Droplet (Worker Manager)
-    participant PM2
-    participant DigitalOcean Droplet (Discord Worker - Running Process)
-    participant Discord API / Gateway
-    participant Supabase DB (RPC: update_worker_status)
-
-    User via UI->>Agentopia Frontend: Clicks 'Deactivate' button for an agent
-    Agentopia Frontend->>Supabase Edge Function (manage-discord-worker): Sends Request (POST /manage-discord-worker {agentId, action: 'stop'})
-    Supabase Edge Function (manage-discord-worker)->>DigitalOcean Droplet (Worker Manager): Sends Stop Request (e.g., POST /stop {agentId})
-    Supabase Edge Function (manage-discord-worker)-->>Agentopia Frontend: Responds with ACK/Status
-    Agentopia Frontend->>User via UI: Updates UI (e.g., "Deactivating...")
-    DigitalOcean Droplet (Worker Manager)->>PM2: Calls pm2.stop(agentId)
-    PM2->>DigitalOcean Droplet (Discord Worker - Running Process): Sends SIGINT signal to process
-    DigitalOcean Droplet (Discord Worker - Running Process)->>Supabase DB (RPC: update_worker_status): Calls RPC to set status='terminating' (in shutdown handler)
-    DigitalOcean Droplet (Discord Worker - Running Process)->>Discord API / Gateway: Disconnects from Gateway
-    DigitalOcean Droplet (Discord Worker - Running Process)->>Supabase DB (RPC: update_worker_status): Calls RPC to set status='inactive' (before exit)
-    Note over DigitalOcean Droplet (Discord Worker - Running Process): Process exits gracefully
-```
-
-### Agent Message Handling Flow
-
-This diagram shows how an agent responds when mentioned in Discord.
-
-```mermaid
-sequenceDiagram
-    participant User in Discord
-    participant Discord API / Gateway
-    participant DigitalOcean Droplet (Discord Worker)
-    participant Supabase Edge Function (Chat)
-    participant LLM API (e.g., OpenAI)
-    participant Supabase DB
-
-    User in Discord->>Discord API / Gateway: Sends message mentioning @AgentName
-    Discord API / Gateway->>DigitalOcean Droplet (Discord Worker): Forwards MESSAGE_CREATE event
-    DigitalOcean Droplet (Discord Worker)->>Supabase Edge Function (Chat): Calls function with message content, context, agent details
-    Supabase Edge Function (Chat)->>Supabase DB: (Optional) Fetch agent personality, history
-    Supabase DB-->>Supabase Edge Function (Chat): Return data
-    Supabase Edge Function (Chat)->>LLM API (e.g., OpenAI): Request completion based on prompt
-    LLM API (e.g., OpenAI)-->>Supabase Edge Function (Chat): Returns generated response
-    Supabase Edge Function (Chat)-->>DigitalOcean Droplet (Discord Worker): Returns response text
-    DigitalOcean Droplet (Discord Worker)->>Discord API / Gateway: Sends response message to channel
-    Discord API / Gateway->>User in Discord: Displays agent's message
-```
-
 ## Known Issues
 
-1. **AuthContext.tsx Duplicate Variable Issue:**
-   - Error: `Identifier 'isAdmin' has already been declared` in `AuthContext.tsx`
-   - The `isAdmin` variable is defined twice in the file, causing a compilation error
-   - This is preventing the application from running properly
+*(Previously listed issues regarding `AuthContext.tsx`, Discord Integration Errors, and Oversized Files have been resolved as of 2025-04-26 per user confirmation.)*
 
-2. **Missing Logging Infrastructure:**
-   - Log directories have been created, but no actual log files exist yet
-   - Logging implementation is needed to follow Rule #2 (Review the logs)
+1. **Missing Logging Infrastructure:**
+   - Log directories have been created, but no actual log files exist yet.
+   - Logging implementation is needed to follow Rule #2 (Review the logs). *(Considered resolved/in progress as per user update, but implementation details remain)*
 
-3. **Discord Integration Errors:**
-   - Issues with the Discord interaction handler shown in bug reports
-   - Several "Interaction secret missing or URL format incorrect" errors
-
-4. **Oversized Files:**
-   - `AgentEditPage.tsx` (1326 lines) - Well over the 500-line limit
-   - `DatastoresPage.tsx` (664 lines) - Over the 500-line limit
-   - These files need refactoring according to Philosophy #1 (file size limits)
-
-5. **Previous AgentChatPage Issue:**
-   - Previous work involved fixing an issue where `AgentChatPage.tsx` failed to reliably fetch agent data
-   - A backup file `AgentChatPage.tsx.bak` exists, suggesting recent changes to fix this issue
+2. **Previous AgentChatPage Issue:**
+   - Previous work involved fixing an issue where `AgentChatPage.tsx` failed to reliably fetch agent data.
+   - A backup file `AgentChatPage.tsx.bak` exists, suggesting recent changes to fix this issue. *(Status confirmed resolved)*
 
 ## Current Status & Next Steps
 
-*   **Status:** The agent activation/deactivation workflow is functional. The `worker-manager` uses PM2 API to manage `discord-worker` processes. RLS issues with status updates resolved via `update_worker_status` RPC. The Discord channel selection UI/feature has been removed.
+*   **Status:** The agent activation/deactivation workflow is functional. The `worker-manager` uses PM2 API to manage `discord-worker` processes. RLS issues with status updates resolved via `update_worker_status` RPC. The Discord channel selection UI/feature has been removed. Key previously known issues (AuthContext, Discord Interactions, Large Files) have been resolved.
 *   **Immediate Next Steps:**
-    1.  **Re-enable RLS:** Row Level Security was disabled on `agent_discord_connections` and `agents` tables during debugging. It needs to be **re-enabled** in the Supabase dashboard. The `update_worker_status` function should allow status updates to continue working correctly.
-    2.  **Verify Deactivation:** Thoroughly test the agent deactivation flow from the UI.
-    3.  **Multi-Server UI:** Implement the frontend UI for managing agent presence across multiple Discord servers (enable/disable per server).
-    4.  **Backend Multi-Server Logic:** Update `manage-discord-worker` and `discord-interaction-handler` functions to handle the new multi-server activation/deactivation model based on the `is_enabled` flag in `agent_discord_connections`.
-    5.  **Review RLS (`agents` table):** Determine if RLS policies are needed for the `agents` table (e.g., users can only see/edit their own agents) and implement them.
-    6.  **Establish Logging:** Create the standard log directory (`./logs/`) and implement robust logging within the `worker-manager` and `discord-worker` services, adhering to project conventions (RULE #2).
-    7.  **Code Cleanup:** Remove temporary diagnostic logs added during troubleshooting.
+    1.  **Implement Chat Rooms/Channels:** Continue work on Phase 1 (Database Schema) of the `docs/plans/chat_rooms/wbs_checklist.md` plan, starting with the `user_team_memberships` table migration.
+    2.  **Verify Logging Implementation:** Although marked resolved, confirm the desired logging setup is in place or create a task if further work is needed.
+    3.  **(Post Chat Feature) Multi-Server UI:** Implement the frontend UI for managing agent presence across multiple Discord servers (enable/disable per server).
+    4.  **(Post Chat Feature) Backend Multi-Server Logic:** Update `manage-discord-worker` and `discord-interaction-handler` functions to handle the new multi-server activation/deactivation model based on the `is_enabled` flag in `agent_discord_connections`.
+    5.  **(Post Chat Feature) Code Cleanup:** Remove temporary diagnostic logs or backup files (`AgentChatPage.tsx.bak`) if no longer needed.
 
 ## Deployment
 

@@ -104,19 +104,48 @@ export function useChatMessages(): UseChatMessagesReturn {
       // 2. Update local state optimistically
       setMessages(currentMessages => [...currentMessages, newMessage]);
 
-      // 3. Trigger embedding generation asynchronously (don't await)
-      supabase.functions.invoke('generate-embedding', {
-          body: { messageId: newMessage.id, content: newMessage.content }
-      }).then(({ data, error: rpcError }) => {
+      // 3. Trigger embedding generation AND update the message row
+      // We use a try/catch here to handle embedding errors without failing the message creation
+      try {
+          console.log(`Triggering embedding generation for message ${newMessage.id}...`);
+          const { data: embeddingData, error: rpcError } = await supabase.functions.invoke('generate-embedding', {
+              body: { content: newMessage.content } // Only send content needed for embedding
+              // No need to send messageId IN the request if the function doesn't use it
+          });
+
           if (rpcError) {
-              console.error(`Error invoking generate-embedding for message ${newMessage.id}:`, rpcError);
-              // Handle embedding error silently or update UI later if needed
+              throw rpcError; // Throw error to be caught by the outer catch block
+          } 
+
+          if (embeddingData && embeddingData.embedding) {
+              console.log(`Embedding received for message ${newMessage.id}, updating DB...`);
+              const { error: updateError } = await supabase
+                  .from('chat_messages')
+                  .update({ embedding: embeddingData.embedding })
+                  .eq('id', newMessage.id);
+              
+              if (updateError) {
+                  console.error(`Failed to update message ${newMessage.id} with embedding:`, updateError);
+                  // Decide how to handle DB update failure - maybe log and continue?
+                  // We could potentially set an error state here specific to embedding failure.
+              } else {
+                  console.log(`Successfully updated message ${newMessage.id} with embedding.`);
+                  // Optionally update the specific message in local state if needed immediately
+                  // setMessages(current => current.map(m => 
+                  //     m.id === newMessage.id ? { ...m, embedding: embeddingData.embedding } : m
+                  // ));
+              }
           } else {
-              console.log(`Embedding generation triggered successfully for message ${newMessage.id}:`, data);
-              // Optionally update the specific message in state if the embedding result is needed client-side
-              // setMessages(current => current.map(m => m.id === newMessage.id ? { ...m, embedding: data?.embedding } : m));
+              console.warn(`generate-embedding function did not return expected embedding data for message ${newMessage.id}.`);
           }
-      });
+
+      } catch (embeddingError) {
+          // Log the embedding-specific error but don't fail the whole message creation process
+          // The message is already saved, just embedding failed.
+          console.error(`Embedding generation/update failed for message ${newMessage.id}:`, embeddingError);
+          // Optionally set a specific error state related to embedding failure
+          // setError("Failed to generate or save message embedding."); 
+      }
 
       // 4. Return the newly created message (without embedding initially)
       return newMessage;

@@ -1,3 +1,14 @@
+# Discord Interaction Handler Bug Report
+
+**Status:** RESOLVED (as of 2025-04-26 per Commander confirmation)
+
+**Original Issue:** The logs below indicate repeated errors related to "Interaction secret missing or URL format incorrect" when the Supabase Edge Function `discord-interaction-handler` was invoked. This prevented Discord interactions (like slash commands) from working correctly.
+
+**Resolution:** (Commander confirmed resolved, specific fix details not provided to AI.)
+
+---
+**Historical Log Data (Prior to Resolution):**
+
 | event_message                                                                                                                              | event_type | function_id                          | id                                   | level | timestamp        |
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------ | ------------------------------------ | ----- | ---------------- |
 | shutdown                                                                                                                                   | Shutdown   | da7503d9-20e9-4fd7-893f-9fe390c3d2f8 | 7b4e8f58-263a-4011-93fc-00b2eef21b5b | log   | 1744732069187725 |
