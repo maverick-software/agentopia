@@ -17,6 +17,7 @@
     - [ ] Deploy `generate-embedding` function (`supabase functions deploy generate-embedding`). (*Not yet deployed*)
 - [X] **Define Agent Roles:**
     - [X] Create or update `/docs/project/agent_roles.md` documenting standard team roles (`project_manager`, `user_liaison`, `qa`, `member`). (*Created*)
+    - [X] Define role exclusivity rules: only one project manager, one QA, and one user liaison per team. (*Added*)
 
 ## Phase 2: Database Implementation
 
@@ -31,11 +32,13 @@
     - [X] Apply `team_members` migration (`supabase db push`). (*Applied after fixing syntax*)
     - [X] Implement RLS policy migration (`supabase/migrations/20250425211511_create_team_members_rls.sql`) incl. helper functions. (*Created*)
     - [X] Apply `team_members` RLS migration (`supabase db push`). (*Applied*)
-- [X] **Table: `chat_sessions`**
-    - [X] Create migration file (`supabase/migrations/20250425211651_create_chat_sessions_table.sql`) for `chat_sessions`. (*Created*)
-    - [X] Apply `chat_sessions` migration (`supabase db push`). (*Applied*)
+    - [X] Add `job_description` text field to `team_members` table. (*Added*)
+    - [X] Add `reports_to_agent_id` and `reports_to_user` fields to implement hierarchy. (*Added*)
+- [X] **Table: `workspaces`** (renamed from `chat_sessions`)
+    - [X] Create migration file (`supabase/migrations/20250425211651_create_chat_sessions_table.sql`) for `workspaces`. (*Created*)
+    - [X] Apply `workspaces` migration (`supabase db push`). (*Applied*)
     - [X] Implement RLS policy migration (`supabase/migrations/20250425211723_create_chat_sessions_rls.sql`). (*Created*)
-    - [X] Apply `chat_sessions` RLS migration (`supabase db push`). (*Applied*)
+    - [X] Apply `workspaces` RLS migration (`supabase db push`). (*Applied*)
 - [X] **Table: `chat_messages`**
     - [X] Create migration file (`supabase/migrations/20250425211817_create_chat_messages_table.sql`) for `chat_messages` (incl. `embedding`, `metadata`, realtime). (*Created*)
     - [X] Apply `chat_messages` migration (`supabase db push`). (*Applied*)
@@ -70,11 +73,11 @@
     - [X] Implement `updateTeamMember(teamId, agentId, updates)` function. (*Verified existing*)
     - [X] Add `useState` for loading and error states. (*Verified existing*)
     - [X] Export hook and types. (*Verified existing*)
-- [X] **Hook: `useChatSessions` (`src/hooks/useChatSessions.ts`)**
+- [X] **Hook: `useTeamChatRooms` (`src/hooks/useTeamChatRooms.ts`)**
     - [X] Create file and basic hook structure.
-    - [X] Define `ChatSession` interface in `src/types.ts`.
-    - [X] Implement `fetchChatSessions(teamId)` function.
-    - [X] Implement `createChatSession(teamId, sessionName)` function.
+    - [X] Define `ChatRoom` interface in `src/types.ts`.
+    - [X] Implement `fetchTeamChatRooms(teamId)` function.
+    - [X] Implement `createChatRoom(teamId, roomName)` function.
     - [X] Add `useState` for loading and error states.
     - [X] Export hook and types.
 - [X] **Hook: `useChatMessages` (`src/hooks/useChatMessages.ts`)**
@@ -124,8 +127,8 @@
     - [X] Call `useTeams` hook to `fetchTeamById(teamId)`.
     - [X] Display team name and description.
     - [X] Add `Link` to `/teams/${teamId}/edit`.
-    - [ ] Render `TeamMemberList` component, passing `teamId`.
-    - [ ] Render `ChatSessionList` component, passing `teamId`.
+    - [X] Render `TeamMemberList` component, passing `teamId`.
+    - [X] Render `TeamChatRoomList` component, passing `teamId`.
     - [X] Display loading/error states for team fetching.
 - [X] **Component: `AgentSelector.tsx` (`src/components/shared/AgentSelector.tsx`)**
     - [X] Create file and basic component structure.
@@ -152,6 +155,18 @@
         - [X] Filter out the agent itself from the list.
         - [X] Call `updateTeamMember` with `reports_to_agent_id` or `reports_to_user`.
         - [X] Handle logic/UI to prevent multiple `reports_to_user`.
+    - [X] Convert inline add form to modal.
+    - [X] Create edit modal with role selection and remove functionality.
+    - [X] Enforce one-per-team limit for specialized roles (project manager, QA, user liaison).
+- [X] **Component: `EditTeamMemberModal.tsx` (`src/components/teams/EditTeamMemberModal.tsx`)**
+    - [X] Create file and basic modal component structure.
+    - [X] Accept props: `isOpen`, `onClose`, `onUpdateRole`, `onRemoveMember`, `member`.
+    - [X] Display team member name.
+    - [X] Implement role selection dropdown.
+    - [X] Add job description text area field.
+    - [X] Add "Remove from team" button with confirmation.
+    - [X] Implement save changes button.
+    - [X] Handle loading and error states.
 - [X] **Component: `EditTeamPage.tsx` (`src/pages/EditTeamPage.tsx`)**
     - [X] Create file and basic component structure.
     - [X] Use `useParams` to get `teamId`.
@@ -160,6 +175,13 @@
     - [X] Implement form submission handler calling `updateTeam`.
     - [X] Display loading/error states.
     - [X] Use `useNavigate` for redirection on success.
+- [X] **Component: `TeamChatRoomList.tsx` (`src/components/teams/TeamChatRoomList.tsx`)**
+    - [X] Create file and basic component structure.
+    - [X] Accept `teamId` prop.
+    - [X] Call `useTeamChatRooms` hook to get chat rooms, loading, error.
+    - [X] Render loading/error states.
+    - [X] Display list of workspaces with links to open.
+    - [X] Add "Create Workspace" button.
 
 ## Phase 5: Frontend Implementation - Agent Edit Page Update
 
@@ -172,18 +194,46 @@
 
 ## Phase 6: Frontend Implementation - Chat UI & Functionality
 
-- [ ] **Routing (`src/router/AppRouter.tsx`)**
-    - [ ] Add `const ChatRoomPage = lazy(...)`.
-    - [ ] Add `<Route path="/teams/:teamId/sessions/:sessionId" element={<Layout><ProtectedRoute><ChatRoomPage /></ProtectedRoute></Layout>} />`.
-- [ ] **Component: `ChatSessionList.tsx` (`src/components/chat/ChatSessionList.tsx`)**
-    - [ ] Create file and basic component structure.
-    - [ ] Accept `teamId` prop.
-    - [ ] Call `useChatSessions` hook to get `sessions`, `loading`, `error`.
-    - [ ] Render loading/error states.
-    - [ ] Map `sessions` array, rendering session name.
-    - [ ] Wrap each session item in a `Link` to `/teams/${teamId}/sessions/${session.id}`.
-    - [ ] Add button to trigger `CreateChatSessionModal`.
-- [ ] **Component: `CreateChatSessionModal.tsx` (`src/components/chat/CreateChatSessionModal.tsx`)**
-    - [ ] Create file and basic component structure (modal).
-    - [ ] Accept `teamId`, `isOpen`, `onClose` props.
-    - [ ] Use `useState` for `sessionName`
+- [X] **Routing (`src/router/AppRouter.tsx`)**
+    - [X] Add `const WorkspacePage = lazy(...)`.
+    - [X] Add `<Route path="/workspace/:workspaceId" element={<Layout><ProtectedRoute><WorkspacePage /></ProtectedRoute></Layout>} />`.
+- [X] **Component: `WorkspacePage.tsx` (`src/pages/WorkspacePage.tsx`)**
+    - [X] Create file and basic component structure.
+    - [X] Use `useParams` to get `workspaceId`.
+    - [X] Call appropriate hooks to load workspace data and messages.
+    - [X] Render workspace UI with chat interface.
+    - [X] Show team context in sidebar or header.
+
+## Phase 7: Team Role Management Enhancements
+
+- [X] **Role Exclusivity Enforcement**
+    - [X] Modify `addTeamMember` and `updateTeamMember` functions to check for existing specialized roles.
+    - [X] Implement validation logic preventing multiple instances of specialized roles (project manager, QA, user liaison).
+    - [X] Add error handling and user feedback for role conflicts.
+    - [X] Update UI to reflect role restrictions.
+
+- [X] **Job Description Implementation**
+    - [X] Add job description textarea field to `AddTeamMemberModal.tsx`.
+    - [X] Add job description textarea field to `EditTeamMemberModal.tsx`.
+    - [X] Update `addTeamMember` and `updateTeamMember` functions to handle job description field.
+    - [X] Create database migration to add `job_description` column to `team_members` table if not already present.
+
+- [X] **Reporting Hierarchy Implementation**
+    - [X] Add "Reports To" dropdown to team member edit modal.
+    - [X] Populate dropdown with team members and "User" option.
+    - [X] Implement logic ensuring only one agent can report to user.
+    - [X] Add validation preventing circular reporting chains.
+
+## Phase 8: System Instructions Context Integration
+
+- [ ] **Context System for Workspace Agents**
+    - [ ] Create mechanism to add team role, job description, and reporting hierarchy to agent context window.
+    - [ ] Modify workspace chat interface to include team context in agent prompts.
+    - [ ] Update agent instruction generator to include team-specific information when agent operates in a workspace.
+    - [ ] Test context integration with various agent roles and hierarchies.
+
+- [ ] **Role-Based Behavior Guidelines**
+    - [ ] Define behavior expectations for each specialized role (project manager, QA, user liaison).
+    - [ ] Document how reporting hierarchy should influence agent behavior.
+    - [ ] Implement prompt engineering strategies that leverage team structure.
+    - [ ] Create examples and templates for effective team agent interactions.
