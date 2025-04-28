@@ -46,7 +46,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 │   ├── context/          # AI context documents and checklists
 │   │   └── checklists/   # Task checklists for AI assistants
 │   ├── features/
-│   ├── plans/
+│   ├── plans/            # Feature development plans & WBS checklists
 │   ├── project/
 │   ├── requirements/
 │   ├── __ai__.md

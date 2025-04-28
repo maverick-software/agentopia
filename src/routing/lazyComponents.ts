@@ -28,3 +28,6 @@ export const MonitoringPage = lazy(() => import('../pages/MonitoringPage.tsx').t
 export const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement.tsx').then(module => ({ default: module.AdminUserManagement })));
 export const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement.tsx').then(module => ({ default: module.AdminAgentManagement })));
 export const HomePage = lazy(() => import('../pages/HomePage.tsx').then(module => ({ default: module.HomePage }))); 
+
+// Add WorkspacePage
+export const WorkspacePage = lazy(() => import('../pages/WorkspacePage.tsx').then(module => ({ default: module.WorkspacePage }))); 
