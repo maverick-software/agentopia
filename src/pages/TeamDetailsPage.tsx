@@ -90,11 +90,18 @@ export const TeamDetailsPage: React.FC = () => {
         </Link>
       </div>
 
-      {/* Render the actual TeamMemberList component */}
-      <TeamMemberList teamId={team.id} />
-      
-      {/* Render the new TeamChatRoomList component */}
-      <TeamChatRoomList teamId={team.id} />
+      {/* Grid container for Member List and Workspaces with improved spacing/separation */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Column 1: Team Member List - with visual container */}
+          <div className="bg-gray-800/50 border border-gray-700 rounded-lg shadow-sm p-6">
+              <TeamMemberList teamId={team.id} />
+          </div>
+          
+          {/* Column 2: Workspace/Chat Room List - with visual container */}
+          <div className="bg-gray-800/50 border border-gray-700 rounded-lg shadow-sm p-6">
+              <TeamChatRoomList teamId={team.id} />
+          </div>
+      </div>
       
     </div>
   );

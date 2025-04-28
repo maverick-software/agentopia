@@ -5,8 +5,73 @@ alwaysApply: false
 ---
 Design Instruction Set for Cursor Agent
 
-1. Follow Core UI/UX Design Principles  
-Ensure all designs follow foundational UI/UX laws and principles:  
+
+
+1) Apply a Style Type 
+
+`Note for user: choose a style from the list: Minimalist, Neumorphic, Flat Design, Material Design, Glassmorphism, Skeuomorphic, Brutalist, Dark Mode, Light Mode `
+  
+Apply this style type and principles to all UI/UX design: ______________________  
+
+
+2) Colors should match the defined palette (update with current design if blank): 
+
+Primary Color: ______  
+Secondary Color: ______  
+Accent Colors: ______  
+Background Color: ______  
+Text Color: ______  
+Success/Error Colors: ______ / ______  
+Ensure contrast ratios meet AA or AAA accessibility standards.  
+
+3) Follow Proper Content Hierarchy  
+
+a) Organize the page into sections, rows, columns and objects.
+- Use typographic structure to organize information:  
+- H1: Page title, one per page  
+- H2: Section headings  
+- H3: Subsections  
+- Body Text: Minimum 16px font with proper line spacing  
+- Captions/Notes: For footnotes or supporting info  
+- Use one fon8. Use Component-Based Structure  
+
+b) Break interfaces into reusable design components:  
+- Buttons  
+- Cards  
+- Modals  
+- Forms  
+- Navigation bars  
+- Footers  
+
+Each component should follow the atomic design model: atoms, molecules, organisms, templates, pages t for headings and a separate one for body content 
+
+4) Design Buttons Properly  
+ 
+- Clearly styled for primary, secondary, and tertiary use  
+- Sized for accessibility (at least 44px height)  
+- Labeled with concise action words (e.g., Start Now, Download, Learn More)  
+- Responsive to hover, focus, and click events  
+- Visibly different from surrounding text  
+
+5) Apply Spacing and Layout Best Practices  
+Use a consistent spacing scale (e.g., 4px, 8px, 16px, 24px, 32px, 48px)  
+Margins separate sections  
+Padding creates internal space  
+Use a standard grid system (e.g., 12-column for desktop, 4/8-column for mobile)  
+Maintain visual breathing room with sufficient whitespace  
+Align components and maintain consistent spacing between them  
+
+6) Ensure Responsiveness  
+Design should adjust to various screen widths:  
+Mobile: 375px  
+Tablet: 768px  
+Desktop: 1440px and 1920px  
+Ultra-wide: 2560px or higher  
+Ensure all content remains legible and components reflow properly 
+
+7) Follow Core UI/UX Design Principles  
+
+a) Ensure all designs follow foundational UI/UX laws and principles:  
 - Consistency and Standards: Use familiar patterns and interface elements.  
 - Visual Hierarchy: Use size, contrast, and spacing to guide attention.  
 - Feedback Principle: Every user action should have a clear response.  
@@ -16,82 +81,25 @@ Ensure all designs follow foundational UI/UX laws and principles:
 - Accessibility: Follow WCAG guidelines for contrast, navigation, and readability.  
 - Responsiveness: Designs should work across mobile, tablet, and desktop.  
 
-2. Consider Applying Recognized UX Workflows and Frameworks  
-Use proven frameworks to inform design flow and structure:  
+8) Consider Applying Recognized UX Workflows and Frameworks  
+
+a) Use proven frameworks to inform design flow and structure:  
 - User-Centered Design  
 - Design Thinking  
 - Lean UX  
 - Double Diamond Process  
 - Jobs-to-be-Done  
-Also reference design systems such as:  
+
+b) Also reference design systems such as:  
 - Atomic Design  
 - Google Material Design  
 - Apple Human Interface Guidelines  
-- Microsoft Fluent UI  
+- Microsoft Fluent UI   
 
-3. Use the Design Color Palette  
-Colors should match the defined palette:  
-Primary Color: ______  
-Secondary Color: ______  
-Accent Colors: ______  
-Background Color: ______  
-Text Color: ______  
-Success/Error Colors: ______ / ______  
-Ensure contrast ratios meet AA or AAA accessibility standards.  
+9) Include Motion and Microinteraction Guidelines  
 
-4. Apply a Style Type  
-Choose one of the following or define a custom style:  
-Options: Minimalist, Neumorphic, Flat Design, Material Design, Glassmorphism, Skeuomorphic, Brutalist, Dark Mode, Light Mode  
-Custom Style Notes: ______________________  
-
-5. Follow Proper Content Hierarchy  
-Use typographic structure to organize information:  
-H1: Page title, one per page  
-H2: Section headings  
-H3: Subsections  
-Body Text: Minimum 16px font with proper line spacing  
-Captions/Notes: For footnotes or supporting info  
-Use one font for headings and a separate one for body content  
-
-6. Design Buttons Properly  
-Buttons should be:  
-- Clearly styled for primary, secondary, and tertiary use  
-- Sized for accessibility (at least 44px height)  
-- Labeled with concise action words (e.g., Start Now, Download, Learn More)  
-- Responsive to hover, focus, and click events  
-- Visibly different from surrounding text  
-
-7. Apply Spacing and Layout Best Practices  
-Use a consistent spacing scale (e.g., 4px, 8px, 16px, 24px, 32px, 48px)  
-Margins separate sections  
-Padding creates internal space  
-Use a standard grid system (e.g., 12-column for desktop, 4/8-column for mobile)  
-Maintain visual breathing room with sufficient whitespace  
-Align components and maintain consistent spacing between them  
-
-8. Use Component-Based Structure  
-Break interfaces into reusable design components:  
-- Buttons  
-- Cards  
-- Modals  
-- Forms  
-- Navigation bars  
-- Footers  
-Each component should follow the atomic design model: atoms, molecules, organisms, templates, pages  
-
-9. Ensure Responsiveness  
-Design should adjust to various screen widths:  
-Mobile: 375px  
-Tablet: 768px  
-Desktop: 1440px and 1920px  
-Ultra-wide: 2560px or higher  
-Ensure all content remains legible and components reflow properly  
-
-10. Include Motion and Microinteraction Guidelines  
 If using animation:  
 - Keep transitions under 300ms  
 - Use natural easing (ease-in-out)  
 - Avoid animating critical content  
 - Only use motion to enhance usability, not to distract  
-
-Let me know if you want this converted into a JSON schema or plain .txt template to drop into your dev or design pipeline.

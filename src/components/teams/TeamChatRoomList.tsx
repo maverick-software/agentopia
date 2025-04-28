@@ -22,8 +22,8 @@ export const TeamChatRoomList: React.FC<TeamChatRoomListProps> = ({ teamId }) =>
   }, [teamId, fetchTeamChatRooms]);
 
   return (
-    <div className="mt-6">
-      <h2 className="text-xl font-semibold mb-3 text-gray-300">Workspaces</h2>
+    <div>
+      <h2 className="text-xl font-semibold mb-4 text-gray-300">Workspaces</h2>
 
       {loading && (
         <div className="flex justify-center items-center p-4">
@@ -45,16 +45,20 @@ export const TeamChatRoomList: React.FC<TeamChatRoomListProps> = ({ teamId }) =>
       )}
 
       {!loading && !error && chatRooms.length > 0 && (
-        <ul className="space-y-2">
-          {chatRooms.map(room => (
-            <li key={room.id} className="bg-gray-800 p-3 rounded-md shadow flex justify-between items-center">
-              <span className="text-gray-200 font-medium">{room.name}</span>
-              {/* TODO: Decide where to link - maybe /workspaces/{room.id} or /chat/{room.id} ? */}
+        <ul className="space-y-3">
+          {chatRooms.map(chatRoom => (
+            <li key={chatRoom.id} className="bg-gray-800 p-3 rounded-md shadow flex justify-between items-center">
+              <div className="flex items-center">
+                <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white">
+                  <MessageSquare className="h-4 w-4" />
+                </div>
+                <span className="ml-3 text-gray-200">{chatRoom.name || 'Untitled Workspace'}</span>
+              </div>
               <Link 
-                to={`/chat/${room.id}`} // Tentative link structure
-                className="text-xs text-indigo-400 hover:text-indigo-300"
+                to={`/chat/${chatRoom.id}`} 
+                className="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 transition-colors duration-200 rounded text-white"
               >
-                Open Workspace
+                Open
               </Link>
             </li>
           ))}

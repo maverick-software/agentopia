@@ -1,4 +1,5 @@
 - [ ] Create Team Rooms (workspaces)
+- [ ] Add images to agents
 - [ ] Password resets, Email verification, MFA via Authenticator, SMS
 - [ ] oAuth via Google
 - [ ] Delegated access for users.
