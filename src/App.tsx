@@ -30,7 +30,13 @@ const AppWithPrefetch = () => {
 }
 
 function App() {
-  return <AppWithPrefetch />;
+  return (
+    <AuthProvider>
+      <DatabaseProvider>
+        <AppRouter />
+      </DatabaseProvider>
+    </AuthProvider>
+  );
 }
 
 export default App;

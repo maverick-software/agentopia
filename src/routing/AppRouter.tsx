@@ -7,23 +7,31 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { AdminRoute } from './AdminRoute';
 import { appRoutes, RouteConfig } from './routeConfig';
 
+// Directly importing DashboardPage as a workaround.
+// Lazy loading caused a 'TypeError: Cannot convert object to primitive value'
+// during component initialization. See lazyComponents.ts for more details.
+import { DashboardPage } from '../pages/DashboardPage';
+
 // Helper function to wrap element with necessary wrappers (Layout, Protection)
 const wrapElement = (route: RouteConfig) => {
   let element = <route.element />;
 
+  // Apply protection wrappers first
   if (route.protection === 'protected') {
     element = <ProtectedRoute>{element}</ProtectedRoute>;
-  }
-  
-  // AdminRoute itself handles the protection and provides Outlet for children
-  // So we only apply it to the parent /admin route definition
-  if (route.protection === 'admin' && route.path === '/admin' && route.children) { 
-      element = <AdminRoute>{element}</AdminRoute>;
   } else if (route.protection === 'admin') {
-      // Child admin routes are rendered via Outlet within AdminRoute
-      // No extra wrapper needed here, assuming they are defined as children
-      // of the main '/admin' route in the config.
-      // If a standalone admin route existed, it would need <AdminRoute><Page/></AdminRoute>
+    // AdminRoute might need specific handling based on nesting
+    // Assuming AdminRoute handles protection and provides Outlet
+    // Apply AdminRoute wrapper only to the top-level /admin entry
+    if (route.path === '/admin' && route.children) {
+        element = <AdminRoute>{element}</AdminRoute>;
+    }
+    // Child admin routes are rendered via Outlet within the parent AdminRoute
+  }
+
+  // Apply Layout wrapper if specified
+  if (route.layout) {
+    element = <Layout>{element}</Layout>;
   }
 
   return element;
@@ -46,31 +54,35 @@ export const AppRouter: React.FC = () => {
               />
             );
           }
-          // Handle root route redirect if user is logged in
+          // Handle root route redirect
           if (route.path === '/') {
               return (
-                <Route 
+                <Route
                   key={route.path}
                   path={route.path}
-                  element={user ? <Navigate to="/dashboard" replace /> : wrapElement(route)} 
+                  // If user is logged in, redirect to dashboard.
+                  // If user is logged out, redirect to login.
+                  element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
                 />
               );
           }
 
           // Handle nested admin routes
           if (route.path === '/admin' && route.children) {
+            // The main element for /admin needs wrapping (including Layout if specified)
+            const AdminWrapperElement = wrapElement(route); 
             return (
-              <Route key={route.path} path={route.path} element={wrapElement(route)}>
-                {/* Render base /admin route element if needed (already wrapped) */}
-                {/* Currently, AdminRoute uses Outlet, so children are rendered directly */}
-                {/* If /admin itself should show AdminDashboardPage, config needs adjustment */} 
-                {/* Let's assume AdminRoute provides Outlet */} 
-                <Route index element={<route.element />} /> {/* Render base element at /admin */} 
+              <Route key={route.path} path={route.path} element={AdminWrapperElement}>
+                {/* Render base element if specified, using Outlet from AdminRoute */}
+                <Route index element={<route.element />} /> 
                 {route.children.map(childRoute => (
+                  // Child routes don't need separate Layout/AdminRoute wrappers here,
+                  // only their specific element needs rendering within the Outlet.
+                  // Protection check still happens via AdminRoute on parent.
                   <Route 
                     key={childRoute.path}
                     path={childRoute.path} 
-                    element={wrapElement(childRoute)} // Children inherit protection, no layout needed
+                    element={<childRoute.element />} // Render child element directly
                   />
                 ))}
               </Route>

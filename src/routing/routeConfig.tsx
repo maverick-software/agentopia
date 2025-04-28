@@ -21,7 +21,6 @@ export interface RouteConfig {
 // import { RegisterPage } from '../pages/RegisterPage'; // Removed direct import
 import UnauthorizedPage from '../pages/UnauthorizedPage';
 import {
-    DashboardPage,
     AgentsPage,
     AgentChatPage,
     DatastoresPage,
@@ -45,6 +44,8 @@ import {
 // Manually import the new non-lazy pages
 import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
+// Import DashboardPage directly for debugging
+import { DashboardPage } from '../pages/DashboardPage';
 
 // Define the application routes using the RouteConfig structure
 export const appRoutes: RouteConfig[] = [

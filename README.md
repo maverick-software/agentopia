@@ -250,25 +250,38 @@ RLS is confirmed ENABLED and correctly implemented on the relevant tables:
 
 ## Known Issues
 
-*(Previously listed issues regarding `AuthContext.tsx`, Discord Integration Errors, and Oversized Files have been resolved as of 2025-04-26 per user confirmation.)*
-
-1. **Missing Logging Infrastructure:**
-   - Log directories have been created, but no actual log files exist yet.
-   - Logging implementation is needed to follow Rule #2 (Review the logs). *(Considered resolved/in progress as per user update, but implementation details remain)*
-
+1. **Oversized Files:**
+   * `AgentEditPage.tsx` (1326 lines) - Well over the 500-line limit
+   * `DatastoresPage.tsx` (664 lines) - Over the 500-line limit
+   * These files need refactoring according to Philosophy #1 (file size limits)
 2. **Previous AgentChatPage Issue:**
-   - Previous work involved fixing an issue where `AgentChatPage.tsx` failed to reliably fetch agent data.
-   - A backup file `AgentChatPage.tsx.bak` exists, suggesting recent changes to fix this issue. *(Status confirmed resolved)*
+   * Previous work involved fixing an issue where `AgentChatPage.tsx` failed to reliably fetch agent data
+   * A backup file `AgentChatPage.tsx.bak` exists, suggesting recent changes to fix this issue
+3. **`esbuild` Vulnerability:**
+   * `npm audit` reports moderate severity vulnerabilities in `esbuild` (via `vite`).
+   * The suggested `npm audit fix --force` involves a breaking change in `vite`. Requires careful investigation before applying.
 
 ## Current Status & Next Steps
 
-*   **Status:** The agent activation/deactivation workflow is functional. The `worker-manager` uses PM2 API to manage `discord-worker` processes. RLS issues with status updates resolved via `update_worker_status` RPC. The Discord channel selection UI/feature has been removed. Key previously known issues (AuthContext, Discord Interactions, Large Files) have been resolved.
-*   **Immediate Next Steps:**
-    1.  **Implement Chat Rooms/Channels:** Continue work on Phase 1 (Database Schema) of the `docs/plans/chat_rooms/wbs_checklist.md` plan, starting with the `user_team_memberships` table migration.
-    2.  **Verify Logging Implementation:** Although marked resolved, confirm the desired logging setup is in place or create a task if further work is needed.
-    3.  **(Post Chat Feature) Multi-Server UI:** Implement the frontend UI for managing agent presence across multiple Discord servers (enable/disable per server).
-    4.  **(Post Chat Feature) Backend Multi-Server Logic:** Update `manage-discord-worker` and `discord-interaction-handler` functions to handle the new multi-server activation/deactivation model based on the `is_enabled` flag in `agent_discord_connections`.
-    5.  **(Post Chat Feature) Code Cleanup:** Remove temporary diagnostic logs or backup files (`AgentChatPage.tsx.bak`) if no longer needed.
+*   **Status:** The agent activation/deactivation workflow is functional. The `worker-manager` uses PM2 API to manage `discord-worker` processes. RLS issues with status updates resolved via `update_worker_status` RPC. The Discord channel selection UI/feature has been removed. **Routing logic for the root path (`/`) and conditional layout rendering (sidebar visibility) has been corrected (See commit history related to `AppRouter.tsx`).**
+*   **Agent Teams Feature Progress:** (Based on [`docs/plans/agent_teams/wbs_checklist.md`](./docs/plans/agent_teams/wbs_checklist.md))
+    *   **Phase 1 (Setup):** Prerequisites and role definitions complete.
+    *   **Phase 2 (Database):** All required tables (`teams`, `team_members`, `workspaces`, `chat_messages`), RLS policies, and helper functions implemented via migrations.
+    *   **Phase 3 (API Hooks):** React hooks (`useTeams`, `useTeamMembers`, `useTeamChatRooms`, `useChatMessages`) for interacting with the database are implemented.
+    *   **Phase 4 (Core Team UI):** Routing and components for creating, viewing, and managing teams and members (`TeamsPage`, `CreateTeamPage`, `TeamDetailsPage`, `EditTeamPage`, `TeamMemberList`, etc.) are implemented.
+    *   **Phase 5 (Agent Edit Page Update):** `AgentEditPage` now displays team membership details.
+    *   **Phase 6 (Chat UI):** Basic routing and page structure for team workspaces (`WorkspacePage`) implemented.
+    *   **Phase 7 (Role Management):** Enhancements for role exclusivity, job descriptions, and reporting hierarchy implemented in UI and API hooks.
+    *   **Next for Teams:** Phase 8 - Integrating team context (roles, hierarchy) into agent system instructions and behavior.
+*   **Immediate Next Steps (General):**
+    1. **Re-enable RLS:** Row Level Security was disabled on `agent_discord_connections` and `agents` tables during debugging. It needs to be **re-enabled** in the Supabase dashboard. The `update_worker_status` function should allow status updates to continue working correctly.
+    2. **Verify Deactivation:** Thoroughly test the agent deactivation flow from the UI.
+    3. **Multi-Server UI:** Implement the frontend UI for managing agent presence across multiple Discord servers (enable/disable per server).
+    4. **Backend Multi-Server Logic:** Update `manage-discord-worker` and `discord-interaction-handler` functions to handle the new multi-server activation/deactivation model based on the `is_enabled` flag in `agent_discord_connections`.
+    5. **Review RLS (`agents` table):** Determine if RLS policies are needed for the `agents` table (e.g., users can only see/edit their own agents) and implement them.
+    6. **Establish Logging:** Create the standard log directory (`./logs/`) and implement robust logging within the `worker-manager` and `discord-worker` services, adhering to project conventions (RULE #2).
+    7. **Address Known Issues:** Prioritize fixing the `AuthContext.tsx` duplicate variable and investigating the `esbuild` vulnerability and oversized files.
+    8. **Code Cleanup:** Remove temporary diagnostic logs added during troubleshooting.
 
 ## Deployment
 

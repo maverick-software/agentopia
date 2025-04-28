@@ -5,7 +5,12 @@ import { lazy } from 'react';
 export const LoginPage = lazy(() => import('../pages/LoginPage').then(module => ({ default: module.LoginPage })));
 export const RegisterPage = lazy(() => import('../pages/RegisterPage').then(module => ({ default: module.RegisterPage })));
 
-export const DashboardPage = lazy(() => import('../pages/DashboardPage.tsx').then(module => ({ default: module.DashboardPage })));
+// DashboardPage is imported directly in AppRouter.tsx and routeConfig.tsx.
+// Lazy loading caused a 'TypeError: Cannot convert object to primitive value'
+// during component initialization, likely due to timing interactions with
+// hooks/data fetching within DashboardPage when loaded lazily.
+// export const DashboardPage = lazy(() => import('../pages/DashboardPage')); 
+
 export const AgentsPage = lazy(() => import('../pages/AgentsPage.tsx').then(module => ({ default: module.AgentsPage })));
 // Note: AgentEditPage is currently directly imported in AppRouter.tsx
 export const AgentEditPage = lazy(() => import('../pages/AgentEditPage.tsx').then(module => ({ default: module.AgentEditPage })));
