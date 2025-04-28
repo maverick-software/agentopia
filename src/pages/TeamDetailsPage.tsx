@@ -4,16 +4,7 @@ import { useTeams } from '../hooks/useTeams';
 import { ArrowLeft, Edit, Loader2, AlertCircle, Users, MessageSquare } from 'lucide-react';
 import type { Team } from '../types';
 import { TeamMemberList } from '../components/teams/TeamMemberList';
-
-// Placeholder components until created
-// Placeholder for TeamMemberList removed
-
-const ChatSessionListPlaceholder: React.FC<{ teamId: string }> = ({ teamId }) => (
-   <div className="mt-6 p-4 border border-dashed border-gray-600 rounded-md">
-    <h2 className="text-xl font-semibold mb-3 text-gray-300">Chat Sessions (Loading...)</h2>
-    <div className="h-20 bg-gray-700 rounded animate-pulse"></div>
-  </div>
-);
+import { TeamChatRoomList } from '../components/teams/TeamChatRoomList';
 
 export const TeamDetailsPage: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
@@ -102,8 +93,8 @@ export const TeamDetailsPage: React.FC = () => {
       {/* Render the actual TeamMemberList component */}
       <TeamMemberList teamId={team.id} />
       
-      {/* Placeholder for chat sessions */}
-      <ChatSessionListPlaceholder teamId={team.id} />
+      {/* Render the new TeamChatRoomList component */}
+      <TeamChatRoomList teamId={team.id} />
       
     </div>
   );

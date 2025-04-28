@@ -1,8 +1,9 @@
-- [ ] Create Team Rooms
+- [ ] Create Team Rooms (workspaces)
 - [ ] Password resets, Email verification, MFA via Authenticator, SMS
 - [ ] oAuth via Google
 - [ ] Delegated access for users.
 - [ ] MCP Tool Belts for agents (Zapier, Make.com Automation)
+- [ ] Scheduled tasks that can be assigned 'workflows' and have their prompts/instructions.
 - [ ] Invite External Agents (Make.com, n8n)
 - [ ] Default optimized prompt listing available MCP servers.
 - [ ] Optional Chain of Thought / Advanced Reasoning for agents.

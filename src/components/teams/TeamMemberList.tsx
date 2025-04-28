@@ -63,16 +63,23 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
       setAddError('Please select an agent and a role.');
       return;
     }
+    // Safeguard: Check if agent is already a member (should be handled by AgentSelector, but belt-and-suspenders)
+    if (currentMemberAgentIds.includes(selectedAgentToAdd)) {
+      setAddError('This agent is already a member of the team.');
+      return; 
+    }
     setIsAdding(true);
     setAddError(null);
     try {
       const newMember = await addTeamMember(teamId, selectedAgentToAdd, selectedRoleToAdd);
       if (newMember) {
         setSelectedAgentToAdd(''); // Reset selector
-        // Optionally reset role selector if needed
+        // Explicitly refresh the member list after successful add
+        await fetchTeamMembers(teamId); 
       } else {
         // Error should be reflected in the main 'error' state from the hook
-        setAddError('Failed to add team member. Check console or main error message.');
+        // Use the error state from the hook if it exists
+        setAddError(error?.message || 'Failed to add team member. Check console.');
       }
     } catch (err: any) {
       console.error("Error adding member:", err);
@@ -80,7 +87,7 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
     } finally {
       setIsAdding(false);
     }
-  }, [teamId, selectedAgentToAdd, selectedRoleToAdd, addTeamMember]);
+  }, [teamId, selectedAgentToAdd, selectedRoleToAdd, addTeamMember, currentMemberAgentIds, fetchTeamMembers, error]);
 
   // Remove member handler
   const handleRemoveMember = useCallback(async (agentId: string) => {
@@ -230,6 +237,8 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
       {/* Enhanced Member List */} 
       {!loading && !error && members.length > 0 && (
           <div className="overflow-x-auto">
+              {/* Log the members array right before rendering the table */} 
+              {(() => { console.log('[TeamMemberList] Rendering list with members:', members); return null; })()}
               <table className="min-w-full divide-y divide-gray-700">
                   <thead>
                       <tr>

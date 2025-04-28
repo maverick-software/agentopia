@@ -108,7 +108,17 @@ export interface TeamMember {
   agent: Agent; // Embed the full Agent object for convenience
 }
 
-// New type for Chat Sessions
+// New type for Chat Rooms (Workspaces)
+export interface ChatRoom {
+  id: string; // uuid, PK
+  name: string; // text, Not Null
+  owner_user_id: string; // uuid, FK -> auth.users.id, Not Null
+  created_at?: string; // timestamptz
+  // Add other fields like topic, last_message_at if needed from chat_channels?
+  // For now, just the basic room info.
+}
+
+// New type for Chat Sessions (Potentially deprecated/replaced by Chat Rooms/Channels?)
 export interface ChatSession {
   id: string; // uuid
   team_id: string; // uuid, FK to teams
