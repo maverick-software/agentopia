@@ -11,7 +11,9 @@ Design Instruction Set for Cursor Agent
 
 `Note for user: choose a style from the list: Minimalist, Neumorphic, Flat Design, Material Design, Glassmorphism, Skeuomorphic, Brutalist, Dark Mode, Light Mode `
   
-Apply this style type and principles to all UI/UX design: ______________________  
+Apply this style type and principles to all UI/UX design: ______________________ 
+
+2) Use the following libraries: Shadcn and Tailwind CSS
 
 
 2) Colors should match the defined palette (update with current design if blank): 

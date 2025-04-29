@@ -125,10 +125,10 @@ Join table linking agents to datastores.
     *   `datastore_id` (uuid, FK -> `datastores.id`)
     *   `created_at` (timestamptz)
 
-## Chat Room Tables
+## Workspace Tables (Formerly Chat Room Tables)
 
-### `public.chat_rooms`
-Top-level containers for chat.
+### `public.workspaces` (Formerly `chat_rooms`)
+Top-level containers for collaboration, replacing the concept of chat rooms.
 *   **Key Columns:**
     *   `id` (uuid, PK)
     *   `name` (text, Not Null)
@@ -136,23 +136,26 @@ Top-level containers for chat.
     *   `created_at` (timestamptz)
 
 ### `public.chat_channels`
-Individual channels within a chat room.
+Individual channels within a workspace.
 *   **Key Columns:**
     *   `id` (uuid, PK)
-    *   `room_id` (uuid, FK -> `chat_rooms.id`, Not Null)
+    *   `workspace_id` (uuid, FK -> `workspaces.id`, Not Null) // Updated from room_id
     *   `name` (text, Not Null)
     *   `topic` (text)
     *   `created_at` (timestamptz, Not Null)
     *   `last_message_at` (timestamptz)
 
-### `public.chat_room_members`
-Links users, agents, or teams as members of a chat room.
-*   **Key Columns:**
+### `public.workspace_members` (Formerly `chat_room_members`)
+Links users to workspaces and defines their role.
+*   **(Diagram vs. Migrations Note:** Diagram shows `user_id`, `agent_id`, `role`, `added_by_user_id`. Migrations implemented `member_type` and `member_id`. This description favors the diagram's apparent structure after workspace refactor.)*
+*   **Key Columns (from Diagram):**
     *   `id` (uuid, PK)
-    *   `room_id` (uuid, FK -> `chat_rooms.id`, Not Null)
-    *   `member_type` (text, Check('user', 'agent', 'team'))
-    *   `member_id` (uuid, Not Null): Refers to `auth.users.id`, `agents.id`, or `teams.id` based on `member_type`.
-    *   `added_at` (timestamptz)
+    *   `workspace_id` (uuid, FK -> `workspaces.id`, Not Null)
+    *   `user_id` (uuid, FK -> `auth.users.id`, Not Null) // Assuming direct user link now
+    *   `agent_id` (uuid, FK -> `agents.id`) // Optional agent association?
+    *   `role` (text) // Role within the workspace
+    *   `added_by_user_id` (uuid, FK -> `auth.users.id`)
+    *   `created_at` (timestamptz)
 
 ### `public.chat_messages`
 Stores individual messages within a chat channel.
@@ -165,6 +168,7 @@ Stores individual messages within a chat channel.
     *   `metadata` (jsonb)
     *   `embedding` (vector(1536))
     *   `created_at` (timestamptz, Not Null)
+    *   `updated_at` (timestamptz)
 
 ## Other Tables (From Diagram)
 
@@ -194,10 +198,9 @@ Defines available backend servers for MCP.
 
 ### `public.user_secrets`
 Links users to secrets, likely stored in a vault.
-*   **(Diagram vs. Migrations Note:** Table not shown connected in the main diagram provided, but migrations exist.)*
-*   **Key Columns (from Migrations):**
+*   **(Diagram vs. Migrations Note:** Table not shown connected in the main diagram provided, but migrations exist. Diagram shows `user_id` and `encryption_key`.)*
+*   **Key Columns (from Diagram):**
     *   `id` (uuid, PK)
     *   `user_id` (uuid, FK -> `auth.users.id`)
-    *   `vault_id` (text)
-    *   `vault_item_id` (text)
+    *   `encryption_key` (text) // As shown in diagram fragment
     *   `created_at`, `updated_at` (timestamptz) 

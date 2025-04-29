@@ -39,7 +39,8 @@ import {
     LoginPage, // Now imported here
     RegisterPage, // Now imported here
     AgentEditPage, // Now imported here
-    WorkspacePage // Added WorkspacePage
+    WorkspacePage, // Added WorkspacePage
+    WorkspacesListPage // Added WorkspacesListPage
 } from './lazyComponents';
 
 // Manually import the new non-lazy pages
@@ -69,7 +70,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/teams/new', element: CreateTeamPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId', element: TeamDetailsPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId/edit', element: EditTeamPage, protection: 'protected', layout: true },
-  { path: '/workspaces', element: () => <Navigate to="/dashboard" replace />, protection: 'protected', layout: true },
+  { path: '/workspaces', element: WorkspacesListPage, protection: 'protected', layout: true },
   { path: '/workspaces/:roomId', element: WorkspacePage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/tools', element: MCPPage, protection: 'protected', layout: true },
