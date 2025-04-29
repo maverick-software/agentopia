@@ -47,7 +47,6 @@ export function WorkspacesListPage() {
           throw new Error(`Failed to fetch owned workspaces: ${ownedError.message}`);
         }
 
-        /* // Temporarily comment out fetching member workspaces
         // Option 2: Fetch workspaces where the user is a member
         const { data: memberEntries, error: memberError } = await supabase
           .from('workspace_members')
@@ -76,15 +75,12 @@ export function WorkspacesListPage() {
             }
             memberWorkspaces = fetchedMemberWorkspaces || [];
         }
-        */
 
-        // Combine and deduplicate - Simplified for owned only
-        // const allWorkspacesMap = new Map<string, Workspace>();
-        // (ownedWorkspaces || []).forEach(ws => allWorkspacesMap.set(ws.id, ws));
-        // memberWorkspaces.forEach(ws => allWorkspacesMap.set(ws.id, ws));
-        // setWorkspaces(Array.from(allWorkspacesMap.values()));
-
-        setWorkspaces(ownedWorkspaces || []); // Directly set owned workspaces for now
+        // Uncomment the combining/deduplicating logic
+        const allWorkspacesMap = new Map<string, Workspace>();
+        (ownedWorkspaces || []).forEach(ws => allWorkspacesMap.set(ws.id, ws));
+        memberWorkspaces.forEach(ws => allWorkspacesMap.set(ws.id, ws));
+        setWorkspaces(Array.from(allWorkspacesMap.values()));
 
       } catch (err: any) {
         console.error("Error in fetchWorkspaces:", err);
@@ -110,8 +106,8 @@ export function WorkspacesListPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Workspaces</h1>
         <Button asChild>
-          {/* TODO: Link to a '/workspaces/new' page if creation is implemented */}
-          <Link to="#">Create New Workspace</Link>
+          {/* Link to the new workspace creation page */}
+          <Link to="/workspaces/new">Create New Workspace</Link>
         </Button>
       </div>
 

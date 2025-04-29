@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
-import RoomListSidebar from './RoomListSidebar';
+import ChannelListSidebar from './ChannelListSidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,6 +11,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
+  const params = useParams<{ roomId?: string }>();
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -21,8 +22,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
-  const isRoomContext = location.pathname.startsWith('/workspaces/');
-  const isChannelContext = location.pathname.includes('/channels/');
+  const showChannelSidebar = !!params.roomId;
 
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
@@ -33,8 +33,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         triggerRef={triggerRef}
       />
       
-      {/* Only show the RoomListSidebar when we're in a room context */}
-      {isRoomContext && <RoomListSidebar />}
+      {showChannelSidebar && params.roomId && <ChannelListSidebar roomId={params.roomId} />}
 
       <div className="flex-1 flex flex-col overflow-hidden relative">
         <Header />
