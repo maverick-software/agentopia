@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
-import { Hash, Plus, Loader2 } from 'lucide-react';
+import { Hash, Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { useChatChannels } from '../hooks/useChatChannels';
 import { Button } from "@/components/ui/button"; // Assuming Shadcn alias
+import { supabase } from '@/lib/supabase'; // Import supabase client
 import {
   Dialog,
   DialogContent,
@@ -20,11 +21,50 @@ interface ChannelListSidebarProps {
 }
 
 const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
-  const { channels, loading, error, createChannel } = useChatChannels(roomId);
+  const workspaceId = roomId; // Rename for clarity within component
+  const { channels, loading: channelsLoading, error: channelsError, createChannel } = useChatChannels(workspaceId);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelTopic, setNewChannelTopic] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null); // State for workspace name
+  const [nameLoading, setNameLoading] = useState<boolean>(true); // Loading state for name
+  const [nameError, setNameError] = useState<string | null>(null); // Error state for name
+
+  // Fetch workspace name when component mounts or workspaceId changes
+  useEffect(() => {
+    const fetchWorkspaceName = async () => {
+      if (!workspaceId) {
+        setNameError('No Workspace ID provided.');
+        setNameLoading(false);
+        return;
+      }
+      setNameLoading(true);
+      setNameError(null);
+      try {
+        const { data, error } = await supabase
+          .from('workspaces')
+          .select('name')
+          .eq('id', workspaceId)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setWorkspaceName(data.name);
+        } else {
+          throw new Error('Workspace not found.');
+        }
+      } catch (err: any) {
+        console.error("Error fetching workspace name:", err);
+        setNameError(err.message || 'Failed to fetch workspace name.');
+        setWorkspaceName(null);
+      } finally {
+        setNameLoading(false);
+      }
+    };
+
+    fetchWorkspaceName();
+  }, [workspaceId]);
 
   const handleCreateChannel = async () => {
     if (!newChannelName.trim()) return;
@@ -41,9 +81,19 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
 
   return (
     <div className="w-60 bg-gray-100 dark:bg-gray-700 h-full flex flex-col py-4 px-2 border-r border-gray-300 dark:border-gray-600">
-      {/* Room Title/Info? - Could fetch room details here or pass down */}
-      <div className="px-2 mb-4">
-        <h2 className="text-lg font-semibold truncate">Room Placeholder</h2>
+      {/* Workspace Title */}
+      <div className="px-2 mb-4 h-8 flex items-center"> {/* Added fixed height and centering */}
+        {nameLoading ? (
+          <Loader2 className="animate-spin text-gray-500 mx-auto" size={18} />
+        ) : nameError ? (
+          <div className="flex items-center text-red-500 text-xs" title={nameError}>
+            <AlertTriangle size={14} className="mr-1" /> Error
+          </div>
+        ) : (
+          <h2 className="text-lg font-semibold truncate" title={workspaceName || 'Workspace'}>
+            {workspaceName || 'Workspace'}
+          </h2>
+        )}
       </div>
 
       {/* Create Channel Button/Dialog */}
@@ -90,12 +140,12 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
 
       {/* Channel List */}
       <div className="flex-1 flex flex-col space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-500 pr-1">
-        {loading && <Loader2 className="animate-spin text-gray-500 mx-auto my-4" />}
-        {error && <span className="text-red-500 text-xs px-2">Error loading channels</span>}
+        {channelsLoading && <Loader2 className="animate-spin text-gray-500 mx-auto my-4" />}
+        {channelsError && <span className="text-red-500 text-xs px-2">Error: {channelsError}</span>}
         {channels.map((channel) => (
           <NavLink
             key={channel.id}
-            to={`/rooms/${roomId}/channels/${channel.id}`}
+            to={`/workspaces/${workspaceId}/channels/${channel.id}`}
             className={({ isActive }): string =>
               `flex items-center px-2 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 ease-in-out 
                ${

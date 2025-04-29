@@ -2,29 +2,29 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { type ChatChannel } from '../types/chat';
-import { useAuth } from '../contexts/AuthContext'; // Corrected import
+import { useAuth } from '../contexts/AuthContext';
 
-export const useChatChannels = (roomId: string | null) => {
+export const useChatChannels = (workspaceId: string | null) => {
   const supabase = useSupabaseClient();
-  const { user } = useAuth(); // Corrected usage
+  const { user } = useAuth();
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchChannelsForRoom = useCallback(async () => {
-    if (!roomId) {
+    if (!supabase || !workspaceId) {
       setChannels([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      // RLS Policy "Allow room members to view channels" handles access
       const { data, error: fetchError } = await supabase
         .from('chat_channels')
         .select('*')
-        .eq('room_id', roomId)
-        .order('name', { ascending: true }); // Order channels alphabetically
+        .eq('workspace_id', workspaceId)
+        .order('name', { ascending: true });
 
       if (fetchError) throw fetchError;
 
@@ -37,34 +37,32 @@ export const useChatChannels = (roomId: string | null) => {
     } finally {
       setLoading(false);
     }
-  }, [supabase, roomId]);
+  }, [supabase, workspaceId]);
 
-  // Fetch channels when roomId changes
   useEffect(() => {
-    if (roomId) {
+    if (workspaceId && supabase) {
       fetchChannelsForRoom();
     }
-  }, [roomId, fetchChannelsForRoom]);
+  }, [workspaceId, supabase, fetchChannelsForRoom]);
 
   const createChannel = async (name: string, topic?: string): Promise<ChatChannel | null> => {
-    if (!roomId || !user || !name.trim()) {
-      setError('Room ID, User context, and Channel name are required.');
+    if (!workspaceId || !user || !name.trim() || !supabase) {
+      setError('Workspace ID, User context, Channel name, and Supabase client are required.');
       return null;
     }
-    // RLS: "Allow room owner to create channels"
     setLoading(true);
     setError(null);
     try {
       const { data, error: insertError } = await supabase
         .from('chat_channels')
-        .insert({ room_id: roomId, name: name.trim(), topic: topic || null })
+        .insert({ workspace_id: workspaceId, name: name.trim(), topic: topic || null })
         .select()
         .single();
 
       if (insertError) throw insertError;
 
       if (data) {
-        setChannels(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name))); // Add and re-sort
+        setChannels(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
         return data;
       } else {
         throw new Error('Failed to create channel: No data returned.');
@@ -80,11 +78,10 @@ export const useChatChannels = (roomId: string | null) => {
   };
 
   const updateChannel = async (channelId: string, updates: { name?: string; topic?: string }): Promise<ChatChannel | null> => {
-    if (!user || !channelId || Object.keys(updates).length === 0) {
-        setError('User context, Channel ID, and updates are required.');
+    if (!user || !channelId || Object.keys(updates).length === 0 || !supabase) {
+        setError('User context, Channel ID, updates, and Supabase client are required.');
         return null;
     }
-    // RLS: "Allow room owner to update channels"
     setLoading(true);
     setError(null);
     try {
@@ -107,7 +104,7 @@ export const useChatChannels = (roomId: string | null) => {
 
     } catch (err: any) {
         console.error("Error updating channel:", err);
-        setError(err.message || 'Failed to update channel. Check if you are the room owner.');
+        setError(err.message || 'Failed to update channel. Check permissions.');
         return null;
     } finally {
         setLoading(false);
@@ -116,11 +113,10 @@ export const useChatChannels = (roomId: string | null) => {
 
 
  const deleteChannel = async (channelId: string): Promise<boolean> => {
-    if (!user || !channelId) {
-        setError('User context and Channel ID are required.');
+    if (!user || !channelId || !supabase) {
+        setError('User context, Channel ID, and Supabase client are required.');
         return false;
     }
-    // RLS: "Allow room owner to delete channels"
     setLoading(true);
     setError(null);
     try {
@@ -136,7 +132,7 @@ export const useChatChannels = (roomId: string | null) => {
 
     } catch (err: any) {
         console.error("Error deleting channel:", err);
-        setError(err.message || 'Failed to delete channel. Check if you are the room owner.');
+        setError(err.message || 'Failed to delete channel. Check permissions.');
         return false;
     } finally {
         setLoading(false);

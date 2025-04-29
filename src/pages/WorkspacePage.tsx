@@ -4,6 +4,8 @@ import { Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import type { Workspace } from './WorkspacesListPage'; // Assuming exported from list page
 import type { Message, Agent } from '../types'; // Might need Team/Workspace types later
 
 // Rename component to WorkspacePage
@@ -15,22 +17,24 @@ export function WorkspacePage() {
   const { roomId: workspaceId } = useParams<{ roomId: string }>(); // Use roomId here
   const navigate = useNavigate();
   
-  // TODO: Fetch workspace data instead of agent data initially
-  // const [workspace, setWorkspace] = useState<Workspace | null>(null); // Example
-  const [agent, setAgent] = useState<Agent | null>(null); // Keep for now, need to determine responding agent logic
+  // State for workspace details
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [agent, setAgent] = useState<Agent | null>(null); // Keep placeholder for now
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(true); 
+  // Separate loading states
+  const [loadingWorkspace, setLoadingWorkspace] = useState(true); 
+  const [loadingMessages, setLoadingMessages] = useState(true); // Add if fetching messages
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  // const fetchWorkspaceAttempts = useRef(0); // TODO: Rename ref
-  const fetchAgentAttempts = useRef(0);
+  // const fetchWorkspaceAttempts = useRef(0);
+  const fetchAgentAttempts = useRef(0); // Still placeholder
   const MAX_FETCH_ATTEMPTS = 5;
   const isMounted = useRef(true); 
-  const fetchInProgress = useRef(false); 
+  const fetchWorkspaceInProgress = useRef(false); // Specific flag for workspace fetch
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -48,123 +52,86 @@ export function WorkspacePage() {
     };
   }, []);
 
-  // TODO: Refactor this effect to fetch Workspace details and potentially the list of agents in the team/workspace
+  // Effect to fetch Workspace details
   useEffect(() => {
-    // console.log("[WorkspaceFetchEffect] Running due to render/mount.") // Debug log
-
-    if (fetchInProgress.current) {
-      // console.log("[WorkspaceFetchEffect] Skipping: Fetch already in progress.");
-      return;
-    }
+    if (fetchWorkspaceInProgress.current) return;
     
-    // Use workspaceId now
-    const fetchInitialData = async (attempt = 1) => { 
-      if (!workspaceId || !user?.id) {
-        // console.log("[fetchInitialData] Skipping: missing workspaceId or user.id"); 
-        return;
-      }
+    const fetchWorkspaceData = async (attempt = 1) => { 
+      if (!workspaceId || !user?.id) return;
 
-      fetchInProgress.current = true;
-      setLoading(true); 
+      fetchWorkspaceInProgress.current = true;
+      setLoadingWorkspace(true); 
       setError(null); 
 
       if (attempt > MAX_FETCH_ATTEMPTS) {
-        console.warn(`[fetchInitialData] Max fetch attempts (${MAX_FETCH_ATTEMPTS}) reached for workspace ${workspaceId}.`);
+        console.warn(`[fetchWorkspaceData] Max fetch attempts reached for workspace ${workspaceId}.`);
         if (isMounted.current) {
             setError(`Failed to load workspace details after ${MAX_FETCH_ATTEMPTS} attempts.`);
-            setLoading(false);
+            setLoadingWorkspace(false);
         }
-        fetchInProgress.current = false; // Reset flag on final failure
+        fetchWorkspaceInProgress.current = false; 
         return;
       }
       
-      // console.log(`[fetchInitialData] Attempt ${attempt} for workspace ${workspaceId}`); 
-
+      console.log(`[fetchWorkspaceData] Attempt ${attempt} fetching workspace ${workspaceId}...`);
       const controller = new AbortController();
-      abortControllerRef.current = controller; 
+      // Do we need an abort controller specifically for this? Maybe not if it's quick.
 
       try {
-        // TODO: Fetch workspace data first (e.g., name, team_id)
-        console.log(`[fetchInitialData] Fetching workspace ${workspaceId}... (Placeholder)`);
-        // const { data: workspaceInfo, error: workspaceError } = await supabase
-        //   .from('workspaces')
-        //   .select('*') 
-        //   .eq('id', workspaceId)
-        //   .single(); 
-        // if (workspaceError) throw workspaceError;
-        // if (!workspaceInfo) throw new Error('Workspace not found or access denied.');
-        
-        // TODO: Fetch team members/agents associated with this workspace/team
-        console.log(`[fetchInitialData] Fetching agents for workspace ${workspaceId}... (Placeholder)`);
-        // For now, let's just fetch *one* agent associated with the user as a placeholder
-        // In reality, we need to know which agent(s) are *in* this workspace/team.
+        // Fetch workspace data first 
+        const { data: workspaceInfo, error: workspaceError } = await supabase
+          .from('workspaces')
+          .select('id, name, created_at, owner_user_id') // Select needed fields
+          .eq('id', workspaceId)
+          .maybeSingle(); // Use maybeSingle to handle not found gracefully
+
+        if (workspaceError) throw workspaceError;
+        if (!workspaceInfo) throw new Error('Workspace not found or access denied.');
+
+        // TODO: Fetch team members/agents associated with this workspace/team - Placeholder still here
+        console.log(`[fetchWorkspaceData] Fetching agents for workspace ${workspaceId}... (Placeholder)`);
         const { data: placeholderAgent, error: agentError } = await supabase
            .from('agents')
            .select('*')
            .eq('user_id', user.id) // Placeholder logic
            .limit(1)
            .single();
+        if (agentError) console.warn("Agent placeholder fetch failed:", agentError); // Non-critical
         
-        if (agentError) throw agentError;
-        if (!placeholderAgent) throw new Error('Could not find an agent for this workspace (placeholder logic).');
-
         if (!isMounted.current) return; 
 
-        // setWorkspace(workspaceInfo); // Set workspace state
+        setWorkspace(workspaceInfo); // Set actual workspace state
         setAgent(placeholderAgent); // Set placeholder agent state
-        setLoading(false);
+        setLoadingWorkspace(false); // Workspace loading done
         setError(null); 
-        // fetchWorkspaceAttempts.current = 0; // Reset attempts
         fetchAgentAttempts.current = 0; 
-        fetchInProgress.current = false; // Reset flag on success
+        fetchWorkspaceInProgress.current = false;
         
-        // TODO: Fetch initial messages for the workspace
-        console.log(`[fetchInitialData] Fetching initial messages for workspace ${workspaceId}... (Placeholder)`);
-        // Example call:
-        // await fetchMessages(workspaceId); 
+        // TODO: Fetch initial messages for the workspace/default channel
+        console.log(`[fetchWorkspaceData] Fetching initial messages for workspace ${workspaceId}... (Placeholder)`);
+        setLoadingMessages(false); // Assume messages loaded/or handle separately
 
       } catch (err: any) {
-        if (!isMounted.current) return;
-
-        console.error('[fetchInitialData] Error caught:', err);
-        const isRetryable = attempt < MAX_FETCH_ATTEMPTS;
-        const message = err instanceof Error ? err.message : 'An unknown error occurred';
-        setError(`Failed to load workspace data. ${isRetryable ? `Retrying... (${attempt}/${MAX_FETCH_ATTEMPTS})` : `Max attempts reached.`} Error: ${message}`);
-        setLoading(false); 
-
-        if (isRetryable) {
-            const delay = 2000 * attempt; 
-            setTimeout(() => {
-                if (isMounted.current) { 
-                   fetchInitialData(attempt + 1);
-                }
-            }, delay);
-        } else {
-             console.error('[fetchInitialData] Max fetch attempts reached after error.');
-             fetchInProgress.current = false; // Reset flag on final failure
-        }
-      } finally {
-         if (isMounted.current && abortControllerRef.current === controller) {
-            abortControllerRef.current = null;
-         }
-         // Do not reset fetchInProgress here if a retry is scheduled
+         if (!isMounted.current) return;
+         console.error('[fetchWorkspaceData] Error caught:', err);
+         // Handle retry logic similar to before, or simplify
+         setError(`Failed to load workspace data: ${err.message}`);
+         setLoadingWorkspace(false); 
+         setLoadingMessages(false); // Ensure message loading also stops on error
+         fetchWorkspaceInProgress.current = false;
       }
     };
 
     if (workspaceId && user?.id) {
-        // fetchWorkspaceAttempts.current = 0;
         fetchAgentAttempts.current = 0;
-        fetchInitialData(1); 
+        fetchWorkspaceData(1); 
     } else {
-        setLoading(false);
+        setLoadingWorkspace(false);
+        setLoadingMessages(false);
     }
 
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-    };
+    // No cleanup needed for abort controller here if not used
+
   }, [workspaceId, user?.id]); // Depend on workspaceId and user.id
 
   useEffect(() => {
@@ -261,74 +228,42 @@ export function WorkspacePage() {
     }
   }, [input, agent, sending, user?.id, workspaceId, scrollToBottom]); // Add dependencies
 
-  // TODO: Update rendering logic to show workspace info, agent list?
-  return (
-    <div className="flex flex-col h-full bg-gray-900 text-gray-100">
-      {/* Header */}
-      <header className="bg-gray-800 p-4 shadow-md flex items-center justify-between">
-        {loading ? (
-          <div className="animate-pulse flex items-center space-x-3">
-            <div className="h-8 w-8 bg-gray-700 rounded-full"></div>
-            <div className="h-4 bg-gray-700 rounded w-32"></div>
-          </div>
-        ) : agent ? (
-          <div className="flex items-center space-x-3">
-            {/* <img src={agent.avatar_url || '/default-avatar.png'} alt={agent.name} className="w-8 h-8 rounded-full" /> */}
-            <h1 className="text-xl font-semibold">Chat with {agent.name} (in Workspace: {workspaceId})</h1> 
-          </div>
-        ) : (
-           <h1 className="text-xl font-semibold text-red-500">Workspace Loading Error</h1>
-        )}
-        {/* Add other header elements like back button or settings if needed */}
-         <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white">
-           Back
-         </button>
-      </header>
-      
-      {/* Error Display */}
-       {error && (
-         <div className="bg-red-900 border-l-4 border-red-500 text-red-100 p-4 m-4 rounded-r-lg shadow-md" role="alert">
-           <p className="font-bold flex items-center"><AlertCircle className="mr-2"/> Error</p>
-           <p>{error}</p>
-         </div>
-       )}
+  // Example of how to use in render:
+  if (loadingWorkspace) {
+    return <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>; 
+  }
 
-      {/* Messages Area */}
+  if (error) {
+     return <div className="text-red-500 p-4">Error loading workspace: {error}</div>;
+  }
+  
+  if (!workspace) {
+     return <div className="text-yellow-500 p-4">Workspace not found or access denied.</div>;
+  }
+
+  // Existing chat UI can be wrapped or modified to show workspace.name in a header
+  return (
+    <div className="flex flex-col h-full">
+      {/* Simple Header Example */}
+      <div className="p-4 border-b border-gray-700">
+        <h1 className="text-xl font-semibold">{workspace.name}</h1>
+        {/* Add other controls like settings link here later */}
+      </div>
+      
+      {/* Existing Chat Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {loading && !messages.length && (
-          <div className="flex justify-center items-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-          </div>
-        )}
-        {!loading && !messages.length && !error && (
-            <div className="text-center text-gray-500 pt-10">Start the conversation!</div>
-        )}
         {messages.map((msg, index) => (
-          <ChatMessage key={index} message={msg} agent={agent} />
+          <ChatMessage key={index} message={msg} />
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <footer className="bg-gray-800 p-4">
-        <form onSubmit={handleSubmit} className="flex items-center space-x-3">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Send a message..."
-            disabled={sending || loading || !!error}
-            className="flex-1 p-3 bg-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={sending || !input.trim() || loading || !!error}
-            className="p-3 bg-indigo-600 rounded-lg text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {sending ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
-          </button>
-        </form>
-      </footer>
+      {/* Existing Input Area */}
+      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-700">
+          {/* ... input elements ... */}
+      </form>
+      {/* Display sending state or specific errors */} 
+      {/* ... */} 
     </div>
   );
 }

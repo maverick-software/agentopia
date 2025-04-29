@@ -38,8 +38,8 @@
     *   [X] Remains for defining reusable groups of agents.
 *   [ ] **Table: `team_members` (No Change)**
     *   [X] Remains for defining agent membership *within a Team*.
-*   [ ] **Table: `chat_channels` (Review)**
-    *   [ ] Ensure `workspace_id` (FK to `workspaces.id`) exists and is NOT NULL (replacing `room_id`).
+*   [X] **Table: `chat_channels` (Review)**
+    *   [X] Ensure `workspace_id` (FK to `workspaces.id`) exists and is NOT NULL (replacing `room_id`). *(Migration created)*
     *   [ ] Review/Update RLS based on workspace membership.
 *   [X] **SQL Helper Functions (Review/Update)**
     *   [X] `is_workspace_member` created (as `is_chat_room_member`, implicitly renamed). (`20250428180807_update_workspaces_rls.sql`)
@@ -81,43 +81,42 @@
 
 ## Phase 3: Frontend UI Refactoring
 
-*   [ ] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
-    *   [ ] Add route `/workspaces` -> `WorkspacesPage`.
-    *   [ ] Ensure `/workspaces/:roomId` -> `WorkspacePage`.
-    *   [ ] Remove `/teams/:teamId` route if team details page is no longer needed, or update it to remove workspace list. *(Decision: Keep `/teams/:teamId` for team management, remove workspace list)*.
-    *   [ ] Add `WorkspacesPage` to lazy loading.
-    *   [ ] Add `/workspaces/:roomId/settings` route -> `WorkspaceSettingsPage`.
-*   [ ] **Component: `WorkspacesPage.tsx` (NEW)**
-    *   [ ] Create `src/pages/WorkspacesPage.tsx`.
-    *   [ ] Use `useWorkspaces` hook to list accessible workspaces.
-    *   [ ] Implement UI for `createWorkspace` (e.g., modal).
-    *   [ ] Link each workspace item to `/workspaces/:roomId`.
+*   [X] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
+    *   [X] Add route `/workspaces` -> `WorkspacesListPage`. *(Done)*
+    *   [X] Ensure `/workspaces/:roomId` -> `WorkspacePage`. *(Done)*
+    *   [ ] Remove `/teams/:teamId` route if team details page is no longer needed, or update it to remove workspace list. *(Decision: Keep `/teams/:teamId` for team management, remove workspace list)*. *(Status: Pending - needs check)*
+    *   [X] Add `WorkspacesListPage` to lazy loading. *(Done)*
+    *   [X] Add route `/workspaces/new` -> `CreateWorkspacePage`. *(Done)*
+    *   [X] Add `CreateWorkspacePage` to lazy loading. *(Done)*
+    *   [ ] Add `/workspaces/:roomId/settings` route -> `WorkspaceSettingsPage`. *(Status: Pending)*
+*   [X] **Component: `WorkspacesListPage.tsx`**
+    *   [X] Create `src/pages/WorkspacesListPage.tsx`. *(Done)*
+    *   [X] Use fetch logic to list accessible workspaces (owned + member). *(Done - Initial implementation)*
+    *   [X] Implement UI for triggering `createWorkspace`. *(Done - Button links to `/workspaces/new`)*.
+    *   [X] Link each workspace item to `/workspaces/:roomId`. *(Done - Handled by `WorkspaceCard`)*.
+*   [X] **Component: `CreateWorkspacePage.tsx` (NEW)**
+    *   [X] Create `src/pages/CreateWorkspacePage.tsx`. *(Done)*
+    *   [X] Implement form and Supabase insert logic. *(Done)*
 *   [ ] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`)**
-    *   [ ] Fetch data using `useWorkspaces(workspaceId)`.
-    *   [ ] Display workspace name/details in header.
-    *   [ ] Use `useChatMessages(channelId)` (Need logic to select/load a default/current channel within the workspace).
-    *   [ ] Render message list and input.
-    *   [ ] Adapt `handleSubmit` to determine responding agent and pass `roomId`.
-    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`.
+    *   [ ] Fetch data using `useWorkspaces(workspaceId)`. *(Pending)*
+    *   [ ] Display workspace name/details in header. *(Pending)*
+    *   [ ] Use `useChatMessages(channelId)` (Need logic to select/load a default/current channel within the workspace). *(Pending)*
+    *   [ ] Render message list and input. *(Partially exists)*
+    *   [ ] Adapt `handleSubmit` to determine responding agent and pass `roomId`. *(Pending)*
+    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`. *(Pending)*
 *   [ ] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
-    *   [ ] Create `src/pages/WorkspaceSettingsPage.tsx`.
-    *   [ ] Fetch workspace details using `useWorkspaces(workspaceId)`.
-    *   [ ] Implement UI for updating workspace name/description (using `useWorkspaces.updateWorkspace`).
-    *   [ ] Render `WorkspaceMemberManager` component.
-    *   [ ] Implement UI for deleting the workspace (using `useWorkspaces.deleteWorkspace`).
+    *   *(Not created yet)*
 *   [ ] **Component: `WorkspaceMemberManager.tsx` (NEW)**
-    *   [ ] Create `src/components/workspaces/WorkspaceMemberManager.tsx`.
-    *   [ ] Use `useParams` to get `workspaceId`.
-    *   [ ] Use `useWorkspaceMembers` hook to list members (Agents, Teams, Users).
-    *   [ ] Implement UI for adding members (Agent selector, Team selector, User email input) calling appropriate hook functions.
-    *   [ ] Implement UI for removing members.
-    *   [ ] Implement UI for changing member roles.
+    *   *(Not created yet)*
+*   [X] **Component: `WorkspaceCard.tsx` (NEW)**
+    *   [X] Create `src/components/workspaces/WorkspaceCard.tsx`. *(Done)*
+    *   [X] Refactor `WorkspaceCard.tsx` for consistency with `TeamCard.tsx`. *(Done)*
 *   [ ] **Component: `TeamDetailsPage.tsx` (Refactor `/teams/:teamId`)**
-    *   [ ] Remove the `TeamChatRoomList` / `TeamWorkspaceList` component.
-    *   [ ] Ensure it correctly uses `useTeams` and `useTeamMembers` for managing the team definition itself.
-*   [ ] **Sidebar/Layout Updates:**
-    *   [ ] Refactor `RoomListSidebar` -> `WorkspaceListSidebar`? Or integrate workspace list elsewhere.
-    *   [ ] Refactor `ChannelListSidebar` to fetch channels based on the current `workspaceId`.
+    *   *(Not refactored yet)*
+*   [X] **Sidebar/Layout Updates:**
+    *   [ ] Refactor `RoomListSidebar` -> `WorkspaceListSidebar`? Or integrate workspace list elsewhere. *(Decision: Replaced with `ChannelListSidebar`)*
+    *   [X] Refactor `ChannelListSidebar` to fetch channels based on the current `workspaceId`. *(Hook exists, needs error fix)*
+    *   [X] Update `Layout.tsx` to conditionally render `ChannelListSidebar` only when `roomId` param exists. *(Done)*
 
 ## Phase 4: Testing & Refinement
 
