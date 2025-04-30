@@ -31,20 +31,28 @@
     *   [X] Migration: Implement RLS policies: (`20250428180914_workspace_members_rls.sql`)
         *   SELECT: Workspace members (check `workspace_members` for `auth.uid()`, or if `team_id` matches a team the user is in, or if `workspace_id` owned by user).
         *   INSERT/DELETE/UPDATE: Workspace owner or members with 'moderator' role (Requires helper function `can_manage_workspace_members`).
-*   [ ] **Table: `chat_messages` (Review & Update)**
-    *   [ ] Verify `channel_id` (FK to `chat_channels`) is appropriate or if messages should link directly to `workspace_id`. *(Assumption: Keep channels within workspaces)*.
-    *   [ ] Migration: Update RLS policies to check based on membership in the relevant `workspace_id` (derived from `channel_id` -> `chat_channels` -> `workspace_id`).
-*   [ ] **Table: `teams` (No Change)**
-    *   [X] Remains for defining reusable groups of agents.
-*   [ ] **Table: `team_members` (No Change)**
-    *   [X] Remains for defining agent membership *within a Team*.
 *   [X] **Table: `chat_channels` (Review)**
-    *   [X] Ensure `workspace_id` (FK to `workspaces.id`) exists and is NOT NULL (replacing `room_id`). *(Migration created)*
-    *   [ ] Review/Update RLS based on workspace membership.
+    *   [X] Ensure `workspace_id` (FK to `workspaces.id`) exists and is NOT NULL (replacing `room_id`). *(Migration `20250428190000...` or `20250428180438...` created)*
+    *   [X] Review/Update RLS based on workspace membership. (`20250428180438...`)
 *   [X] **SQL Helper Functions (Review/Update)**
-    *   [X] `is_workspace_member` created (as `is_chat_room_member`, implicitly renamed). (`20250428180807_update_workspaces_rls.sql`)
-    *   [X] `can_manage_workspace_members` created (as `can_manage_chat_room_members`, implicitly renamed). (`20250428180914_workspace_members_rls.sql`)
-*   [X] **Apply All Migrations** (Completed up to this point)
+    *   [X] `is_workspace_member` created. (`20250428180438...`)
+    *   [X] `can_manage_workspace_members` created. (`20250428180438...`)
+*   [X] **Apply All Migrations** (Completed up to initial point)
+
+*   **Manual Database Correction & Sync (PRIORITY - Due to Cloud Schema Mismatch)**
+    *   [ ] **Manual SQL:** Execute `ALTER TABLE public.chat_channels RENAME COLUMN room_id TO workspace_id;` in Supabase SQL Editor.
+    *   [ ] **Manual SQL:** Execute `DROP TABLE IF EXISTS public.chat_room_members;` in Supabase SQL Editor.
+    *   [ ] **Verify Schema Manually:** Confirm `workspaces` exists, `chat_channels.workspace_id` exists, `chat_room_members` is gone, `workspace_members` exists via Supabase dashboard.
+    *   [ ] **Repair Migration History:** Run `supabase migration repair --status applied 20250428180438` locally (marks the consolidated migration as applied).
+    *   [ ] **Re-sync Local:** Run `supabase db pull` locally.
+    *   [ ] **Final Push Check:** Run `supabase db push` locally (should report "Remote database is up to date").
+*   **Documentation Update (Post-Schema Fix)**
+    *   [ ] Update `database/README.md` to reflect the finalized schema (workspace tables, columns, dropped tables).
+*   **Table: `chat_messages` (Review & Update RLS - Post Manual Fix)**
+    *   [ ] Verify `channel_id` (FK to `chat_channels`) is appropriate. *(Decision: Keep channels)*.
+    *   [ ] Re-verify RLS policies check membership based on `workspace_id` derived from `channel_id`. (`20250428180438...`)
+*   **Table: `teams` (No Change)**
+*   **Table: `team_members` (No Change)**
 
 ## Phase 2: Backend & API Layer Refactoring
 
@@ -68,18 +76,22 @@
     *   [ ] Implement `updateMemberRole(workspaceId, memberType, memberId, role)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Add standard loading/error states.
 *   [ ] **Hook: `useChatMessages` (Update)**
-    *   [ ] Ensure it uses `channelId` correctly and fetches based on workspace context if needed. *(Likely minimal change if channel focus remains)*.
+    *   [ ] Ensure it uses `channelId` correctly.
+    *   [ ] Implement fetching based on selected `channelId`.
+    *   [ ] Add realtime subscription for messages in a channel.
+    *   [ ] **Refactor:** Ensure all internal logic uses `workspace_id` where relevant (if needed for context/permissions).
 *   [ ] **Hook: `useTeams` (No Change)**
     *   [ ] Remains for managing team definitions.
 *   [ ] **Hook: `useTeamMembers` (No Change)**
     *   [ ] Remains for managing members *of a team*.
 *   [ ] **Supabase Function: `/chat` (Update)**
-    *   [ ] Update context fetching: Use `roomId` (workspace ID) to get workspace details.
+    *   [ ] Update context fetching: Use `roomId` (which is `workspaceId`) to get workspace details.
     *   [ ] Fetch members from `workspace_members` based on `roomId`.
-    *   [ ] Determine responding agent based on request or workspace logic.
+    *   [ ] Determine responding agent based on request or workspace logic (using `workspace_members`).
     *   [ ] If team context needed for the specific *responding agent*, fetch its `team_members` details separately.
+    *   [ ] **Refactor:** Ensure all internal logic uses `workspace_id` and `workspace_members`.
 
-## Phase 3: Frontend UI Refactoring
+## Phase 3: Frontend UI Refactoring (Post-Schema Fix)
 
 *   [X] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
     *   [X] Add route `/workspaces` -> `WorkspacesListPage`. *(Done)*
@@ -97,13 +109,16 @@
 *   [X] **Component: `CreateWorkspacePage.tsx` (NEW)**
     *   [X] Create `src/pages/CreateWorkspacePage.tsx`. *(Done)*
     *   [X] Implement form and Supabase insert logic. *(Done)*
-*   [ ] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`)**
-    *   [ ] Fetch data using `useWorkspaces(workspaceId)`. *(Pending)*
-    *   [ ] Display workspace name/details in header. *(Pending)*
-    *   [ ] Use `useChatMessages(channelId)` (Need logic to select/load a default/current channel within the workspace). *(Pending)*
-    *   [ ] Render message list and input. *(Partially exists)*
-    *   [ ] Adapt `handleSubmit` to determine responding agent and pass `roomId`. *(Pending)*
-    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`. *(Pending)*
+*   [ ] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`) (Post-Schema Fix)**
+    *   [X] Fetch/Display workspace members (using `workspace_members` table). *(Done - Needs Testing)*
+    *   [ ] Fetch workspace details using `useWorkspaces(workspaceId)`.
+    *   [ ] Display workspace name/details in header. *(Partially Done)*
+    *   [ ] Implement channel selection/default channel logic.
+    *   [ ] Implement message fetching based on selected channel (using `useChatMessages`).
+    *   [ ] Render message list (`ChatMessage`) and input (`MessageInput`). *(Partially exists)*
+    *   [ ] Refactor `handleSubmit` to determine responding agent from `workspace_members` and pass `roomId` (`workspaceId`), `channelId`.
+    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`.
+    *   [ ] **Refactor:** Ensure all references use `workspaceId` from `useParams`.
 *   [ ] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
     *   *(Not created yet)*
 *   [ ] **Component: `WorkspaceMemberManager.tsx` (NEW)**
@@ -112,13 +127,13 @@
     *   [X] Create `src/components/workspaces/WorkspaceCard.tsx`. *(Done)*
     *   [X] Refactor `WorkspaceCard.tsx` for consistency with `TeamCard.tsx`. *(Done)*
 *   [ ] **Component: `TeamDetailsPage.tsx` (Refactor `/teams/:teamId`)**
-    *   *(Not refactored yet)*
+    *   [ ] Remove any UI related to listing workspaces/chat rooms.
 *   [X] **Sidebar/Layout Updates:**
-    *   [ ] Refactor `RoomListSidebar` -> `WorkspaceListSidebar`? Or integrate workspace list elsewhere. *(Decision: Replaced with `ChannelListSidebar`)*
-    *   [X] Refactor `ChannelListSidebar` to fetch channels based on the current `workspaceId`. *(Hook exists, needs error fix)*
-    *   [X] Update `Layout.tsx` to conditionally render `ChannelListSidebar` only when `roomId` param exists. *(Done)*
+    *   [X] `ChannelListSidebar` fetches channels based on `workspaceId`. *(Needs schema fix)*
+    *   [ ] **Refactor:** Verify `useChatChannels` hook (used by sidebar) correctly uses `workspaceId` parameter after schema fix.
+    *   [X] `Layout.tsx` conditionally renders `ChannelListSidebar`.
 
-## Phase 4: Testing & Refinement
+## Phase 4: Testing & Refinement (Post-Schema Fix)
 
 *   [ ] **Functionality Testing:**
     *   [ ] Workspace Creation, Update, Deletion.

@@ -6,7 +6,16 @@ import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import type { Workspace } from './WorkspacesListPage'; // Assuming exported from list page
-import type { Message, Agent } from '../types'; // Might need Team/Workspace types later
+import type { Message } from '../types'; // Remove Agent type import, might need Member type later
+
+// Define a simple type for workspace members based on the table structure
+interface WorkspaceMember {
+  id: string;
+  user_id: string | null;
+  agent_id: string | null;
+  role: string | null;
+  // Add joined profile/agent details later if needed
+}
 
 // Rename component to WorkspacePage
 export function WorkspacePage() { 
@@ -19,19 +28,24 @@ export function WorkspacePage() {
   
   // State for workspace details
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [agent, setAgent] = useState<Agent | null>(null); // Keep placeholder for now
-  
+  // Remove placeholder agent state
+  // const [agent, setAgent] = useState<Agent | null>(null); 
+  // Add state for workspace members
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   // Separate loading states
   const [loadingWorkspace, setLoadingWorkspace] = useState(true); 
   const [loadingMessages, setLoadingMessages] = useState(true); // Add if fetching messages
+  // Add loading state for members if needed, or combine with workspace loading
+  const [loadingMembers, setLoadingMembers] = useState(true); 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   // const fetchWorkspaceAttempts = useRef(0);
-  const fetchAgentAttempts = useRef(0); // Still placeholder
+  // const fetchAgentAttempts = useRef(0); // Still placeholder
   const MAX_FETCH_ATTEMPTS = 5;
   const isMounted = useRef(true); 
   const fetchWorkspaceInProgress = useRef(false); // Specific flag for workspace fetch
@@ -52,7 +66,7 @@ export function WorkspacePage() {
     };
   }, []);
 
-  // Effect to fetch Workspace details
+  // Effect to fetch Workspace details and Members
   useEffect(() => {
     if (fetchWorkspaceInProgress.current) return;
     
@@ -61,6 +75,7 @@ export function WorkspacePage() {
 
       fetchWorkspaceInProgress.current = true;
       setLoadingWorkspace(true); 
+      setLoadingMembers(true); // Start loading members too
       setError(null); 
 
       if (attempt > MAX_FETCH_ATTEMPTS) {
@@ -87,24 +102,50 @@ export function WorkspacePage() {
 
         if (workspaceError) throw workspaceError;
         if (!workspaceInfo) throw new Error('Workspace not found or access denied.');
+        
+        // Set workspace state immediately after fetching it
+        if (isMounted.current) {
+            setWorkspace(workspaceInfo);
+            setLoadingWorkspace(false); // Workspace loading done here
+        } else {
+            fetchWorkspaceInProgress.current = false;
+            return; // Exit if unmounted
+        }
 
-        // TODO: Fetch team members/agents associated with this workspace/team - Placeholder still here
-        console.log(`[fetchWorkspaceData] Fetching agents for workspace ${workspaceId}... (Placeholder)`);
-        const { data: placeholderAgent, error: agentError } = await supabase
-           .from('agents')
-           .select('*')
-           .eq('user_id', user.id) // Placeholder logic
-           .limit(1)
-           .single();
-        if (agentError) console.warn("Agent placeholder fetch failed:", agentError); // Non-critical
+        // Fetch workspace members associated with this workspace
+        console.log(`[fetchWorkspaceData] Fetching members for workspace ${workspaceId}...`);
+        const { data: membersData, error: membersError } = await supabase
+           .from('workspace_members')
+           .select('id, user_id, agent_id, role') // Fetch basic member info
+           .eq('workspace_id', workspaceId);
+
+        if (membersError) {
+          // Log error but potentially continue, maybe workspace has no members yet?
+          console.warn("Failed to fetch workspace members:", membersError);
+          // Decide if this should be a hard error or just result in an empty list
+          // throw membersError; 
+        }
         
         if (!isMounted.current) return; 
 
-        setWorkspace(workspaceInfo); // Set actual workspace state
-        setAgent(placeholderAgent); // Set placeholder agent state
-        setLoadingWorkspace(false); // Workspace loading done
+        // Set members state (even if null/empty from error or no members)
+        setWorkspaceMembers(membersData || []); 
+        setLoadingMembers(false); // Members loading done
+        
+        // Remove placeholder agent fetch logic
+        // console.log(`[fetchWorkspaceData] Fetching agents for workspace ${workspaceId}... (Placeholder)`);
+        // const { data: placeholderAgent, error: agentError } = await supabase
+        //    .from('agents')
+        //    .select('*')
+        //    .eq('user_id', user.id) // Placeholder logic
+        //    .limit(1)
+        //    .single();
+        // if (agentError) console.warn("Agent placeholder fetch failed:", agentError); // Non-critical
+        
+        // Remove placeholder agent state setting
+        // setAgent(placeholderAgent); // Set placeholder agent state
         setError(null); 
-        fetchAgentAttempts.current = 0; 
+        // fetchAgentAttempts.current = 0; // Remove agent attempts logic
         fetchWorkspaceInProgress.current = false;
         
         // TODO: Fetch initial messages for the workspace/default channel
@@ -115,18 +156,20 @@ export function WorkspacePage() {
          if (!isMounted.current) return;
          console.error('[fetchWorkspaceData] Error caught:', err);
          // Handle retry logic similar to before, or simplify
-         setError(`Failed to load workspace data: ${err.message}`);
-         setLoadingWorkspace(false); 
-         setLoadingMessages(false); // Ensure message loading also stops on error
+         setError(`Failed to load workspace data or members: ${err.message}`);
+         setLoadingWorkspace(false); // Ensure all loading stops on error
+         setLoadingMembers(false); 
+         setLoadingMessages(false); 
          fetchWorkspaceInProgress.current = false;
       }
     };
 
     if (workspaceId && user?.id) {
-        fetchAgentAttempts.current = 0;
+        // fetchAgentAttempts.current = 0; // Remove
         fetchWorkspaceData(1); 
     } else {
         setLoadingWorkspace(false);
+        setLoadingMembers(false); // Ensure loading stops if no ID/user
         setLoadingMessages(false);
     }
 
@@ -143,10 +186,33 @@ export function WorkspacePage() {
   // TODO: Refactor handleSubmit to handle multiple potential responding agents?
   //       Or determine the primary responding agent for the workspace.
   //       Needs to send `roomId` (our `workspaceId`) to the backend.
+  //       Needs to use `workspaceMembers` instead of `agent`.
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     // Use workspaceId, ensure an agent is selected/determined for response
-    if (!input.trim() || !agent || sending || !user?.id || !workspaceId) return; 
+    // Temporarily disable sending if no members/logic yet, or keep old logic?
+    // For now, let's prevent sending if the old 'agent' logic isn't met,
+    // as the agent determination logic needs rework based on members.
+    // if (!input.trim() || !agent || sending || !user?.id || !workspaceId) return; 
+    if (!input.trim() || sending || !user?.id || !workspaceId || workspaceMembers.length === 0) {
+        console.warn("Submit cancelled: Missing input, user, workspaceId, sending, or no members found.");
+        // Add user feedback here if needed
+        return; 
+    }
+
+    // Determine which agent should respond based on workspaceMembers - COMPLEX LOGIC NEEDED HERE
+    // Placeholder: Just log members for now and don't proceed with sending to chat func yet
+    console.log("Workspace Members:", workspaceMembers);
+    const targetAgentId = null; // Replace with actual logic later
+    // --- END OF TEMPORARY LOGIC ---
+    
+    // If no agent can be determined, prevent sending
+    if (!targetAgentId) {
+      setError("Could not determine which agent should respond in this workspace.");
+      console.error("handleSubmit: Failed to determine target agent from members:", workspaceMembers);
+      return;
+    }
+
 
     const userMessage: Message = {
       role: 'user',
@@ -154,6 +220,10 @@ export function WorkspacePage() {
       timestamp: new Date(),
     };
 
+    // ... (rest of handleSubmit needs significant changes based on targetAgentId) ...
+    // ... temporarily commenting out the fetch call until agent logic is solid ...
+
+    /* 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -173,7 +243,8 @@ export function WorkspacePage() {
 
       // Send roomId (workspaceId) and the ID of the agent expected to respond
       const requestBody = {
-        agentId: agent.id, // Which agent should respond? Needs logic.
+        // agentId: agent.id, // Which agent should respond? Needs logic. Use targetAgentId
+        agentId: targetAgentId, 
         message: userMessage.content,
         roomId: workspaceId, // Send the workspace ID
         // channelId: null, // Set if applicable
@@ -204,7 +275,8 @@ export function WorkspacePage() {
           role: 'assistant',
           content: data.reply,
           timestamp: new Date(),
-          agentId: agent.id, // Associate response with the agent
+          // agentId: agent.id, // Associate response with the agent - use targetAgentId
+          agentId: targetAgentId,
         };
         setMessages(prev => [...prev, agentMessage]);
       } else {
@@ -226,10 +298,11 @@ export function WorkspacePage() {
         abortControllerRef.current = null;
       }
     }
-  }, [input, agent, sending, user?.id, workspaceId, scrollToBottom]); // Add dependencies
+    */
+  }, [input, sending, user?.id, workspaceId, scrollToBottom, workspaceMembers]); // Use workspaceMembers in dependencies
 
-  // Example of how to use in render:
-  if (loadingWorkspace) {
+  // Update loading check to include members
+  if (loadingWorkspace || loadingMembers) {
     return <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>; 
   }
 
