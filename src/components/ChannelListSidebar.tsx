@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
-import { Hash, Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { NavLink, useParams, Link } from 'react-router-dom';
+import { Hash, Plus, Loader2, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useChatChannels } from '../hooks/useChatChannels';
-import { Button } from "@/components/ui/button"; // Assuming Shadcn alias
-import { supabase } from '@/lib/supabase'; // Import supabase client
+import { Button } from "@/components/ui/button";
+import { supabase } from '@/lib/supabase';
 import {
   Dialog,
   DialogContent,
@@ -15,23 +15,25 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ChannelListSidebarProps {
-  roomId: string; // Passed from RoomViewLayout
+  roomId: string;
 }
 
 const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
-  const workspaceId = roomId; // Rename for clarity within component
+  const workspaceId = roomId;
+  const { user, signOut } = useAuth();
   const { channels, loading: channelsLoading, error: channelsError, createChannel } = useChatChannels(workspaceId);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelTopic, setNewChannelTopic] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [workspaceName, setWorkspaceName] = useState<string | null>(null); // State for workspace name
-  const [nameLoading, setNameLoading] = useState<boolean>(true); // Loading state for name
-  const [nameError, setNameError] = useState<string | null>(null); // Error state for name
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
+  const [nameLoading, setNameLoading] = useState<boolean>(true);
+  const [nameError, setNameError] = useState<string | null>(null);
 
-  // Fetch workspace name when component mounts or workspaceId changes
   useEffect(() => {
     const fetchWorkspaceName = async () => {
       if (!workspaceId) {
@@ -75,93 +77,99 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
       setNewChannelName('');
       setNewChannelTopic('');
       setIsCreateDialogOpen(false);
-      // Optionally navigate?
     }
   };
 
   return (
-    <div className="w-60 bg-gray-100 dark:bg-gray-700 h-full flex flex-col py-4 px-2 border-r border-gray-300 dark:border-gray-600">
-      {/* Workspace Title */}
-      <div className="px-2 mb-4 h-8 flex items-center"> {/* Added fixed height and centering */}
+    <div className="w-64 bg-gray-800 h-full flex flex-col text-gray-300 rounded-lg shadow-md">
+      <div className="px-3 h-14 flex items-center border-b border-gray-700 shadow-sm">
         {nameLoading ? (
-          <Loader2 className="animate-spin text-gray-500 mx-auto" size={18} />
+          <Loader2 className="animate-spin text-gray-400 mx-auto" size={18} />
         ) : nameError ? (
           <div className="flex items-center text-red-500 text-xs" title={nameError}>
             <AlertTriangle size={14} className="mr-1" /> Error
           </div>
         ) : (
-          <h2 className="text-lg font-semibold truncate" title={workspaceName || 'Workspace'}>
+          <h2 className="text-lg font-semibold text-white truncate" title={workspaceName || 'Workspace'}>
             {workspaceName || 'Workspace'}
           </h2>
         )}
       </div>
 
-      {/* Create Channel Button/Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="w-full justify-start mb-2 text-left">
-            <Plus size={16} className="mr-2" /> Create Channel
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Create New Channel</DialogTitle>
-            <DialogDescription>Enter details for the new channel in this room.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="channel-name" className="text-right">Name</Label>
-              <Input
-                id="channel-name"
-                value={newChannelName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelName(e.target.value)}
-                className="col-span-3"
-                placeholder="e.g., general"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="channel-topic" className="text-right">Topic</Label>
-              <Input
-                id="channel-topic"
-                value={newChannelTopic}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelTopic(e.target.value)}
-                className="col-span-3"
-                placeholder="(Optional)"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={handleCreateChannel} disabled={isCreating || !newChannelName.trim()}>
-              {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Channel
+      <div className="flex-1 flex flex-col pt-3 px-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-start mb-1 text-gray-400 hover:bg-gray-700 hover:text-gray-100">
+              <Plus size={16} className="mr-2" /> Create Channel
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px] bg-gray-800 border-gray-700 text-white">
+            <DialogHeader>
+              <DialogTitle>Create New Channel</DialogTitle>
+              <DialogDescription className="text-gray-400">Enter details for the new channel in this workspace.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="channel-name" className="text-right text-gray-400">Name</Label>
+                <Input
+                  id="channel-name"
+                  value={newChannelName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelName(e.target.value)}
+                  className="col-span-3 bg-gray-700 border-gray-600 text-white placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="e.g., general"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="channel-topic" className="text-right text-gray-400">Topic</Label>
+                <Input
+                  id="channel-topic"
+                  value={newChannelTopic}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewChannelTopic(e.target.value)}
+                  className="col-span-3 bg-gray-700 border-gray-600 text-white placeholder-gray-500 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="(Optional)"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" onClick={handleCreateChannel} disabled={isCreating || !newChannelName.trim()} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Channel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* Channel List */}
-      <div className="flex-1 flex flex-col space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-500 pr-1">
-        {channelsLoading && <Loader2 className="animate-spin text-gray-500 mx-auto my-4" />}
+        {channelsLoading && <Loader2 className="animate-spin text-gray-400 mx-auto my-4" />}
         {channelsError && <span className="text-red-500 text-xs px-2">Error: {channelsError}</span>}
+        {!channelsLoading && !channelsError && channels.length === 0 && (
+          <p className="text-gray-500 text-sm px-2">No channels yet.</p>
+        )}
         {channels.map((channel) => (
           <NavLink
             key={channel.id}
             to={`/workspaces/${workspaceId}/channels/${channel.id}`}
             className={({ isActive }): string =>
-              `flex items-center px-2 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 ease-in-out 
+              `flex items-center px-2 py-1.5 rounded text-sm font-medium transition-colors duration-150 ease-in-out group 
                ${
                  isActive
-                   ? 'bg-indigo-100 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-100'
-                   : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-gray-100'
+                   ? 'bg-gray-700 text-white'
+                   : 'text-gray-400 hover:bg-gray-700 hover:text-gray-100'
                }`
             }
           >
-            <Hash size={16} className="mr-2 opacity-75" />
+            <Hash size={16} className="mr-2 text-gray-500 group-hover:text-gray-400" />
             <span className="truncate">{channel.name}</span>
           </NavLink>
         ))}
       </div>
 
-      {/* User/Settings Panel at Bottom? */}
+      <div className="mt-auto p-2 border-t border-gray-700">
+        <Link to="/workspaces" className="block w-full">
+           <Button variant="ghost" className="w-full justify-center text-gray-400 hover:bg-gray-700 hover:text-gray-100">
+             <ArrowLeft size={16} className="mr-2" />
+             Exit Workspace
+           </Button>
+        </Link>
+      </div>
     </div>
   );
 };

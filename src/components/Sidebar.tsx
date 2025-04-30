@@ -1,13 +1,23 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Database, Brain, Activity, Settings,
   ShieldCheck, LogOut, Bot, PanelLeftClose, PanelRightClose,
   MessageSquare, ChevronDown, ChevronRight, MemoryStick,
   Wrench, GitBranch, FolderKanban, Folder,
-  Building2
+  Building2,
+  User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Define type for a single navigation item, allowing for children
 interface NavItem {
@@ -125,11 +135,9 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
 interface SidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
-  setIsMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  triggerRef: React.RefObject<HTMLButtonElement>;
 }
 
-export function Sidebar({ isCollapsed, setIsCollapsed, setIsMenuOpen, triggerRef }: SidebarProps) {
+export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
 
@@ -179,23 +187,60 @@ export function Sidebar({ isCollapsed, setIsCollapsed, setIsMenuOpen, triggerRef
       </div>
 
       {user && (
-        <div className="mt-auto border-t border-gray-700 pt-4">
-          <button 
-            ref={triggerRef}
-            onClick={() => setIsMenuOpen(prev => !prev)}
-            className={`flex items-center w-full rounded-md hover:bg-gray-700 transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
-            title="Account options"
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button 
+              className={`flex items-center w-full rounded-md hover:bg-gray-700 transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
+              title="Account options"
+            >
+              <Avatar className={`flex-shrink-0 w-8 h-8 ${!isCollapsed ? 'mr-3' : ''}`}> 
+                 <AvatarFallback className="bg-indigo-500 text-white text-xs">
+                    {user.email?.substring(0, 2).toUpperCase() || '??'}
+                 </AvatarFallback>
+              </Avatar>
+              {!isCollapsed && (
+                <span className="flex-1 text-sm text-left text-gray-300 truncate" title={user.email || 'User'}>
+                  {user.email}
+                </span>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent 
+             className="w-56 bg-gray-800 border-gray-700 text-gray-200" 
+             sideOffset={5} 
+             align={isCollapsed ? "start" : "center"}
+             alignOffset={isCollapsed ? 5 : 0}
           >
-            <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center ${!isCollapsed ? 'mr-3' : ''}`}>
-              <span className="text-xs font-medium text-white">{user.email?.charAt(0).toUpperCase()}</span>
-            </div>
-            {!isCollapsed && (
-              <span className="flex-1 text-sm text-left text-gray-300 truncate" title={user.email || 'User'}>
-                {user.email}
-              </span>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                 <p className="text-sm font-medium leading-none">Signed in as</p>
+                 <p className="text-xs leading-none text-gray-400 truncate">
+                    {user.email}
+                 </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-gray-700" />
+            {isAdmin && (
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-gray-700 focus:text-white">
+                 <Link to="/admin" className="flex items-center w-full">
+                    <UserIcon className="mr-2 h-4 w-4" />
+                    <span>Admin Panel</span>
+                 </Link>
+              </DropdownMenuItem>
             )}
-          </button>
-        </div>
+            <DropdownMenuItem asChild className="cursor-pointer focus:bg-gray-700 focus:text-white">
+               <Link to="/settings" className="flex items-center w-full">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+               </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-gray-700" />
+            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-900/50 focus:text-red-300">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </nav>
   );

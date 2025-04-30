@@ -1,47 +1,39 @@
 # Agentopia Database Schema
 
-This document provides an overview of the database schema for the Agentopia project, primarily based on the visual schema diagram provided (`DATABASE_SCHEMA.png`).
+This document provides an overview of the database schema for the Agentopia project.
 
-**Note:** This representation might differ slightly from the state defined purely by applied migrations. RLS policies are generally not shown in the diagram.
+**Note:** This schema reflects the state after the Workspace refactoring. RLS policies are generally not detailed here but are crucial for access control.
 
 ## Core Tables
 
 ### `auth.users`
 Standard Supabase authentication table.
-*   **Key Columns:**
-    *   `id` (uuid, PK)
-    *   (Other standard columns)
+*   **Key Columns:** `id` (uuid, PK), (Other standard columns)
 
 ### `public.user_profiles`
 Stores additional user profile information.
-*   **(Diagram vs. Migrations Note:** Name is `user_profiles` in diagram, `profiles` in migrations. Column differences exist.)*
-*   **Key Columns (from Diagram):**
+*   **(Note:** Migrations use `profiles` table name, but functionality implies this purpose. Columns adjusted based on migrations/context.)*
+*   **Key Columns:** 
     *   `id` (uuid, PK, FK -> `auth.users.id`)
     *   `username` (text)
     *   `full_name` (text)
     *   `avatar_url` (text)
+    *   `role_id` (uuid, FK -> `roles.id`) // Added by migration
+    *   `encryption_key_id` (text) // Added by migration for user secrets
     *   `updated_at` (timestamptz)
 *   **Relationships:** One-to-one with `auth.users`.
 
 ### `public.roles`
-Defines application roles.
-*   **Key Columns:**
+Defines application roles (e.g., 'admin', 'user').
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `name` (text, Unique)
     *   `description` (text)
     *   `created_at` (timestamptz)
 
-### `public.user_roles`
-Links users to their roles.
-*   **(Diagram vs. Migrations Note:** This join table is in the diagram. Migrations put `role_id` directly on `profiles`.)*
-*   **Key Columns:**
-    *   `user_id` (uuid, PK, FK -> `auth.users.id`)
-    *   `role_id` (uuid, PK, FK -> `roles.id`)
-    *   `created_at` (timestamptz)
-
 ### `public.teams`
-Represents teams.
-*   **Key Columns:**
+Represents teams, which can be added as members to workspaces.
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `name` (text, Not Null)
     *   `description` (text)
@@ -51,20 +43,17 @@ Represents teams.
 
 ### `public.team_members`
 Links **Agents** to Teams and defines their role/reporting structure within the team.
-*   **(Diagram vs. Migrations Note:** Significant column differences exist. This description aligns with the intent that this table is for **Agents**, adjusted from the diagram which included a `user_id`.)*
-*   **Key Columns (Adjusted from Diagram):**
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `team_id` (uuid, FK -> `teams.id`, Not Null)
-    *   `agent_id` (uuid, FK -> `agents.id`, Not Null) // Assuming agent link is mandatory
+    *   `agent_id` (uuid, FK -> `agents.id`, Not Null)
     *   `team_role` (text): Role within the team.
-    *   `team_role_description` (text)
     *   `reports_to_agent_id` (uuid, Nullable, FK -> `agents.id`)
     *   `joined_at` (timestamptz)
 
 ### `public.user_team_memberships`
-Tracks user membership in teams.
-*   **(Note:** Potential redundancy with `team_members` noted in diagram and migrations.)*
-*   **Key Columns:**
+Tracks user membership in teams (distinct from agents in teams).
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `user_id` (uuid, FK -> `auth.users.id`, Not Null)
     *   `team_id` (uuid, FK -> `teams.id`, Not Null)
@@ -74,92 +63,92 @@ Tracks user membership in teams.
 
 ### `public.agents`
 Stores configuration for individual AI agents.
-*   **(Diagram vs. Migrations Note:** Column differences exist. This reflects the functionally required schema.)*
-*   **Key Columns (Corrected):**
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `user_id` (uuid, FK -> `auth.users.id`)
     *   `name` (text)
     *   `description` (text)
     *   `system_instructions` (text)
     *   `assistant_instructions` (text)
-    *   `discord_channel` (text)
-    *   `discord_bot_key` (text) // (Vault?)
-    *   `discord_bot_token_id` (text) // (Vault?)
-    *   `discord_user_id` (text)
-    *   `active` (boolean, DEFAULT false) // Functionally required
-    *   `created_at`, `updated_at` (timestamptz)
+    *   `discord_bot_key` (text, likely reference to Vault)
+    *   `active` (boolean, DEFAULT false)
+    *   `created_at` (timestamptz)
+    *   `updated_at` (timestamptz)
 
 ### `public.agent_discord_connections`
 Tracks connection details and status for agents, specifically per Discord Server (Guild).
-*   **(Diagram vs. Migrations Note:** Diagram includes `channel_id` which is deprecated/incorrect for this table's purpose. Migrations correctly implemented `guild_id`. This description uses `guild_id`.)*
-*   **Key Columns (Corrected):**
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `agent_id` (uuid, FK -> `agents.id`)
-    *   `guild_id` (text, Not Null) // Discord Server ID
+    *   `guild_id` (text, Not Null)
     *   `is_enabled` (boolean)
     *   `discord_app_id` (text)
     *   `discord_public_key` (text)
-    *   `inactivity_timeout_ms` (integer)
+    *   `interaction_secret` (text) // Added by migration
+    *   `inactivity_timeout_minutes` (integer) // Renamed from _ms in migrations
     *   `worker_status` (text)
     *   `created_at` (timestamptz)
 
 ### `public.datastores`
-Represents collections of data for RAG.
-*   **Key Columns:**
+Represents collections of data for RAG (e.g., Pinecone indexes).
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `user_id` (uuid, FK -> `auth.users.id`)
     *   `name` (text)
     *   `description` (text)
-    *   `type` (text)
+    *   `type` (text, e.g., 'pinecone')
     *   `config` (jsonb)
     *   `similarity_metric` (text)
     *   `similarity_threshold` (float4)
     *   `max_results` (integer)
-    *   `created_at`, `updated_at` (timestamptz)
+    *   `created_at` (timestamptz)
+    *   `updated_at` (timestamptz)
 
 ### `public.agent_datastores`
 Join table linking agents to datastores.
-*   **Key Columns:**
-    *   `id` (uuid, PK) // Diagram shows own PK
+*   **Key Columns:** 
+    *   `id` (uuid, PK)
     *   `agent_id` (uuid, FK -> `agents.id`)
     *   `datastore_id` (uuid, FK -> `datastores.id`)
     *   `created_at` (timestamptz)
 
-## Workspace Tables (Formerly Chat Room Tables)
+## Workspace & Collaboration Tables
 
-### `public.workspaces` (Formerly `chat_rooms`)
-Top-level containers for collaboration, replacing the concept of chat rooms.
-*   **Key Columns:**
+### `public.workspaces`
+Top-level containers for collaboration (chat, agents, teams, users).
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `name` (text, Not Null)
     *   `owner_user_id` (uuid, FK -> `auth.users.id`, Not Null)
     *   `created_at` (timestamptz)
 
 ### `public.chat_channels`
-Individual channels within a workspace.
-*   **Key Columns:**
+Individual text channels within a workspace.
+*   **Key Columns:** 
     *   `id` (uuid, PK)
-    *   `workspace_id` (uuid, FK -> `workspaces.id`, Not Null) // Updated from room_id
+    *   `workspace_id` (uuid, FK -> `workspaces.id`, Not Null)
     *   `name` (text, Not Null)
     *   `topic` (text)
     *   `created_at` (timestamptz, Not Null)
     *   `last_message_at` (timestamptz)
+*   **RLS Note:** RLS policies need correction (pending migration) to allow members SELECT/INSERT access based on `is_workspace_member`.
 
-### `public.workspace_members` (Formerly `chat_room_members`)
-Links users to workspaces and defines their role.
-*   **(Diagram vs. Migrations Note:** Diagram shows `user_id`, `agent_id`, `role`, `added_by_user_id`. Migrations implemented `member_type` and `member_id`. This description favors the diagram's apparent structure after workspace refactor.)*
-*   **Key Columns (from Diagram):**
+### `public.workspace_members`
+Links agents, teams, or users to a specific workspace and defines their role within it.
+*   **Key Columns:**
     *   `id` (uuid, PK)
     *   `workspace_id` (uuid, FK -> `workspaces.id`, Not Null)
-    *   `user_id` (uuid, FK -> `auth.users.id`, Not Null) // Assuming direct user link now
-    *   `agent_id` (uuid, FK -> `agents.id`) // Optional agent association?
-    *   `role` (text) // Role within the workspace
-    *   `added_by_user_id` (uuid, FK -> `auth.users.id`)
-    *   `created_at` (timestamptz)
+    *   `agent_id` (uuid, FK -> `agents.id`, NULLABLE)
+    *   `team_id` (uuid, FK -> `teams.id`, NULLABLE)
+    *   `user_id` (uuid, FK -> `auth.users.id`, NULLABLE)
+    *   `role` (text, NULLABLE, default 'member')
+    *   `added_by_user_id` (uuid, FK -> `auth.users.id`, NULLABLE)
+    *   `created_at` (timestamptz, default now())
+*   **Constraints:** `CHECK (num_nonnulls(agent_id, team_id, user_id) = 1)`, UNIQUE constraints on `(workspace_id, agent_id)`, `(workspace_id, team_id)`, `(workspace_id, user_id)`.
 
 ### `public.chat_messages`
 Stores individual messages within a chat channel.
-*   **Key Columns:**
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `channel_id` (uuid, FK -> `chat_channels.id`, Not Null)
     *   `sender_user_id` (uuid, Nullable, FK -> `auth.users.id`)
@@ -170,37 +159,44 @@ Stores individual messages within a chat channel.
     *   `created_at` (timestamptz, Not Null)
     *   `updated_at` (timestamptz)
 
-## Other Tables (From Diagram)
+## Other Supporting Tables
 
 ### `public.mcp_configurations`
-Configuration for the Multi-Cloud Proxy feature.
-*   **Key Columns:**
+Configuration for the Multi-Cloud Proxy feature, linked to agents and specific servers.
+*   **Key Columns:** 
     *   `id` (uuid, PK)
     *   `agent_id` (uuid, FK -> `agents.id`)
-    *   `is_enabled` (boolean)
+    *   `server_id` (uuid, FK -> `mcp_servers.id`) // Link to server
+    *   `name` (text)
+    *   `is_active` (boolean)
+    *   `priority` (integer)
+    *   `timeout_ms` (integer)
+    *   `max_retries` (integer)
+    *   `retry_backoff_ms` (integer)
     *   `created_at`, `updated_at` (timestamptz)
 
 ### `public.mcp_servers`
 Defines available backend servers for MCP.
-*   **Key Columns:**
+*   **Key Columns:** 
     *   `id` (uuid, PK)
-    *   `config_id` (uuid, FK -> `mcp_configurations.id`)
-    *   `name` (varchar)
+    *   `name` (text)
     *   `endpoint_url` (text)
-    *   `vault_api_key_id` (uuid) // Diagram name
-    *   `timeout_ms` (integer)
-    *   `max_retries` (integer)
-    *   `retry_backoff_ms` (integer)
-    *   `priority` (integer)
-    *   `is_active` (boolean)
+    *   `vault_api_key_id` (text) // Reference to key in vault
     *   `capabilities` (jsonb)
     *   `created_at`, `updated_at` (timestamptz)
 
 ### `public.user_secrets`
-Links users to secrets, likely stored in a vault.
-*   **(Diagram vs. Migrations Note:** Table not shown connected in the main diagram provided, but migrations exist. Diagram shows `user_id` and `encryption_key`.)*
-*   **Key Columns (from Diagram):**
+*   **(Note:** Internal Supabase Vault management? Seems related to `vault.secrets`.)*
+*   **Key Columns (from migrations):** 
     *   `id` (uuid, PK)
     *   `user_id` (uuid, FK -> `auth.users.id`)
-    *   `encryption_key` (text) // As shown in diagram fragment
-    *   `created_at`, `updated_at` (timestamptz) 
+    *   `key_id` (uuid) // Refers to vault encryption key?
+    *   `secret` (text) // Encrypted secret value
+    *   `name` (text)
+    *   `description` (text)
+    *   `created_at`, `updated_at` (timestamptz)
+
+## Removed / Deprecated Tables
+
+*   `public.chat_sessions`: Replaced by `workspaces` and `chat_channels`.
+*   `public.chat_room_members`: Replaced by `workspace_members`. 

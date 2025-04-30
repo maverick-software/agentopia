@@ -39,18 +39,23 @@
     *   [X] `can_manage_workspace_members` created. (`20250428180438...`)
 *   [X] **Apply All Migrations** (Completed up to initial point)
 
-*   **Manual Database Correction & Sync (PRIORITY - Due to Cloud Schema Mismatch)**
-    *   [ ] **Manual SQL:** Execute `ALTER TABLE public.chat_channels RENAME COLUMN room_id TO workspace_id;` in Supabase SQL Editor.
-    *   [ ] **Manual SQL:** Execute `DROP TABLE IF EXISTS public.chat_room_members;` in Supabase SQL Editor.
-    *   [ ] **Verify Schema Manually:** Confirm `workspaces` exists, `chat_channels.workspace_id` exists, `chat_room_members` is gone, `workspace_members` exists via Supabase dashboard.
-    *   [ ] **Repair Migration History:** Run `supabase migration repair --status applied 20250428180438` locally (marks the consolidated migration as applied).
-    *   [ ] **Re-sync Local:** Run `supabase db pull` locally.
-    *   [ ] **Final Push Check:** Run `supabase db push` locally (should report "Remote database is up to date").
-*   **Documentation Update (Post-Schema Fix)**
-    *   [ ] Update `database/README.md` to reflect the finalized schema (workspace tables, columns, dropped tables).
-*   **Table: `chat_messages` (Review & Update RLS - Post Manual Fix)**
+*   **Schema Correction & Sync (Completed via Migrations)**
+    *   [X] ~~Manual SQL: Execute ALTER TABLE ... RENAME COLUMN ...~~ *(Done via migration `20250430162336...`)*
+    *   [X] ~~Manual SQL: Execute DROP TABLE ...~~ *(Done via migration `20250430162336...`)*
+    *   [X] ~~Verify Schema Manually~~ *(Implicitly verified by subsequent steps)*
+    *   [X] ~~Repair Migration History: Run supabase migration repair ...~~ *(Handled during push/pull sequence)*
+    *   [X] ~~Re-sync Local: Run supabase db pull ...~~ *(Completed)*
+    *   [X] ~~Final Push Check: Run supabase db push ...~~ *(Completed)*
+*   **Fix `chat_channels` RLS (Pending)**
+    *   [x] Create Migration: `supabase migration new fix_chat_channels_rls`
+    *   [x] Edit Migration: Drop incorrect policies, add new policies (SELECT: `is_workspace_member`, INSERT: `is_workspace_member`, UPDATE/DELETE: Owner check using `workspace_id`). *(Included function definition)*
+    *   [x] Apply Migration: `supabase db push`
+*   **Documentation Update (Pending)**
+    *   [x] Update `database/README.md` to reflect the finalized schema (workspace tables, columns, dropped tables, corrected RLS).
+    *   [x] Update main `README.md` (Database, Workflow sections).
+*   **Table: `chat_messages` (Review & Update RLS - Post RLS Fix)**
     *   [ ] Verify `channel_id` (FK to `chat_channels`) is appropriate. *(Decision: Keep channels)*.
-    *   [ ] Re-verify RLS policies check membership based on `workspace_id` derived from `channel_id`. (`20250428180438...`)
+    *   [ ] Re-verify RLS policies check membership based on `workspace_id` derived from `channel_id`. (`20250428180438...` - Might need update after RLS fix).
 *   **Table: `teams` (No Change)**
 *   **Table: `team_members` (No Change)**
 
@@ -132,6 +137,10 @@
     *   [X] `ChannelListSidebar` fetches channels based on `workspaceId`. *(Needs schema fix)*
     *   [ ] **Refactor:** Verify `useChatChannels` hook (used by sidebar) correctly uses `workspaceId` parameter after schema fix.
     *   [X] `Layout.tsx` conditionally renders `ChannelListSidebar`.
+*   [X] **Layout Refactoring (Workspace Focus)**
+    *   [x] Modify `Layout.tsx`: Conditionally hide main `Sidebar` based on workspace route (`/workspaces/:roomId/...`, excluding `/workspaces` and `/workspaces/new`).
+    *   [x] Modify `WorkspacePage.tsx`: Ensure it renders `ChannelListSidebar` directly within its own structure.
+    *   [x] Modify `ChannelListSidebar.tsx`: Make workspace title header (`<h2/>`) a `Link` navigating back to `/workspaces`.
 
 ## Phase 4: Testing & Refinement (Post-Schema Fix)
 

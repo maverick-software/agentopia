@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useLocation, matchPath } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
-import ChannelListSidebar from './ChannelListSidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,10 +10,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
-  const params = useParams<{ roomId?: string }>();
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setIsTransitioning(true);
@@ -22,20 +18,25 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
-  const showChannelSidebar = !!params.roomId;
+  const isWorkspaceView = matchPath(
+    { path: "/workspaces/:roomId", end: false },
+    location.pathname
+  );
+
+  const showMainSidebar = !isWorkspaceView || 
+                          location.pathname === '/workspaces' || 
+                          location.pathname === '/workspaces/new';
 
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
-      <Sidebar 
-        isCollapsed={isCollapsed}
-        setIsCollapsed={setIsCollapsed}
-        setIsMenuOpen={setIsMenuOpen}
-        triggerRef={triggerRef}
-      />
-      
-      {showChannelSidebar && params.roomId && <ChannelListSidebar roomId={params.roomId} />}
+      {showMainSidebar && (
+        <Sidebar 
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+        />
+      )}
 
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div className={`flex-1 flex flex-col overflow-hidden relative ${!showMainSidebar ? 'w-full' : ''}`}>
         <Header />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-900 p-6 relative text-gray-100">
           {isTransitioning ? (

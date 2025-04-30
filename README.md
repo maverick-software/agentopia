@@ -21,16 +21,19 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 
 ## Project Overview
 
-*   **Goal:** Provide a platform for creating AI agents that can operate within Discord.
-*   **Core Technologies:** React/Vite (Frontend), Supabase (Database, Auth, Edge Functions), Node.js/TypeScript (Backend Services), Discord.js, PM2 (Process Management), DigitalOcean (Droplet for Backend Services).
+*   **Goal:** Provide a platform for creating AI agents that can operate within Discord, collaborate within **Workspaces**, and leverage external tools (MCP) and knowledge (RAG).
+*   **Core Technologies:** React/Vite (Frontend), Supabase (Database, Auth, Edge Functions, Vault), Node.js/TypeScript (Backend Services), Discord.js, PM2 (Process Management), DigitalOcean (Droplet for Backend Services).
 *   **Key Features:**
     *   Web UI for agent creation and configuration.
-    *   Discord integration setup (Bot Token, App ID, etc.).
+    *   **Workspace-based Collaboration:** Manage members (users, agents, teams), channels, and chat within dedicated workspaces.
+    *   Discord integration setup (Bot Token, App ID, etc.) per agent.
     *   `/activate` slash command to bring agents online in a server.
     *   Agent responses when mentioned (`@AgentName`).
-    *   Management of agent worker processes.
-    *   **User Account Management:** Supports user registration, login, and profile management (via Supabase Auth).
-    *   **Admin Interface:** Provides administrative controls for managing users and system settings (details pending).
+    *   Management of agent worker processes (`worker-manager`, `discord-worker`).
+    *   User Account Management: Registration, login, profiles (via Supabase Auth).
+    *   Admin Interface: User and system management (accessed via account dropdown).
+    *   RAG via Datastores (e.g., Pinecone).
+    *   Multi-Cloud Proxy (MCP) integration.
     *   Digital Ocean Login -     ssh -i c:/users/<user>/ssh_key_filename root@165.22.172.98
 
 ## Project Structure
@@ -105,22 +108,20 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   **Frontend (`src/`):**
     *   Built with React, Vite, and TypeScript.
     *   Styled with Tailwind CSS.
-    *   **Entry Point:** `src/main.tsx` renders `src/App.tsx`, which handles routing and context providers (like `AuthContext`).
-    *   **User Features:** Allows users to register, log in (via Supabase Auth), create/edit agents (name, personality, instructions), and configure Discord connection details (Bot Token, App ID, Public Key, timeout).
-    *   **Admin Features:** Includes an admin interface for user management and potentially other system-level configurations.
-    *   Initiates activation/deactivation requests via the `manage-discord-worker` Supabase function.
-    *   Interacts with the Supabase database via the Supabase JS client.
-    *   **Note:** The previous functionality to select a specific Discord channel for the agent has been removed. Future updates will allow managing the agent's presence across multiple servers via a dedicated interface.
+    *   **Entry Point:** `src/main.tsx` -> `src/App.tsx` -> `Layout.tsx`.
+    *   **User Features:** User auth, agent management, team management, datastore management, **Workspace creation/management/chat**. Provides focused workspace view (hiding main sidebar).
+    *   **Admin Features:** Accessed via account dropdown in main sidebar (if user has admin role).
+    *   Initiates agent activation/deactivation via `manage-discord-worker`.
+    *   Interacts with Supabase via JS client & custom hooks.
 *   **Supabase Backend (`supabase/`):**
-    *   **Database:** Stores agent configurations (`agents` table), Discord connection details and status (`agent_discord_connections` table), user data, etc. Uses Row Level Security (RLS), with specific bypasses managed via `SECURITY DEFINER` functions. RLS policies are confirmed enabled and correctly implemented (see RLS section below).
+    *   **Database:** Stores configurations for users, agents, teams, workspaces, channels, members, connections, datastores, MCP, etc. See [`database/README.md`](./database/README.md) for details. Uses RLS extensively.
     *   **Authentication:** Handles user login/signup.
-    *   **Edge Functions:** Serverless functions for handling specific backend tasks.
-        *   `manage-discord-worker`: Receives requests from the frontend UI to start or stop a specific agent's Discord worker. Calls the `worker-manager` service.
-        *   `discord-interaction-handler`: Receives HTTPS requests from Discord for interactions (e.g., slash commands like `/activate`). Verifies request signatures, fetches data from Supabase DB, and may also call the `worker-manager` service (e.g., for activation via slash command).
-        *   `register-agent-commands`: Registers the necessary slash commands (e.g., `/activate`) with Discord's API for specific agents/guilds.
-        *   `chat`: Contains the logic for generating an agent's response when it's mentioned, involving calls to an LLM API (like OpenAI) and potentially utilizing RAG with vector stores.
-    *   **Database Functions:**
-        *   `update_worker_status` (`SECURITY DEFINER`): Allows the `discord-worker` (running potentially with limited Supabase permissions/anon key) to update its own status in the `agent_discord_connections` table, bypassing RLS for this specific action. Called via RPC (`supabase.rpc(...)`).
+    *   **Edge Functions:**
+        *   `manage-discord-worker`: UI -> Worker Manager bridge for start/stop.
+        *   `discord-interaction-handler`: Discord Interaction Webhook (sig verify, autocomplete, `/activate` -> Worker Manager).
+        *   `register-agent-commands`: Registers slash commands.
+        *   `chat`: Core LLM/RAG/MCP logic, called by `discord-worker`.
+    *   **Database Functions:** RLS helpers (`is_workspace_member`, etc.), `update_worker_status` (RPC for worker self-update).
 *   **Backend Services (`services/`):**
     *   Designed to run persistently on a separate server (e.g., DigitalOcean Droplet) managed by PM2.
     *   Written in Node.js and TypeScript.
@@ -136,8 +137,8 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
         *   Calls the Supabase `chat` function to get responses.
         *   Handles inactivity timeouts (configured via UI/DB).
         *   Updates its status (`active`, `inactive`, `terminating`, `error`) in the `agent_discord_connections` table via the `update_worker_status` RPC function upon startup, shutdown, or error.
-*   **Logging Infrastructure (`logs/`):**
-    *   Provides dedicated storage for application logs.
+*   **Logging Infrastructure (`logs/`, `docs/console/logs/`):**
+    *   **Status:** Currently **NOT IMPLEMENTED**. Log directories are empty.
     *   Critical for monitoring, debugging, and system maintenance.
     *   Expected log files:
         *   `worker-manager.log` - Logs from the worker manager service
@@ -218,70 +219,32 @@ These optimizations follow React best practices for handling component lazy-load
 
 ## Database Schema
 
-The database utilizes PostgreSQL managed by Supabase. Key schemas include `auth` (for user authentication) and `public` (for application data).
+The database utilizes PostgreSQL managed by Supabase. Core entities include users, profiles, roles, teams, agents, datastores, **workspaces, workspace members, chat channels, messages**, and MCP components.
 
-**Core entities include:**
-*   Users, Profiles, Roles
-*   Teams, Team Memberships
-*   Agents, Agent Discord Connections
-*   Datastores (for RAG)
-*   Chat Rooms, Channels, Members, and Messages
-*   MCP (Multi-Cloud Proxy) configurations
+**For a detailed breakdown, refer to:** [`database/README.md`](./database/README.md)
 
-**For a detailed breakdown of tables, columns, relationships, and keys, please refer to the dedicated schema documentation:** [`database/README.md`](./database/README.md)
+### Row Level Security (RLS) Policies
 
-### Row Level Security (RLS) Policies (Verified 2025-04-18)
-
-RLS is confirmed ENABLED and correctly implemented on the relevant tables:
-
-**`agents` Table:**
-*   Policy: `Allow full access to own agents`
-*   Role: `authenticated`
-*   Commands: `ALL`
-*   Expression: `auth.uid() = user_id` (for both `USING` and `WITH CHECK`)
-*   *Ensures users can only interact with their own agents.*
-
-**`agent_discord_connections` Table:**
-*   Policy: `Allow full access to connections for own agents`
-*   Role: `authenticated`
-*   Commands: `ALL`
-*   Expression: `is_agent_owner(agent_id)` (for both `USING` and `WITH CHECK`)
-*   *Ensures users can only interact with connections belonging to agents they own (via the `is_agent_owner` SQL function).*
+RLS is enabled on most tables. Key policies include:
+*   Users manage their own profiles, agents, datastores.
+*   Agents can update their own status (`agent_discord_connections`) via RPC.
+*   Workspace access controlled by ownership and `workspace_members` table (via `is_workspace_member` helper).
+*   `chat_channels` access **needs RLS correction** (pending migration) to allow members SELECT/INSERT.
+*   Admin roles bypass RLS where necessary (e.g., via `SECURITY DEFINER` functions or specific admin policies).
 
 ## Known Issues
 
-1. **Oversized Files:**
-   * `AgentEditPage.tsx` (1326 lines) - Well over the 500-line limit
-   * `DatastoresPage.tsx` (664 lines) - Over the 500-line limit
-   * These files need refactoring according to Philosophy #1 (file size limits)
-2. **Previous AgentChatPage Issue:**
-   * Previous work involved fixing an issue where `AgentChatPage.tsx` failed to reliably fetch agent data
-   * A backup file `AgentChatPage.tsx.bak` exists, suggesting recent changes to fix this issue
-3. **`esbuild` Vulnerability:**
-   * `npm audit` reports moderate severity vulnerabilities in `esbuild` (via `vite`).
-   * The suggested `npm audit fix --force` involves a breaking change in `vite`. Requires careful investigation before applying.
+*   **Missing Logs:** Logging is not implemented (violates Rule #2).
+*   **Large Files:** `src/pages/AgentEditPage.tsx` and `src/pages/DatastoresPage.tsx` exceed size limits (violates Philosophy #1).
+*   **`chat_channels` RLS:** Needs correction migration to allow members SELECT/INSERT access (causes 403 errors).
+*   **Frontend Build Error (`AuthContext.tsx`):** Potential duplicate `isAdmin` variable (unverified).
+*   **Workspace Chat `handleSubmit`:** Needs refactoring to determine responding agent based on `workspaceMembers`.
 
 ## Current Status & Next Steps
 
-*   **Status:** The agent activation/deactivation workflow is functional. The `worker-manager` uses PM2 API to manage `discord-worker` processes. RLS issues with status updates resolved via `update_worker_status` RPC. The Discord channel selection UI/feature has been removed. **Routing logic for the root path (`/`) and conditional layout rendering (sidebar visibility) has been corrected (See commit history related to `AppRouter.tsx`).**
-*   **Agent Teams Feature Progress:** (Based on [`docs/plans/agent_teams/wbs_checklist.md`](./docs/plans/agent_teams/wbs_checklist.md))
-    *   **Phase 1 (Setup):** Prerequisites and role definitions complete.
-    *   **Phase 2 (Database):** All required tables (`teams`, `team_members`, `workspaces`, `chat_messages`), RLS policies, and helper functions implemented via migrations.
-    *   **Phase 3 (API Hooks):** React hooks (`useTeams`, `useTeamMembers`, `useTeamChatRooms`, `useChatMessages`) for interacting with the database are implemented.
-    *   **Phase 4 (Core Team UI):** Routing and components for creating, viewing, and managing teams and members (`TeamsPage`, `CreateTeamPage`, `TeamDetailsPage`, `EditTeamPage`, `TeamMemberList`, etc.) are implemented.
-    *   **Phase 5 (Agent Edit Page Update):** `AgentEditPage` now displays team membership details.
-    *   **Phase 6 (Chat UI):** Basic routing and page structure for team workspaces (`WorkspacePage`) implemented.
-    *   **Phase 7 (Role Management):** Enhancements for role exclusivity, job descriptions, and reporting hierarchy implemented in UI and API hooks.
-    *   **Next for Teams:** Phase 8 - Integrating team context (roles, hierarchy) into agent system instructions and behavior.
-*   **Immediate Next Steps (General):**
-    1. **Re-enable RLS:** Row Level Security was disabled on `agent_discord_connections` and `agents` tables during debugging. It needs to be **re-enabled** in the Supabase dashboard. The `update_worker_status` function should allow status updates to continue working correctly.
-    2. **Verify Deactivation:** Thoroughly test the agent deactivation flow from the UI.
-    3. **Multi-Server UI:** Implement the frontend UI for managing agent presence across multiple Discord servers (enable/disable per server).
-    4. **Backend Multi-Server Logic:** Update `manage-discord-worker` and `discord-interaction-handler` functions to handle the new multi-server activation/deactivation model based on the `is_enabled` flag in `agent_discord_connections`.
-    5. **Review RLS (`agents` table):** Determine if RLS policies are needed for the `agents` table (e.g., users can only see/edit their own agents) and implement them.
-    6. **Establish Logging:** Create the standard log directory (`./logs/`) and implement robust logging within the `worker-manager` and `discord-worker` services, adhering to project conventions (RULE #2).
-    7. **Address Known Issues:** Prioritize fixing the `AuthContext.tsx` duplicate variable and investigating the `esbuild` vulnerability and oversized files.
-    8. **Code Cleanup:** Remove temporary diagnostic logs added during troubleshooting.
+*   **Workspace Refactor:** Database schema changes (column rename, table drop) applied via migration. Layout refactoring (hiding main sidebar in workspace view) complete.
+*   **Immediate Next Step:** Create and apply migration to fix `chat_channels` RLS policies.
+*   **Pending WBS Tasks:** Implement remaining backend hooks (`useWorkspaces`, `useWorkspaceMembers`), update `/chat` function logic, complete frontend UI for workspace page (member management, settings), testing.
 
 ## Deployment
 
