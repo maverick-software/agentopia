@@ -5,7 +5,9 @@ import { Clipboard, Check } from 'lucide-react';
 import type { Message } from '../types';
 
 interface ChatMessageProps {
-  message: Message;
+  message: Message & {
+    agentName?: string | null;
+  };
 }
 
 export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMessageProps) {
@@ -35,6 +37,9 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
             : 'bg-gray-600 text-gray-200'
         }`}
       >
+        {message.role === 'assistant' && message.agentName && (
+            <p className="text-xs font-medium text-gray-400 mb-1">{message.agentName}</p>
+        )}
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -44,7 +49,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
             ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-2" {...props} />,
             ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-2" {...props} />,
             li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-            code: ({ node, inline, className, children, ...props }) => {
+            code: ({ node, inline, className, children, ...props }: any) => {
               const match = /language-(\w+)/.exec(className || '');
               return !inline ? (
                 <pre className="bg-gray-800/50 p-2 rounded overflow-x-auto mb-2"><code className={className} {...props}>{children}</code></pre>

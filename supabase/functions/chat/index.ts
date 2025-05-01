@@ -556,7 +556,7 @@ Deno.serve(async (req) => {
       }
 
       // --- Return Response --- (Keep existing logic)
-      return new Response(JSON.stringify({ reply: agentReplyContent, agentId: agentId }), {
+      return new Response(JSON.stringify({ reply: agentReplyContent, agentId: agentId, agentName: agent?.name }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       });
