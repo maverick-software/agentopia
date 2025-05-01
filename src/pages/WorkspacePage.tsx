@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, Menu, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
@@ -15,6 +15,7 @@ import WorkspaceMemberSidebar from '@/components/workspaces/WorkspaceMemberSideb
 import { useWorkspaceMembers } from '@/hooks/useWorkspaceMembers';
 // Import the new chat input component
 import { WorkspaceChatInput } from '@/components/WorkspaceChatInput'; 
+import { Button } from '@/components/ui/button';
 
 // Define a simple type for workspace members based on the table structure
 interface WorkspaceMember {
@@ -64,6 +65,11 @@ export function WorkspacePage() {
   // Keep general page-level error state if needed
   const [pageError, setPageError] = useState<string | null>(null); 
   
+  // --- ADD State for Responsive Sidebars ---
+  const [isChannelSidebarOpen, setIsChannelSidebarOpen] = useState(false);
+  const [isMemberSidebarOpen, setIsMemberSidebarOpen] = useState(false);
+  // --- End State --- 
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // REMOVE abortControllerRef - handled by WorkspaceChat
   // const abortControllerRef = useRef<AbortController | null>(null);
@@ -268,59 +274,89 @@ export function WorkspacePage() {
   }
 
   return (
-    // --- Outer Container --- 
-    // Make background transparent, add padding and spacing between children
-    <div className="flex h-screen bg-transparent p-3 space-x-3">
-      {/* Left Sidebar for Channels (Width is likely handled internally) */}
-      <ChannelListSidebar roomId={workspaceId ?? ''} />
+    <div className="flex w-full h-full bg-gray-900 overflow-hidden p-4">
+      <div className="flex w-full h-full mx-auto gap-4">
+        {/* --- Toggle Buttons for Small Screens --- */}
+        <Button 
+          variant="ghost"
+          size="icon"
+          className="absolute top-4 left-4 z-50 md:hidden bg-gray-800 hover:bg-gray-700 text-white rounded-md"
+          onClick={() => setIsChannelSidebarOpen(!isChannelSidebarOpen)}
+        >
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Toggle Channels</span>
+        </Button>
+        {/* Member Toggle */}
+        <Button 
+          variant="ghost"
+          size="icon"
+          className="absolute top-4 right-4 z-50 md:hidden bg-gray-800 hover:bg-gray-700 text-white rounded-md"
+          onClick={() => setIsMemberSidebarOpen(!isMemberSidebarOpen)}
+        >
+          <Users className="h-5 w-5" />
+          <span className="sr-only">Toggle Members</span>
+        </Button>
+        {/* --- End Toggle Buttons --- */}
 
-      {/* --- Center Chat Area Container --- */}
-      {/* Apply styles similar to sidebars: bg, rounded, shadow, height */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-800 rounded-lg shadow-md">
-        {/* REMOVE Header */}
-        {/* 
-        <header className="p-4 border-b border-gray-700 shadow-sm rounded-t-lg">
-          <h1 className="text-xl font-semibold text-white">{workspace.name} - #{channels.find(c => c.id === channelId)?.name || 'Select Channel'}</h1> 
-          {pageError && <p className="text-xs text-destructive mt-1">{pageError}</p>}
-        </header>
-        */}
-
-        {/* --- Message List --- */}
-        {/* Ensure message list div has rounded top corners if header removed */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900 rounded-t-lg"> 
-          {loadingMessages ? (
-              <LoadingSpinner />
-          ) : messages.length === 0 ? (
-            <div className="text-center text-gray-500 pt-10"> {/* Adjusted text color */} 
-              No messages yet. Start the conversation!
-            </div>
-          ) : (
-            messages.map((msg, index) => (
-              <ChatMessage key={msg.id || index} message={msg} />
-            ))
-          )}
-          <div ref={messagesEndRef} />
+        {/* --- Left Column: Navigation / Channel List --- */}
+        <div className={`
+          fixed md:relative top-0 left-0 h-full z-40 
+          w-64 md:w-60 lg:w-64
+          bg-gray-800 border-r border-gray-700 rounded-lg
+          transition-transform duration-200 ease-in-out transform 
+          ${isChannelSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+          md:translate-x-0 md:z-auto md:flex-shrink-0
+          shadow-lg md:shadow-none
+        `}>
+          <ChannelListSidebar roomId={workspaceId ?? ''} />
         </div>
 
-        {/* --- Chat Input Area --- */}
-        {/* Ensure input area styles fit, maybe change its bg? */}
-        {/* Let's change WorkspaceChatInput's internal form bg to bg-gray-800 to match */}
-        {/* We'll need to edit WorkspaceChatInput.tsx for that */}
-        <WorkspaceChatInput 
-           workspaceId={workspaceId ?? ''}
-           channelId={channelId ?? null}
-           members={workspaceMembers}
-           onMessageSent={handleMessageSent}
-        />
-        
-      </div>
+        {/* --- Center Column: Main Content / Chat Area --- */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-800 rounded-lg shadow-md">
+          {/* --- Message List --- */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-700/10 rounded-t-lg"> 
+            {loadingMessages ? (
+                <LoadingSpinner />
+            ) : messages.length === 0 ? (
+              <div className="text-center text-gray-400 pt-10">
+                No messages yet. Start the conversation!
+              </div>
+            ) : (
+              messages.map((msg, index) => (
+                <ChatMessage key={msg.id || index} message={msg} />
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-      {/* Right Sidebar for Members (Width handled internally) */}
-      <WorkspaceMemberSidebar 
-          workspaceId={workspaceId ?? ''} 
-          members={workspaceMembers} 
-          onAddAgent={addAgentMember}
-      />
+          {/* --- Chat Input Area --- */}
+          <div className="px-4 py-3 bg-gray-800 border-t border-gray-700 rounded-b-lg">
+            <WorkspaceChatInput 
+               workspaceId={workspaceId ?? ''}
+               channelId={channelId ?? null}
+               members={workspaceMembers}
+               onMessageSent={handleMessageSent}
+            />
+          </div>
+        </div>
+
+        {/* --- Right Column: Contextual Information / Member List --- */}
+        <div className={`
+          fixed md:relative top-0 right-0 h-full z-40 
+          w-64 md:w-60 lg:w-64
+          bg-gray-800 border-l border-gray-700 rounded-lg
+          transition-transform duration-200 ease-in-out transform 
+          ${isMemberSidebarOpen ? 'translate-x-0' : 'translate-x-full'} 
+          md:translate-x-0 md:z-auto md:flex-shrink-0
+          shadow-lg md:shadow-none
+        `}>
+            <WorkspaceMemberSidebar 
+                workspaceId={workspaceId ?? ''} 
+                members={workspaceMembers} 
+                onAddAgent={addAgentMember}
+            />
+        </div>
+      </div>
     </div>
   );
 }
