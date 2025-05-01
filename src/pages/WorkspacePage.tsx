@@ -11,6 +11,8 @@ import ChannelListSidebar from '@/components/ChannelListSidebar'; // <-- Import 
 import { useChatChannels } from '@/hooks/useChatChannels'; // Import the hook
 // Import the new member sidebar
 import WorkspaceMemberSidebar from '@/components/workspaces/WorkspaceMemberSidebar';
+// Import the new members hook
+import { useWorkspaceMembers } from '@/hooks/useWorkspaceMembers';
 
 // Define a simple type for workspace members based on the table structure
 interface WorkspaceMember {
@@ -28,22 +30,24 @@ export function WorkspacePage() {
   const { user } = useAuth();
   const { roomId: workspaceId, channelId } = useParams<{ roomId: string, channelId?: string }>(); // Get channelId too
   const navigate = useNavigate();
-  const { channels, loading: channelsLoading } = useChatChannels(workspaceId ?? null); // Use the hook here too
+  const { channels, loading: channelsLoading } = useChatChannels(workspaceId ?? null); 
+  // Use the new hook to get members
+  const { members: workspaceMembers, loading: membersLoading, error: membersError } = useWorkspaceMembers(workspaceId ?? null);
   
   // State for workspace details
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   // Remove placeholder agent state
   // const [agent, setAgent] = useState<Agent | null>(null); 
   // Add state for workspace members
-  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
+  // const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   // Separate loading states
   const [loadingWorkspace, setLoadingWorkspace] = useState(true); 
   const [loadingMessages, setLoadingMessages] = useState(true); // Add if fetching messages
-  // Add loading state for members if needed, or combine with workspace loading
-  const [loadingMembers, setLoadingMembers] = useState(true); 
+  // Remove separate loading state for members - use the one from the hook
+  // const [loadingMembers, setLoadingMembers] = useState(true); 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -70,29 +74,29 @@ export function WorkspacePage() {
     };
   }, []);
 
-  // Effect to fetch Workspace details and Members
+  // Effect to fetch Workspace details (Remove member fetching logic from here)
   useEffect(() => {
-    if (fetchWorkspaceInProgress.current) return;
-    
-    const fetchWorkspaceData = async (attempt = 1) => { 
+    // fetchWorkspaceInProgress ref might still be useful if other async ops happen here
+    // but let's simplify for now and assume only workspace detail fetch here.
+    const fetchWorkspaceDetails = async (attempt = 1) => { 
       if (!workspaceId || !user?.id) return;
 
-      fetchWorkspaceInProgress.current = true;
+      // fetchWorkspaceInProgress.current = true; // Flag not needed if only one fetch
       setLoadingWorkspace(true); 
-      setLoadingMembers(true); 
-      setError(null); 
+      // setLoadingMembers(true); // Member loading handled by useWorkspaceMembers hook
+      setError(null); // Clear previous errors
 
       if (attempt > MAX_FETCH_ATTEMPTS) {
-        console.warn(`[fetchWorkspaceData] Max fetch attempts reached for workspace ${workspaceId}.`);
+        console.warn(`[fetchWorkspaceDetails] Max fetch attempts reached for workspace ${workspaceId}.`);
         if (isMounted.current) {
             setError(`Failed to load workspace details after ${MAX_FETCH_ATTEMPTS} attempts.`);
             setLoadingWorkspace(false);
         }
-        fetchWorkspaceInProgress.current = false; 
+        // fetchWorkspaceInProgress.current = false; 
         return;
       }
       
-      console.log(`[fetchWorkspaceData] Attempt ${attempt} fetching workspace ${workspaceId}...`);
+      console.log(`[fetchWorkspaceDetails] Attempt ${attempt} fetching workspace ${workspaceId}...`);
 
       try {
         const { data: workspaceInfo, error: workspaceError } = await supabase
@@ -107,53 +111,46 @@ export function WorkspacePage() {
         if (isMounted.current) {
             setWorkspace(workspaceInfo);
             setLoadingWorkspace(false);
-        } else {
-            fetchWorkspaceInProgress.current = false;
-            return;
-        }
+            setError(null); // Clear error on success
+        } 
+        // else {
+        //     fetchWorkspaceInProgress.current = false;
+        //     return;
+        // }
 
-        console.log(`[fetchWorkspaceData] Fetching members for workspace ${workspaceId}...`);
-        const { data: membersData, error: membersError } = await supabase
-           .from('workspace_members')
-           .select('id, user_id, agent_id, role')
-           .eq('workspace_id', workspaceId);
-
-        if (membersError) {
-          console.warn("Failed to fetch workspace members:", membersError);
-        }
+        // // Member fetching is now handled by the useWorkspaceMembers hook 
+        // console.log(`[fetchWorkspaceData] Fetching members for workspace ${workspaceId}...`);
+        // ... (removed member fetch query) ...
+        // setWorkspaceMembers(membersData || []); 
+        // setLoadingMembers(false);
         
-        if (!isMounted.current) return; 
-
-        setWorkspaceMembers(membersData || []); 
-        setLoadingMembers(false);
-        setError(null);
-        fetchWorkspaceInProgress.current = false;
-        
-        console.log(`[fetchWorkspaceData] Fetching initial messages for workspace ${workspaceId}, channel ${channelId}... (Placeholder)`);
-        // TODO: Implement actual message fetching based on channelId
-        setLoadingMessages(false);
+        // Message fetching logic might depend on workspace/channel load, handle separately
+        // console.log(`[fetchWorkspaceData] Fetching initial messages... (Placeholder)`);
+        // setLoadingMessages(false); 
 
       } catch (err: any) {
          if (!isMounted.current) return;
-         console.error('[fetchWorkspaceData] Error caught:', err);
-         setError(`Failed to load workspace data or members: ${err.message}`);
-         setLoadingWorkspace(false);
-         setLoadingMembers(false); 
-         setLoadingMessages(false); 
-         fetchWorkspaceInProgress.current = false;
+         console.error('[fetchWorkspaceDetails] Error caught:', err);
+         setError(`Failed to load workspace details: ${err.message}`);
+         setLoadingWorkspace(false); 
+         // Ensure other loading states are false if they depend on this failing?
+         // setLoadingMembers(false); 
+         // setLoadingMessages(false); 
+         // fetchWorkspaceInProgress.current = false;
       }
     };
 
     if (workspaceId && user?.id) {
-        fetchWorkspaceData(1); 
+        fetchWorkspaceDetails(1); 
     } else {
         setLoadingWorkspace(false);
-        setLoadingMembers(false);
-        setLoadingMessages(false);
-        setError('Workspace ID or User ID is missing.'); // Provide error if no ID
+        // setLoadingMembers(false); 
+        // setLoadingMessages(false);
+        if (!workspaceId) setError('Workspace ID is missing from URL.');
+        else if (!user?.id) setError('User ID is missing.');
     }
 
-  }, [workspaceId, user?.id, channelId]); // Add channelId dependency
+  }, [workspaceId, user?.id]); // Removed channelId dependency here, manage message fetching separately
 
   // *** NEW useEffect: Navigate to first channel if none selected ***
   useEffect(() => {
@@ -287,18 +284,71 @@ export function WorkspacePage() {
 
   }, [input, sending, user?.id, workspaceId, channelId, workspaceMembers, scrollToBottom]); // Add channelId dependency
 
-  // Render loading state for the whole page until workspace/members are loaded
-  if (loadingWorkspace || loadingMembers || channelsLoading) {
+  // Effect to fetch messages when channelId changes or becomes available
+  useEffect(() => {
+    const fetchChannelMessages = async () => {
+      if (!supabase || !channelId) {
+        setMessages([]); // Clear messages if no channel selected
+        setLoadingMessages(false);
+        return;
+      }
+      setLoadingMessages(true);
+      setError(null); // Clear previous errors before fetching messages
+      console.log(`[WorkspacePage] Fetching messages via RPC for channel: ${channelId}`);
+      try {
+        // Call the RPC function instead of direct select
+        const { data, error: rpcError } = await supabase
+          .rpc('get_chat_messages_with_details', { 
+            p_channel_id: channelId 
+          });
+
+        if (rpcError) throw rpcError;
+
+        console.log("Fetched messages via RPC:", data);
+        // Map the fetched data to the Message interface
+        // Note: The RPC function returns profile/agent data nested in jsonb columns
+        const formattedMessages: Message[] = (data || []).map((msg: any) => ({
+            role: msg.sender_agent_id ? 'assistant' : 'user', 
+            content: msg.content,
+            timestamp: new Date(msg.created_at),
+            agentId: msg.sender_agent_id,
+            agentName: msg.agent?.name, // Access nested agent name
+            userId: msg.sender_user_id,
+            userName: msg.user_profile?.full_name, // Access nested profile name
+            userAvatar: msg.user_profile?.avatar_url, // Access nested profile avatar
+            metadata: msg.metadata,
+        }));
+        setMessages(formattedMessages); 
+
+      } catch (err: any) {
+        console.error("Error fetching messages via RPC:", err);
+        setError(`Failed to load messages via RPC: ${err.message}`);
+        setMessages([]);
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+
+    fetchChannelMessages();
+
+    // TODO: Add realtime subscription for messages
+
+  }, [supabase, channelId]); // Depend on supabase client and channelId
+
+  // Update loading check to use loading state from the hook
+  if (loadingWorkspace || membersLoading || channelsLoading) {
     return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>;
   }
 
   // Handle case where workspace couldn't be loaded or wasn't found
-  if (error && !workspace) {
+  // Check membersError as well?
+  const combinedError = error || membersError;
+  if (combinedError && !workspace) { // Show error if workspace loading failed, or if member loading failed before workspace loaded
     return (
       <div className="flex flex-col items-center justify-center h-full text-red-500">
         <AlertCircle className="w-12 h-12 mb-4" />
         <p className="text-xl font-semibold">Error Loading Workspace</p>
-        <p>{error}</p>
+        <p>{combinedError}</p>
         <button onClick={() => navigate('/workspaces')} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
           Back to Workspaces
         </button>

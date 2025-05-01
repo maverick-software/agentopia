@@ -1,18 +1,16 @@
 import React from 'react';
+import { User, Bot, Users } from 'lucide-react'; // Import icons
 
-// Define the shape of a member prop (simplified from WorkspacePage for now)
-// TODO: Refine this based on actual data structure needed (e.g., joined user/agent names)
-interface Member {
-  id: string;
-  user_id?: string | null;
-  agent_id?: string | null;
-  team_id?: string | null; // Added team_id for completeness
-  role?: string | null;
-}
+// Import the detailed type from the hook
+import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
+
+// Define the shape of a member prop (using the imported type)
+// interface Member { ... } // Remove the simplified interface
 
 interface WorkspaceMemberSidebarProps {
   workspaceId: string;
-  members: Member[];
+  // Use the detailed type for members prop
+  members: WorkspaceMemberDetail[]; 
 }
 
 const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspaceId, members }) => {
@@ -36,11 +34,27 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspa
         ) : (
           <ul className="space-y-2">
             {members.map((member) => (
-              <li key={member.id} className="text-sm p-1 rounded hover:bg-gray-600">
-                {/* TODO: Display user/agent/team name instead of IDs */}
-                {member.user_id && <span>User: {member.user_id.substring(0, 8)}...</span>}
-                {member.agent_id && <span>Agent: {member.agent_id.substring(0, 8)}...</span>}
-                {member.team_id && <span>Team: {member.team_id.substring(0, 8)}...</span>}
+              // Use member.id (workspace_member UUID) as key
+              <li key={member.id} className="flex items-center text-sm p-1 rounded hover:bg-gray-600">
+                {/* Display Avatar/Icon based on member type */}
+                {member.user_id && (
+                  member.user_profile?.avatar_url ? (
+                    <img src={member.user_profile.avatar_url} alt="User avatar" className="w-5 h-5 rounded-full mr-2" />
+                  ) : (
+                    <User className="w-4 h-4 mr-2 text-gray-400" />
+                  )
+                )}
+                {member.agent_id && <Bot className="w-4 h-4 mr-2 text-blue-400" />}
+                {member.team_id && <Users className="w-4 h-4 mr-2 text-green-400" />}
+                
+                {/* Display Name based on member type */}
+                <span className="flex-1 truncate">
+                  {member.user_id && (member.user_profile?.full_name || `User ${member.user_id.substring(0,6)}...`)}
+                  {member.agent_id && (member.agent?.name || `Agent ${member.agent_id.substring(0,6)}...`)}
+                  {member.team_id && (member.team?.name || `Team ${member.team_id.substring(0,6)}...`)}
+                </span>
+                
+                {/* Display Role */}
                 <span className="text-xs text-gray-400 ml-2">({member.role || 'member'})</span>
               </li>
             ))}

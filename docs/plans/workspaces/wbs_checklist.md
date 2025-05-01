@@ -70,7 +70,7 @@
     *   [ ] Implement `deleteWorkspace(workspaceId)` (check permissions - owner only).
     *   [ ] Add standard loading/error states.
 *   [ ] **Hook: `useWorkspaceMembers` (NEW)**
-    *   [ ] Create `src/hooks/useWorkspaceMembers.ts`.
+    *   [X] Create `src/hooks/useWorkspaceMembers.ts`.
     *   [ ] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members`).
     *   [ ] Implement `addAgentMember(workspaceId, agentId, role?)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `addTeamMember(workspaceId, teamId, role?)` (check permissions via `can_manage_workspace_members`).
