@@ -125,12 +125,21 @@
     *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`.
     *   [ ] **Refactor:** Ensure all references use `workspaceId` from `useParams`.
 *   [ ] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
-    *   *(Not created yet)*
+    *   [ ] Create `src/pages/WorkspaceSettingsPage.tsx`.
+    *   [ ] Use `useWorkspaces` for fetching/updating details.
 *   [ ] **Component: `WorkspaceMemberManager.tsx` (NEW)**
-    *   *(Not created yet)*
-*   [X] **Component: `WorkspaceCard.tsx` (NEW)**
-    *   [X] Create `src/components/workspaces/WorkspaceCard.tsx`. *(Done)*
-    *   [X] Refactor `WorkspaceCard.tsx` for consistency with `TeamCard.tsx`. *(Done)*
+    *   [ ] Create `src/components/workspaces/WorkspaceMemberManager.tsx`.
+    *   [ ] Use `useWorkspaceMembers` hook for fetching/adding/removing/updating members.
+    *   [ ] Implement UI for managing different member types (Agents, Teams, Users).
+*   **Component: `WorkspaceMemberSidebar.tsx` (NEW - Right Sidebar)**
+    *   [ ] Modify `WorkspacePage.tsx` layout to include a right sidebar section.
+    *   [ ] Create `src/components/workspaces/WorkspaceMemberSidebar.tsx`.
+    *   [ ] Implement basic member list display (pass `workspaceMembers` prop from `WorkspacePage`).
+    *   [ ] Add placeholder UI for member invite input and button.
+    *   [ ] Integrate `WorkspaceMemberSidebar` into `WorkspacePage.tsx`.
+*   [X] **Component: `WorkspaceCard.tsx`**
+    *   [X] Created `src/components/workspaces/WorkspaceCard.tsx`.
+    *   [X] Styled consistently.
 *   [ ] **Component: `TeamDetailsPage.tsx` (Refactor `/teams/:teamId`)**
     *   [ ] Remove any UI related to listing workspaces/chat rooms.
 *   [X] **Sidebar/Layout Updates:**
