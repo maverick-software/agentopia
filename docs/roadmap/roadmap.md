@@ -9,6 +9,7 @@
 - [ ] Default optimized prompt listing available MCP servers.
 - [ ] Optional Chain of Thought / Advanced Reasoning for agents.
 - [ ] Project creation and management with agent access control (CRUD/partial CRUD).
+- [ ] Project creation agent assist, which helps create all project docs/checklists after a series of questions.
 - [ ] Web Chatbots installable via script, assignable to agents.
 - [ ] Email, SMS, and additional communication channel notifications.
 - [ ] Voice capabilities for agents.

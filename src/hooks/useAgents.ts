@@ -4,6 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import type { Agent } from '../types';
 import { PostgrestError } from '@supabase/supabase-js';
 
+// Add type for Agent Summary
+export interface AgentSummary {
+  id: string;
+  name: string | null;
+}
+
 interface AgentTeamDetails {
   team_id: string;
   team_name: string | null;
@@ -17,6 +23,12 @@ interface UseAgentsReturn {
   loading: boolean;
   error: PostgrestError | null;
   fetchAllAgents: () => Promise<Agent[]>; // Returns the fetched agents
+  
+  // State and function for Agent Summaries (for invite lists)
+  agentSummaries: AgentSummary[];
+  agentSummariesLoading: boolean;
+  agentSummariesError: PostgrestError | null;
+  fetchAgentSummaries: () => Promise<void>; // Function to fetch summaries
   
   // Agent CRUD operations
   fetchAgentById: (agentId: string) => Promise<Agent | null>;
@@ -35,6 +47,11 @@ export function useAgents(): UseAgentsReturn {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<PostgrestError | null>(null);
+  
+  // Add state for agent summaries
+  const [agentSummaries, setAgentSummaries] = useState<AgentSummary[]>([]);
+  const [agentSummariesLoading, setAgentSummariesLoading] = useState<boolean>(false);
+  const [agentSummariesError, setAgentSummariesError] = useState<PostgrestError | null>(null);
   
   // New state for team details
   const [teamDetails, setTeamDetails] = useState<AgentTeamDetails | null>(null);
@@ -206,19 +223,56 @@ export function useAgents(): UseAgentsReturn {
     }
   }, []); // No user dependency needed here, reads public/RLS-protected data
 
-  // Optional: Fetch agents automatically when the hook is mounted?
-  // Or rely on the component using the hook to call fetchAllAgents.
-  // For a selector, usually fetching on demand or on component mount is preferred.
+  // --- New Function for Agent Summaries ---
+  const fetchAgentSummaries = useCallback(async (): Promise<void> => {
+    if (!user) {
+      console.warn('fetchAgentSummaries called but user is not logged in.');
+      setAgentSummaries([]);
+      return;
+    }
+    setAgentSummariesLoading(true);
+    setAgentSummariesError(null);
+    try {
+      // Fetch only id and name for agents owned by the user
+      // TODO: Consider fetching agents from teams the user is in?
+      const { data, error: fetchError } = await supabase
+        .from('agents')
+        .select('id, name') 
+        .eq('user_id', user.id)
+        .order('name', { ascending: true });
+
+      if (fetchError) throw fetchError;
+      
+      setAgentSummaries(data || []); 
+    } catch (err) {
+      console.error('Error fetching agent summaries:', err);
+      setAgentSummariesError(err as PostgrestError);
+      setAgentSummaries([]);
+    } finally {
+      setAgentSummariesLoading(false);
+    }
+  }, [user]);
+
+  // Optional: Fetch summaries automatically when the hook is mounted?
+  // useEffect(() => {
+  //   fetchAgentSummaries();
+  // }, [fetchAgentSummaries]);
 
   return {
     agents, // Current state of agents fetched by this hook instance
     loading,
     error,
     fetchAllAgents,
-    fetchAgentById, // Added
-    createAgent, // Added
-    updateAgent, // Added
-    // Return new state and function
+    // Return agent summary state and function
+    agentSummaries,
+    agentSummariesLoading,
+    agentSummariesError,
+    fetchAgentSummaries, // Return the new fetch function
+    // CRUD functions
+    fetchAgentById,
+    createAgent,
+    updateAgent,
+    // Team details
     teamDetails,
     teamDetailsLoading,
     teamDetailsError,

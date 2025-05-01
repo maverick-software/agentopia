@@ -71,8 +71,8 @@
     *   [ ] Add standard loading/error states.
 *   [ ] **Hook: `useWorkspaceMembers` (NEW)**
     *   [X] Create `src/hooks/useWorkspaceMembers.ts`.
-    *   [ ] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members`).
-    *   [ ] Implement `addAgentMember(workspaceId, agentId, role?)` (check permissions via `can_manage_workspace_members`).
+    *   [X] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members`).
+    *   [X] Implement `addAgentMember(workspaceId, agentId, role?)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `addTeamMember(workspaceId, teamId, role?)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `addUserMember(workspaceId, userEmail, role?)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `removeAgentMember(workspaceId, agentId)` (check permissions via `can_manage_workspace_members`).
@@ -132,11 +132,17 @@
     *   [ ] Use `useWorkspaceMembers` hook for fetching/adding/removing/updating members.
     *   [ ] Implement UI for managing different member types (Agents, Teams, Users).
 *   **Component: `WorkspaceMemberSidebar.tsx` (NEW - Right Sidebar)**
-    *   [ ] Modify `WorkspacePage.tsx` layout to include a right sidebar section.
-    *   [ ] Create `src/components/workspaces/WorkspaceMemberSidebar.tsx`.
-    *   [ ] Implement basic member list display (pass `workspaceMembers` prop from `WorkspacePage`).
-    *   [ ] Add placeholder UI for member invite input and button.
-    *   [ ] Integrate `WorkspaceMemberSidebar` into `WorkspacePage.tsx`.
+    *   [X] Modify `WorkspacePage.tsx` layout to include a right sidebar section.
+    *   [X] Create `src/components/workspaces/WorkspaceMemberSidebar.tsx`.
+    *   [X] Implement basic member list display (pass `workspaceMembers` prop from `WorkspacePage`).
+    *   [X] Add placeholder UI for member invite input and button.
+    *   [X] Integrate `WorkspaceMemberSidebar` into `WorkspacePage.tsx`.
+    *   **Invite Functionality (Agent Name):**
+        *   [ ] Enhance `useAgents` Hook: Add state (`agentSummaries`) and function (`fetchAgentSummaries`) to fetch agent `id` and `name` list.
+        *   [ ] Fetch Agent Summaries: Call `fetchAgentSummaries` in `WorkspaceMemberSidebar` using the `useAgents` hook.
+        *   [ ] Implement Autocomplete UI: Add state/logic to filter agent summaries based on `@` input, display dropdown suggestions.
+        *   [ ] Handle Selection: Store the selected agent's ID from the dropdown.
+        *   [ ] Update Invite Logic: Modify `handleInvite` to use the selected agent ID when calling `addAgentMember`.
 *   [X] **Component: `WorkspaceCard.tsx`**
     *   [X] Created `src/components/workspaces/WorkspaceCard.tsx`.
     *   [X] Styled consistently.

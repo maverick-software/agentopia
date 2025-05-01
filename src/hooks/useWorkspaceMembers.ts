@@ -82,11 +82,46 @@ export const useWorkspaceMembers = (workspaceId: string | null) => {
   // --- Placeholder Mutation Functions --- 
 
   const addAgentMember = async (agentId: string, role: string = 'member'): Promise<boolean> => {
-    console.log(`[useWorkspaceMembers] Placeholder: Add agent ${agentId} with role ${role} to ${workspaceId}`);
-    // TODO: Implement Supabase insert into workspace_members
-    // Remember to check permissions (e.g., using RLS or checking ownership/role here)
-    setError('Add agent member not implemented.');
-    return false;
+    if (!supabase || !workspaceId || !user?.id) {
+      setError('Cannot add member: Missing workspace context or user session.');
+      return false;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // TODO: Add more robust permission checks if needed beyond RLS
+      const { error: insertError } = await supabase
+        .from('workspace_members')
+        .insert({
+          workspace_id: workspaceId,
+          agent_id: agentId,
+          role: role,
+          added_by_user_id: user.id // Track who added the member
+        });
+
+      if (insertError) {
+        // Handle potential unique constraint violation (member already added)
+        if (insertError.code === '23505') { // Check for unique violation code
+           console.warn(`Agent ${agentId} might already be a member of workspace ${workspaceId}.`);
+           setError(`Agent is already a member.`); // User-friendly error
+           return false; // Indicate failure, but maybe not a hard error?
+        } else {
+          throw insertError; // Rethrow other errors
+        }
+      }
+
+      console.log(`[useWorkspaceMembers] Successfully added agent ${agentId} to ${workspaceId}`);
+      // Re-fetch members to update the list
+      fetchMembers(); 
+      return true; // Indicate success
+
+    } catch (err: any) {
+      console.error("[useWorkspaceMembers] Error adding agent member:", err);
+      setError(err.message || 'Failed to add agent member');
+      return false; // Indicate failure
+    } finally {
+      setLoading(false);
+    }
   };
   
   const addTeamMember = async (teamId: string, role: string = 'member'): Promise<boolean> => {
