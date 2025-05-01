@@ -26,7 +26,7 @@ export function WorkspacePage() {
   const { user } = useAuth();
   const { roomId: workspaceId, channelId } = useParams<{ roomId: string, channelId?: string }>(); // Get channelId too
   const navigate = useNavigate();
-  const { channels, loading: channelsLoading } = useChatChannels(workspaceId); // Use the hook here too
+  const { channels, loading: channelsLoading } = useChatChannels(workspaceId ?? null); // Use the hook here too
   
   // State for workspace details
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -160,7 +160,7 @@ export function WorkspacePage() {
     if (!loadingWorkspace && !channelsLoading && !channelId && channels && channels.length > 0) {
       const firstChannelId = channels[0].id;
       console.log(`[WorkspacePage] No channelId in URL, navigating to first channel: ${firstChannelId}`);
-      navigate(`/workspaces/${workspaceId}/${firstChannelId}`, { replace: true });
+      navigate(`/workspaces/${workspaceId}/channels/${firstChannelId}`, { replace: true });
     }
     // Add dependencies: workspaceId, channelId, channels, channelsLoading, loadingWorkspace, navigate
   }, [workspaceId, channelId, channels, channelsLoading, loadingWorkspace, navigate]);
