@@ -3,8 +3,6 @@ import { User, Bot, Users } from 'lucide-react'; // Import icons
 
 // Import the detailed type from the hook
 import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
-// Import the hook to use its functions
-import { useWorkspaceMembers } from '@/hooks/useWorkspaceMembers'; 
 // Import the hook to get agent summaries
 import { useAgents, type AgentSummary } from '@/hooks/useAgents';
 
@@ -15,23 +13,28 @@ interface WorkspaceMemberSidebarProps {
   workspaceId: string;
   // Use the detailed type for members prop
   members: WorkspaceMemberDetail[]; 
+  // Add the mutation function prop
+  onAddAgent: (agentId: string, role?: string) => Promise<boolean>;
+  // TODO: Add props for mutation loading/error state if needed for UI feedback
+  // mutationLoading?: boolean;
+  // mutationError?: string | null;
 }
 
-const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspaceId, members }) => {
-  // Get the mutation function from the hook context (assuming it's provided higher up or passed down)
-  // For now, let's re-initialize the hook here just for the mutation function.
-  // TODO: Refactor later to pass down mutation functions via props or context to avoid re-initializing the hook.
-  const { 
-    addAgentMember, 
-    error: mutationError, 
-    loading: mutationLoading 
-  } = useWorkspaceMembers(workspaceId);
-  
+const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ 
+  workspaceId, 
+  members, 
+  onAddAgent, // Destructure the passed-in function
+  // mutationLoading, // Destructure if passed
+  // mutationError // Destructure if passed
+}) => {
   // State for the invite input and agent selection
   const [inviteInput, setInviteInput] = useState('');
   const [suggestions, setSuggestions] = useState<AgentSummary[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(null);
+  // Local state for loading/error specific to *this component's* actions?
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   // Fetch available agents for suggestions
   // Correctly destructure agentSummaries and fetchAgentSummaries
@@ -56,6 +59,7 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspa
     const value = e.target.value;
     setInviteInput(value);
     setSelectedAgent(null); // Clear selection when input changes
+    setInviteError(null); // Clear error on new input
 
     if (value.startsWith('@') && value.length > 1) {
       const searchTerm = value.substring(1).toLowerCase();
@@ -78,27 +82,31 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspa
     setInviteInput(`@${agent.name || agent.id}`); // Display selected name
     setShowSuggestions(false);
     setSuggestions([]);
+    setInviteError(null); // Clear error on selection
   };
 
   const handleInvite = async () => {
-    // Use the selectedAgent's ID for the invite
     if (!selectedAgent) {
-      console.error("No agent selected for invite.");
-      // TODO: Show user feedback
+      setInviteError("Please select an agent from the suggestions.");
       return; 
     }
 
+    setIsInviting(true);
+    setInviteError(null);
     console.log(`Attempting to add agent: ${selectedAgent.name} (ID: ${selectedAgent.id})`);
-    const success = await addAgentMember(selectedAgent.id);
+    // Call the passed-in function
+    const success = await onAddAgent(selectedAgent.id);
 
     if (success) {
       console.log(`Invite successful for ${selectedAgent.name}`);
-      setInviteInput(''); // Clear input
-      setSelectedAgent(null); // Clear selection
+      setInviteInput(''); 
+      setSelectedAgent(null); 
     } else {
-      console.error(`Invite failed for ${selectedAgent.name}. Error: ${mutationError}`);
-      // Error is displayed via mutationError state below
+      console.error(`Invite failed for ${selectedAgent.name}.`);
+      // Use local error state, assuming parent might handle/log the actual error
+      setInviteError("Failed to add agent. They might already be a member."); 
     }
+    setIsInviting(false);
   };
 
   return (
@@ -142,8 +150,8 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspa
 
       {/* Invite Section */}
       <div className="mt-auto border-t border-gray-600 pt-3">
-        {/* Display mutation errors here */} 
-        {mutationError && <p className="text-xs text-red-400 mb-1">Error: {mutationError}</p>}
+        {/* Display local invite error */} 
+        {inviteError && <p className="text-xs text-red-400 mb-1">Error: {inviteError}</p>}
         <p className="text-xs text-gray-400 mb-1">Invite Agents (use @)</p> 
         <div className="relative"> {/* Wrapper for positioning suggestions */}
           <div className="flex space-x-2">
@@ -153,15 +161,15 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({ workspa
               onChange={handleInputChange} // Use new handler
               placeholder="@agent name..." // Updated placeholder
               className="flex-1 px-2 py-1 text-sm bg-gray-600 border border-gray-500 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-white"
-              disabled={mutationLoading} 
+              disabled={isInviting} // Use local loading state
             />
             <button 
               onClick={handleInvite}
               // Disable if no agent is selected OR mutation is loading
-              disabled={!selectedAgent || mutationLoading} 
+              disabled={!selectedAgent || isInviting} 
               className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {mutationLoading ? 'Inviting...' : 'Invite'}
+              {isInviting ? 'Inviting...' : 'Invite'} {/* Use local loading state */}
             </button>
           </div>
           {/* Suggestions Dropdown */} 

@@ -31,8 +31,15 @@ export function WorkspacePage() {
   const { roomId: workspaceId, channelId } = useParams<{ roomId: string, channelId?: string }>(); // Get channelId too
   const navigate = useNavigate();
   const { channels, loading: channelsLoading } = useChatChannels(workspaceId ?? null); 
-  // Use the new hook to get members
-  const { members: workspaceMembers, loading: membersLoading, error: membersError } = useWorkspaceMembers(workspaceId ?? null);
+  // Use the new hook to get members AND mutation functions
+  const { 
+    members: workspaceMembers, 
+    loading: membersLoading, 
+    error: membersError,
+    addAgentMember, // Get mutation functions from this instance
+    // addTeamMember, 
+    // addUserMember 
+  } = useWorkspaceMembers(workspaceId ?? null);
   
   // State for workspace details
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -422,6 +429,11 @@ export function WorkspacePage() {
         <WorkspaceMemberSidebar 
           workspaceId={workspaceId} 
           members={workspaceMembers} // Pass fetched members
+          // Pass down the mutation function and relevant state from the parent hook instance
+          onAddAgent={addAgentMember} 
+          // Pass loading/error related to mutations if needed by sidebar UI
+          // mutationLoading={membersLoading} // Or hook needs separate mutation loading state
+          // mutationError={membersError} // Or hook needs separate mutation error state
         />
       </div>
 
