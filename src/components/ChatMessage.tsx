@@ -24,6 +24,8 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
       });
   };
 
+  console.log("Rendering message with agent name:", message.agentName);
+
   return (
     <div
       className={`flex ${
@@ -38,7 +40,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
         }`}
       >
         {message.role === 'assistant' && message.agentName && (
-            <p className="text-xs font-medium text-gray-400 mb-1">{message.agentName}</p>
+          <p className="text-xs font-medium text-indigo-300 mb-1">{message.agentName}</p>
         )}
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}

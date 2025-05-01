@@ -210,15 +210,21 @@ export function WorkspacePage() {
         });
         if (error) throw new Error(error.message || 'Failed to fetch messages.');
         if (isMounted.current) {
-            const fetchedMessages: Message[] = (data || []).map((msg: any) => ({
-                id: msg.id, 
-                role: msg.sender_agent_id ? 'assistant' : 'user',
-                content: msg.content,
-                timestamp: new Date(msg.created_at),
-                userId: msg.sender_user_id,
-                agentId: msg.sender_agent_id,
-                agentName: msg.agent_name ?? null, 
-            }));
+            const fetchedMessages: Message[] = (data || []).map((msg: any) => {
+                // Extract agent name from the agent property if it exists
+                const agentName = msg.agent && typeof msg.agent === 'object' ? msg.agent.name : null;
+                console.log("Message agent data:", msg.agent, "Extracted name:", agentName);
+                
+                return {
+                    id: msg.id, 
+                    role: msg.sender_agent_id ? 'assistant' : 'user',
+                    content: msg.content,
+                    timestamp: new Date(msg.created_at),
+                    userId: msg.sender_user_id,
+                    agentId: msg.sender_agent_id,
+                    agentName: agentName, 
+                };
+            });
             console.log("[fetchMessagesForChannel] Mapped messages:", fetchedMessages);
             setMessages(fetchedMessages);
             // Only set loading false if it was set true initially (or always set false?)
