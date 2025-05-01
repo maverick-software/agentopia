@@ -184,16 +184,20 @@ export function WorkspacePage() {
   }, [messages, scrollToBottom]);
 
   // --- Refactored Message Fetching Logic --- 
-  const fetchMessagesForChannel = useCallback(async () => {
+  const fetchMessagesForChannel = useCallback(async (isRefresh: boolean = false) => {
     if (!channelId || !workspaceId) {
         console.log("[fetchMessagesForChannel] Skipping fetch: channelId or workspaceId missing.");
         setMessages([]);
         setLoadingMessages(false);
         return;
     }
-    console.log(`[fetchMessagesForChannel] Fetching messages for channel ${channelId}...`);
-    setLoadingMessages(true);
-    setPageError(null);
+    console.log(`[fetchMessagesForChannel] Fetching messages (isRefresh: ${isRefresh}) for channel ${channelId}...`);
+    // Only set loading on initial load, not on refresh
+    if (!isRefresh) {
+      setLoadingMessages(true);
+    }
+    // Always clear page errors before fetch attempt
+    setPageError(null); 
     try {
         const { data, error } = await supabase.rpc('get_chat_messages_with_details', {
             p_channel_id: channelId
@@ -201,33 +205,33 @@ export function WorkspacePage() {
         if (error) throw new Error(error.message || 'Failed to fetch messages.');
         if (isMounted.current) {
             const fetchedMessages: Message[] = (data || []).map((msg: any) => ({
-                // Add ID mapping
                 id: msg.id, 
                 role: msg.sender_agent_id ? 'assistant' : 'user',
                 content: msg.content,
                 timestamp: new Date(msg.created_at),
                 userId: msg.sender_user_id,
                 agentId: msg.sender_agent_id,
-                // Add agentName mapping (assuming msg.agent_name exists in RPC result)
                 agentName: msg.agent_name ?? null, 
             }));
-            // --- Log fetched messages --- 
             console.log("[fetchMessagesForChannel] Mapped messages:", fetchedMessages);
             setMessages(fetchedMessages);
-            setLoadingMessages(false);
+            // Only set loading false if it was set true initially (or always set false?)
+            // Let's always set it false to be safe, covers initial load and potential refresh edge cases.
+            setLoadingMessages(false); 
         }
     } catch (err: any) {
         if (isMounted.current) {
             console.error("Error in fetchMessagesForChannel:", err);
             setPageError(`Failed to load messages: ${err.message}`);
             setMessages([]);
-            setLoadingMessages(false);
+            setLoadingMessages(false); // Ensure loading is false on error
         }
     }
   }, [channelId, workspaceId]); // Dependencies: channelId, workspaceId
 
   // --- useEffect to fetch messages when channelId changes --- 
   useEffect(() => {
+    // Call for initial load (isRefresh = false by default)
     fetchMessagesForChannel();
   }, [fetchMessagesForChannel]); // Depend on the useCallback function
 
@@ -237,17 +241,15 @@ export function WorkspacePage() {
     setMessages(prev => [...prev, userMessage]);
     requestAnimationFrame(scrollToBottom);
     
-    // --- Trigger Refetch --- 
-    // Use setTimeout to allow backend time to process and save the agent's reply (if any)
     const refreshTimeout = setTimeout(() => {
       console.log("[WorkspacePage] Triggering message refetch after send...");
-      fetchMessagesForChannel(); 
-    }, 3000); // INCREASED delay to 3 seconds
+      // Call fetch with isRefresh = true
+      fetchMessagesForChannel(true); 
+    }, 3000);
 
-    // Cleanup timeout if component unmounts before it fires
     return () => clearTimeout(refreshTimeout);
     
-  }, [scrollToBottom, fetchMessagesForChannel]); // Add fetchMessagesForChannel dependency
+  }, [scrollToBottom, fetchMessagesForChannel]);
 
   // Loading states combined
   const isLoading = loadingWorkspace || channelsLoading; // Initial page load
