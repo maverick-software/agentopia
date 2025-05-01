@@ -13,6 +13,8 @@ import { useChatChannels } from '@/hooks/useChatChannels'; // Import the hook
 import WorkspaceMemberSidebar from '@/components/workspaces/WorkspaceMemberSidebar';
 // Import the new members hook
 import { useWorkspaceMembers } from '@/hooks/useWorkspaceMembers';
+// Import the new chat input component
+import { WorkspaceChatInput } from '@/components/WorkspaceChatInput'; 
 
 // Define a simple type for workspace members based on the table structure
 interface WorkspaceMember {
@@ -49,21 +51,25 @@ export function WorkspacePage() {
   // const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  // Separate loading states
+  // REMOVE input state - handled by WorkspaceChat
+  // const [input, setInput] = useState('');
+  
+  // Loading states
   const [loadingWorkspace, setLoadingWorkspace] = useState(true); 
-  const [loadingMessages, setLoadingMessages] = useState(true); // Add if fetching messages
-  // Remove separate loading state for members - use the one from the hook
-  // const [loadingMembers, setLoadingMembers] = useState(true); 
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState(false); // Initialize to false
+  // REMOVE sending state - handled by WorkspaceChat
+  // const [sending, setSending] = useState(false);
+  // REMOVE error state related to sending - handled by WorkspaceChat
+  // const [error, setError] = useState<string | null>(null);
+  // Keep general page-level error state if needed
+  const [pageError, setPageError] = useState<string | null>(null); 
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  // const fetchWorkspaceAttempts = useRef(0);
-  // const fetchAgentAttempts = useRef(0); // Still placeholder
-  const MAX_FETCH_ATTEMPTS = 5;
+  // REMOVE abortControllerRef - handled by WorkspaceChat
+  // const abortControllerRef = useRef<AbortController | null>(null);
   const isMounted = useRef(true); 
   const fetchWorkspaceInProgress = useRef(false); // Specific flag for workspace fetch
+  const MAX_FETCH_ATTEMPTS = 5;
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -75,8 +81,8 @@ export function WorkspacePage() {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      if (fetchWorkspaceInProgress.current) {
+        fetchWorkspaceInProgress.current = false;
       }
     };
   }, []);
@@ -91,12 +97,12 @@ export function WorkspacePage() {
       // fetchWorkspaceInProgress.current = true; // Flag not needed if only one fetch
       setLoadingWorkspace(true); 
       // setLoadingMembers(true); // Member loading handled by useWorkspaceMembers hook
-      setError(null); // Clear previous errors
+      setPageError(null); // Clear previous errors
 
       if (attempt > MAX_FETCH_ATTEMPTS) {
         console.warn(`[fetchWorkspaceDetails] Max fetch attempts reached for workspace ${workspaceId}.`);
         if (isMounted.current) {
-            setError(`Failed to load workspace details after ${MAX_FETCH_ATTEMPTS} attempts.`);
+            setPageError(`Failed to load workspace details after ${MAX_FETCH_ATTEMPTS} attempts.`);
             setLoadingWorkspace(false);
         }
         // fetchWorkspaceInProgress.current = false; 
@@ -118,7 +124,7 @@ export function WorkspacePage() {
         if (isMounted.current) {
             setWorkspace(workspaceInfo);
             setLoadingWorkspace(false);
-            setError(null); // Clear error on success
+            setPageError(null); // Clear pageError on success
         } 
         // else {
         //     fetchWorkspaceInProgress.current = false;
@@ -138,7 +144,7 @@ export function WorkspacePage() {
       } catch (err: any) {
          if (!isMounted.current) return;
          console.error('[fetchWorkspaceDetails] Error caught:', err);
-         setError(`Failed to load workspace details: ${err.message}`);
+         setPageError(`Failed to load workspace details: ${err.message}`);
          setLoadingWorkspace(false); 
          // Ensure other loading states are false if they depend on this failing?
          // setLoadingMembers(false); 
@@ -153,8 +159,8 @@ export function WorkspacePage() {
         setLoadingWorkspace(false);
         // setLoadingMembers(false); 
         // setLoadingMessages(false);
-        if (!workspaceId) setError('Workspace ID is missing from URL.');
-        else if (!user?.id) setError('User ID is missing.');
+        if (!workspaceId) setPageError('Workspace ID is missing from URL.');
+        else if (!user?.id) setPageError('User ID is missing.');
     }
 
   }, [workspaceId, user?.id]); // Removed channelId dependency here, manage message fetching separately
@@ -177,230 +183,120 @@ export function WorkspacePage() {
     }
   }, [messages, scrollToBottom]);
 
-  // TODO: Refactor handleSubmit to handle multiple potential responding agents?
-  //       Or determine the primary responding agent for the workspace.
-  //       Needs to send `roomId` (our `workspaceId`) to the backend.
-  //       Needs to use `workspaceMembers` instead of `agent`.
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Allow sending even if no members, remove member length check
-    // Remove targetAgentId check for now
-    if (!input.trim() || sending || !user?.id || !workspaceId || !channelId) { 
-        console.warn("Submit cancelled: Check input, user, workspaceId, channelId, or sending status.");
-        // Provide clearer user feedback if needed
-        // setError("Cannot send message. Check your input and channel selection."); 
-        return; 
-    }
-
-    // Temporarily remove agent determination logic
-    // console.log("Workspace Members:", workspaceMembers);
-    // const targetAgentId = null; // Replace with actual logic later
-    // if (!targetAgentId) {
-    //   setError("Could not determine which agent should respond in this workspace.");
-    //   console.error("handleSubmit: Failed to determine target agent from members:", workspaceMembers);
-    //   return;
-    // }
-
-    const userMessage: Message = {
-      role: 'user',
-      content: input.trim(),
-      timestamp: new Date(),
-      userId: user.id // Include sender user ID
-    };
-    
-    // Declare messageToSend outside the try block
-    let messageToSend: string = '';
-
-    // --- Re-enable Fetch --- 
-    
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    try {
-      setSending(true);
-      setError(null);
-      // Assign value inside try block
-      messageToSend = input.trim(); 
-      setInput(''); // Clear input immediately
-
-      // Optimistically update UI
-      setMessages(prev => [...prev, userMessage]);
-      requestAnimationFrame(scrollToBottom);
-
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session?.access_token) {
-          throw new Error(`Authentication error: ${sessionError?.message || 'Could not get session token.'}`);
-      }
-      const accessToken = session.access_token;
-
-      // Send message to backend function
-      const requestBody = {
-        agentId: null, // Send null for agentId for now (general message)
-        message: messageToSend,
-        roomId: workspaceId, 
-        channelId: channelId, 
-      };
-      console.log("Sending chat request body:", requestBody); 
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal 
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
-        console.error("Chat API Error Response:", errorData);
-        // Revert optimistic update on error
-        setMessages(prev => prev.filter(msg => msg.timestamp !== userMessage.timestamp)); 
-        setInput(messageToSend); // Restore input
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Handle potential agent reply (even if agentId was initially null, backend might decide to reply)
-      if (data.reply) {
-        const agentMessage: Message = {
-          role: 'assistant',
-          content: data.reply,
-          timestamp: new Date(),
-          agentId: data.agentId || null, // Use agentId from response if provided
-          // TODO: Fetch agent name based on data.agentId if needed
-        };
-        setMessages(prev => [...prev, agentMessage]);
-      } else {
-         // No reply is not necessarily an error, just log it
-         console.log("Received response from chat function, but no reply content.");
-      }
-
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        console.log('Chat request aborted.');
-        setError('Chat request timed out or was cancelled.');
-      } else {
-        console.error('Error sending message:', err);
-        setError(`Failed to send message: ${err.message}`);
-      }
-       // Revert optimistic update on any catch
-       setMessages(prev => prev.filter(msg => msg.timestamp !== userMessage.timestamp)); 
-       setInput(messageToSend); // Restore input
-    } finally {
-      setSending(false);
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-    }
-    // --- End Fetch Re-enable ---
-
-    // Remove placeholder logic 
-    // setMessages(prev => [...prev, userMessage]);
-    // setInput('');
-    // requestAnimationFrame(scrollToBottom);
-    // console.warn("handleSubmit: Chat fetch call is temporarily disabled until agent selection logic is implemented.");
-
-  }, [input, sending, user?.id, workspaceId, channelId, scrollToBottom, supabase]); // Removed workspaceMembers dependency, added supabase
-
-  // Effect to fetch messages when channelId changes or becomes available
+  // --- NEW: useEffect to fetch messages when channelId changes --- 
   useEffect(() => {
     const fetchChannelMessages = async () => {
-      if (!supabase || !channelId) {
-        setMessages([]); // Clear messages if no channel selected
-        setLoadingMessages(false);
-        return;
-      }
-      setLoadingMessages(true);
-      setError(null); // Clear previous errors before fetching messages
-      console.log(`[WorkspacePage] Fetching messages via RPC for channel: ${channelId}`);
-      try {
-        // Call the RPC function instead of direct select
-        const { data, error: rpcError } = await supabase
-          .rpc('get_chat_messages_with_details', { 
-            p_channel_id: channelId 
-          });
+        if (!channelId || !workspaceId) {
+            console.log("[fetchChannelMessages] Skipping fetch: channelId or workspaceId missing.");
+            setMessages([]); // Clear messages if no channel selected
+            setLoadingMessages(false);
+            return;
+        }
 
-        if (rpcError) throw rpcError;
+        console.log(`[fetchChannelMessages] Fetching messages for channel ${channelId}...`);
+        setLoadingMessages(true);
+        setPageError(null); // Clear previous errors
 
-        console.log("Fetched messages via RPC:", data);
-        // Map the fetched data to the Message interface
-        // Note: The RPC function returns profile/agent data nested in jsonb columns
-        const formattedMessages: Message[] = (data || []).map((msg: any) => ({
-            role: msg.sender_agent_id ? 'assistant' : 'user', 
-            content: msg.content,
-            timestamp: new Date(msg.created_at),
-            agentId: msg.sender_agent_id,
-            agentName: msg.agent?.name, // Access nested agent name
-            userId: msg.sender_user_id,
-            userName: msg.user_profile?.full_name, // Access nested profile name
-            userAvatar: msg.user_profile?.avatar_url, // Access nested profile avatar
-            metadata: msg.metadata,
-        }));
-        setMessages(formattedMessages); 
+        try {
+            // Use the RPC function to get messages with details
+            const { data, error } = await supabase.rpc('get_chat_messages_with_details', {
+                p_channel_id: channelId
+            });
 
-      } catch (err: any) {
-        console.error("Error fetching messages via RPC:", err);
-        setError(`Failed to load messages via RPC: ${err.message}`);
-        setMessages([]);
-      } finally {
-        setLoadingMessages(false);
-      }
+            if (error) {
+                console.error("Error fetching messages via RPC:", error);
+                throw new Error(error.message || 'Failed to fetch messages.');
+            }
+
+            if (isMounted.current) {
+                // Transform the RPC result (which includes nested profiles) into the Message type
+                const fetchedMessages: Message[] = (data || []).map((msg: any) => ({
+                    role: msg.sender_agent_id ? 'assistant' : 'user',
+                    content: msg.content,
+                    timestamp: new Date(msg.created_at),
+                    userId: msg.sender_user_id,
+                    agentId: msg.sender_agent_id,
+                    // Include user/agent details if needed later
+                    // userName: msg.user_profile?.full_name,
+                    // agentName: msg.agent_profile?.name,
+                }));
+                setMessages(fetchedMessages);
+                setLoadingMessages(false);
+            }
+        } catch (err: any) {
+            if (isMounted.current) {
+                console.error("Error in fetchChannelMessages:", err);
+                setPageError(`Failed to load messages: ${err.message}`);
+                setMessages([]); // Clear messages on error
+                setLoadingMessages(false);
+            }
+        }
     };
 
     fetchChannelMessages();
 
-    // TODO: Add realtime subscription for messages
+  }, [channelId, workspaceId]); // Dependency array includes channelId and workspaceId
+  
+  // --- ADD New Callback for WorkspaceChat --- 
+  const handleMessageSent = useCallback((userMessage: Message, agentReply?: Message | null) => {
+    console.log("[WorkspacePage] handleMessageSent called.");
+    // Optimistically add the user's message
+    setMessages(prev => [...prev, userMessage]);
+    requestAnimationFrame(scrollToBottom); // Scroll after adding user message
+    
+    // TODO: Trigger a refetch of messages after a short delay to get agent reply
+    // This is simpler than trying to handle the agentReply passed back.
+    // We can use React Query's invalidateQueries or a simple setTimeout + refetch function.
+    // Example using a placeholder refetch function:
+    // setTimeout(() => {
+    //   console.log("[WorkspacePage] Triggering message refetch after send...");
+    //   // fetchChannelMessages(); // Need to adapt fetchChannelMessages or create a dedicated refetch
+    // }, 1000); // Delay to allow backend processing
 
-  }, [supabase, channelId]); // Depend on supabase client and channelId
+  }, [scrollToBottom]); // Dependency array
 
-  // Update loading check to use loading state from the hook
-  if (loadingWorkspace || membersLoading || channelsLoading) {
-    return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>;
-  }
+  // Loading states combined
+  const isLoading = loadingWorkspace || channelsLoading; // Initial page load
 
-  // Handle case where workspace couldn't be loaded or wasn't found
-  // Check membersError as well?
-  const combinedError = error || membersError;
-  if (combinedError && !workspace) { // Show error if workspace loading failed, or if member loading failed before workspace loaded
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-red-500">
-        <AlertCircle className="w-12 h-12 mb-4" />
-        <p className="text-xl font-semibold">Error Loading Workspace</p>
-        <p>{combinedError}</p>
-        <button onClick={() => navigate('/workspaces')} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
-          Back to Workspaces
-        </button>
-      </div>
-    );
+  if (isLoading) {
+    return <LoadingSpinner />;
   }
   
-  // Ensure workspaceId is available before rendering sidebar
-  if (!workspaceId) {
-      return <div className="text-red-500 p-4">Error: Workspace ID is missing from URL.</div>; 
+  // Use pageError for general page loading issues
+  if (pageError && !workspace) { // Show critical error only if workspace failed to load
+      return <div className="p-4 text-red-600">Error: {pageError}</div>;
+  }
+
+  if (!workspace) {
+    return <div className="p-4 text-orange-500">Workspace not found or access denied.</div>;
   }
 
   return (
-    // Adjust main container for three columns
-    <div className="flex flex-1 h-full overflow-hidden bg-gray-800 rounded-lg p-3 shadow-lg space-x-3"> {/* Added space-x-3 */}
-      
-      {/* Channel Sidebar (Left) */}
-      <div className="w-64 flex-shrink-0"> {/* Added fixed width */}
-        <ChannelListSidebar roomId={workspaceId} /> 
-      </div>
+    // --- Outer Container --- 
+    // Make background transparent, add padding and spacing between children
+    <div className="flex h-screen bg-transparent p-3 space-x-3">
+      {/* Left Sidebar for Channels (Width is likely handled internally) */}
+      <ChannelListSidebar roomId={workspaceId ?? ''} />
 
-      {/* Center Content: Main Chat Area */}
-      {/* Remove ml-3, use space-x on parent */}
-      <div className="flex-1 flex flex-col overflow-hidden"> 
-        {/* Message List Area */}
-        {/* Ensure background contrast if needed */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 bg-gray-900 rounded-t-lg"> {/* Added bg and rounded top */}
+      {/* --- Center Chat Area Container --- */}
+      {/* Apply styles similar to sidebars: bg, rounded, shadow, height */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-800 rounded-lg shadow-md">
+        {/* Header (Keep similar style, maybe adjust bg/text if needed) */}
+        {/* FIX: Remove card background/text to match container */}
+        <header className="p-4 border-b border-gray-700 shadow-sm rounded-t-lg">
+          <h1 className="text-xl font-semibold text-white">{workspace.name} - #{channels.find(c => c.id === channelId)?.name || 'Select Channel'}</h1> {/* Explicitly set text white */} 
+          {pageError && <p className="text-xs text-destructive mt-1">{pageError}</p>}
+        </header>
+
+        {/* --- Message List --- */}
+        {/* Change background for better contrast, adjust padding/spacing */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900"> {/* Changed bg */} 
           {loadingMessages ? (
               <LoadingSpinner />
           ) : messages.length === 0 ? (
-            <div className="text-center text-gray-500">No messages in this channel yet.</div>
+            <div className="text-center text-gray-500 pt-10"> {/* Adjusted text color */} 
+              No messages yet. Start the conversation!
+            </div>
           ) : (
             messages.map((msg, index) => (
               <ChatMessage key={index} message={msg} />
@@ -409,48 +305,25 @@ export function WorkspacePage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
-        {/* Ensure background contrast */}
-        <div className="p-4 border-t border-gray-700 bg-gray-800 rounded-b-lg"> {/* Added rounded bottom */} 
-          {/* ... error display and form ... */} 
-          {error && !workspace && (
-            <div className="text-red-500 text-sm mb-2">Error: {error}</div>
-          )}
-          <form onSubmit={handleSubmit} className="flex items-center space-x-2">
-             {/* ... input and button ... */} 
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={sending ? "Waiting for response..." : "Type your message..."}
-              className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white disabled:opacity-50"
-              disabled={sending || !channelId} // Disable if sending or no channel selected
-            />
-            <button 
-              type="submit" 
-              disabled={sending || !input.trim() || !channelId} // Disable if sending, input empty, or no channel
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            >
-              {sending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Send className="mr-2 h-4 w-4" />} 
-              Send
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Member Sidebar (Right) */}
-      <div className="w-64 flex-shrink-0"> {/* Added fixed width */}
-        <WorkspaceMemberSidebar 
-          workspaceId={workspaceId} 
-          members={workspaceMembers} // Pass fetched members
-          // Pass down the mutation function and relevant state from the parent hook instance
-          onAddAgent={addAgentMember} 
-          // Pass loading/error related to mutations if needed by sidebar UI
-          // mutationLoading={membersLoading} // Or hook needs separate mutation loading state
-          // mutationError={membersError} // Or hook needs separate mutation error state
+        {/* --- Chat Input Area --- */}
+        {/* Ensure input area styles fit, maybe change its bg? */}
+        {/* Let's change WorkspaceChatInput's internal form bg to bg-gray-800 to match */}
+        {/* We'll need to edit WorkspaceChatInput.tsx for that */}
+        <WorkspaceChatInput 
+           workspaceId={workspaceId ?? ''}
+           channelId={channelId ?? null}
+           members={workspaceMembers}
+           onMessageSent={handleMessageSent}
         />
+        
       </div>
 
+      {/* Right Sidebar for Members (Width handled internally) */}
+      <WorkspaceMemberSidebar 
+          workspaceId={workspaceId ?? ''} 
+          members={workspaceMembers} 
+          onAddAgent={addAgentMember}
+      />
     </div>
   );
 }

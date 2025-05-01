@@ -120,7 +120,7 @@
     *   [ ] Display workspace name/details in header. *(Partially Done)*
     *   [ ] Implement channel selection/default channel logic.
     *   [ ] Implement message fetching based on selected channel (using `useChatMessages`).
-    *   [ ] Render message list (`ChatMessage`) and input (`MessageInput`). *(Partially exists)*
+    *   [X] Render message list (`ChatMessage`) and input (`WorkspaceChatInput`). *(Partially exists, Renamed from MessageInput)*
     *   [ ] Refactor `handleSubmit` to determine responding agent from `workspace_members` and pass `roomId` (`workspaceId`), `channelId`.
     *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`.
     *   [ ] **Refactor:** Ensure all references use `workspaceId` from `useParams`.

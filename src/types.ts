@@ -2,6 +2,8 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  userId?: string | null;
+  agentId?: string | null;
 }
 
 export interface Agent {
