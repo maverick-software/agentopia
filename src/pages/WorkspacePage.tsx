@@ -183,37 +183,47 @@ export function WorkspacePage() {
   //       Needs to use `workspaceMembers` instead of `agent`.
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || sending || !user?.id || !workspaceId || !channelId || workspaceMembers.length === 0) { // Added channelId check
-        console.warn("Submit cancelled: Check input, user, workspaceId, channelId, sending status, or members.");
-        setError("Cannot send message. Ensure you are in a channel and the workspace has members.");
+    // Allow sending even if no members, remove member length check
+    // Remove targetAgentId check for now
+    if (!input.trim() || sending || !user?.id || !workspaceId || !channelId) { 
+        console.warn("Submit cancelled: Check input, user, workspaceId, channelId, or sending status.");
+        // Provide clearer user feedback if needed
+        // setError("Cannot send message. Check your input and channel selection."); 
         return; 
     }
 
-    console.log("Workspace Members:", workspaceMembers);
-    const targetAgentId = null; // Replace with actual logic later
-    
-    if (!targetAgentId) {
-      setError("Could not determine which agent should respond in this workspace.");
-      console.error("handleSubmit: Failed to determine target agent from members:", workspaceMembers);
-      return;
-    }
+    // Temporarily remove agent determination logic
+    // console.log("Workspace Members:", workspaceMembers);
+    // const targetAgentId = null; // Replace with actual logic later
+    // if (!targetAgentId) {
+    //   setError("Could not determine which agent should respond in this workspace.");
+    //   console.error("handleSubmit: Failed to determine target agent from members:", workspaceMembers);
+    //   return;
+    // }
 
     const userMessage: Message = {
       role: 'user',
       content: input.trim(),
       timestamp: new Date(),
+      userId: user.id // Include sender user ID
     };
+    
+    // Declare messageToSend outside the try block
+    let messageToSend: string = '';
 
-    // --- Temporarily Commented Out Fetch --- 
-    /*
+    // --- Re-enable Fetch --- 
+    
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
       setSending(true);
       setError(null);
-      setInput('');
+      // Assign value inside try block
+      messageToSend = input.trim(); 
+      setInput(''); // Clear input immediately
 
+      // Optimistically update UI
       setMessages(prev => [...prev, userMessage]);
       requestAnimationFrame(scrollToBottom);
 
@@ -223,14 +233,12 @@ export function WorkspacePage() {
       }
       const accessToken = session.access_token;
 
-      // Send roomId (workspaceId) and the ID of the agent expected to respond
+      // Send message to backend function
       const requestBody = {
-        // agentId: agent.id, // Which agent should respond? Needs logic. Use targetAgentId
-        agentId: targetAgentId, 
-        message: userMessage.content,
-        roomId: workspaceId, // Send the workspace ID
-        // channelId: null, // Set if applicable
-        // members: [], // Add if needed
+        agentId: null, // Send null for agentId for now (general message)
+        message: messageToSend,
+        roomId: workspaceId, 
+        channelId: channelId, 
       };
       console.log("Sending chat request body:", requestBody); 
 
@@ -241,28 +249,33 @@ export function WorkspacePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
-        signal: controller.signal // Add abort signal
+        signal: controller.signal 
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
         console.error("Chat API Error Response:", errorData);
+        // Revert optimistic update on error
+        setMessages(prev => prev.filter(msg => msg.timestamp !== userMessage.timestamp)); 
+        setInput(messageToSend); // Restore input
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
 
+      // Handle potential agent reply (even if agentId was initially null, backend might decide to reply)
       if (data.reply) {
         const agentMessage: Message = {
           role: 'assistant',
           content: data.reply,
           timestamp: new Date(),
-          // agentId: agent.id, // Associate response with the agent - use targetAgentId
-          agentId: targetAgentId,
+          agentId: data.agentId || null, // Use agentId from response if provided
+          // TODO: Fetch agent name based on data.agentId if needed
         };
         setMessages(prev => [...prev, agentMessage]);
       } else {
-         throw new Error("Received empty reply from agent.");
+         // No reply is not necessarily an error, just log it
+         console.log("Received response from chat function, but no reply content.");
       }
 
     } catch (err: any) {
@@ -271,25 +284,26 @@ export function WorkspacePage() {
         setError('Chat request timed out or was cancelled.');
       } else {
         console.error('Error sending message:', err);
-        setError(`Failed to get response: ${err.message}`);
-        // Optionally revert optimistic user message update on error
+        setError(`Failed to send message: ${err.message}`);
       }
+       // Revert optimistic update on any catch
+       setMessages(prev => prev.filter(msg => msg.timestamp !== userMessage.timestamp)); 
+       setInput(messageToSend); // Restore input
     } finally {
       setSending(false);
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
     }
-    */
-    // --- End Temp Comment --- 
+    // --- End Fetch Re-enable ---
 
-    // Placeholder to simulate sending
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    requestAnimationFrame(scrollToBottom);
-    console.warn("handleSubmit: Chat fetch call is temporarily disabled until agent selection logic is implemented.");
+    // Remove placeholder logic 
+    // setMessages(prev => [...prev, userMessage]);
+    // setInput('');
+    // requestAnimationFrame(scrollToBottom);
+    // console.warn("handleSubmit: Chat fetch call is temporarily disabled until agent selection logic is implemented.");
 
-  }, [input, sending, user?.id, workspaceId, channelId, workspaceMembers, scrollToBottom]); // Add channelId dependency
+  }, [input, sending, user?.id, workspaceId, channelId, scrollToBottom, supabase]); // Removed workspaceMembers dependency, added supabase
 
   // Effect to fetch messages when channelId changes or becomes available
   useEffect(() => {

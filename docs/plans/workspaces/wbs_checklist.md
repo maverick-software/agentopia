@@ -138,11 +138,11 @@
     *   [X] Add placeholder UI for member invite input and button.
     *   [X] Integrate `WorkspaceMemberSidebar` into `WorkspacePage.tsx`.
     *   **Invite Functionality (Agent Name):**
-        *   [ ] Enhance `useAgents` Hook: Add state (`agentSummaries`) and function (`fetchAgentSummaries`) to fetch agent `id` and `name` list.
-        *   [ ] Fetch Agent Summaries: Call `fetchAgentSummaries` in `WorkspaceMemberSidebar` using the `useAgents` hook.
-        *   [ ] Implement Autocomplete UI: Add state/logic to filter agent summaries based on `@` input, display dropdown suggestions.
-        *   [ ] Handle Selection: Store the selected agent's ID from the dropdown.
-        *   [ ] Update Invite Logic: Modify `handleInvite` to use the selected agent ID when calling `addAgentMember`.
+        *   [X] Enhance `useAgents` Hook: Add state (`agentSummaries`) and function (`fetchAgentSummaries`) to fetch agent `id` and `name` list.
+        *   [X] Fetch Agent Summaries: Call `fetchAgentSummaries` in `WorkspaceMemberSidebar` using the `useAgents` hook.
+        *   [X] Implement Autocomplete UI: Add state/logic to filter agent summaries based on `@` input, display dropdown suggestions.
+        *   [X] Handle Selection: Store the selected agent's ID from the dropdown.
+        *   [X] Update Invite Logic: Modify `handleInvite` to use the selected agent ID when calling `addAgentMember`.
 *   [X] **Component: `WorkspaceCard.tsx`**
     *   [X] Created `src/components/workspaces/WorkspaceCard.tsx`.
     *   [X] Styled consistently.
