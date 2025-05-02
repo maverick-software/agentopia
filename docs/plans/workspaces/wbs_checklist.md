@@ -170,4 +170,59 @@
     *   [ ] Verify permissions for adding/removing members based on role/ownership.
     *   [ ] Verify chat message visibility based on workspace membership.
 *   [ ] **UI/UX Testing & Refinement.**
-*   [ ] **Documentation Updates (`README.md`, etc.).** 
+*   [ ] **Documentation Updates (`README.md`, etc.).**
+
+## Phase 5: Workspace Chat Context Enhancement
+
+*   [ ] **Database Schema for Context Windows:**
+    *   [ ] Migration: Add `context_window_size` column to `workspaces` table (default: 20).
+    *   [ ] Migration: Add `context_window_token_limit` column to `workspaces` table (default: 8000).
+    *   [ ] Migration: Update RLS policies for `workspaces` table to allow owner to modify context settings.
+
+*   [ ] **Edge Function `/chat` Enhancements:**
+    *   [ ] Modify `/chat` to fetch workspace members for agent awareness.
+    *   [ ] Modify `/chat` to fetch workspace context window settings.
+    *   [ ] Implement chat history fetching based on context window settings:
+        *   [ ] Fetch up to `context_window_size` most recent messages from channel.
+        *   [ ] Apply token counting to respect `context_window_token_limit`.
+        *   [ ] Include information about all agents in workspace as system context.
+    *   [ ] Update message formatting to include agent metadata:
+        *   [ ] Include agent name with each message.
+        *   [ ] Include optional agent personality information.
+    *   [ ] Modify system prompts to inform of workspace context:
+        *   [ ] Add workspace name and description to system context.
+        *   [ ] Add list of workspace members (agents, users) to system context.
+        *   [ ] Add awareness of channel (topic, purpose) to system context.
+
+*   [ ] **Frontend - Workspace Settings:**
+    *   [ ] Create `WorkspaceSettingsPage` component with tabs.
+    *   [ ] Create `ContextSettingsTab` component with:
+        *   [ ] Input for `context_window_size` (number of messages).
+        *   [ ] Input for `context_window_token_limit` (maximum tokens).
+        *   [ ] Toggle for including agent awareness.
+        *   [ ] Save/Reset buttons to update settings.
+    *   [ ] Create a database hook `useWorkspaceSettings`:
+        *   [ ] Implement `fetchSettings(workspaceId)`.
+        *   [ ] Implement `updateSettings(workspaceId, settings)`.
+    *   [ ] Update routes in `routeConfig.tsx` to include `/workspaces/:roomId/settings`.
+
+*   [ ] **WorkspaceChatInput Component Enhancement:**
+    *   [ ] Add visual indicators for mentioning agents.
+    *   [ ] Implement @mention autocomplete for agents in workspace.
+    *   [ ] Format agent mentions in messages to be distinct.
+
+*   [ ] **Agent Awareness UI:**
+    *   [ ] Enhance `WorkspaceMemberSidebar` to show online/offline status.
+    *   [ ] Add tooltip to agent names showing their role/purpose.
+    *   [ ] Add indicator for which agent is responding to a message.
+
+*   [ ] **Testing & Validation:**
+    *   [ ] Test context window settings affecting message history.
+    *   [ ] Validate agent awareness in responses (mentioning other agents).
+    *   [ ] Measure performance impact of larger context windows.
+    *   [ ] Test token limit enforcement.
+
+*   [ ] **Documentation:**
+    *   [ ] Update workspace documentation with context settings information.
+    *   [ ] Add developer documentation on agent context implementation.
+    *   [ ] Create user guide for workspace context settings. 

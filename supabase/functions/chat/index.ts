@@ -334,12 +334,103 @@ interface BasicRoomMember {
     // Add name/details if the worker sends them
 }
 interface ChatRequestBody {
-    agentId: string;
+    agentId: string | null; // Can be null if message is just from user
     message: string;
     authorId?: string; // Keep if used elsewhere
-    roomId?: string; // NEW
-    channelId?: string; // NEW
-    members?: BasicRoomMember[]; // NEW (Optional)
+    workspaceId?: string; // NEW - ID of the workspace
+    channelId?: string; // NEW - ID of the channel within the workspace
+    // members?: BasicRoomMember[]; // REMOVE - We fetch this server-side
+}
+
+interface BasicWorkspaceMember {
+  id: string;
+  role: string | null;
+  user_id?: string | null;
+  agent_id?: string | null;
+  team_id?: string | null;
+  // Include details if needed later
+  user_name?: string | null; // Example: From user_profiles
+  agent_name?: string | null; // Example: From agents
+  team_name?: string | null; // Example: From teams
+}
+
+interface WorkspaceDetails {
+  id: string;
+  name: string;
+  context_window_size: number;
+  context_window_token_limit: number;
+  members: BasicWorkspaceMember[];
+}
+
+/**
+ * Fetches workspace details, members, and context settings.
+ */
+async function getWorkspaceDetails(workspaceId: string): Promise<WorkspaceDetails | null> {
+  if (!workspaceId) {
+    console.error('getWorkspaceDetails: workspaceId is required.');
+    return null;
+  }
+
+  try {
+    // Fetch workspace settings
+    const { data: workspaceData, error: workspaceError } = await supabaseClient
+      .from('workspaces')
+      .select('id, name, context_window_size, context_window_token_limit')
+      .eq('id', workspaceId)
+      .single();
+
+    if (workspaceError) {
+      console.error(`Error fetching workspace details for ${workspaceId}:`, workspaceError);
+      return null;
+    }
+    if (!workspaceData) {
+      console.warn(`Workspace not found: ${workspaceId}`);
+      return null;
+    }
+
+    // Fetch members with their names
+    // This query joins workspace_members with agents, user_profiles, and teams
+    // to get names associated with each member type.
+    const { data: membersData, error: membersError } = await supabaseClient
+      .from('workspace_members')
+      .select(`
+        id,
+        role,
+        user_id,
+        agent_id,
+        team_id,
+        user_profiles:user_id ( full_name ),
+        agents:agent_id ( name ),
+        teams:team_id ( name )
+      `)
+      .eq('workspace_id', workspaceId);
+
+    if (membersError) {
+      console.error(`Error fetching members for workspace ${workspaceId}:`, membersError);
+      // Return workspace data even if members fail, but log the error
+    }
+
+    const members: BasicWorkspaceMember[] = (membersData || []).map((m: any) => ({
+      id: m.id,
+      role: m.role,
+      user_id: m.user_id,
+      agent_id: m.agent_id,
+      team_id: m.team_id,
+      // Extract names from joined tables
+      user_name: m.user_profiles?.full_name ?? null,
+      agent_name: m.agents?.name ?? null,
+      team_name: m.teams?.name ?? null,
+    }));
+
+    return {
+      ...workspaceData,
+      members: members,
+    };
+
+  } catch (error) {
+    console.error(`Unexpected error in getWorkspaceDetails for ${workspaceId}:`, error);
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -371,13 +462,30 @@ Deno.serve(async (req) => {
     // --- Parse Request Body ---
     const reqData: ChatRequestBody = await req.json();
     const userMessageContent = reqData.message?.trim();
-    const agentId = reqData.agentId; // Can be null
-    const channelId = reqData.channelId; // Should exist for workspace chat
+    const agentId = reqData.agentId; // Target agent ID (can be null)
+    const channelId = reqData.channelId;
+    const workspaceId = reqData.workspaceId;
 
-    // --- *** NEW CONDITIONAL LOGIC *** ---
+    // --- Workspace Context Fetch ---
+    let workspaceDetails: WorkspaceDetails | null = null;
+    if (workspaceId) {
+      workspaceDetails = await getWorkspaceDetails(workspaceId);
+      if (!workspaceDetails) {
+        // Decide handling: Maybe proceed without context, or error?
+        console.warn(`Could not fetch details for workspace ${workspaceId}. Proceeding without workspace context.`);
+        // Return error if workspace context is critical
+        // return new Response(JSON.stringify({ error: 'Failed to load workspace context.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } else {
+        // If no workspaceId is provided, we might be in a different chat mode (e.g., direct agent chat)
+        console.log('No workspaceId provided, assuming non-workspace chat context.');
+        // Proceed without workspace context
+    }
+
+    // --- *** CONDITIONAL LOGIC *** ---
     if (!agentId) {
       // --- Handle User-Only Message (No Agent Target) ---
-      console.log(`Handling user-only message for channel: ${channelId}`);
+      console.log(`Handling user-only message for channel: ${channelId} in workspace: ${workspaceId}`);
 
       if (!userMessageContent) {
           return new Response(JSON.stringify({ error: 'Message content is required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -409,8 +517,8 @@ Deno.serve(async (req) => {
       });
 
     } else {
-      // --- Handle Message Targeting an Agent (Existing Logic) ---
-      console.log(`Handling message for agent: ${agentId}`);
+      // --- Handle Message Targeting an Agent ---
+      console.log(`Handling message for agent: ${agentId} in workspace: ${workspaceId} channel: ${channelId}`);
 
       // Validate Agent ID and Message Content (Keep existing validation)
       if (!agentId || typeof agentId !== 'string') {
@@ -432,27 +540,49 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Agent not found or error fetching agent' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // --- Prepare Context (Vector Search, History, MCP) --- (Keep existing logic)
+      // --- Prepare Context (Vector Search, History, MCP, Workspace) ---
       const vectorContext = await getVectorSearchResults(userMessageContent, agentId);
-      // TODO: Add logic to fetch actual chat history for the specific channel/workspace
-      const chatHistory: ChatMessage[] = [ /* Placeholder */ ];
+
+      // TODO: Fetch chat history using workspaceDetails context settings
+      const chatHistory: ChatMessage[] = [ /* Placeholder for actual history fetch */ ];
 
       const systemMessages: ChatMessage[] = [];
+      // ** Add Workspace Context to System Messages **
+      if (workspaceDetails) {
+          let workspaceContext = `You are in the workspace "${workspaceDetails.name}".\n`;
+          if (workspaceDetails.members.length > 0) {
+              workspaceContext += "Current members in this workspace:\n";
+              workspaceDetails.members.forEach(member => {
+                  let memberInfo = `- `;
+                  if (member.agent_name) memberInfo += `Agent: ${member.agent_name}`;
+                  else if (member.user_name) memberInfo += `User: ${member.user_name}`;
+                  else if (member.team_name) memberInfo += `Team: ${member.team_name}`;
+                  else memberInfo += `Unknown Member (ID: ${member.id})`;
+                  if (member.role) memberInfo += ` (Role: ${member.role})`;
+                  workspaceContext += memberInfo + '\n';
+              });
+          } else {
+              workspaceContext += "You are the only member currently listed.\n";
+          }
+          // TODO: Add channel context (name/topic) if available
+          systemMessages.push({ role: 'system', content: workspaceContext });
+      }
+      // Add Agent system instructions
       if (agent.system_instructions) {
         systemMessages.push({ role: 'system', content: agent.system_instructions });
       }
+      // Add Vector context
       if (vectorContext) {
         systemMessages.push({ role: 'system', content: vectorContext });
       }
-      // Add assistant instructions if they exist
+      // Add assistant instructions
        if (agent.assistant_instructions) {
           systemMessages.push({ role: 'system', content: `ASSISTANT INSTRUCTIONS: ${agent.assistant_instructions}` });
        }
 
-
       const messages: ChatMessage[] = [
         ...systemMessages,
-        ...chatHistory, // Add fetched history here
+        ...chatHistory, // Add fetched history here (TODO)
         { role: 'user', content: userMessageContent },
       ];
 
