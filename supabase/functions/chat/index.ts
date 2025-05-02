@@ -1,21 +1,16 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
+import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import OpenAI from 'npm:openai@4.28.0';
 import { RateLimiter } from 'npm:limiter@3.0.0';
 import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
 import { MCPManager } from './manager.ts';
 import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults } from './types.ts';
+import { ContextBuilder, ChatMessage, WorkspaceDetails, ContextSettings, BasicWorkspaceMember } from './context_builder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
-
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp?: string;
-}
 
 interface VectorSearchResult {
   id: string;
@@ -39,13 +34,11 @@ const openai = new OpenAI({
 });
 
 // Initialize Supabase client
-const supabaseClient = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  {
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const supabaseClient: SupabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { persistSession: false },
-  }
-);
+});
 
 async function getVectorSearchResults(message: string, agentId: string): Promise<string | null> {
   try {
@@ -342,18 +335,6 @@ interface ChatRequestBody {
     // members?: BasicRoomMember[]; // REMOVE - We fetch this server-side
 }
 
-interface BasicWorkspaceMember {
-  id: string;
-  role: string | null;
-  user_id?: string | null;
-  agent_id?: string | null;
-  team_id?: string | null;
-  // Include details if needed later
-  user_name?: string | null; // Example: From user_profiles
-  agent_name?: string | null; // Example: From agents
-  team_name?: string | null; // Example: From teams
-}
-
 interface WorkspaceDetails {
   id: string;
   name: string;
@@ -433,6 +414,60 @@ async function getWorkspaceDetails(workspaceId: string): Promise<WorkspaceDetail
   }
 }
 
+// Fetches chat history - Returns array matching ChatMessage interface
+async function getRelevantChatHistory(
+    channelId: string | null, 
+    userId: string | null, // NEW: User ID for direct chats
+    targetAgentId: string | null, // NEW: Agent ID for direct chats
+    limit: number
+): Promise<ChatMessage[]> {
+    
+    if (limit <= 0) return [];
+
+    try {
+        let query = supabaseClient
+            .from('chat_messages')
+            .select('content, created_at, sender_agent_id, sender_user_id, agents:sender_agent_id ( name )')
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (channelId) {
+            // Workspace Channel History
+            console.log(`Fetching history for channel ${channelId}, limit: ${limit}`);
+            query = query.eq('channel_id', channelId);
+        } else if (userId && targetAgentId) {
+            // Direct Chat History (User <-> Agent)
+            console.log(`Fetching direct history between user ${userId} and agent ${targetAgentId}, limit: ${limit}`);
+            query = query.is('channel_id', null) // Ensure it's not a channel message
+                         .or(`(sender_user_id.eq.${userId},sender_agent_id.eq.${targetAgentId}),(sender_user_id.eq.${targetAgentId},sender_agent_id.eq.${userId})`); // Messages between the two
+                         // Note: The RLS policies must allow fetching these!
+        } else {
+            // Invalid state or scenario not supported (e.g., agent-to-agent direct?)
+            console.warn('getRelevantChatHistory: Cannot fetch history without channelId or userId+targetAgentId pair.');
+            return [];
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const history = (data || []).map((msg: any) => (
+            {
+                role: msg.sender_agent_id ? 'assistant' : 'user',
+                content: msg.content,
+                timestamp: msg.created_at,
+                agentName: msg.agents?.name ?? null
+            } as ChatMessage))
+            .reverse(); 
+            
+        console.log(`Fetched ${history.length} messages for history.`);
+        return history;
+
+    } catch (err) {
+        console.error(`Error fetching chat history (channel: ${channelId}, user: ${userId}, agent: ${targetAgentId}):`, err);
+        return [];
+    }
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -462,7 +497,7 @@ Deno.serve(async (req) => {
     // --- Parse Request Body ---
     const reqData: ChatRequestBody = await req.json();
     const userMessageContent = reqData.message?.trim();
-    const agentId = reqData.agentId; // Target agent ID (can be null)
+    const targetAgentId = reqData.agentId;
     const channelId = reqData.channelId;
     const workspaceId = reqData.workspaceId;
 
@@ -482,216 +517,128 @@ Deno.serve(async (req) => {
         // Proceed without workspace context
     }
 
-    // --- *** CONDITIONAL LOGIC *** ---
-    if (!agentId) {
-      // --- Handle User-Only Message (No Agent Target) ---
+    // --- Define Context Settings ---
+    const contextSettings: ContextSettings = {
+        messageLimit: workspaceDetails?.context_window_size ?? 20, 
+        tokenLimit: workspaceDetails?.context_window_token_limit ?? 8000, 
+    };
+
+    // --- *** CONDITIONAL LOGIC (User vs Agent Message) *** ---
+    if (!targetAgentId) {
+      // --- Handle User-Only Message --- 
       console.log(`Handling user-only message for channel: ${channelId} in workspace: ${workspaceId}`);
-
-      if (!userMessageContent) {
-          return new Response(JSON.stringify({ error: 'Message content is required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!userMessageContent || !channelId) {
+        return new Response(JSON.stringify({ error: 'Message content and Channel ID are required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      if (!channelId) {
-          return new Response(JSON.stringify({ error: 'Channel ID is required for workspace messages.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Save the user message to the database
+      const userMessagePayload: ChatMessageInsertPayload = {
+          channel_id: channelId,
+          content: userMessageContent,
+          sender_user_id: userId,
+          sender_agent_id: null
+      };
       const { error: insertError } = await supabaseClient
-          .from('chat_messages')
-          .insert({
-              channel_id: channelId,
-              content: userMessageContent,
-              sender_user_id: userId,
-              sender_agent_id: null, // Explicitly null
-              // metadata: {} // Add if needed
-          });
-
-      if (insertError) {
+        .from('chat_messages')
+        .insert(userMessagePayload); 
+      if (insertError) { 
           console.error('Error saving user-only message:', insertError);
-          return new Response(JSON.stringify({ error: 'Failed to save message.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          return new Response(JSON.stringify({ error: 'Failed to save message.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); 
       }
-
-      // Return success without a reply
-      return new Response(JSON.stringify({ success: true, message: "Message saved." }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-      });
+      return new Response(JSON.stringify({ success: true, message: "Message saved." }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else {
       // --- Handle Message Targeting an Agent ---
-      console.log(`Handling message for agent: ${agentId} in workspace: ${workspaceId} channel: ${channelId}`);
-
-      // Validate Agent ID and Message Content (Keep existing validation)
-      if (!agentId || typeof agentId !== 'string') {
-        return new Response(JSON.stringify({ error: 'Invalid request format. AgentId valid: false.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-      if (!userMessageContent || typeof userMessageContent !== 'string') {
-        return new Response(JSON.stringify({ error: 'Invalid request format. UserMessage valid: false.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.log(`Handling message for agent: ${targetAgentId} in workspace: ${workspaceId} channel: ${channelId}`);
+      if (!userMessageContent) { 
+          return new Response(JSON.stringify({ error: 'Message content is required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); 
       }
 
-      // --- Fetch Agent Details --- (Keep existing logic)
+      // --- Fetch Agent Details ---
       const { data: agent, error: agentError } = await supabaseClient
-        .from('agents')
-        .select('id, name, system_instructions, assistant_instructions')
-        .eq('id', agentId)
-        .single();
-
-      if (agentError || !agent) {
-        console.error('Agent fetch error:', agentError);
-        return new Response(JSON.stringify({ error: 'Agent not found or error fetching agent' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          .from('agents')
+          .select('id, name, system_instructions, assistant_instructions') 
+          .eq('id', targetAgentId)
+          .single();
+      if (agentError || !agent) { 
+          console.error('Agent fetch error:', agentError);
+          return new Response(JSON.stringify({ error: 'Target agent not found or error fetching agent' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // --- Prepare Context (Vector Search, History, MCP, Workspace) ---
-      const vectorContext = await getVectorSearchResults(userMessageContent, agentId);
+      // --- Fetch Context Components ---
+      const vectorContextStr = await getVectorSearchResults(userMessageContent, targetAgentId);
+      const historyMessages = await getRelevantChatHistory(channelId, userId, targetAgentId, contextSettings.messageLimit);
+      let mcpResourceContextStr: string | null = null; 
 
-      // TODO: Fetch chat history using workspaceDetails context settings
-      const chatHistory: ChatMessage[] = [ /* Placeholder for actual history fetch */ ];
-
-      const systemMessages: ChatMessage[] = [];
-      // ** Add Workspace Context to System Messages **
-      if (workspaceDetails) {
-          let workspaceContext = `You are in the workspace "${workspaceDetails.name}".\n`;
-          if (workspaceDetails.members.length > 0) {
-              workspaceContext += "Current members in this workspace:\n";
-              workspaceDetails.members.forEach(member => {
-                  let memberInfo = `- `;
-                  if (member.agent_name) memberInfo += `Agent: ${member.agent_name}`;
-                  else if (member.user_name) memberInfo += `User: ${member.user_name}`;
-                  else if (member.team_name) memberInfo += `Team: ${member.team_name}`;
-                  else memberInfo += `Unknown Member (ID: ${member.id})`;
-                  if (member.role) memberInfo += ` (Role: ${member.role})`;
-                  workspaceContext += memberInfo + '\n';
-              });
-          } else {
-              workspaceContext += "You are the only member currently listed.\n";
-          }
-          // TODO: Add channel context (name/topic) if available
-          systemMessages.push({ role: 'system', content: workspaceContext });
-      }
-      // Add Agent system instructions
-      if (agent.system_instructions) {
-        systemMessages.push({ role: 'system', content: agent.system_instructions });
-      }
-      // Add Vector context
-      if (vectorContext) {
-        systemMessages.push({ role: 'system', content: vectorContext });
-      }
-      // Add assistant instructions
-       if (agent.assistant_instructions) {
-          systemMessages.push({ role: 'system', content: `ASSISTANT INSTRUCTIONS: ${agent.assistant_instructions}` });
-       }
-
-      const messages: ChatMessage[] = [
-        ...systemMessages,
-        ...chatHistory, // Add fetched history here (TODO)
-        { role: 'user', content: userMessageContent },
-      ];
-
-      let agentReplyContent: string | null = null;
-      let mcpResults: AggregatedMCPResults | null = null;
-
-      // --- MCP Logic --- (Keep existing logic, but fix usage)
-      const mcpConfigs = await getMCPConfigurations(agentId);
-      if (mcpConfigs.length > 0) {
-          console.log(`Agent ${agentId} has ${mcpConfigs.length} active MCP configurations. Attempting MCP...`);
-          const mcpContext = await prepareMCPContext(messages, agent.id, agent.name ?? 'Agent', /* personality */ '', systemMessages.map(m=>m.content).join('\n'), agent.assistant_instructions ?? '');
-          // FIX: Constructor only takes configs
-          const mcpManager = new MCPManager(mcpConfigs /*, getVaultAPIKey */);
+      // --- MCP Logic (Fetch results before context building) --- 
+      const mcpConfigs = await getMCPConfigurations(targetAgentId);
+          if (mcpConfigs.length > 0) {
           try {
-              // FIX: Call processContext and expect AggregatedMCPResults { resources, errors }
-              mcpResults = await mcpManager.processContext(mcpContext);
-
-              // FIX: Process resources as context, don't expect a direct reply
+              // Pass necessary context to prepareMCPContext if needed, simplified for now
+              const mcpContext = await prepareMCPContext([], agent.id, agent.name ?? 'Agent', '', agent.system_instructions, agent.assistant_instructions);
+              const mcpManager = new MCPManager(mcpConfigs /*, getVaultAPIKey */);
+              const mcpResults = await mcpManager.processContext(mcpContext);
               if (mcpResults && mcpResults.resources.length > 0) {
-                  console.log(`MCP successful for agent ${agentId}. Received ${mcpResults.resources.length} resources.`);
-                  // Format MCP resources into a context string
-                  const mcpResourceContext = 'External Context from MCP Servers:\n\n' +
-                      mcpResults.resources
-                          .map(resource => `${resource.type} (${resource.id}):\n${JSON.stringify(resource.content)}`) // Simple stringification
-                          .join('\n\n');
-                  // Add MCP context as a system message for OpenAI
-                  messages.push({ role: 'system', content: mcpResourceContext });
-                  console.log(`Added MCP resource context to messages for agent ${agentId}.`);
-              } else {
-                  console.log(`MCP process completed for agent ${agentId}, but yielded no resources.`);
+                  mcpResourceContextStr = 'External Context from MCP Servers:\n\n' + 
+                      mcpResults.resources.map(r => `${r.type} (${r.id}):\n${JSON.stringify(r.content)}`).join('\n\n');
               }
-
-              if (mcpResults && mcpResults.errors.length > 0) {
-                   console.warn(`MCP processing encountered errors for agent ${agentId}:`, mcpResults.errors);
-                   // Log errors but continue to OpenAI fallback
+              if (mcpResults?.errors?.length > 0) {
+                   console.warn(`MCP processing encountered errors for agent ${targetAgentId}:`, mcpResults.errors);
               }
-
           } catch (mcpError) {
-               console.error(`Critical error during MCP processing for agent ${agentId}:`, mcpError);
-               // Ensure mcpResults is at least an empty structure if error occurred before assignment
-               if (!mcpResults) mcpResults = { resources: [], errors: [{ serverId: -1, error: mcpError }] };
-               else mcpResults.errors.push({ serverId: -1, error: mcpError });
-          } finally {
-              // Ensure MCP clients are disconnected
-              // NOTE: MCPManager constructor doesn't exist in this scope anymore.
-              // Need to consider how to handle cleanup if MCPManager was intended
-              // to be reused or if client cleanup is handled internally.
-              // Assuming MCPClient handles its own cleanup or manager does on processContext completion.
-              // If manager needs explicit disconnect, this needs rethink.
-              // For now, removing disconnectAll() call here as manager instance may not be accessible
-              // and processContext should ideally handle internal cleanup or client lifetime.
+              console.error(`Critical error during MCP processing for agent ${targetAgentId}:`, mcpError);
           }
-
-      } else {
-          console.log(`No active MCP configurations for agent ${agentId}. Skipping MCP processing.`);
-          // Fall through to primary model
       }
 
+      // --- Build Context using ContextBuilder --- 
+      const builder = new ContextBuilder(contextSettings);
+      
+      builder
+        .addSystemInstruction(agent.system_instructions ?? '')
+        .addWorkspaceContext(workspaceDetails)
+        .addVectorMemories(vectorContextStr)
+        .addMCPContext(mcpResourceContextStr)
+        .addAssistantInstruction(agent.assistant_instructions ?? '')
+        .setHistory(historyMessages)
+        .setUserInput(userMessageContent);
+        
+      const finalMessagesForLLM = builder.buildContext(); 
+      
+      // --- Primary Model Invocation --- 
+      let agentReplyContent: string | null = null;
+      console.log(`Invoking primary OpenAI model for agent ${targetAgentId} with ${finalMessagesForLLM.length} messages...`);
+      try {
+        const completion = await openai.chat.completions.create({
+              model: 'gpt-4o', 
+              messages: finalMessagesForLLM as OpenAI.Chat.Completions.ChatCompletionMessageParam[], 
+          temperature: 0.7,
+          });
+          agentReplyContent = completion.choices[0]?.message?.content?.trim() || null;
+          if (!agentReplyContent) console.warn(`Primary OpenAI model returned no content for agent ${targetAgentId}.`);
+          else console.log(`Primary OpenAI model successful for agent ${targetAgentId}.`);
+      } catch (openaiError) {
+          console.error(`Primary OpenAI model invocation error for agent ${targetAgentId}:`, openaiError);
+          agentReplyContent = null;
+      }
 
-       // --- Primary Model Fallback (OpenAI) --- (Now always runs, potentially with added MCP context)
-       // FIX: Remove the check for agentReplyContent === null, as MCP no longer sets it directly.
-       // Always attempt OpenAI call unless a critical *unrecoverable* error happened earlier.
-       // (Current logic proceeds even if MCP had errors/no resources).
-       console.log(`Invoking primary OpenAI model for agent ${agentId}...`);
-       try {
-           const completion = await openai.chat.completions.create({
-               model: 'gpt-4o', // Or your preferred model
-               messages: messages as any, // Cast needed if type doesn't align perfectly
-               temperature: 0.7,
-           });
-           agentReplyContent = completion.choices[0]?.message?.content?.trim() || null;
-           if (agentReplyContent) {
-               console.log(`Primary OpenAI model successful for agent ${agentId}.`);
-           } else {
-              console.warn(`Primary OpenAI model returned no content for agent ${agentId}.`);
-           }
-       } catch (openaiError) {
-           console.error(`Primary OpenAI model invocation error for agent ${agentId}:`, openaiError);
-           // Do not error out the whole request, just return no reply
-           agentReplyContent = null;
-       }
-
-
-      // --- Save Messages --- (Keep existing logic, save user message + agent reply if exists)
-      const messagesToInsert = [
-        { channel_id: channelId, content: userMessageContent, sender_user_id: userId, sender_agent_id: null },
+      // --- Save Messages --- 
+      const messagesToInsert: ChatMessageInsertPayload[] = [
+          { channel_id: channelId!, content: userMessageContent!, sender_user_id: userId, sender_agent_id: null },
       ];
       if (agentReplyContent) {
-        messagesToInsert.push({ channel_id: channelId, content: agentReplyContent, sender_user_id: null, sender_agent_id: agentId });
-      } else {
-        console.log(`Agent ${agentId} did not provide a reply to save.`);
+          messagesToInsert.push({ channel_id: channelId!, content: agentReplyContent, sender_user_id: null, sender_agent_id: targetAgentId });
       }
-
       const { error: insertError } = await supabaseClient
         .from('chat_messages')
         .insert(messagesToInsert);
-
       if (insertError) {
         console.error('Error saving messages:', insertError);
-        // Don't fail the request if saving fails, but log it
       }
 
-      // --- Return Response --- (Keep existing logic)
-      return new Response(JSON.stringify({ reply: agentReplyContent, agentId: agentId, agentName: agent?.name }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      // --- Return Response --- 
+      return new Response(JSON.stringify({ reply: agentReplyContent, agentId: targetAgentId, agentName: agent?.name }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
-      });
+    });
     }
-    // --- *** END CONDITIONAL LOGIC *** ---
 
   } catch (error) {
     console.error('Critical Chat Function Error:', error);
