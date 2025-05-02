@@ -4,7 +4,7 @@ import { RateLimiter } from 'npm:limiter@3.0.0';
 import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
 import { MCPManager } from './manager.ts';
 import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults } from './types.ts';
-import { ContextBuilder, ChatMessage, WorkspaceDetails, ContextSettings, BasicWorkspaceMember } from './context_builder.ts';
+import { ContextBuilder, ChatMessage, WorkspaceDetails as ImportedWorkspaceDetails, ContextSettings, BasicWorkspaceMember } from './context_builder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -335,18 +335,18 @@ interface ChatRequestBody {
     // members?: BasicRoomMember[]; // REMOVE - We fetch this server-side
 }
 
-interface WorkspaceDetails {
-  id: string;
-  name: string;
-  context_window_size: number;
-  context_window_token_limit: number;
-  members: BasicWorkspaceMember[];
+// Define the type for inserting messages into the database
+interface ChatMessageInsertPayload {
+  channel_id: string | null; // Can be null for direct messages
+  content: string;
+  sender_user_id: string | null;
+  sender_agent_id: string | null;
 }
 
 /**
  * Fetches workspace details, members, and context settings.
  */
-async function getWorkspaceDetails(workspaceId: string): Promise<WorkspaceDetails | null> {
+async function getWorkspaceDetails(workspaceId: string): Promise<ImportedWorkspaceDetails | null> {
   if (!workspaceId) {
     console.error('getWorkspaceDetails: workspaceId is required.');
     return null;
@@ -417,55 +417,72 @@ async function getWorkspaceDetails(workspaceId: string): Promise<WorkspaceDetail
 // Fetches chat history - Returns array matching ChatMessage interface
 async function getRelevantChatHistory(
     channelId: string | null, 
-    userId: string | null, // NEW: User ID for direct chats
-    targetAgentId: string | null, // NEW: Agent ID for direct chats
+    userId: string | null, 
+    targetAgentId: string | null, 
     limit: number
 ): Promise<ChatMessage[]> {
-    
-    if (limit <= 0) return [];
+  if (limit <= 0) return [];
+  console.log(`[getRelevantChatHistory] Attempting fetch - channelId: ${channelId}, userId: ${userId}, targetAgentId: ${targetAgentId}, limit: ${limit}`);
 
-    try {
-        let query = supabaseClient
-            .from('chat_messages')
-            .select('content, created_at, sender_agent_id, sender_user_id, agents:sender_agent_id ( name )')
-            .order('created_at', { ascending: false })
-            .limit(limit);
+  try {
+    let query = supabaseClient
+        .from('chat_messages')
+        .select('content, created_at, sender_agent_id, sender_user_id, agents:sender_agent_id ( name )')
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-        if (channelId) {
-            // Workspace Channel History
-            console.log(`Fetching history for channel ${channelId}, limit: ${limit}`);
-            query = query.eq('channel_id', channelId);
-        } else if (userId && targetAgentId) {
-            // Direct Chat History (User <-> Agent)
-            console.log(`Fetching direct history between user ${userId} and agent ${targetAgentId}, limit: ${limit}`);
-            query = query.is('channel_id', null) // Ensure it's not a channel message
-                         .or(`(sender_user_id.eq.${userId},sender_agent_id.eq.${targetAgentId}),(sender_user_id.eq.${targetAgentId},sender_agent_id.eq.${userId})`); // Messages between the two
-                         // Note: The RLS policies must allow fetching these!
-        } else {
-            // Invalid state or scenario not supported (e.g., agent-to-agent direct?)
-            console.warn('getRelevantChatHistory: Cannot fetch history without channelId or userId+targetAgentId pair.');
-            return [];
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
-
-        const history = (data || []).map((msg: any) => (
-            {
-                role: msg.sender_agent_id ? 'assistant' : 'user',
-                content: msg.content,
-                timestamp: msg.created_at,
-                agentName: msg.agents?.name ?? null
-            } as ChatMessage))
-            .reverse(); 
-            
-        console.log(`Fetched ${history.length} messages for history.`);
-        return history;
-
-    } catch (err) {
-        console.error(`Error fetching chat history (channel: ${channelId}, user: ${userId}, agent: ${targetAgentId}):`, err);
+    if (channelId) {
+        // Workspace Channel History
+        console.log(`[getRelevantChatHistory] Mode: Workspace Channel`);
+        query = query.eq('channel_id', channelId);
+    } else if (userId && targetAgentId) {
+        // Direct Chat History (User <-> Agent)
+        console.log(`[getRelevantChatHistory] Mode: Direct Chat`);
+        query = query.is('channel_id', null) 
+                     .or(
+                        `sender_user_id.eq.${userId},` +
+                        `sender_agent_id.eq.${targetAgentId}`
+                     );
+                     
+        // Let's log the constructed filter parts for clarity (DEBUGGING)
+        console.log(`[getRelevantChatHistory] Direct Chat Filters: channel_id IS NULL, OR (` +
+            `sender_user_id.eq.${userId},` +
+            `sender_agent_id.eq.${targetAgentId}` +
+        `)`);
+                     
+    } else {
+        // Invalid state or scenario not supported
+        console.warn('[getRelevantChatHistory] Cannot fetch: No channelId AND no valid userId/targetAgentId pair.');
         return [];
     }
+
+    // Log the final query structure before execution (optional, might be complex)
+    // console.log("[getRelevantChatHistory] Executing query:", query); // Be cautious logging full queries
+
+    const { data, error } = await query;
+
+    // Log the raw results
+    console.log(`[getRelevantChatHistory] Query Result - Error:`, error); 
+    console.log(`[getRelevantChatHistory] Query Result - Data Count:`, data?.length ?? 0);
+    // console.log(`[getRelevantChatHistory] Query Result - Raw Data:`, data); // Avoid logging potentially sensitive message content unless necessary
+
+    if (error) throw error;
+
+    // Map to ChatMessage type (imported)
+    const history = (data || []).map((msg: any) => ({
+        role: msg.sender_agent_id ? 'assistant' : 'user',
+        content: msg.content,
+        timestamp: msg.created_at,
+        agentName: msg.agents?.name ?? null
+    } as ChatMessage)).reverse(); 
+    
+    console.log(`[getRelevantChatHistory] Processed ${history.length} messages for history.`);
+    return history;
+
+  } catch (err) {
+    console.error(`[getRelevantChatHistory] Error fetching history (channel: ${channelId}, user: ${userId}, agent: ${targetAgentId}):`, err);
+    return [];
+  }
 }
 
 Deno.serve(async (req) => {
@@ -502,7 +519,7 @@ Deno.serve(async (req) => {
     const workspaceId = reqData.workspaceId;
 
     // --- Workspace Context Fetch ---
-    let workspaceDetails: WorkspaceDetails | null = null;
+    let workspaceDetails: ImportedWorkspaceDetails | null = null;
     if (workspaceId) {
       workspaceDetails = await getWorkspaceDetails(workspaceId);
       if (!workspaceDetails) {
@@ -565,7 +582,7 @@ Deno.serve(async (req) => {
 
       // --- Fetch Context Components ---
       const vectorContextStr = await getVectorSearchResults(userMessageContent, targetAgentId);
-      const historyMessages = await getRelevantChatHistory(channelId, userId, targetAgentId, contextSettings.messageLimit);
+      const historyMessages = await getRelevantChatHistory(channelId ?? null, userId, targetAgentId, contextSettings.messageLimit);
       let mcpResourceContextStr: string | null = null; 
 
       // --- MCP Logic (Fetch results before context building) --- 
@@ -621,10 +638,10 @@ Deno.serve(async (req) => {
 
       // --- Save Messages --- 
       const messagesToInsert: ChatMessageInsertPayload[] = [
-          { channel_id: channelId!, content: userMessageContent!, sender_user_id: userId, sender_agent_id: null },
+          { channel_id: channelId ?? null, content: userMessageContent!, sender_user_id: userId, sender_agent_id: null },
       ];
       if (agentReplyContent) {
-          messagesToInsert.push({ channel_id: channelId!, content: agentReplyContent, sender_user_id: null, sender_agent_id: targetAgentId });
+          messagesToInsert.push({ channel_id: channelId ?? null, content: agentReplyContent, sender_user_id: null, sender_agent_id: targetAgentId });
       }
       const { error: insertError } = await supabaseClient
         .from('chat_messages')

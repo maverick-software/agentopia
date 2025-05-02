@@ -45,10 +45,32 @@
 ## Phase 3: Testing & Refinement
 
 *   [ ] **Functionality Testing:**
-    *   [ ] Verify context is correctly assembled for workspace chats.
-    *   [ ] Verify context is correctly assembled for non-workspace chats (if applicable).
-    *   [ ] Test message limit enforcement (`context_window_size`).
-    *   [ ] Test token limit enforcement (`context_window_token_limit`) - requires better token counting.
+    *   [ ] **Direct Chat History Verification:**
+        *   [ ] Send multiple messages back and forth in a direct chat with an agent.
+        *   [ ] Close and reopen the direct chat. Verify previous messages are loaded.
+        *   [ ] Verify the agent's responses consider the recent direct chat history.
+        *   [ ] Check Supabase function logs (`supabase functions logs chat`) to confirm `getRelevantChatHistory` is fetching records where `channel_id IS NULL`.
+        *   [ ] Verify workspace context (name, members list) is NOT included in the system prompt for direct chats (check logs).
+    *   [ ] **Workspace Chat History Verification:**
+        *   [ ] Send multiple messages in a workspace channel.
+        *   [ ] Close and reopen the workspace/channel. Verify previous messages are loaded.
+        *   [ ] Verify the agent's responses consider the recent channel history.
+        *   [ ] Check Supabase function logs to confirm `getRelevantChatHistory` is fetching records for the specific `channel_id`.
+        *   [ ] Verify workspace context (name, members list) IS included in the system prompt for workspace chats (check logs).
+    *   [ ] **Context Window Limit Testing (Message Count):**
+        *   [ ] Configure a small `context_window_size` (e.g., 5) for a test workspace via Supabase Studio or a script.
+        *   [ ] Engage in a long conversation ( > 5 messages) in a channel within that workspace.
+        *   [ ] Verify that the agent's responses only consider the last 5 messages (check logs for the history passed to the LLM).
+        *   [ ] Repeat for a direct chat (requires temporarily modifying the default limit or function logic if direct chats don't use workspace settings).
+    *   [ ] **Context Window Limit Testing (Token Count):**
+        *   [ ] Configure a small `context_window_token_limit` (e.g., 500) for a test workspace.
+        *   [ ] Engage in a conversation with messages of varying lengths in a channel within that workspace.
+        *   [ ] Observe (via logs) how the `ContextBuilder` includes history messages until the token limit is approached. Verify older messages are truncated first.
+        *   [ ] Repeat for a direct chat (similar constraints as message count testing).
+    *   [ ] **Edge Case Testing:**
+        *   [ ] Test chats with no prior history (both direct and workspace).
+        *   [ ] Test sending the very first message in a direct chat.
+        *   [ ] Test sending the very first message in a workspace channel.
 *   [ ] **Integration Testing:** Ensure the `/chat` function works end-to-end with the new context logic.
 *   [ ] **Performance Testing:** Evaluate any performance impact of the new logic, especially history fetching and token counting.
 *   [ ] **Refinement:** Adjust token estimation, prompt structure, or logic based on testing.
