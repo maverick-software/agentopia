@@ -208,4 +208,35 @@ export class ContextBuilder {
 
         return finalMessages;
     }
+
+    // Add a method to get the estimated total token count
+    getTotalTokenCount(): number {
+        let total = 0;
+        
+        // Count system messages
+        for (const msg of this.systemMessages) {
+            total += estimateTokenCount(msg.content);
+        }
+        
+        // Count optional context
+        if (this.vectorContext) {
+            total += estimateTokenCount(this.vectorContext);
+        }
+        
+        if (this.mcpContext) {
+            total += estimateTokenCount(this.mcpContext);
+        }
+        
+        // Count history messages
+        for (const msg of this.historyMessages) {
+            total += estimateTokenCount(msg.content);
+        }
+        
+        // Count user message
+        if (this.userMessage) {
+            total += estimateTokenCount(this.userMessage.content);
+        }
+        
+        return total;
+    }
 } 

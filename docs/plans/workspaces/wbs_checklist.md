@@ -185,17 +185,17 @@
     *   [X] Migration: Add `context_window_token_limit` column to `workspaces` table (default: 8000).
     *   [X] Migration: Update RLS policies for `workspaces` table to allow owner to modify context settings.
 
-*   [ ] **Edge Function `/chat` Enhancements:**
+*   [X] **Edge Function `/chat` Enhancements:**
     *   [X] Modify `/chat` to fetch workspace members for agent awareness. *(Done in Phase 2)*
-    *   [ ] Modify `/chat` to fetch workspace context window settings.
-    *   [ ] Implement chat history fetching based on context window settings:
-        *   [ ] Fetch up to `context_window_size` most recent messages from channel.
-        *   [ ] Apply token counting to respect `context_window_token_limit`.
-        *   [ ] Include information about all agents in workspace as system context.
-    *   [ ] Update message formatting to include agent metadata:
-        *   [ ] Include agent name with each message.
-        *   [ ] Include optional agent personality information.
-    *   [ ] Modify system prompts to inform of workspace context:
+    *   [X] Modify `/chat` to fetch workspace context window settings.
+    *   [X] Implement chat history fetching based on context window settings:
+        *   [X] Fetch up to `context_window_size` most recent messages from channel.
+        *   [X] Apply token counting to respect `context_window_token_limit`.
+        *   [X] Include information about all agents in workspace as system context.
+    *   [X] Update message formatting to include agent metadata:
+        *   [X] Include agent name with each message.
+        *   [X] Include optional agent personality information.
+    *   [X] Modify system prompts to inform of workspace context:
         *   [X] Add workspace name and description to system context. *(Done in Phase 2)*
         *   [X] Add list of workspace members (agents, users) to system context. *(Done in Phase 2)*
         *   [X] Add awareness of channel (topic, purpose) to system context. *(Done in Phase 2)*
@@ -211,6 +211,7 @@
         *   [X] Implement `fetchSettings(workspaceId)`.
         *   [X] Implement `updateSettings(workspaceId, settings)`.
     *   [X] Update routes in `routeConfig.tsx` to include `/workspaces/:roomId/settings`. *(Done)*
+    *   [X] Add required UI components: slider.tsx, tooltip.tsx, switch.tsx.
 
 *   [X] **WorkspaceChatInput Component Enhancement:**
     *   [X] Add visual indicators for mentioning agents. *(Popover appears)*
@@ -222,11 +223,11 @@
     *   [X] Add tooltip to agent names showing their role/purpose.
     *   [X] Add indicator for which agent is responding to a message.
 
-*   [ ] **ChatMessage Enhancements:**
+*   [X] **ChatMessage Enhancements:**
     *   [X] Display agent name on chat messages from assistants
     *   [X] Ensure proper styling and contrast for all message types
     *   [X] Fix agent mention display in messages
-    *   [ ] Add optional avatar display for agents
+    *   [X] Add optional avatar display for agents
 
 *   [ ] **Testing & Validation:**
     *   [ ] Test context window settings affecting message history.

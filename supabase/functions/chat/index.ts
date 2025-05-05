@@ -536,9 +536,11 @@ Deno.serve(async (req) => {
 
     // --- Define Context Settings ---
     const contextSettings: ContextSettings = {
-        messageLimit: workspaceDetails?.context_window_size ?? 20, 
-        tokenLimit: workspaceDetails?.context_window_token_limit ?? 8000, 
+      messageLimit: workspaceDetails?.context_window_size ?? 20, 
+      tokenLimit: workspaceDetails?.context_window_token_limit ?? 8000, 
     };
+
+    console.log(`[chat] Using context settings - Window Size: ${contextSettings.messageLimit}, Token Limit: ${contextSettings.tokenLimit}`);
 
     // --- *** CONDITIONAL LOGIC (User vs Agent Message) *** ---
     if (!targetAgentId) {
@@ -572,7 +574,7 @@ Deno.serve(async (req) => {
       // --- Fetch Agent Details ---
       const { data: agent, error: agentError } = await supabaseClient
           .from('agents')
-          .select('id, name, system_instructions, assistant_instructions') 
+          .select('id, name, system_instructions, assistant_instructions, personality') 
           .eq('id', targetAgentId)
           .single();
       if (agentError || !agent) { 
@@ -605,56 +607,85 @@ Deno.serve(async (req) => {
           }
       }
 
-      // --- Build Context using ContextBuilder --- 
-      const builder = new ContextBuilder(contextSettings);
-      
-      builder
-        .addSystemInstruction(agent.system_instructions ?? '')
-        .addWorkspaceContext(workspaceDetails)
-        .addVectorMemories(vectorContextStr)
-        .addMCPContext(mcpResourceContextStr)
-        .addAssistantInstruction(agent.assistant_instructions ?? '')
-        .setHistory(historyMessages)
-        .setUserInput(userMessageContent);
-        
-      const finalMessagesForLLM = builder.buildContext(); 
-      
-      // --- Primary Model Invocation --- 
-      let agentReplyContent: string | null = null;
-      console.log(`Invoking primary OpenAI model for agent ${targetAgentId} with ${finalMessagesForLLM.length} messages...`);
-      try {
-        const completion = await openai.chat.completions.create({
-              model: 'gpt-4o', 
-              messages: finalMessagesForLLM as OpenAI.Chat.Completions.ChatCompletionMessageParam[], 
-          temperature: 0.7,
-          });
-          agentReplyContent = completion.choices[0]?.message?.content?.trim() || null;
-          if (!agentReplyContent) console.warn(`Primary OpenAI model returned no content for agent ${targetAgentId}.`);
-          else console.log(`Primary OpenAI model successful for agent ${targetAgentId}.`);
-      } catch (openaiError) {
-          console.error(`Primary OpenAI model invocation error for agent ${targetAgentId}:`, openaiError);
-          agentReplyContent = null;
+      // --- Create Context Builder ---
+      const contextBuilder = new ContextBuilder(contextSettings)
+        .addSystemInstruction(agent.system_instructions || '');
+
+      // Add agent identity and personality
+      if (agent.name) {
+        contextBuilder.addSystemInstruction(`You are ${agent.name}, an AI agent.`);
+        if (agent.personality) {
+          contextBuilder.addSystemInstruction(`Your personality: ${agent.personality}`);
+        }
       }
 
-      // --- Save Messages --- 
-      const messagesToInsert: ChatMessageInsertPayload[] = [
-          { channel_id: channelId ?? null, content: userMessageContent!, sender_user_id: userId, sender_agent_id: null },
-      ];
-      if (agentReplyContent) {
-          messagesToInsert.push({ channel_id: channelId ?? null, content: agentReplyContent, sender_user_id: null, sender_agent_id: targetAgentId });
+      // Add workspace context
+      if (workspaceDetails) {
+        contextBuilder.addWorkspaceContext(workspaceDetails);
       }
-      const { error: insertError } = await supabaseClient
+
+      // Add assistant instructions
+      if (agent.assistant_instructions) {
+        contextBuilder.addAssistantInstruction(agent.assistant_instructions);
+      }
+
+      // Add vector search results if available
+      if (vectorContextStr) {
+        contextBuilder.addVectorMemories(vectorContextStr);
+      }
+
+      // Add MCP context if available
+      if (mcpResourceContextStr) {
+        contextBuilder.addMCPContext(mcpResourceContextStr);
+      }
+
+      // Set chat history with agent names
+      contextBuilder.setHistory(historyMessages);
+
+      // Set the user's current message
+      contextBuilder.setUserInput(userMessageContent);
+
+      // Build the final context
+      const messages = contextBuilder.buildContext();
+
+      console.log(`[chat] Final context built - ${messages.length} messages, approximately ${contextBuilder.getTotalTokenCount()} tokens`);
+
+      // --- Get Response from LLM ---
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages,
+        temperature: 0.7,
+      });
+
+      // --- Extract & Save Assistant Response ---
+      const completionContent = completion.choices[0].message.content;
+
+      // Save agent response in the database
+      const agentResponsePayload: ChatMessageInsertPayload = {
+        channel_id: channelId,
+        content: completionContent,
+        sender_user_id: null,
+        sender_agent_id: targetAgentId
+      };
+
+      const { error: responseInsertError } = await supabaseClient
         .from('chat_messages')
-        .insert(messagesToInsert);
-      if (insertError) {
-        console.error('Error saving messages:', insertError);
+        .insert(agentResponsePayload);
+      if (responseInsertError) {
+        console.error('Error saving agent response:', responseInsertError);
+        // Note: We still return the response to the client even if saving fails
       }
 
-      // --- Return Response --- 
-      return new Response(JSON.stringify({ reply: agentReplyContent, agentId: targetAgentId, agentName: agent?.name }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+      return new Response(
+        JSON.stringify({
+          message: completionContent,
+          agent: { id: agent.id, name: agent.name },
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
   } catch (error) {
