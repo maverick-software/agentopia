@@ -165,6 +165,15 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
           </NavLink>
         ))}
       </div>
+
+      <div className="mt-auto p-2 border-t border-gray-700">
+        <Link to="/workspaces" className="block w-full">
+           <Button variant="ghost" className="w-full justify-center text-gray-400 hover:bg-gray-700 hover:text-gray-100">
+             <ArrowLeft size={16} className="mr-2" />
+             Exit Workspace
+           </Button>
+        </Link>
+      </div>
     </div>
   );
 };
