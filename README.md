@@ -236,15 +236,19 @@ RLS is enabled on most tables. Key policies include:
 
 *   **Missing Logs:** Logging is not implemented (violates Rule #2).
 *   **Large Files:** `src/pages/AgentEditPage.tsx` and `src/pages/DatastoresPage.tsx` exceed size limits (violates Philosophy #1).
-*   **`chat_channels` RLS:** Needs correction migration to allow members SELECT/INSERT access (causes 403 errors).
-*   **Frontend Build Error (`AuthContext.tsx`):** Potential duplicate `isAdmin` variable (unverified).
+*   ~~**`chat_channels` RLS:** Needs correction migration to allow members SELECT/INSERT access (causes 403 errors).~~ *(Fixed by `20250428180438...`)*
+*   ~~**Frontend Build Error (`AuthContext.tsx`):** Potential duplicate `isAdmin` variable (unverified).~~ *(Likely resolved or unrelated to current state)*
 *   **Workspace Chat `handleSubmit`:** Needs refactoring to determine responding agent based on `workspaceMembers`.
+*   ~~**Infinite Render Loop (WorkspaceChatInput):** Previously caused by complex state interactions with Radix Popover during @mention suggestions. Resolved by refining state management and debouncing logic.~~ *(Fixed)*
+*   ~~**ERR_INSUFFICIENT_RESOURCES:** Previously caused by an infinite loop in `useChatMessages` hook due to incorrect `useEffect` dependency array. Resolved by removing `fetchMessages` and `subscribeToNewMessages` from dependencies.~~ *(Fixed)*
+*   ~~**Duplicate Sidebar Layout:** Previously caused by `AppRouter` and `App` both attempting to apply the main `Layout`. Resolved by removing layout logic from `AppRouter`.~~ *(Fixed)*
+*   ~~**Incorrect Background Color:** Previously caused by `index.css` overriding theme variables. Resolved by applying `bg-background` correctly.~~ *(Fixed)*
 
 ## Current Status & Next Steps
 
-*   **Workspace Refactor:** Database schema changes (column rename, table drop) applied via migration. Layout refactoring (hiding main sidebar in workspace view) complete.
-*   **Immediate Next Step:** Create and apply migration to fix `chat_channels` RLS policies.
-*   **Pending WBS Tasks:** Implement remaining backend hooks (`useWorkspaces`, `useWorkspaceMembers`), update `/chat` function logic, complete frontend UI for workspace page (member management, settings), testing.
+*   **Workspace Refactor:** Phase 1 (DB), Phase 2 (Hooks/API), and significant parts of Phase 3 (UI Components, Routing, Layout) are complete.
+*   **Immediate Next Step:** Verify the remaining unchecked items in Phase 3 of the WBS checklist, particularly the `/chat` function logic and the `WorkspaceMemberManager` component implementation.
+*   **Pending WBS Tasks:** Complete Phase 3, proceed to Phase 4 (Testing) and Phase 5 (Context Enhancements).
 
 ## Deployment
 

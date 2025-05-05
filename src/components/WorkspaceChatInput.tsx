@@ -12,14 +12,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 interface WorkspaceChatInputProps {
   workspaceId: string;
   channelId: string | null;
-  workspaceMembers: WorkspaceMemberDetail[]; 
   members: WorkspaceMemberDetail[]; 
   onSendMessage: (content: string, agentId?: string | null) => Promise<void>; 
 }
 // --- End Update --- 
 
 // RENAME function to match filename convention if needed (e.g., WorkspaceChatInput)
-export function WorkspaceChatInput({ workspaceId, channelId, members, workspaceMembers, onSendMessage }: WorkspaceChatInputProps) { // <-- Use onSendMessage
+export function WorkspaceChatInput({ workspaceId, channelId, members, onSendMessage }: WorkspaceChatInputProps) {
   const { user } = useAuth();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -39,12 +38,15 @@ export function WorkspaceChatInput({ workspaceId, channelId, members, workspaceM
       console.warn("Submit cancelled: Check input, user, workspaceId, channelId.");
       return;
     }
+    
     const agentIdToSend = selectedAgentId; 
+    
     setInput(''); 
     setSelectedAgentId(null); 
     setMentionQuery(null); // Ensure mention state is cleared on submit
     setSuggestions([]);   // Ensure suggestions are cleared on submit
     setError(null);
+    
     try {
         setSending(true); 
         await onSendMessage(content, agentIdToSend);
@@ -72,7 +74,7 @@ export function WorkspaceChatInput({ workspaceId, channelId, members, workspaceM
     }
   };
 
-  // Restore useEffect for debounced suggestions
+  // --- useEffect for Debounced Suggestion Logic --- 
   useEffect(() => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -82,7 +84,7 @@ export function WorkspaceChatInput({ workspaceId, channelId, members, workspaceM
       debounceTimeoutRef.current = setTimeout(() => {
         const query = mentionMatch[1].toLowerCase();
         setMentionQuery(query); 
-        const filteredAgents = workspaceMembers.filter(member => 
+        const filteredAgents = members.filter(member => 
           member.agent_id && member.agent && member.agent.name?.toLowerCase().includes(query)
         );
         setSuggestions(filteredAgents); 
@@ -96,14 +98,14 @@ export function WorkspaceChatInput({ workspaceId, channelId, members, workspaceM
         clearTimeout(debounceTimeoutRef.current);
       }
     };
-  }, [input, workspaceMembers]);
+  }, [input, members]); // Ensure dependency array uses 'members'
+  // --- End useEffect --- 
 
   // Restore original handleInputChange
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const currentValue = e.target.value;
     setInput(currentValue); 
     setError(null); 
-    setSelectedAgentId(null); 
     // Suggestion logic is handled by the useEffect
   };
 

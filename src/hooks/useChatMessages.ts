@@ -44,14 +44,31 @@ export function useChatMessages(
     try {
       const { data, error: fetchError } = await supabase
         .from('chat_messages')
-        .select('*')
+        .select(`
+          *,
+          agents:sender_agent_id (
+            id,
+            name
+          )
+        `)
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
         .range(offset, offset + limit - 1);
 
       if (fetchError) throw fetchError;
       
-      const fetchedMessages = data || [];
+      const fetchedMessages = data?.map(msg => {
+        const message: ChatMessage = {
+          ...msg,
+          timestamp: new Date(msg.created_at),
+          role: msg.sender_agent_id ? 'assistant' : 'user',
+          agentName: msg.agents?.name || null
+        };
+        return message;
+      }) || [];
+
+      console.log('Fetched and processed messages with agent names:', fetchedMessages);
+      
       setMessages(prevMessages => {
           const existingIds = new Set(prevMessages.map(m => m.id));
           const newMessages = fetchedMessages.filter(m => !existingIds.has(m.id));
@@ -101,9 +118,33 @@ export function useChatMessages(
           table: 'chat_messages',
           filter: `channel_id=eq.${channelId}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('New message received via Realtime:', payload);
-          const newMessage = payload.new as ChatMessage;
+          const newMessageRaw = payload.new as ChatMessage;
+          
+          let agentName = null;
+          if (newMessageRaw.sender_agent_id) {
+            try {
+              const { data: agentData } = await supabase
+                .from('agents')
+                .select('name')
+                .eq('id', newMessageRaw.sender_agent_id)
+                .single();
+              
+              if (agentData) {
+                agentName = agentData.name;
+              }
+            } catch (err) {
+              console.error('Error fetching agent name for realtime message:', err);
+            }
+          }
+          
+          const newMessage: ChatMessage = {
+            ...newMessageRaw,
+            timestamp: new Date(newMessageRaw.created_at),
+            role: newMessageRaw.sender_agent_id ? 'assistant' : 'user',
+            agentName
+          };
           
           const currentMessages = messagesRef.current;
           if (!currentMessages.some(msg => msg.id === newMessage.id)) {

@@ -36,8 +36,8 @@ export function WorkspacePage() {
     addAgentMember, 
   } = useWorkspaceMembers(workspaceId ?? null); 
   
-  // --- Memoize workspaceMembers --- 
-  const workspaceMembers = useMemo(() => workspaceMembersData, [workspaceMembersData]);
+  // --- Memoize members --- 
+  const members = useMemo(() => workspaceMembersData, [workspaceMembersData]);
   // --- End Memoization --- 
 
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
@@ -219,7 +219,7 @@ export function WorkspacePage() {
         </header>
 
         {/* Chat Area */}
-        <main className="flex-1 overflow-y-auto p-4 pb-20 md:pb-4"> {/* Add padding-bottom for input */}
+        <main className="flex-1 overflow-y-auto p-4 pb-20 md:pb-4 flex flex-col">
           {isLoading && !messages.length && (
             <div className="flex h-full items-center justify-center">
               <LoadingSpinner />
@@ -253,7 +253,7 @@ export function WorkspacePage() {
             <ChatMessage 
               key={msg.id || `msg-${index}`}
               message={msg} 
-              workspaceMembers={workspaceMembers ?? []} 
+              members={members ?? []} 
             />
           ))}
           <div ref={messagesEndRef} /> {/* For scrolling */}
@@ -265,7 +265,7 @@ export function WorkspacePage() {
              <WorkspaceChatInput 
                channelId={channelId} 
                workspaceId={workspaceId}
-               workspaceMembers={workspaceMembers ?? []} 
+               members={members ?? []} 
                onSendMessage={handleSendMessage}
              />
            </footer>
@@ -274,7 +274,7 @@ export function WorkspacePage() {
 
       <WorkspaceMemberSidebar 
         workspaceId={workspaceId}
-        members={workspaceMembers ?? []} 
+        members={members ?? []} 
         loading={membersLoading} 
         error={membersError} 
         onAddAgent={handleAddAgent} 
