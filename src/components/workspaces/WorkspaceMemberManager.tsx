@@ -68,7 +68,7 @@ export const WorkspaceMemberManager: React.FC<WorkspaceMemberManagerProps> = ({ 
   };
 
   if (loading && !members.length) {
-    return <LoadingSpinner message="Loading members..." />;
+    return <LoadingSpinner />;
   }
 
   return (
@@ -126,25 +126,29 @@ export const WorkspaceMemberManager: React.FC<WorkspaceMemberManagerProps> = ({ 
                   {member.team_id && <Users className="w-5 h-5 text-green-400" />}
                   <span className="text-sm font-medium">
                     {member.user_id && (member.user_profile?.full_name || `User ID: ${member.user_id.substring(0, 8)}...`)}
-                    {member.agent_id && (member.agent?.name || `Agent ID: ${member.agent_id.substring(0, 8)}...`)}
+                    {member.agent_id && `${(member.agent?.name || `Agent ID: ${member.agent_id.substring(0, 8)}...`)} (agent)`}
                     {member.team_id && (member.team?.name || `Team ID: ${member.team_id.substring(0, 8)}...`)}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Select 
-                    value={member.role || 'member'}
-                    onValueChange={(newRole) => handleRoleChange(member.id, newRole)}
-                    // TODO: Disable based on permissions (e.g., if current user is not owner/moderator)
+                  {member.user_id || member.team_id ? (
+                    <Select 
+                      value={member.role || 'member'}
+                      onValueChange={(newRole) => handleRoleChange(member.id, newRole)}
+                      // TODO: Disable based on permissions
                     >
-                    <SelectTrigger className="w-[120px] text-xs h-8">
+                      <SelectTrigger className="w-[120px] text-xs h-8">
                         <SelectValue placeholder="Role" />
-                    </SelectTrigger>
-                    <SelectContent>
+                      </SelectTrigger>
+                      <SelectContent>
                         <SelectItem value="moderator">Moderator</SelectItem>
                         <SelectItem value="member">Member</SelectItem>
                         {/* Add other roles if needed */}
-                    </SelectContent>
-                  </Select>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="w-[120px] h-8"></div> 
+                  )}
                   <Button 
                     variant="ghost"
                     size="icon"
@@ -152,8 +156,8 @@ export const WorkspaceMemberManager: React.FC<WorkspaceMemberManagerProps> = ({ 
                     className="text-red-500 hover:text-red-700 hover:bg-red-500/10"
                     title="Remove member"
                      // TODO: Disable based on permissions
-                    >
-                     <Trash2 className="h-4 w-4" />
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </li>

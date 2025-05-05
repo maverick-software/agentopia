@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Bot, Users, ArrowRight, Loader2 } from 'lucide-react'; // Added ArrowRight, Loader2
+import type { PostgrestError } from '@supabase/supabase-js'; // Import PostgrestError
 
 // Import the detailed type from the hook
 import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
@@ -20,7 +21,7 @@ interface WorkspaceMemberSidebarProps {
   // mutationLoading?: boolean;
   // mutationError?: string | null;
   loading: boolean; // Add loading state for members fetch
-  error: string | null; // Add error state for members fetch
+  error: PostgrestError | null; // Update error type
   // Add props for mobile sidebar state
   isOpen: boolean;
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>; 
@@ -35,7 +36,7 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({
   // mutationLoading, // Destructure if passed
   // mutationError, // Destructure if passed
   loading: membersLoading, // Rename for clarity
-  error: membersError,
+  error: membersError, // Error is now PostgrestError | null
   isOpen, 
   setIsOpen, 
   currentUserRole 
@@ -152,7 +153,7 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({
              <Loader2 className="animate-spin text-muted-foreground" />
            </div>
         ) : membersError ? (
-          <p className="text-destructive text-sm px-2">Error: {membersError}</p>
+          <p className="text-destructive text-sm px-2">Error: {membersError.message || 'Failed to load members'}</p>
         ) : members.length === 0 ? (
           <p className="text-muted-foreground text-sm">No members yet.</p>
         ) : (
@@ -174,12 +175,15 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({
                 {/* Display Name based on member type */}
                 <span className="flex-1 truncate">
                   {member.user_id && (member.user_profile?.full_name || `User ${member.user_id.substring(0,6)}...`)}
-                  {member.agent_id && (member.agent?.name || `Agent ${member.agent_id.substring(0,6)}...`)}
+                  {member.agent_id && 
+                    <>{member.agent?.name || `Agent ${member.agent_id.substring(0,6)}...`}
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">(agent)</span>
+                    </>}
                   {member.team_id && (member.team?.name || `Team ${member.team_id.substring(0,6)}...`)}
                 </span>
                 
-                {/* Display Role */}
-                <span className="text-xs text-muted-foreground ml-2">({member.role || 'member'})</span>
+                {/* Display Role only if not an agent */}
+                {!member.agent_id && <span className="text-xs text-muted-foreground ml-2">({member.role || 'member'})</span>}
               </li>
             ))}
           </ul>
@@ -191,7 +195,11 @@ const WorkspaceMemberSidebar: React.FC<WorkspaceMemberSidebarProps> = ({
       {(currentUserRole === 'owner' || currentUserRole === 'admin') && (
         <div className="mt-auto border-t pt-3">
           {inviteError && <p className="text-xs text-destructive mb-1">Error: {inviteError}</p>}
-          {agentSummariesError && <p className="text-xs text-destructive mb-1">Error loading agents: {agentSummariesError}</p>} 
+          {agentSummariesError && (
+            <p className="text-xs text-destructive mb-1">
+              Error loading agents: {typeof agentSummariesError === 'string' ? agentSummariesError : (agentSummariesError?.message || 'Unknown error')}
+            </p>
+          )} 
           
           <p className="text-xs text-muted-foreground mb-1">Invite Agents (use @)</p> 
           <div className="relative"> 
