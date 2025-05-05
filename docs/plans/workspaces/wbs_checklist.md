@@ -53,9 +53,9 @@
 *   [X] **Documentation Update**
     *   [X] Update `database/README.md` to reflect the finalized schema (workspace tables, columns, dropped tables, corrected RLS).
     *   [X] Update main `README.md` (Database, Workflow sections).
-*   [ ] **Table: `chat_messages` (Review & Update RLS - Requires Schema Fix)**
-    *   [ ] **Schema:** Verify `chat_messages` should use `channel_id` FK instead of `session_id`. Create migration if needed.
-    *   [ ] **RLS:** Re-verify/Update RLS policies to check membership based on `workspace_id` derived from `channel_id`. Create migration if needed.
+*   [X] **Table: `chat_messages` (Review & Update RLS)**
+    *   [X] **Schema:** Verified `chat_messages` uses `channel_id` FK. *(Migration `20250505195156...` applied)*
+    *   [X] **RLS:** RLS policies updated to check membership based on `workspace_id` derived from `channel_id`. *(Migration `20250505195156...` applied)*
 *   [X] **Table: `teams` (No Change)**
 *   [X] **Table: `team_members` (No Change)**
 
