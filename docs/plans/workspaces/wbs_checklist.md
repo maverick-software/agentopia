@@ -32,132 +32,132 @@
         *   SELECT: Workspace members (check `workspace_members` for `auth.uid()`, or if `team_id` matches a team the user is in, or if `workspace_id` owned by user).
         *   INSERT/DELETE/UPDATE: Workspace owner or members with 'moderator' role (Requires helper function `can_manage_workspace_members`).
 *   [X] **Table: `chat_channels` (Review)**
-    *   [X] Ensure `workspace_id` (FK to `workspaces.id`) exists and is NOT NULL (replacing `room_id`). *(Migration `20250428190000...` or `20250428180438...` created)*
+    *   [X] Ensure `workspace_id` (FK to `workspaces.id`) exists and is NOT NULL (replacing `room_id`). *(Migration `20250428180438...` created)*
     *   [X] Review/Update RLS based on workspace membership. (`20250428180438...`)
 *   [X] **SQL Helper Functions (Review/Update)**
     *   [X] `is_workspace_member` created. (`20250428180438...`)
     *   [X] `can_manage_workspace_members` created. (`20250428180438...`)
 *   [X] **Apply All Migrations** (Completed up to initial point)
 
-*   **Schema Correction & Sync (Completed via Migrations)**
+*   [X] **Schema Correction & Sync (Completed via Migrations)**
     *   [X] ~~Manual SQL: Execute ALTER TABLE ... RENAME COLUMN ...~~ *(Done via migration `20250430162336...`)*
     *   [X] ~~Manual SQL: Execute DROP TABLE ...~~ *(Done via migration `20250430162336...`)*
     *   [X] ~~Verify Schema Manually~~ *(Implicitly verified by subsequent steps)*
     *   [X] ~~Repair Migration History: Run supabase migration repair ...~~ *(Handled during push/pull sequence)*
     *   [X] ~~Re-sync Local: Run supabase db pull ...~~ *(Completed)*
     *   [X] ~~Final Push Check: Run supabase db push ...~~ *(Completed)*
-*   **Fix `chat_channels` RLS (Pending)**
-    *   [x] Create Migration: `supabase migration new fix_chat_channels_rls`
-    *   [x] Edit Migration: Drop incorrect policies, add new policies (SELECT: `is_workspace_member`, INSERT: `is_workspace_member`, UPDATE/DELETE: Owner check using `workspace_id`). *(Included function definition)*
-    *   [x] Apply Migration: `supabase db push`
-*   **Documentation Update (Pending)**
-    *   [x] Update `database/README.md` to reflect the finalized schema (workspace tables, columns, dropped tables, corrected RLS).
-    *   [x] Update main `README.md` (Database, Workflow sections).
-*   **Table: `chat_messages` (Review & Update RLS - Post RLS Fix)**
-    *   [ ] Verify `channel_id` (FK to `chat_channels`) is appropriate. *(Decision: Keep channels)*.
-    *   [ ] Re-verify RLS policies check membership based on `workspace_id` derived from `channel_id`. (`20250428180438...` - Might need update after RLS fix).
-*   **Table: `teams` (No Change)**
-*   **Table: `team_members` (No Change)**
+*   [X] **Fix `chat_channels` RLS**
+    *   [X] Create Migration: `supabase migration new fix_chat_channels_rls` *(Assumed done)*
+    *   [X] Edit Migration: Drop incorrect policies, add new policies (SELECT: `is_workspace_member`, INSERT: `is_workspace_member`, UPDATE/DELETE: Owner check using `workspace_id`). *(Assumed done in `20250428180438...`)*
+    *   [X] Apply Migration: `supabase db push` *(Assumed done)*
+*   [X] **Documentation Update**
+    *   [X] Update `database/README.md` to reflect the finalized schema (workspace tables, columns, dropped tables, corrected RLS).
+    *   [X] Update main `README.md` (Database, Workflow sections).
+*   [ ] **Table: `chat_messages` (Review & Update RLS - Requires Schema Fix)**
+    *   [ ] **Schema:** Verify `chat_messages` should use `channel_id` FK instead of `session_id`. Create migration if needed.
+    *   [ ] **RLS:** Re-verify/Update RLS policies to check membership based on `workspace_id` derived from `channel_id`. Create migration if needed.
+*   [X] **Table: `teams` (No Change)**
+*   [X] **Table: `team_members` (No Change)**
 
 ## Phase 2: Backend & API Layer Refactoring
 
-*   [ ] **Hook: `useWorkspaces` (NEW)**
-    *   [ ] Create `src/hooks/useWorkspaces.ts`.
-    *   [ ] Implement `fetchWorkspaces()` (fetches workspaces user owns or is a member of).
-    *   [ ] Implement `fetchWorkspaceById(workspaceId)`.
-    *   [ ] Implement `createWorkspace(name, description?)`.
-    *   [ ] Implement `updateWorkspace(workspaceId, data)` (check permissions - owner only).
-    *   [ ] Implement `deleteWorkspace(workspaceId)` (check permissions - owner only).
-    *   [ ] Add standard loading/error states.
-*   [ ] **Hook: `useWorkspaceMembers` (NEW)**
+*   [X] **Hook: `useWorkspaces` (NEW)**
+    *   [X] Create `src/hooks/useWorkspaces.ts`.
+    *   [X] Implement `fetchWorkspaces()` (fetches workspaces user owns or is a member of).
+    *   [X] Implement `fetchWorkspaceById(workspaceId)`.
+    *   [X] Implement `createWorkspace(name, description?)`.
+    *   [X] Implement `updateWorkspace(workspaceId, data)` (check permissions - owner only).
+    *   [X] Implement `deleteWorkspace(workspaceId)` (check permissions - owner only).
+    *   [X] Add standard loading/error states.
+*   [ ] **Hook: `useWorkspaceMembers` (Partially Implemented)**
     *   [X] Create `src/hooks/useWorkspaceMembers.ts`.
-    *   [X] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members`).
+    *   [X] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members` using RPC).
     *   [X] Implement `addAgentMember(workspaceId, agentId, role?)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `addTeamMember(workspaceId, teamId, role?)` (check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `addUserMember(workspaceId, userEmail, role?)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `removeAgentMember(workspaceId, agentId)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `removeTeamMember(workspaceId, teamId)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `removeUserMember(workspaceId, userId)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `updateMemberRole(workspaceId, memberType, memberId, role)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Add standard loading/error states.
-*   [ ] **Hook: `useChatMessages` (Update)**
-    *   [ ] Ensure it uses `channelId` correctly.
+    *   [ ] Implement `removeMember(memberId)` (Handles all types, check permissions via `can_manage_workspace_members`).
+    *   [ ] Implement `updateMemberRole(memberId, newRole)` (check permissions via `can_manage_workspace_members`).
+    *   [X] Add standard loading/error states.
+*   [ ] **Hook: `useChatMessages` (Update - Requires Schema Fix)**
+    *   [ ] Ensure it uses `channelId` correctly (currently uses `sessionId`).
     *   [ ] Implement fetching based on selected `channelId`.
-    *   [ ] Add realtime subscription for messages in a channel.
+    *   [ ] Add realtime subscription for messages filtered by `channelId`.
     *   [ ] **Refactor:** Ensure all internal logic uses `workspace_id` where relevant (if needed for context/permissions).
-*   [ ] **Hook: `useTeams` (No Change)**
-    *   [ ] Remains for managing team definitions.
-*   [ ] **Hook: `useTeamMembers` (No Change)**
-    *   [ ] Remains for managing members *of a team*.
-*   [ ] **Supabase Function: `/chat` (Update)**
-    *   [ ] Update context fetching: Use `roomId` (which is `workspaceId`) to get workspace details.
-    *   [ ] Fetch members from `workspace_members` based on `roomId`.
-    *   [ ] Determine responding agent based on request or workspace logic (using `workspace_members`).
-    *   [ ] If team context needed for the specific *responding agent*, fetch its `team_members` details separately.
-    *   [ ] **Refactor:** Ensure all internal logic uses `workspace_id` and `workspace_members`.
+*   [X] **Hook: `useTeams` (No Change)**
+    *   [X] Remains for managing team definitions.
+*   [X] **Hook: `useTeamMembers` (No Change)**
+    *   [X] Remains for managing members *of a team*.
+*   [X] **Supabase Function: `/chat` (Update)**
+    *   [X] Update context fetching: Use `workspaceId` to get workspace details.
+    *   [X] Fetch members from `workspace_members` based on `workspaceId` (using RPC).
+    *   [X] Determine responding agent based on request or workspace logic (using `workspace_members`).
+    *   [ ] If team context needed for the specific *responding agent*, fetch its `team_members` details separately. *(Status: Pending)*
+    *   [X] **Refactor:** Ensure internal logic uses `workspace_id`, `channelId`, and `workspace_members`.
 
 ## Phase 3: Frontend UI Refactoring (Post-Schema Fix)
 
-*   [X] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
+*   [ ] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
     *   [X] Add route `/workspaces` -> `WorkspacesListPage`. *(Done)*
     *   [X] Ensure `/workspaces/:roomId` -> `WorkspacePage`. *(Done)*
-    *   [ ] Remove `/teams/:teamId` route if team details page is no longer needed, or update it to remove workspace list. *(Decision: Keep `/teams/:teamId` for team management, remove workspace list)*. *(Status: Pending - needs check)*
+    *   [ ] Remove `/teams/:teamId` route if team details page is no longer needed, or update it to remove workspace list. *(Decision: Keep `/teams/:teamId` for team management, remove workspace list)*. *(Status: Pending - needs check/update)*
     *   [X] Add `WorkspacesListPage` to lazy loading. *(Done)*
     *   [X] Add route `/workspaces/new` -> `CreateWorkspacePage`. *(Done)*
     *   [X] Add `CreateWorkspacePage` to lazy loading. *(Done)*
     *   [ ] Add `/workspaces/:roomId/settings` route -> `WorkspaceSettingsPage`. *(Status: Pending)*
+    *   [X] Ensure `/workspaces/:roomId/channels/:channelId` -> `WorkspacePage`. *(Done)*
 *   [X] **Component: `WorkspacesListPage.tsx`**
     *   [X] Create `src/pages/WorkspacesListPage.tsx`. *(Done)*
-    *   [X] Use fetch logic to list accessible workspaces (owned + member). *(Done - Initial implementation)*
+    *   [X] Use fetch logic to list accessible workspaces (owned + member). *(Done - Doesn't use hook yet)*.
     *   [X] Implement UI for triggering `createWorkspace`. *(Done - Button links to `/workspaces/new`)*.
     *   [X] Link each workspace item to `/workspaces/:roomId`. *(Done - Handled by `WorkspaceCard`)*.
 *   [X] **Component: `CreateWorkspacePage.tsx` (NEW)**
     *   [X] Create `src/pages/CreateWorkspacePage.tsx`. *(Done)*
-    *   [X] Implement form and Supabase insert logic. *(Done)*
-*   [ ] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`) (Post-Schema Fix)**
-    *   [X] Fetch/Display workspace members (using `workspace_members` table). *(Done - Needs Testing)*
-    *   [ ] Fetch workspace details using `useWorkspaces(workspaceId)`.
-    *   [ ] Display workspace name/details in header. *(Partially Done)*
-    *   [ ] Implement channel selection/default channel logic.
-    *   [ ] Implement message fetching based on selected channel (using `useChatMessages`).
-    *   [X] Render message list (`ChatMessage`) and input (`WorkspaceChatInput`). *(Partially exists, Renamed from MessageInput)*
-    *   [ ] Refactor `handleSubmit` to determine responding agent from `workspace_members` and pass `roomId` (`workspaceId`), `channelId`.
-    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`.
-    *   [ ] **Refactor:** Ensure all references use `workspaceId` from `useParams`.
-*   [ ] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
-    *   [ ] Create `src/pages/WorkspaceSettingsPage.tsx`.
-    *   [ ] Use `useWorkspaces` for fetching/updating details.
+    *   [X] Implement form and Supabase insert logic. *(Done - Doesn't use hook yet)*
+*   [ ] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`)**
+    *   [X] Fetch/Display workspace members (using `useWorkspaceMembers` hook).
+    *   [ ] Fetch workspace details using `useWorkspaces(workspaceId)`. *(Currently fetches directly)*
+    *   [X] Display workspace name/details in header. *(Uses direct fetch)*
+    *   [X] Implement channel selection/default channel logic (navigates to first channel).
+    *   [ ] Implement message fetching based on selected channel (using `useChatMessages` hook). *(Currently fetches directly via RPC)*
+    *   [X] Render message list (`ChatMessage`).
+    *   [X] Render input (`WorkspaceChatInput`).
+    *   [ ] Verify `handleSubmit` logic (in `WorkspaceChatInput`) determines responding agent from `workspace_members` and passes `workspaceId`, `channelId`. *(Needs check)*
+    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`. *(Needs check)*
+    *   [X] **Refactor:** Ensure all references use `workspaceId` from `useParams`.
+*   [X] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
+    *   [X] Create `src/pages/WorkspaceSettingsPage.tsx`.
+    *   [X] Use `useWorkspaces` for fetching/updating details.
 *   [ ] **Component: `WorkspaceMemberManager.tsx` (NEW)**
     *   [ ] Create `src/components/workspaces/WorkspaceMemberManager.tsx`.
     *   [ ] Use `useWorkspaceMembers` hook for fetching/adding/removing/updating members.
     *   [ ] Implement UI for managing different member types (Agents, Teams, Users).
-*   **Component: `WorkspaceMemberSidebar.tsx` (NEW - Right Sidebar)**
+*   [X] **Component: `WorkspaceMemberSidebar.tsx` (NEW - Right Sidebar)**
     *   [X] Modify `WorkspacePage.tsx` layout to include a right sidebar section.
     *   [X] Create `src/components/workspaces/WorkspaceMemberSidebar.tsx`.
     *   [X] Implement basic member list display (pass `workspaceMembers` prop from `WorkspacePage`).
-    *   [X] Add placeholder UI for member invite input and button.
+    *   [X] Add agent invite input and autocomplete UI.
     *   [X] Integrate `WorkspaceMemberSidebar` into `WorkspacePage.tsx`.
     *   **Invite Functionality (Agent Name):**
-        *   [X] Enhance `useAgents` Hook: Add state (`agentSummaries`) and function (`fetchAgentSummaries`) to fetch agent `id` and `name` list.
-        *   [X] Fetch Agent Summaries: Call `fetchAgentSummaries` in `WorkspaceMemberSidebar` using the `useAgents` hook.
-        *   [X] Implement Autocomplete UI: Add state/logic to filter agent summaries based on `@` input, display dropdown suggestions.
-        *   [X] Handle Selection: Store the selected agent's ID from the dropdown.
-        *   [X] Update Invite Logic: Modify `handleInvite` to use the selected agent ID when calling `addAgentMember`.
+        *   [X] Enhance `useAgents` Hook: Add state (`agentSummaries`) and function (`fetchAgentSummaries`).
+        *   [X] Fetch Agent Summaries: Call `fetchAgentSummaries` in `WorkspaceMemberSidebar`.
+        *   [X] Implement Autocomplete UI.
+        *   [X] Handle Selection.
+        *   [X] Update Invite Logic: Calls `onAddAgent` prop (passed from `WorkspacePage`, uses `addAgentMember` from hook).
 *   [X] **Component: `WorkspaceCard.tsx`**
     *   [X] Created `src/components/workspaces/WorkspaceCard.tsx`.
     *   [X] Styled consistently.
 *   [ ] **Component: `TeamDetailsPage.tsx` (Refactor `/teams/:teamId`)**
-    *   [ ] Remove any UI related to listing workspaces/chat rooms.
+    *   [ ] Remove any UI related to listing workspaces/chat rooms. *(Imports `TeamChatRoomList`)*
 *   [X] **Sidebar/Layout Updates:**
-    *   [X] `ChannelListSidebar` fetches channels based on `workspaceId`. *(Needs schema fix)*
-    *   [ ] **Refactor:** Verify `useChatChannels` hook (used by sidebar) correctly uses `workspaceId` parameter after schema fix.
-    *   [X] `Layout.tsx` conditionally renders `ChannelListSidebar`.
-*   [X] **Layout Refactoring (Workspace Focus)**
-    *   [x] Modify `Layout.tsx`: Conditionally hide main `Sidebar` based on workspace route (`/workspaces/:roomId/...`, excluding `/workspaces` and `/workspaces/new`).
-    *   [x] Modify `WorkspacePage.tsx`: Ensure it renders `ChannelListSidebar` directly within its own structure.
-    *   [x] Modify `ChannelListSidebar.tsx`: Make workspace title header (`<h2/>`) a `Link` navigating back to `/workspaces`.
+    *   [X] `ChannelListSidebar` fetches channels based on `workspaceId` (using `useChatChannels` hook).
+    *   [ ] **Verify:** `useChatChannels` hook correctly uses `workspaceId` parameter. *(Hook exists and seems correct)*.
+    *   [X] `Layout.tsx` conditionally renders main `Sidebar`.
+*   [ ] **Layout Refactoring (Workspace Focus)**
+    *   [X] Modify `Layout.tsx`: Conditionally hide main `Sidebar`.
+    *   [X] Modify `WorkspacePage.tsx`: Ensure it renders `ChannelListSidebar` directly.
+    *   [ ] Modify `ChannelListSidebar.tsx`: Make workspace title header (`<h2/>`) a `Link` navigating back to `/workspaces`. *(Has "Exit Workspace" button instead)*.
 
-## Phase 4: Testing & Refinement (Post-Schema Fix)
+## Phase 4: Testing & Refinement
 
 *   [ ] **Functionality Testing:**
     *   [ ] Workspace Creation, Update, Deletion.
@@ -180,7 +180,7 @@
     *   [ ] Migration: Update RLS policies for `workspaces` table to allow owner to modify context settings.
 
 *   [ ] **Edge Function `/chat` Enhancements:**
-    *   [ ] Modify `/chat` to fetch workspace members for agent awareness.
+    *   [X] Modify `/chat` to fetch workspace members for agent awareness. *(Done in Phase 2)*
     *   [ ] Modify `/chat` to fetch workspace context window settings.
     *   [ ] Implement chat history fetching based on context window settings:
         *   [ ] Fetch up to `context_window_size` most recent messages from channel.
@@ -190,9 +190,9 @@
         *   [ ] Include agent name with each message.
         *   [ ] Include optional agent personality information.
     *   [ ] Modify system prompts to inform of workspace context:
-        *   [ ] Add workspace name and description to system context.
-        *   [ ] Add list of workspace members (agents, users) to system context.
-        *   [ ] Add awareness of channel (topic, purpose) to system context.
+        *   [X] Add workspace name and description to system context. *(Done in Phase 2)*
+        *   [X] Add list of workspace members (agents, users) to system context. *(Done in Phase 2)*
+        *   [X] Add awareness of channel (topic, purpose) to system context. *(Done in Phase 2)*
 
 *   [ ] **Frontend - Workspace Settings:**
     *   [ ] Create `WorkspaceSettingsPage` component with tabs.
