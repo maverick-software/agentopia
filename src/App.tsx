@@ -6,8 +6,8 @@ import { AppRouter } from './routing';
 import { useRoutePrefetch } from './hooks/useRoutePrefetch';
 // import { BrowserRouter } from 'react-router-dom';
 
-// Wrapper component that uses the prefetch hook
-const AppWithPrefetch = () => {
+// Rename to App and make default export
+function App() {
   useRoutePrefetch();
   
   // Force dark mode on initial load
@@ -29,14 +29,7 @@ const AppWithPrefetch = () => {
   );
 }
 
-function App() {
-  return (
-    <AuthProvider>
-      <DatabaseProvider>
-        <AppRouter />
-      </DatabaseProvider>
-    </AuthProvider>
-  );
-}
+// Remove the old App function
+// function App() { ... }
 
-export default App;
+export default App; // Export the correct component

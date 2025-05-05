@@ -33,3 +33,5 @@ export const HomePage = lazy(() => import('../pages/HomePage.tsx').then(module =
 export const WorkspacePage = lazy(() => import('../pages/WorkspacePage').then(module => ({ default: module.WorkspacePage })));
 export const WorkspacesListPage = lazy(() => import('../pages/WorkspacesListPage').then(module => ({ default: module.WorkspacesListPage }))); 
 export const CreateWorkspacePage = lazy(() => import('../pages/CreateWorkspacePage').then(module => ({ default: module.CreateWorkspacePage }))); 
+// Add WorkspaceSettingsPage
+export const WorkspaceSettingsPage = lazy(() => import('../pages/WorkspaceSettingsPage').then(module => ({ default: module.WorkspaceSettingsPage }))); 

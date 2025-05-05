@@ -1,22 +1,36 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { type ChatMessage } from '../types/chat';
 import { PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UseChatMessagesReturn {
   messages: ChatMessage[];
   loading: boolean;
+  sending: boolean;
   error: PostgrestError | string | null;
   createMessage: (channelId: string, content: string, sender: { senderUserId?: string; senderAgentId?: string }, metadata?: Record<string, any>) => Promise<ChatMessage | null>;
+  sendMessage: (content: string, agentId?: string | null) => Promise<void>;
   currentChannelId: string | null;
 }
 
-export function useChatMessages(initialChannelId: string | null): UseChatMessagesReturn {
+export function useChatMessages(
+  workspaceId: string | null,
+  initialChannelId: string | null
+): UseChatMessagesReturn {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [sending, setSending] = useState<boolean>(false);
   const [error, setError] = useState<PostgrestError | string | null>(null);
   const [currentChannelId, setCurrentChannelId] = useState<string | null>(initialChannelId);
   const [currentSubscription, setCurrentSubscription] = useState<RealtimeChannel | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const fetchMessages = useCallback(async (channelId: string, offset: number = 0, limit: number = 50) => {
     if (!channelId) {
@@ -36,8 +50,23 @@ export function useChatMessages(initialChannelId: string | null): UseChatMessage
         .range(offset, offset + limit - 1);
 
       if (fetchError) throw fetchError;
-
-      setMessages(prevMessages => offset === 0 ? (data || []) : [...(data || []), ...prevMessages]);
+      
+      const fetchedMessages = data || [];
+      setMessages(prevMessages => {
+          const existingIds = new Set(prevMessages.map(m => m.id));
+          const newMessages = fetchedMessages.filter(m => !existingIds.has(m.id));
+          
+          if (offset === 0) {
+              if (prevMessages.length !== fetchedMessages.length || 
+                  (prevMessages.length > 0 && fetchedMessages.length > 0 && prevMessages[0].id !== fetchedMessages[0].id)) {
+                 return fetchedMessages; 
+              } else {
+                 return prevMessages;
+              }
+          } else {
+              return newMessages.length > 0 ? [...newMessages, ...prevMessages] : prevMessages;
+          }
+      });
       
     } catch (err) {
         console.error(`Error fetching messages for channel ${channelId}:`, err);
@@ -75,11 +104,11 @@ export function useChatMessages(initialChannelId: string | null): UseChatMessage
         (payload) => {
           console.log('New message received via Realtime:', payload);
           const newMessage = payload.new as ChatMessage;
-          setMessages(currentMessages => 
-              currentMessages.some(msg => msg.id === newMessage.id)
-                  ? currentMessages
-                  : [...currentMessages, newMessage]
-          );
+          
+          const currentMessages = messagesRef.current;
+          if (!currentMessages.some(msg => msg.id === newMessage.id)) {
+            setMessages([...currentMessages, newMessage]);
+          }
         }
       )
       .subscribe((status, err) => {
@@ -118,7 +147,7 @@ export function useChatMessages(initialChannelId: string | null): UseChatMessage
             supabase.removeChannel(currentSubscription);
         }
     };
-  }, [currentChannelId, fetchMessages, subscribeToNewMessages]);
+  }, [currentChannelId]);
 
   const createMessage = useCallback(async (
     channelId: string,
@@ -208,11 +237,92 @@ export function useChatMessages(initialChannelId: string | null): UseChatMessage
     } 
   }, []);
 
+  const sendMessage = useCallback(async (content: string, agentIdToSend: string | null = null) => {
+    if (!content.trim()) {
+        setError('Cannot send an empty message.');
+        return;
+    }
+    if (!user?.id) {
+        setError('User not authenticated.');
+        return;
+    }
+    if (!workspaceId) {
+        setError('Workspace context is missing.');
+        return;
+    }
+     if (!currentChannelId) {
+        setError('Channel context is missing.');
+        return;
+    }
+
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setSending(true);
+    setError(null);
+
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.access_token) {
+        throw new Error(`Authentication error: ${sessionError?.message || 'Could not get session token.'}`);
+      }
+      const accessToken = session.access_token;
+
+      const requestBody = {
+        agentId: agentIdToSend,
+        message: content.trim(),
+        roomId: workspaceId,
+        channelId: currentChannelId,
+      };
+      console.log("[useChatMessages] Sending chat request body:", requestBody);
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        signal: controller.signal,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      abortControllerRef.current = null;
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) { /* Ignore */ }
+        console.error(`[useChatMessages] HTTP error! Status: ${response.status}`, errorData);
+        throw new Error(errorData?.error || `HTTP error ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("[useChatMessages] Received response:", result);
+      
+    } catch (err: any) {
+      abortControllerRef.current = null;
+      if (err.name === 'AbortError') {
+        console.log('[useChatMessages] Fetch aborted.');
+      } else {
+        console.error('[useChatMessages] Error sending message:', err);
+        setError('Failed to send message: ' + err.message);
+      }
+    } finally {
+      setSending(false);
+    }
+  }, [user?.id, workspaceId, currentChannelId]);
+
   return {
     messages,
     loading,
+    sending,
     error,
     createMessage,
+    sendMessage,
     currentChannelId
   };
 } 

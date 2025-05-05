@@ -18,17 +18,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
-  const isWorkspaceView = matchPath(
-    { path: "/workspaces/:roomId", end: false },
+  // Match any route starting with /workspaces/ except /workspaces/new
+  const isWorkspaceSpecificView = matchPath(
+    { path: "/workspaces/:roomId", end: false }, 
     location.pathname
-  );
+  ) && location.pathname !== '/workspaces/new'; // Ensure /new doesn't count
 
-  const showMainSidebar = !isWorkspaceView || 
-                          location.pathname === '/workspaces' || 
-                          location.pathname === '/workspaces/new';
+  // Only show the main Sidebar if NOT in a specific workspace view
+  const showMainSidebar = !isWorkspaceSpecificView;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-900 text-gray-100">
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+      {/* Conditionally render main Sidebar */}
       {showMainSidebar && (
         <Sidebar 
           isCollapsed={isCollapsed}
@@ -36,12 +37,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         />
       )}
 
+      {/* Main content area flexes to fill space */}
+      {/* Apply w-full only if sidebar is hidden to take full width */} 
       <div className={`flex-1 flex flex-col overflow-hidden ${!showMainSidebar ? 'w-full' : ''}`}>
         <Header />
-        <main className="flex-1 flex h-[calc(100vh-64px)] overflow-hidden bg-gray-900 p-0 text-gray-100">
+        <main className="flex-1 overflow-hidden">
           {isTransitioning ? (
-            <div className="fixed inset-0 z-50 flex justify-center items-center bg-gray-900 transition-opacity duration-300">
-              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+            <div className="fixed inset-0 z-50 flex justify-center items-center bg-background transition-opacity duration-300">
+              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
             </div>
           ) : (
             children

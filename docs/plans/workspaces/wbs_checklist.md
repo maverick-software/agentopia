@@ -69,25 +69,26 @@
     *   [X] Implement `updateWorkspace(workspaceId, data)` (check permissions - owner only).
     *   [X] Implement `deleteWorkspace(workspaceId)` (check permissions - owner only).
     *   [X] Add standard loading/error states.
-*   [X] **Hook: `useWorkspaceMembers` (Partially Implemented)**
+*   [X] **Hook: `useWorkspaceMembers` (Implemented)**
     *   [X] Create `src/hooks/useWorkspaceMembers.ts`.
     *   [X] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members` using RPC).
     *   [X] Implement `addAgentMember(workspaceId, agentId, role?)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `addTeamMember(workspaceId, teamId, role?)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `addUserMember(workspaceId, userEmail, role?)` (check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `removeMember(memberId)` (Handles all types, check permissions via `can_manage_workspace_members`).
-    *   [ ] Implement `updateMemberRole(memberId, newRole)` (check permissions via `can_manage_workspace_members`).
+    *   [X] Implement `addTeamMember(workspaceId, teamId, role?)` (check permissions via `can_manage_workspace_members`).
+    *   [X] Implement `addUserMember(workspaceId, userEmail, role?)` (check permissions via `can_manage_workspace_members`).
+    *   [X] Implement `removeMember(memberId)` (Handles all types, check permissions via `can_manage_workspace_members`).
+    *   [X] Implement `updateMemberRole(memberId, newRole)` (check permissions via `can_manage_workspace_members`).
     *   [X] Add standard loading/error states.
 *   [X] **Hook: `useChatMessages` (Update)**
     *   [X] Ensure it uses `channelId` correctly.
     *   [X] Implement fetching based on selected `channelId` (handled internally).
     *   [X] Add realtime subscription for messages filtered by `channelId` (handled internally).
     *   [X] **Refactor:** Internal logic uses `channel_id`.
+    *   [X] **Add:** `sendMessage` function implemented to call `/chat` function.
 *   [X] **Hook: `useTeams` (No Change)**
     *   [X] Remains for managing team definitions.
 *   [X] **Hook: `useTeamMembers` (No Change)**
     *   [X] Remains for managing members *of a team*.
-*   [X] **Supabase Function: `/chat` (Update)**
+*   [ ] **Supabase Function: `/chat` (Update)**
     *   [X] Update context fetching: Use `workspaceId` to get workspace details.
     *   [X] Fetch members from `workspace_members` based on `workspaceId` (using RPC).
     *   [X] Determine responding agent based on request or workspace logic (using `workspace_members`).
@@ -96,33 +97,33 @@
 
 ## Phase 3: Frontend UI Refactoring (Post-Schema Fix)
 
-*   [ ] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
+*   [X] **Routing (`routeConfig.tsx`, `lazyComponents.ts`)**
     *   [X] Add route `/workspaces` -> `WorkspacesListPage`. *(Done)*
-    *   [X] Ensure `/workspaces/:roomId` -> `WorkspacePage`. *(Done)*
-    *   [ ] Remove `/teams/:teamId` route if team details page is no longer needed, or update it to remove workspace list. *(Decision: Keep `/teams/:teamId` for team management, remove workspace list)*. *(Status: Pending - needs check/update)*
+    *   [X] Ensure `/workspaces/:roomId` -> `WorkspacePage`. *(Done, layout: false)*
+    *   [ ] Remove `/teams/:teamId` route if team details page is no longer needed, or update it to remove workspace list. *(Decision: Keep `/teams/:teamId` for team management, remove workspace list)*. *(Status: Pending - needs verification)*
     *   [X] Add `WorkspacesListPage` to lazy loading. *(Done)*
-    *   [X] Add route `/workspaces/new` -> `CreateWorkspacePage`. *(Done)*
+    *   [X] Add route `/workspaces/new` -> `CreateWorkspacePage`. *(Done, layout: true)*
     *   [X] Add `CreateWorkspacePage` to lazy loading. *(Done)*
-    *   [ ] Add `/workspaces/:roomId/settings` route -> `WorkspaceSettingsPage`. *(Status: Pending)*
-    *   [X] Ensure `/workspaces/:roomId/channels/:channelId` -> `WorkspacePage`. *(Done)*
+    *   [X] Add `/workspaces/:roomId/settings` route -> `WorkspaceSettingsPage`. *(Done, layout: false)*
+    *   [X] Ensure `/workspaces/:roomId/channels/:channelId` -> `WorkspacePage`. *(Done, layout: false)*
 *   [X] **Component: `WorkspacesListPage.tsx`**
     *   [X] Create `src/pages/WorkspacesListPage.tsx`. *(Done)*
-    *   [X] Use fetch logic to list accessible workspaces (owned + member). *(Done - Doesn't use hook yet)*.
+    *   [X] Use fetch logic to list accessible workspaces (owned + member). *(Done - Uses direct fetch)*.
     *   [X] Implement UI for triggering `createWorkspace`. *(Done - Button links to `/workspaces/new`)*.
     *   [X] Link each workspace item to `/workspaces/:roomId`. *(Done - Handled by `WorkspaceCard`)*.
 *   [X] **Component: `CreateWorkspacePage.tsx` (NEW)**
     *   [X] Create `src/pages/CreateWorkspacePage.tsx`. *(Done)*
-    *   [X] Implement form and Supabase insert logic. *(Done - Doesn't use hook yet)*
-*   [ ] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`)**
+    *   [X] Implement form and Supabase insert logic. *(Done - Uses direct insert)*
+*   [X] **Component: `WorkspacePage.tsx` (Refactor `/workspaces/:roomId`)**
     *   [X] Fetch/Display workspace members (using `useWorkspaceMembers` hook).
-    *   [ ] Fetch workspace details using `useWorkspaces(workspaceId)`. *(Currently fetches directly)*
-    *   [X] Display workspace name/details in header. *(Uses direct fetch)*
+    *   [X] Fetch workspace details using `useWorkspaces` hook instance.
+    *   [X] Display workspace name/details in header.
     *   [X] Implement channel selection/default channel logic (navigates to first channel).
-    *   [ ] Implement message fetching based on selected channel (using `useChatMessages` hook). *(Currently fetches directly via RPC)*
+    *   [X] Implement message fetching based on selected channel (using `useChatMessages` hook).
     *   [X] Render message list (`ChatMessage`).
     *   [X] Render input (`WorkspaceChatInput`).
     *   [ ] Verify `handleSubmit` logic (in `WorkspaceChatInput`) determines responding agent from `workspace_members` and passes `workspaceId`, `channelId`. *(Needs check)*
-    *   [ ] Add UI element to navigate to `/workspaces/:roomId/settings`. *(Needs check)*
+    *   [X] Add UI element to navigate to `/workspaces/:roomId/settings`.
     *   [X] **Refactor:** Ensure all references use `workspaceId` from `useParams`.
 *   [X] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
     *   [X] Create `src/pages/WorkspaceSettingsPage.tsx`.
@@ -134,7 +135,7 @@
 *   [X] **Component: `WorkspaceMemberSidebar.tsx` (NEW - Right Sidebar)**
     *   [X] Modify `WorkspacePage.tsx` layout to include a right sidebar section.
     *   [X] Create `src/components/workspaces/WorkspaceMemberSidebar.tsx`.
-    *   [X] Implement basic member list display (pass `workspaceMembers` prop from `WorkspacePage`).
+    *   [X] Implement member list display (using passed props from `WorkspacePage`).
     *   [X] Add agent invite input and autocomplete UI.
     *   [X] Integrate `WorkspaceMemberSidebar` into `WorkspacePage.tsx`.
     *   **Invite Functionality (Agent Name):**
@@ -146,16 +147,17 @@
 *   [X] **Component: `WorkspaceCard.tsx`**
     *   [X] Created `src/components/workspaces/WorkspaceCard.tsx`.
     *   [X] Styled consistently.
-*   [ ] **Component: `TeamDetailsPage.tsx` (Refactor `/teams/:teamId`)**
-    *   [ ] Remove any UI related to listing workspaces/chat rooms. *(Imports `TeamChatRoomList`)*
+*   [X] **Component: `TeamDetailsPage.tsx` (Refactor `/teams/:teamId`)**
+    *   [X] Remove any UI related to listing workspaces/chat rooms. *(Done)*
 *   [X] **Sidebar/Layout Updates:**
     *   [X] `ChannelListSidebar` fetches channels based on `workspaceId` (using `useChatChannels` hook).
-    *   [ ] **Verify:** `useChatChannels` hook correctly uses `workspaceId` parameter. *(Hook exists and seems correct)*.
-    *   [X] `Layout.tsx` conditionally renders main `Sidebar`.
-*   [ ] **Layout Refactoring (Workspace Focus)**
-    *   [X] Modify `Layout.tsx`: Conditionally hide main `Sidebar`.
-    *   [X] Modify `WorkspacePage.tsx`: Ensure it renders `ChannelListSidebar` directly.
-    *   [ ] Modify `ChannelListSidebar.tsx`: Make workspace title header (`<h2/>`) a `Link` navigating back to `/workspaces`. *(Has "Exit Workspace" button instead)*.
+    *   [X] **Verify:** `useChatChannels` hook correctly uses `workspaceId` parameter. *(Hook exists and seems correct)*.
+    *   [X] `Layout.tsx` conditionally renders main `Sidebar`. *(Fixed)*
+*   [X] **Layout Refactoring (Workspace Focus)**
+    *   [X] Modify `Layout.tsx`: Conditionally hide main `Sidebar`. *(Fixed)*
+    *   [X] Modify `AppRouter.tsx`: Don't wrap workspace routes in `<Layout>`. *(Fixed)*
+    *   [X] Modify `WorkspacePage.tsx`: Ensure it renders `ChannelListSidebar` directly. *(Verified)*
+    *   [ ] Modify `ChannelListSidebar.tsx`: Make workspace title header (`<h2/>`) a `Link` navigating back to `/workspaces`. *(Has "Exit Workspace" button in `WorkspacePage` header instead)*.
 
 ## Phase 4: Testing & Refinement
 
@@ -204,12 +206,12 @@
     *   [ ] Create a database hook `useWorkspaceSettings`:
         *   [ ] Implement `fetchSettings(workspaceId)`.
         *   [ ] Implement `updateSettings(workspaceId, settings)`.
-    *   [ ] Update routes in `routeConfig.tsx` to include `/workspaces/:roomId/settings`.
+    *   [X] Update routes in `routeConfig.tsx` to include `/workspaces/:roomId/settings`. *(Done)*
 
 *   [ ] **WorkspaceChatInput Component Enhancement:**
-    *   [ ] Add visual indicators for mentioning agents.
-    *   [ ] Implement @mention autocomplete for agents in workspace.
-    *   [ ] Format agent mentions in messages to be distinct.
+    *   [X] Add visual indicators for mentioning agents. *(Popover appears)*
+    *   [X] Implement @mention autocomplete for agents in workspace. *(Suggestions shown)*
+    *   [ ] Format agent mentions in messages to be distinct. *(Basic bolding done in ChatMessage)*
 
 *   [ ] **Agent Awareness UI:**
     *   [ ] Enhance `WorkspaceMemberSidebar` to show online/offline status.

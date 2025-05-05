@@ -54,7 +54,7 @@ button, input, select, textarea {
 
 /* Apply a subtle background to the entire app to avoid harsh white flash */
 html, body {
-  @apply bg-gray-900;
+  @apply bg-background;
 }
 
 @layer base {

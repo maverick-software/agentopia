@@ -1,16 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Clipboard, Check } from 'lucide-react';
 import type { Message } from '../types';
+import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
 
 interface ChatMessageProps {
   message: Message & {
     agentName?: string | null;
   };
+  workspaceMembers: WorkspaceMemberDetail[];
 }
 
-export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMessageProps) {
+const formatMentions = (content: string, members: WorkspaceMemberDetail[]): React.ReactNode => {
+  let formattedContent: React.ReactNode[] = [content];
+  
+  members.forEach(member => {
+      if (member.agent?.name) {
+          const mentionTag = `@${member.agent.name}`;
+          const newFormattedContent: React.ReactNode[] = [];
+          formattedContent.forEach(node => {
+              if (typeof node === 'string') {
+                  const parts = node.split(mentionTag);
+                  for (let i = 0; i < parts.length; i++) {
+                      newFormattedContent.push(parts[i]);
+                      if (i < parts.length - 1) {
+                          newFormattedContent.push(<strong key={`${member.id}-${i}`} className="text-indigo-400">{mentionTag}</strong>);
+                      }
+                  }
+              } else {
+                  newFormattedContent.push(node);
+              }
+          });
+          formattedContent = newFormattedContent;
+      }
+  });
+
+  return formattedContent;
+};
+
+export const ChatMessage = React.memo(function ChatMessage({ message, workspaceMembers }: ChatMessageProps) {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = () => {
@@ -23,6 +52,10 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
         console.error('Failed to copy text: ', err);
       });
   };
+
+  const formattedContent = useMemo(() => {
+      return formatMentions(message.content, workspaceMembers);
+  }, [message.content, workspaceMembers]);
 
   console.log("Rendering message with agent name:", message.agentName);
 
@@ -42,31 +75,14 @@ export const ChatMessage = React.memo(function ChatMessage({ message }: ChatMess
         {message.role === 'assistant' && message.agentName && (
           <p className="text-xs font-medium text-indigo-300 mb-1">{message.agentName}</p>
         )}
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
-            strong: ({ node, ...props }) => <strong className="font-bold" {...props} />,
-            em: ({ node, ...props }) => <em className="italic" {...props} />,
-            ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-2" {...props} />,
-            ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-2" {...props} />,
-            li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-            code: ({ node, inline, className, children, ...props }: any) => {
-              const match = /language-(\w+)/.exec(className || '');
-              return !inline ? (
-                <pre className="bg-gray-800/50 p-2 rounded overflow-x-auto mb-2"><code className={className} {...props}>{children}</code></pre>
-              ) : (
-                <code className="bg-gray-800/50 px-1 py-0.5 rounded text-xs" {...props}>{children}</code>
-              );
-            },
-            a: ({ node, ...props }) => <a className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
-          }}
-        >
-          {message.content}
-        </ReactMarkdown>
+        <div className="prose prose-sm prose-invert break-words">
+          {formattedContent}
+        </div>
         <div className="flex items-center justify-between mt-2">
           <p className="text-xs opacity-70">
-            {message.timestamp.toLocaleTimeString()}
+            {message.timestamp instanceof Date 
+              ? message.timestamp.toLocaleTimeString() 
+              : '--:--:--'}
           </p>
           {message.role === 'assistant' && (
             <button
