@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Trash2 } from 'lucide-react';
+import { AlertCircle, Trash2, Loader2 } from 'lucide-react';
+import { WorkspaceMemberManager } from '@/components/workspaces/WorkspaceMemberManager';
+import { ContextSettingsTab } from '@/components/workspaces/ContextSettingsTab';
 
 export function WorkspaceSettingsPage() {
   const { roomId: workspaceId } = useParams<{ roomId: string }>();
@@ -134,17 +136,16 @@ export function WorkspaceSettingsPage() {
         </div>
       </div>
 
-      {/* Placeholder: Member Management Section */}
+      {/* Member Management Section */}
       <div className="mb-8 p-4 border border-border rounded-lg bg-card">
         <h2 className="text-lg font-medium mb-4">Members</h2>
-        <p className="text-sm text-muted-foreground">Member management will be available here.</p>
-        {/* TODO: Integrate WorkspaceMemberManager component here */}
+        {workspaceId && <WorkspaceMemberManager workspaceId={workspaceId} />}
       </div>
 
-      {/* Placeholder: Context Window Settings (Phase 5) */}
-       <div className="mb-8 p-4 border border-border rounded-lg bg-card">
+      {/* Context Window Settings (Phase 5) */}
+      <div className="mb-8 p-4 border border-border rounded-lg bg-card">
         <h2 className="text-lg font-medium mb-4">AI Context Settings</h2>
-        <p className="text-sm text-muted-foreground">Context window size and token limit settings will be available here (Phase 5).</p>
+        {workspaceId && <ContextSettingsTab workspaceId={workspaceId} />}
       </div>
 
       {/* Danger Zone */}

@@ -122,16 +122,20 @@
     *   [X] Implement message fetching based on selected channel (using `useChatMessages` hook).
     *   [X] Render message list (`ChatMessage`).
     *   [X] Render input (`WorkspaceChatInput`).
-    *   [ ] Verify `handleSubmit` logic (in `WorkspaceChatInput`) determines responding agent from `workspace_members` and passes `workspaceId`, `channelId`. *(Needs check)*
+    *   [X] Verify `handleSubmit` logic (in `WorkspaceChatInput`) determines responding agent from `workspace_members` and passes `workspaceId`, `channelId`.
     *   [X] Add UI element to navigate to `/workspaces/:roomId/settings`.
     *   [X] **Refactor:** Ensure all references use `workspaceId` from `useParams`.
 *   [X] **Component: `WorkspaceSettingsPage.tsx` (NEW)**
     *   [X] Create `src/pages/WorkspaceSettingsPage.tsx`.
     *   [X] Use `useWorkspaces` for fetching/updating details.
-*   [ ] **Component: `WorkspaceMemberManager.tsx` (NEW)**
-    *   [ ] Create `src/components/workspaces/WorkspaceMemberManager.tsx`.
-    *   [ ] Use `useWorkspaceMembers` hook for fetching/adding/removing/updating members.
-    *   [ ] Implement UI for managing different member types (Agents, Teams, Users).
+    *   [X] Implement workspace name/description editing.
+    *   [X] Integrate member management functionality.
+*   [X] **Component: `WorkspaceMemberManager.tsx` (NEW)**
+    *   [X] Create `src/components/workspaces/WorkspaceMemberManager.tsx`.
+    *   [X] Use `useWorkspaceMembers` hook for fetching/adding/removing/updating members.
+    *   [X] Implement UI for managing different member types (Agents, Teams, Users).
+    *   [X] Add role management for workspace members.
+    *   [X] Integrate with WorkspaceSettingsPage.
 *   [X] **Component: `WorkspaceMemberSidebar.tsx` (NEW - Right Sidebar)**
     *   [X] Modify `WorkspacePage.tsx` layout to include a right sidebar section.
     *   [X] Create `src/components/workspaces/WorkspaceMemberSidebar.tsx`.
@@ -177,9 +181,9 @@
 ## Phase 5: Workspace Chat Context Enhancement
 
 *   [ ] **Database Schema for Context Windows:**
-    *   [ ] Migration: Add `context_window_size` column to `workspaces` table (default: 20).
-    *   [ ] Migration: Add `context_window_token_limit` column to `workspaces` table (default: 8000).
-    *   [ ] Migration: Update RLS policies for `workspaces` table to allow owner to modify context settings.
+    *   [X] Migration: Add `context_window_size` column to `workspaces` table (default: 20).
+    *   [X] Migration: Add `context_window_token_limit` column to `workspaces` table (default: 8000).
+    *   [X] Migration: Update RLS policies for `workspaces` table to allow owner to modify context settings.
 
 *   [ ] **Edge Function `/chat` Enhancements:**
     *   [X] Modify `/chat` to fetch workspace members for agent awareness. *(Done in Phase 2)*
@@ -196,27 +200,33 @@
         *   [X] Add list of workspace members (agents, users) to system context. *(Done in Phase 2)*
         *   [X] Add awareness of channel (topic, purpose) to system context. *(Done in Phase 2)*
 
-*   [ ] **Frontend - Workspace Settings:**
-    *   [ ] Create `WorkspaceSettingsPage` component with tabs.
-    *   [ ] Create `ContextSettingsTab` component with:
-        *   [ ] Input for `context_window_size` (number of messages).
-        *   [ ] Input for `context_window_token_limit` (maximum tokens).
-        *   [ ] Toggle for including agent awareness.
-        *   [ ] Save/Reset buttons to update settings.
-    *   [ ] Create a database hook `useWorkspaceSettings`:
-        *   [ ] Implement `fetchSettings(workspaceId)`.
-        *   [ ] Implement `updateSettings(workspaceId, settings)`.
+*   [X] **Frontend - Workspace Settings:**
+    *   [X] Create `WorkspaceSettingsPage` component with sections.
+    *   [X] Create `ContextSettingsTab` component with:
+        *   [X] Input for `context_window_size` (number of messages).
+        *   [X] Input for `context_window_token_limit` (maximum tokens).
+        *   [X] Toggle for including agent awareness.
+        *   [X] Save/Reset buttons to update settings.
+    *   [X] Create a database hook `useWorkspaceSettings`:
+        *   [X] Implement `fetchSettings(workspaceId)`.
+        *   [X] Implement `updateSettings(workspaceId, settings)`.
     *   [X] Update routes in `routeConfig.tsx` to include `/workspaces/:roomId/settings`. *(Done)*
 
-*   [ ] **WorkspaceChatInput Component Enhancement:**
+*   [X] **WorkspaceChatInput Component Enhancement:**
     *   [X] Add visual indicators for mentioning agents. *(Popover appears)*
     *   [X] Implement @mention autocomplete for agents in workspace. *(Suggestions shown)*
-    *   [ ] Format agent mentions in messages to be distinct. *(Basic bolding done in ChatMessage)*
+    *   [X] Format agent mentions in messages to be distinct. *(ChatMessage component properly formats mentions and shows agent names)*
 
-*   [ ] **Agent Awareness UI:**
-    *   [ ] Enhance `WorkspaceMemberSidebar` to show online/offline status.
-    *   [ ] Add tooltip to agent names showing their role/purpose.
-    *   [ ] Add indicator for which agent is responding to a message.
+*   [X] **Agent Awareness UI:**
+    *   [X] Enhance `WorkspaceMemberSidebar` to show online/offline status.
+    *   [X] Add tooltip to agent names showing their role/purpose.
+    *   [X] Add indicator for which agent is responding to a message.
+
+*   [ ] **ChatMessage Enhancements:**
+    *   [X] Display agent name on chat messages from assistants
+    *   [X] Ensure proper styling and contrast for all message types
+    *   [X] Fix agent mention display in messages
+    *   [ ] Add optional avatar display for agents
 
 *   [ ] **Testing & Validation:**
     *   [ ] Test context window settings affecting message history.
