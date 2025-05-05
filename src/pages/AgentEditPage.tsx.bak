@@ -9,13 +9,6 @@ import { DiscordConnect } from '../components/DiscordConnect'; // Import Discord
 import { SubtleStatusToggle } from '../components/DiscordConnect'; // Import the new toggle
 import { useAgentDiscordConnection } from '../hooks/useAgentDiscordConnection'; // Import the new hook
 
-// --- Import Sub-components ---
-import { AgentFormBasicInfo } from '../components/agent-edit/AgentFormBasicInfo';
-import { AgentFormInstructions } from '../components/agent-edit/AgentFormInstructions';
-import { AgentDiscordSettings } from '../components/agent-edit/AgentDiscordSettings';
-import { AgentDatastoreSelector } from '../components/agent-edit/AgentDatastoreSelector';
-// --- End Import Sub-components ---
-
 // Removed conflicting local Agent interface
 
 // Define personality templates (copied from AgentEdit)
@@ -197,32 +190,6 @@ export function AgentEditPage() { // Keep existing export name
     }
   }, [agentId, isEditing]); // Removed fetchAgent from dependency array
 
-  // --- Add Generic Handlers ---
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (value: string) => {
-    // Assuming the select is only for personality for now
-    setFormData(prev => ({ ...prev, personality: value }));
-  };
-  
-  const handleSwitchChange = (checked: boolean) => {
-    // Assuming the switch is only for active status
-    setFormData(prev => ({ ...prev, active: checked }));
-  };
-
-  const handleEditorChange = (fieldName: string, value: string) => {
-    setFormData(prev => ({ ...prev, [fieldName]: value }));
-  };
-  // --- End Generic Handlers ---
-
-  // Handle datastore SELECTION change (Keep, pass to selector component)
-  const handleSelectDatastore = (type: 'vector' | 'knowledge', value: string) => {
-      setSelectedDatastores(prev => ({ ...prev, [type]: value || undefined })); 
-  };
-
   // Handle datastore connection (from AgentEdit)
   const handleConnectDatastores = async () => {
     if (!agentId || !user?.id) return; // Use agentId
@@ -322,7 +289,7 @@ export function AgentEditPage() { // Keep existing export name
       }
 
       setSaveSuccess(true);
-    } catch (err: any) { 
+    } catch (err: any) { // Added type any
       console.error('Error saving agent:', err);
       setError(err.message || 'Failed to save agent. Please try again.');
     } finally {
@@ -348,7 +315,7 @@ export function AgentEditPage() { // Keep existing export name
 
   // Render UI (merged from AgentEdit)
   return (
-    <div className="space-y-6 p-6"> {/* Adjusted padding/container */}
+    <div className="space-y-6 p-6"> {/* Added padding */} 
       {/* Header section from AgentEdit */} 
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-4">
@@ -412,73 +379,246 @@ export function AgentEditPage() { // Keep existing export name
         </div>
       )}
 
-      {/* Form structure - Now uses sub-components and grid layout */}
-      <form id="agent-form" onSubmit={handleSubmit} className="space-y-8">
-        
-        {/* Top Grid: Basic Info & Discord */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Column 1: Basic Info */} 
-          <div className="space-y-4 p-6 border rounded-lg bg-card shadow-sm">
+      {/* Form structure from AgentEdit */} 
+      <form id="agent-form" onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Basic Information */} 
+          <div className="bg-gray-800 rounded-lg p-6 space-y-4">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
-            <AgentFormBasicInfo 
-                formData={formData} 
-                handleInputChange={handleInputChange} 
-                handleSelectChange={handleSelectChange}
-                handleSwitchChange={handleSwitchChange}
-                personalityTemplates={personalityTemplates}
-            />
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Enter agent name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Description *
+              </label>
+              <textarea
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Enter agent description"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Personality Template *
+              </label>
+              <select
+                required
+                value={formData.personality}
+                onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select a template</option>
+                {personalityTemplates.map(template => (
+                  <option key={template.id} value={template.name}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Column 2: Discord Settings */} 
-          <div className="space-y-4 p-6 border rounded-lg bg-card shadow-sm">
-            {/* Pass necessary props from useAgentDiscordConnection */}
-             <AgentDiscordSettings 
-                 connection={discordConnectionData}
-                 hasCredentials={hasCredentials}
-                 workerStatus={workerStatus || 'inactive'}
-                 allGuilds={allGuilds}
-                 isActivating={isActivating}
-                 isDeactivating={isDeactivating}
-                 isGeneratingInvite={isGeneratingInvite}
-                 discordLoading={discordLoading}
-                 discordError={discordError}
-                 onConnectionChange={updateConnectionField}
-                 activate={activate}
-                 deactivate={deactivate}
-                 generateInviteLink={generateInviteLink}
-             /> 
+          {/* Discord Configuration */} 
+          <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+            {/* Heading and Toggle Row */}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Discord Configuration</h2>
+              {/* Conditionally render toggle if credentials seem complete and server selected */}
+              {hasCredentials && discordConnectionData?.guild_id && (
+                <SubtleStatusToggle
+                   workerStatus={workerStatus || 'inactive'}
+                   canActivate={canActivateToggle} // Use calculated value
+                   onActivate={activate}
+                   onDeactivate={deactivate}
+                   isActivating={isActivating}
+                   isDeactivating={isDeactivating}
+                 />
+              )}
+            </div>
+            
+            { discordLoading ? (
+                <p className="text-sm text-gray-400">Loading Discord connection...</p>
+            ) : discordError ? (
+                 <p className="text-sm text-red-400">Error loading Discord info: {discordError}</p>
+            ) : (
+                 <DiscordConnect
+                    connection={discordConnectionData || {}} // Pass fetched connection or empty object
+                    hasCredentials={hasCredentials} // Pass credentials status
+                    onConnectionChange={updateConnectionField} // Pass handler
+                    discord_app_id={discordConnectionData?.discord_app_id} // Pass app_id
+                    onGenerateInviteLink={generateInviteLink} // Pass handler
+                    isGeneratingInvite={isGeneratingInvite} // Pass state
+                    workerStatus={workerStatus || 'inactive'} // Pass status
+                    onActivate={activate} // Pass handler
+                    onDeactivate={deactivate} // Pass handler
+                    isActivating={isActivating} // Pass state
+                    isDeactivating={isDeactivating} // Pass state
+                    allGuilds={allGuilds} // Pass guilds
+                    currentGuildId={discordConnectionData?.guild_id} // Pass current guild
+                    showStatusToggle={true} // Always show toggle on edit page
+                />
+            )}
+            {/* <p className="text-sm text-gray-500">(Discord connection UI temporarily disabled - requires prop updates)</p> */}
           </div>
         </div>
 
-        {/* Full Width: Instructions */}
-        <div className="space-y-4 p-6 border rounded-lg bg-card shadow-sm">
-           <h2 className="text-xl font-semibold mb-4">Agent Instructions</h2>
-           <AgentFormInstructions 
-               systemInstructions={formData.system_instructions}
-               assistantInstructions={formData.assistant_instructions}
-               handleEditorChange={handleEditorChange}
-           />
-        </div>
-
-        {/* Full Width: Datastore Selector (only in edit mode) */}
-        {isEditing && (
-          <div className="space-y-4 p-6 border rounded-lg bg-card shadow-sm">
-            <AgentDatastoreSelector 
-                agentId={agentId}
-                availableDatastores={datastores}
-                selectedVectorStore={selectedDatastores.vector}
-                selectedKnowledgeStore={selectedDatastores.knowledge}
-                onSelectDatastore={handleSelectDatastore}
-                onConnectDatastores={handleConnectDatastores}
-                loadingAvailable={loadingDatastores}
-                connecting={connectingDatastores}
+        {/* System Instructions */} 
+        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+          <h2 className="text-xl font-semibold mb-4">System Instructions</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Define the core behavior and capabilities of your AI agent. These instructions set the foundation for how the agent will interact and process information.
+          </p>
+          <div className="h-64 border border-gray-700 rounded-lg overflow-hidden">
+            <MonacoEditor
+              language="markdown"
+              theme="vs-dark"
+              value={formData.system_instructions}
+              onChange={(value) => setFormData({ ...formData, system_instructions: value })}
+              options={{
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                wrappingIndent: 'indent',
+                automaticLayout: true,
+              }}
             />
           </div>
-        )}
+        </div>
 
+        {/* Assistant Instructions */} 
+        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+          <h2 className="text-xl font-semibold mb-4">Assistant Instructions</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Specify additional context and instructions for the assistant, including any relevant information from datastores or specific behavioral guidelines.
+          </p>
+          <div className="h-64 border border-gray-700 rounded-lg overflow-hidden">
+            <MonacoEditor
+              language="markdown"
+              theme="vs-dark"
+              value={formData.assistant_instructions}
+              onChange={(value) => setFormData({ ...formData, assistant_instructions: value })}
+              options={{
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                wrappingIndent: 'indent',
+                automaticLayout: true,
+              }}
+            />
+          </div>
+        </div>
+        {/* Removed redundant save/cancel buttons from here, moved to header */}
       </form>
 
-      {/* Datastore Connection Modal is removed */}
+      {/* Datastore Connection Modal (from AgentEdit) */} 
+      {showDatastoreModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl">
+            <h2 className="text-2xl font-bold mb-6">Connect Datastores</h2>
+            
+            {loadingDatastores ? (
+              <div className="text-center py-8">
+                <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-400">Loading datastores...</p>
+              </div>
+            ) : datastores.length === 0 ? (
+              <div className="text-center py-8">
+                <Database className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">No datastores found. Create a datastore first.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Vector Datastore Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Vector Datastore (Pinecone)
+                  </label>
+                  <select
+                    value={selectedDatastores.vector || ''}
+                    onChange={(e) => setSelectedDatastores({
+                      ...selectedDatastores,
+                      vector: e.target.value || undefined
+                    })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select a vector datastore</option>
+                    {datastores
+                      .filter(ds => ds.type === 'pinecone')
+                      .map(ds => (
+                        <option key={ds.id} value={ds.id}>{ds.name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                {/* Knowledge Graph Datastore Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Knowledge Graph (GetZep)
+                  </label>
+                  <select
+                    value={selectedDatastores.knowledge || ''}
+                    onChange={(e) => setSelectedDatastores({
+                      ...selectedDatastores,
+                      knowledge: e.target.value || undefined
+                    })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select a knowledge graph datastore</option>
+                    {datastores
+                      .filter(ds => ds.type === 'getzep')
+                      .map(ds => (
+                        <option key={ds.id} value={ds.id}>{ds.name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-6 border-t border-gray-700"> {/* Added border */} 
+                  <button
+                    type="button"
+                    onClick={() => setShowDatastoreModal(false)}
+                    className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                    disabled={connectingDatastores}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConnectDatastores}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={connectingDatastores}
+                  >
+                    {connectingDatastores ? (
+                        <>
+                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                             Connecting...
+                        </>
+                    ) : (
+                         'Connect Datastores'
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
