@@ -16,15 +16,77 @@ Apply this style type and principles to all UI/UX design: **Flat Design (Dark Mo
 2) Use the following libraries: **Shadcn UI** and **Tailwind CSS**. Use **Lucide React** for icons.
 
 
-2) Colors should match the defined palette (update with current design if blank): 
+2) Colors should match the defined palette: 
 
-Primary Color: **Indigo (e.g., `bg-indigo-500`, `text-indigo-400`)**  
-Secondary Color: **Gray (e.g., `bg-gray-700`, `text-gray-400`)**  
-Accent Colors: **(Varies, potentially other blues/purples)**  
-Background Color: **Dark Gray (e.g., `bg-gray-900` base, `bg-gray-800` cards)**  
-Text Color: **White/Light Gray (e.g., `text-white`, `text-gray-300`, `text-gray-400`)**  
-Success/Error Colors: **Green (`text-green-500`) / Red (`text-red-500`)**  
-Ensure contrast ratios meet AA or AAA accessibility standards.  
+### Dark Mode Theme (Primary Theme)
+```css
+--background: 215 28% 9%;        /* Dark bluish-gray background */
+--foreground: 210 20% 98%;       /* Light text color with blue tint */
+--card: 217 25% 12%;             /* Card background - slightly lighter than base */
+--card-foreground: 210 20% 98%;  /* Card text color */
+--popover: 217 25% 12%;          /* Popover background */
+--popover-foreground: 210 20% 98%; /* Popover text */
+--primary: 210 20% 98%;          /* Primary elements color (white with blue tint) */
+--primary-foreground: 215 28% 9%; /* Text on primary elements */
+--secondary: 217 19% 20%;        /* Secondary elements color (medium bluish-gray) */
+--secondary-foreground: 210 20% 98%; /* Text on secondary elements */
+--muted: 217 19% 20%;            /* Muted elements (subtle background) */
+--muted-foreground: 210 15% 70%; /* Muted text color */
+--accent: 217 19% 20%;           /* Accent elements */
+--accent-foreground: 210 20% 98%; /* Text on accent elements */
+--destructive: 0 62.8% 30.6%;    /* Destructive/error color (red) */
+--destructive-foreground: 210 20% 98%; /* Text on destructive elements */
+--border: 217 19% 20%;           /* Border color */
+--input: 217 19% 20%;            /* Input field background */
+--ring: 210 16% 83.1%;           /* Focus ring color */
+```
+
+### Light Mode Theme (Optional Alternative)
+```css
+--background: 0 0% 100%;         /* White background */
+--foreground: 0 0% 3.9%;         /* Nearly black text */
+--card: 0 0% 100%;               /* White card background */
+--card-foreground: 0 0% 3.9%;    /* Dark text on cards */
+--popover: 0 0% 100%;            /* White popover background */
+--popover-foreground: 0 0% 3.9%; /* Dark text on popovers */
+--primary: 0 0% 9%;              /* Dark gray primary */
+--primary-foreground: 0 0% 98%;  /* Light text on primary */
+--secondary: 0 0% 96.1%;         /* Light gray secondary */
+--secondary-foreground: 0 0% 9%; /* Dark text on secondary */
+--muted: 0 0% 96.1%;             /* Light gray muted */
+--muted-foreground: 0 0% 45.1%;  /* Medium gray muted text */
+--accent: 0 0% 96.1%;            /* Light gray accent */
+--accent-foreground: 0 0% 9%;    /* Dark text on accent */
+--destructive: 0 84.2% 60.2%;    /* Bright red destructive */
+--destructive-foreground: 0 0% 98%; /* Light text on destructive */
+--border: 0 0% 89.8%;            /* Light gray border */
+--input: 0 0% 89.8%;             /* Light gray input */
+--ring: 0 0% 3.9%;               /* Dark ring */
+```
+
+### Chart Colors (Data Visualization)
+```css
+/* Dark Mode */
+--chart-1: 220 70% 50%;          /* Blue */
+--chart-2: 160 60% 45%;          /* Green */
+--chart-3: 30 80% 55%;           /* Orange */
+--chart-4: 280 65% 60%;          /* Purple */
+--chart-5: 340 75% 55%;          /* Pink */
+
+/* Light Mode */
+--chart-1: 12 76% 61%;           /* Red-Orange */
+--chart-2: 173 58% 39%;          /* Teal */
+--chart-3: 197 37% 24%;          /* Dark Blue */
+--chart-4: 43 74% 66%;           /* Yellow */
+--chart-5: 27 87% 67%;           /* Orange */
+```
+
+### Implementation Notes
+- Default to dark mode theme for all designs
+- Use HSL color values as defined in CSS variables
+- Ensure sufficient contrast for accessibility (WCAG AA compliance)
+- Apply consistent color usage: primary for main actions, secondary for alternative actions, destructive for delete/warning actions
+- For interactive elements, implement hover and focus states with subtle variations
 
 3) Follow Proper Content Hierarchy  
 

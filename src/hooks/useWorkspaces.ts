@@ -1,9 +1,31 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Workspace } from '@/types'; // Assuming a Workspace type exists
 
-export function useWorkspaces() {
+export interface Workspace {
+    id: string;
+    created_at: string;
+    name: string;
+    description?: string;
+    owner_user_id: string;
+    context_window_size?: number;
+    context_window_token_limit?: number;
+}
+
+export interface UseWorkspacesReturn {
+    workspaces: Workspace[];
+    workspace: Workspace | null; // Single workspace for detail views
+    loading: boolean;
+    error: Error | null;
+    fetchWorkspaces: () => Promise<void>;
+    fetchWorkspaceById: (workspaceId: string) => Promise<Workspace | null>;
+    createWorkspace: (name: string, description?: string) => Promise<Workspace | null>;
+    updateWorkspace: (workspaceId: string, data: Partial<Omit<Workspace, 'id' | 'owner_user_id' | 'created_at'>>) => Promise<Workspace | null>;
+    deleteWorkspace: (workspaceId: string) => Promise<boolean>;
+}
+
+export function useWorkspaces(): UseWorkspacesReturn {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null); // Add state for single workspace
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -67,36 +89,38 @@ export function useWorkspaces() {
     }
   }, []);
 
-  // Placeholder for other functions (fetchById, create, update, delete)
+  // Update fetchWorkspaceById to set the workspace state
   const fetchWorkspaceById = useCallback(async (workspaceId: string): Promise<Workspace | null> => {
-    // No need to set global loading/error for a single fetch usually
-    // setError(null);
+    setLoading(true);
+    setError(null);
     try {
-        // Basic fetch, no RLS check here - assumes if you have the ID, you should fetch.
-        // RLS SELECT policy on the `workspaces` table should handle authorization.
-        const { data, error } = await supabase
-            .from('workspaces')
-            .select('*')
-            .eq('id', workspaceId)
-            .single();
+      // Basic fetch, no RLS check here - assumes if you have the ID, you should fetch.
+      // RLS SELECT policy on the `workspaces` table should handle authorization.
+      const { data, error } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('id', workspaceId)
+        .single();
 
-        if (error) {
-            // Handle case where RLS prevents fetching or item not found
-            if (error.code === 'PGRST116') { // PostgREST error code for "Fetched rowcount 0" from .single()
-                 console.warn(`Workspace with ID ${workspaceId} not found or access denied.`);
-                 return null;
-            }
-            throw error;
+      if (error) {
+        // Handle case where RLS prevents fetching or item not found
+        if (error.code === 'PGRST116') { // PostgREST error code for "Fetched rowcount 0" from .single()
+          console.warn(`Workspace with ID ${workspaceId} not found or access denied.`);
+          setWorkspace(null);
+          return null;
         }
+        throw error;
+      }
 
-        return data;
+      setWorkspace(data);
+      return data;
     } catch (err) {
-        console.error(`Error fetching workspace ${workspaceId}:`, err);
-        // Optionally set the global error state, or handle error specifically where called
-        // setError(err instanceof Error ? err : new Error('Failed to fetch workspace'));
-        return null;
+      console.error(`Error fetching workspace ${workspaceId}:`, err);
+      setError(err instanceof Error ? err : new Error('Failed to fetch workspace'));
+      return null;
+    } finally {
+      setLoading(false);
     }
-    // No finally setLoading(false) needed if global loading isn't used
   }, []);
 
   const createWorkspace = useCallback(async (name: string, description?: string): Promise<Workspace | null> => {
@@ -167,8 +191,9 @@ export function useWorkspaces() {
             throw error;
         }
 
-        // Optionally update the state
+        // Update both the list and single workspace state
         setWorkspaces(prev => prev.map(ws => ws.id === workspaceId ? { ...ws, ...updatedData } : ws));
+        setWorkspace(updatedData); // Also update the single workspace state
 
         return updatedData;
     } catch (err) {
@@ -221,6 +246,7 @@ export function useWorkspaces() {
 
   return {
     workspaces,
+    workspace, // Expose the single workspace state
     loading,
     error,
     fetchWorkspaces,
