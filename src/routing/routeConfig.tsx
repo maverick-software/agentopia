@@ -41,7 +41,8 @@ import {
     AgentEditPage, // Now imported here
     WorkspacePage, // Added WorkspacePage
     WorkspacesListPage, // Added WorkspacesListPage
-    CreateWorkspacePage
+    CreateWorkspacePage,
+    WorkspaceSettingsPage
 } from './lazyComponents';
 
 // Manually import the new non-lazy pages
@@ -74,6 +75,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces', element: WorkspacesListPage, protection: 'protected', layout: true },
   { path: '/workspaces/new', element: CreateWorkspacePage, protection: 'protected', layout: true },
   { path: '/workspaces/:roomId', element: WorkspacePage, protection: 'protected', layout: true },
+  { path: '/workspaces/:roomId/settings', element: WorkspaceSettingsPage, protection: 'protected', layout: true },
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/tools', element: MCPPage, protection: 'protected', layout: true },

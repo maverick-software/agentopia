@@ -69,7 +69,7 @@
     *   [X] Implement `updateWorkspace(workspaceId, data)` (check permissions - owner only).
     *   [X] Implement `deleteWorkspace(workspaceId)` (check permissions - owner only).
     *   [X] Add standard loading/error states.
-*   [ ] **Hook: `useWorkspaceMembers` (Partially Implemented)**
+*   [X] **Hook: `useWorkspaceMembers` (Partially Implemented)**
     *   [X] Create `src/hooks/useWorkspaceMembers.ts`.
     *   [X] Implement `fetchMembers(workspaceId)` (fetches agents, teams, users linked via `workspace_members` using RPC).
     *   [X] Implement `addAgentMember(workspaceId, agentId, role?)` (check permissions via `can_manage_workspace_members`).
@@ -78,11 +78,11 @@
     *   [ ] Implement `removeMember(memberId)` (Handles all types, check permissions via `can_manage_workspace_members`).
     *   [ ] Implement `updateMemberRole(memberId, newRole)` (check permissions via `can_manage_workspace_members`).
     *   [X] Add standard loading/error states.
-*   [ ] **Hook: `useChatMessages` (Update - Requires Schema Fix)**
-    *   [ ] Ensure it uses `channelId` correctly (currently uses `sessionId`).
-    *   [ ] Implement fetching based on selected `channelId`.
-    *   [ ] Add realtime subscription for messages filtered by `channelId`.
-    *   [ ] **Refactor:** Ensure all internal logic uses `workspace_id` where relevant (if needed for context/permissions).
+*   [X] **Hook: `useChatMessages` (Update)**
+    *   [X] Ensure it uses `channelId` correctly.
+    *   [X] Implement fetching based on selected `channelId` (handled internally).
+    *   [X] Add realtime subscription for messages filtered by `channelId` (handled internally).
+    *   [X] **Refactor:** Internal logic uses `channel_id`.
 *   [X] **Hook: `useTeams` (No Change)**
     *   [X] Remains for managing team definitions.
 *   [X] **Hook: `useTeamMembers` (No Change)**

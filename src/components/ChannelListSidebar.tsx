@@ -82,19 +82,23 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
 
   return (
     <div className="w-64 bg-gray-800 h-full flex flex-col text-gray-300 rounded-lg shadow-md">
-      <div className="px-3 h-14 flex items-center border-b border-gray-700 shadow-sm">
+      <Link 
+        to="/workspaces" 
+        className="block px-3 h-14 flex items-center border-b border-gray-700 shadow-sm hover:bg-gray-700/50 transition-colors"
+        title="Back to Workspaces List"
+      >
         {nameLoading ? (
           <Loader2 className="animate-spin text-gray-400 mx-auto" size={18} />
         ) : nameError ? (
           <div className="flex items-center text-red-500 text-xs" title={nameError}>
-            <AlertTriangle size={14} className="mr-1" /> Error
+            <AlertTriangle size={14} className="mr-1" /> Error Loading Name
           </div>
         ) : (
           <h2 className="text-lg font-semibold text-white truncate" title={workspaceName || 'Workspace'}>
             {workspaceName || 'Workspace'}
           </h2>
         )}
-      </div>
+      </Link>
 
       <div className="flex-1 flex flex-col pt-3 px-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -160,15 +164,6 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({ roomId }) => {
             <span className="truncate">{channel.name}</span>
           </NavLink>
         ))}
-      </div>
-
-      <div className="mt-auto p-2 border-t border-gray-700">
-        <Link to="/workspaces" className="block w-full">
-           <Button variant="ghost" className="w-full justify-center text-gray-400 hover:bg-gray-700 hover:text-gray-100">
-             <ArrowLeft size={16} className="mr-2" />
-             Exit Workspace
-           </Button>
-        </Link>
       </div>
     </div>
   );
