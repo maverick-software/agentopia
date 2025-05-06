@@ -16,15 +16,15 @@ This checklist details the specific work breakdown structure tasks for implement
 - [x] Define basic component structure
 
 ### Migrate Logic
-- [ ] Cut/paste JSX
-- [ ] Cut/paste state hooks
-- [ ] Cut/paste handlers/effects
-- [ ] Adjust props/state management
+- [x] Cut/paste JSX
+- [ ] Cut/paste state hooks (N/A - State lifted to parent)
+- [x] Cut/paste handlers/effects (Generic handlers created in parent)
+- [x] Adjust props/state management (Props defined and passed)
 
 ### Update `AgentEditPage.tsx`
-- [ ] Add imports
-- [ ] Replace old JSX with new components
-- [ ] Pass props down
+- [x] Add imports
+- [x] Replace old JSX with new components
+- [x] Pass props down
 
 ### Test Refactoring
 - [ ] Run frontend
@@ -34,49 +34,50 @@ This checklist details the specific work breakdown structure tasks for implement
 ## Phase 2: Backend Setup
 
 ### Database Migration
-- [ ] Create new migration file
-- [ ] Add `ALTER TABLE agents ADD COLUMN avatar_url TEXT;`
-- [ ] Run `supabase db push` (or apply via dashboard)
+- [x] Create new migration file
+- [x] Add `ALTER TABLE agents ADD COLUMN avatar_url TEXT;`
+- [x] Run `supabase db push` (and resolve sync issues)
 
 ### Storage Bucket
-- [ ] Use Supabase dashboard/CLI
-- [ ] Create bucket (`agent_avatars`)
+- [x] Use Supabase dashboard/CLI
+- [x] Create bucket (`agent-avatars`)
 
 ### Storage Policies
-- [ ] Define SELECT policy
-- [ ] Define INSERT policy (with function/user check)
-- [ ] Define DELETE policy (with function/user check)
-- [ ] Apply policies
+- [x] Define SELECT policy (N/A - Public Bucket)
+- [x] Define INSERT policy (with function/user check)
+- [x] Define UPDATE policy (with function/user check)
+- [x] Define DELETE policy (with function/user check)
+- [x] Apply policies (via migration)
 
 ### RLS for `agents` table
-- [ ] Review existing `UPDATE` policy
-- [ ] Modify `USING` / `WITH CHECK` clauses to include `avatar_url`
+- [x] Review existing `UPDATE` policy
+- [x] Modify `USING` / `WITH CHECK` clauses to include `avatar_url` (N/A - Existing policy sufficient)
 
 ### Create Supabase Function (`generate-agent-image`)
-- [ ] Create function files
-- [ ] Add dependencies
-- [ ] Write auth logic
-- [ ] Implement OpenAI API call (DALL-E)
-- [ ] Implement image upload to Supabase Storage
-- [ ] Implement DB update (`agents.avatar_url`)
-- [ ] Define return values
-- [ ] Handle errors
+- [x] Create function files
+- [x] Add dependencies (Imports added)
+- [x] Write auth logic
+- [x] Implement OpenAI API call (DALL-E)
+- [x] Implement image upload to Supabase Storage
+- [x] Implement DB update (`agents.avatar_url`)
+- [x] Define return values
+- [x] Handle errors
 
 ### Deploy Function
-- [ ] Run `supabase functions deploy generate-agent-image`
+- [x] Run `supabase functions deploy generate-agent-image`
 
 ## Phase 3: Frontend Implementation
 
 ### Create `AgentProfileImageEditor.tsx` Component
-- [ ] Create `src/components/agent-edit/AgentProfileImageEditor.tsx`
-- [ ] Define props (e.g., `agentId`, `currentAvatarUrl`, `onUpdate`)
+- [x] Create `src/components/agent-edit/AgentProfileImageEditor.tsx`
+- [x] Define props (e.g., `agentId`, `currentAvatarUrl`, `onUpdate`)
 
 ### Implement Upload Logic
-- [ ] Add file input JSX
-- [ ] Write validation function (type, size, aspect ratio)
-- [ ] Implement `supabaseClient.storage.from(...).upload()` call
-- [ ] Implement DB update call (via prop/hook)
-- [ ] Add preview/display logic
+- [x] Add file input JSX (Done in component creation)
+- [x] Write validation function (type, size, aspect ratio)
+- [x] Implement `supabaseClient.storage.from(...).upload()` call
+- [ ] Implement DB update call (via prop/hook) (Handled by parent via onAvatarUpdate)
+- [x] Add preview/display logic (Done in component creation)
 
 ### Implement AI Generation Logic
 - [ ] Add textarea JSX

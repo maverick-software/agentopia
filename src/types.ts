@@ -1,3 +1,5 @@
+import type { Agent } from './types/index';
+
 export interface Message {
   id?: string;
   role: 'user' | 'assistant';
@@ -7,20 +9,20 @@ export interface Message {
   agentId?: string | null;
 }
 
-export interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  personality: string;
-  active: boolean;
-  discord_server?: string;
-  discord_channel?: string;
-  discord_bot_key?: string;
-  system_instructions?: string;
-  assistant_instructions?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+// export interface Agent {
+//   id: string;
+//   name: string;
+//   description: string;
+//   personality: string;
+//   active: boolean;
+//   discord_server?: string;
+//   discord_channel?: string;
+//   discord_bot_key?: string;
+//   system_instructions?: string;
+//   assistant_instructions?: string;
+//   created_at?: string;
+//   updated_at?: string;
+// }
 
 export interface Datastore {
   id: string;

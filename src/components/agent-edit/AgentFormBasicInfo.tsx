@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import type { Agent } from '@/types';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AgentProfileImageEditor } from './AgentProfileImageEditor';
 
 // Define personality templates structure (assuming it's passed)
 interface PersonalityTemplate {
@@ -15,19 +17,21 @@ interface PersonalityTemplate {
 
 // Define component props
 interface AgentFormBasicInfoProps {
-  formData: Partial<Agent>;
+  agentData: Partial<Agent>;
   handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   handleSelectChange: (value: string) => void; // For personality select
   handleSwitchChange: (checked: boolean) => void; // For active switch
   personalityTemplates: PersonalityTemplate[];
+  handleAvatarUpdate: (newAvatarUrl: string | null) => void;
 }
 
 export const AgentFormBasicInfo: React.FC<AgentFormBasicInfoProps> = ({
-  formData,
+  agentData,
   handleInputChange,
   handleSelectChange,
   handleSwitchChange,
-  personalityTemplates
+  personalityTemplates,
+  handleAvatarUpdate
 }) => {
 
   // State hooks relevant to this form section could be moved here
@@ -36,64 +40,73 @@ export const AgentFormBasicInfo: React.FC<AgentFormBasicInfoProps> = ({
   // const [nameError, setNameError] = useState<string | null>(null);
 
   return (
-    <div className="space-y-4">
-      {/* Agent Name */}
-      <div>
-        <Label htmlFor="agentName">Name</Label>
-        <Input 
-          id="agentName" 
-          name="name" 
-          value={formData.name || ''} 
-          onChange={handleInputChange} 
-          placeholder="Agent Name" 
-          required 
+    <Card>
+      <CardHeader>
+        <CardTitle>Basic Information</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Agent Profile Image Editor Integration */}
+        <AgentProfileImageEditor 
+          agentId={agentData.id} 
+          currentAvatarUrl={agentData.avatar_url}
+          onAvatarUpdate={handleAvatarUpdate}
         />
-      </div>
 
-      {/* Agent Description */}
-      <div>
-        <Label htmlFor="agentDescription">Description</Label>
-        <Textarea 
-          id="agentDescription" 
-          name="description" 
-          value={formData.description || ''} 
-          onChange={handleInputChange} 
-          placeholder="What does this agent do?" 
-          required 
-        />
-      </div>
+        {/* Agent Name */}
+        <div className="space-y-1">
+          <Label htmlFor="name">Name</Label>
+          <Input 
+            id="name" 
+            name="name" 
+            value={agentData.name || ''} 
+            onChange={handleInputChange} 
+            placeholder="My Helpful Agent" 
+          />
+        </div>
 
-      {/* Agent Personality */}
-      <div>
-        <Label htmlFor="agentPersonality">Personality</Label>
-        <Select 
-          name="personality" // Not standard HTML select, name might not be needed here
-          value={formData.personality || ''} 
-          onValueChange={handleSelectChange} // Use onValueChange for Shadcn Select
-        >
-          <SelectTrigger id="agentPersonality">
-            <SelectValue placeholder="Select a personality template" />
-          </SelectTrigger>
-          <SelectContent>
-            {personalityTemplates.map(template => (
-              <SelectItem key={template.id} value={template.id}>
-                {template.name} - {template.description}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        {/* Agent Description */}
+        <div className="space-y-1">
+          <Label htmlFor="description">Description</Label>
+          <Textarea 
+            id="description" 
+            name="description" 
+            value={agentData.description || ''} 
+            onChange={handleInputChange} 
+            placeholder="Provide a brief description of the agent's purpose."
+          />
+        </div>
 
-      {/* Active Status */}
-      <div className="flex items-center space-x-2">
-        <Switch 
-          id="agentActive" 
-          checked={formData.active} 
-          onCheckedChange={handleSwitchChange} 
-        />
-        <Label htmlFor="agentActive">Active</Label>
-      </div>
+        {/* Agent Personality */}
+        <div>
+          <Label htmlFor="agentPersonality">Personality</Label>
+          <Select 
+            name="personality" // Not standard HTML select, name might not be needed here
+            value={agentData.personality || ''} 
+            onValueChange={handleSelectChange} // Use onValueChange for Shadcn Select
+          >
+            <SelectTrigger id="agentPersonality">
+              <SelectValue placeholder="Select a personality template" />
+            </SelectTrigger>
+            <SelectContent>
+              {personalityTemplates.map(template => (
+                <SelectItem key={template.id} value={template.id}>
+                  {template.name} - {template.description}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-    </div>
+        {/* Active Status */}
+        <div className="flex items-center space-x-2">
+          <Switch 
+            id="agentActive" 
+            checked={agentData.active} 
+            onCheckedChange={handleSwitchChange} 
+          />
+          <Label htmlFor="agentActive">Active</Label>
+        </div>
+      </CardContent>
+    </Card>
   );
 }; 

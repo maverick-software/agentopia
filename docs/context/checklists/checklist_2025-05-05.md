@@ -1,0 +1,22 @@
+# Checklist 2025-05-05
+
+## Phase One - Context Protocol Setup
+- [x] Locate and read the checklist template in `\docs\context\checklists\`
+- [x] Copy the checklist template and create a new one in `\docs\context\checklists\[checklist][date]`
+- [x] Locate and read the most recent context document in `\docs\context\[most_recent_context_doc]`
+- [ ] Update your checklist as you move through your priorities.
+
+## Phase Two - Detailed System Analysis
+- [x] Read `README.md` file
+- [x] Read `\docs\index.md`
+- [ ] Identify and analyze core files
+- [ ] Examine database schema
+- [ ] Check API endpoints
+
+## Phase Three - Problem Identification and Next Steps
+- [ ] Review `\docs\console\logs\`
+- [ ] Check `\docs\bugs\`
+- [ ] Summarize findings
+- [ ] Develop a context document
+- [ ] Delete all previous context documents and context checklists
+- [ ] Provide a summary of your understanding of the software and entry points. 
