@@ -12,7 +12,7 @@ import { appRoutes, RouteConfig } from './routeConfig';
 // during component initialization. See lazyComponents.ts for more details.
 import { DashboardPage } from '../pages/DashboardPage';
 
-// Helper function to wrap element with necessary wrappers (Protection ONLY)
+// Helper function to wrap element with necessary wrappers (Protection and Layout)
 const wrapElement = (route: RouteConfig) => {
   console.log(`[AppRouter] Wrapping route: ${route.path}, Layout Flag: ${route.layout}`);
 
@@ -29,6 +29,11 @@ const wrapElement = (route: RouteConfig) => {
         element = <AdminRoute>{element}</AdminRoute>;
     }
     // Child admin routes are rendered via Outlet within the parent AdminRoute
+  }
+
+  // Apply Layout wrapper if route requires it
+  if (route.layout) {
+    element = <Layout>{element}</Layout>;
   }
 
   return element;

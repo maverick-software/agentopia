@@ -10,9 +10,11 @@ export interface DiscordConnectProps {
   connection: Partial<AgentDiscordConnection>;
   hasCredentials: boolean;
   onConnectionChange: (field: keyof AgentDiscordConnection | 'guild_id' | 'discord_app_id' | 'discord_public_key', value: any) => void;
-  discord_app_id?: string;
-  onGenerateInviteLink: () => void;
+  saveDiscordBotToken: (token: string) => Promise<void>;
+  discord_app_id?: string | null;
+  onGenerateInviteLink: () => Promise<string | null>;
   isGeneratingInvite: boolean;
+  isSavingToken: boolean;
   workerStatus?: AgentDiscordConnection['worker_status'];
   onActivate: () => Promise<void>;
   onDeactivate: () => Promise<void>;

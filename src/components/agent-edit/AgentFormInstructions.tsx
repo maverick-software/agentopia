@@ -1,59 +1,52 @@
 import React from 'react';
-import MonacoEditor from 'react-monaco-editor';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Define component props
 interface AgentFormInstructionsProps {
   systemInstructions: string | undefined;
   assistantInstructions: string | undefined;
   handleEditorChange: (fieldName: string, value: string) => void;
-  // Pass theme if needed, or determine dynamically
-  // editorTheme: string;
 }
 
 export const AgentFormInstructions: React.FC<AgentFormInstructionsProps> = ({
   systemInstructions,
   assistantInstructions,
   handleEditorChange,
-  // editorTheme = 'vs-dark' // Default theme example
 }) => {
-  const editorOptions = {
-    selectOnLineNumbers: true,
-    minimap: { enabled: false },
-    automaticLayout: true, // Adjust layout on container size changes
-    wordWrap: 'on' as const // Enable word wrapping
-  };
-
   return (
-    <div className="space-y-6">
-      {/* System Instructions */}
-      <div>
-        <Label htmlFor="systemInstructions">System Instructions</Label>
-        <div className="border rounded-md overflow-hidden h-48"> {/* Fixed height container */}
-          <MonacoEditor
-            language="markdown" // Assuming markdown, adjust if needed
-            theme="vs-dark" // Or use prop: editorTheme
+    <Card>
+      <CardHeader>
+        <CardTitle>Agent Instructions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* System Instructions */}
+        <div className="space-y-2">
+          <Label htmlFor="system_instructions">System Instructions</Label>
+          <Textarea
+            id="system_instructions"
+            name="system_instructions"
+            className="min-h-[8rem] resize-y font-mono text-sm"
+            placeholder="System instructions provide the AI with its role and general behavior guidelines..."
             value={systemInstructions || ''}
-            options={editorOptions}
-            onChange={(value) => handleEditorChange('system_instructions', value)}
-            // Consider adding editorDidMount for potential setup
+            onChange={(e) => handleEditorChange('system_instructions', e.target.value)}
           />
         </div>
-      </div>
 
-      {/* Assistant Instructions */}
-      <div>
-        <Label htmlFor="assistantInstructions">Assistant Instructions (Optional)</Label>
-        <div className="border rounded-md overflow-hidden h-48"> {/* Fixed height container */}
-          <MonacoEditor
-            language="markdown" // Assuming markdown, adjust if needed
-            theme="vs-dark" // Or use prop: editorTheme
+        {/* Assistant Instructions */}
+        <div className="space-y-2">
+          <Label htmlFor="assistant_instructions">Assistant Instructions (Optional)</Label>
+          <Textarea
+            id="assistant_instructions"
+            name="assistant_instructions"
+            className="min-h-[8rem] resize-y font-mono text-sm"
+            placeholder="Assistant instructions can provide additional context or specific response formats..."
             value={assistantInstructions || ''}
-            options={editorOptions}
-            onChange={(value) => handleEditorChange('assistant_instructions', value)}
+            onChange={(e) => handleEditorChange('assistant_instructions', e.target.value)}
           />
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }; 

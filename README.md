@@ -19,6 +19,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 - [Backend Services](#backend-services)
 - [Core Workflows](#core-workflows)
 - [Known Issues & Refactoring](#known-issues--refactoring)
+- [Recent Improvements](#recent-improvements)
 - [Current Status & Next Steps](#current-status--next-steps)
 - [Deployment](#deployment)
 
@@ -191,16 +192,39 @@ Located in `services/`. These are designed for persistent execution on a server 
 ## Known Issues & Refactoring
 
 *   **Missing Logs:** Critical logging across services and functions needs implementation.
-*   **Large Files:** Some page components may exceed recommended size limits and could benefit from refactoring (`AgentEditPage`, `DatastoresPage`).
+*   **Large Files:** Some page components may exceed recommended size limits and could benefit from refactoring (`DatastoresPage`).
 *   **Team Membership Access:** The `fetchWorkspaces` hook doesn't currently grant workspace access based on Team membership; this might need enhancement.
-*   **UI Component Completeness:** Ensure all necessary Shadcn UI components are created/installed (Slider, Tooltip, Switch were recently added).
+*   **UI Component Completeness:** Ensure all necessary Shadcn UI components are created/installed.
+
+## Recent Improvements
+
+*   **Agent Edit Page Refactor:**
+    *   Fixed double sidebar issue by removing redundant Layout wrapper that was applied both at the route level and component level
+    *   Solved scrolling issues by fixing `overflow-y-auto` in Layout component and replacing Monaco editor with Shadcn UI's Textarea
+    *   Restructured component with modals for DatastoreSelector, AgentInstructions, and ProfileImageEditor
+    *   Made the profile image larger with more discreet controls
+    *   Added a Tools section for future integrations
+    *   Moved Active toggle to Discord card header for better UX
+*   **Discord Integration:**
+    *   Fixed Discord integration by properly implementing the useAgentDiscordConnection hook
+    *   Improved error handling and added connection status indicators
+    *   Moved the Discord component to the right column for better layout
+*   **Folder Structure:**
+    *   Moved AgentEditPage to `/src/pages/agents/[agentId]/edit.tsx` following file-based routing conventions
+    *   Archived old duplicate files to prevent conflicts
+*   **Component Improvements:**
+    *   Added the Badge component for status indicators
+    *   Fixed typing issues with newly installed components
 
 ## Current Status & Next Steps
 
 *   **Workspace Refactor:** Largely complete, including DB schema, backend hooks, core UI, chat functionality, context window settings, and member management.
-*   **Recent Fixes:** Resolved issues with settings page loading, restored correct dark theme background color.
-*   **Immediate Focus:** Thorough testing of Workspace features (chat, settings, member management, context limits). Address any remaining UI glitches or inconsistencies.
-*   **Future:** Implement robust logging, refactor large components, potentially enhance Team-based workspace access logic.
+*   **UI Improvements:** Completed significant improvements to the AgentEditPage, focusing on layout, organization, and better component usage.
+*   **Immediate Focus:** 
+    *   Continue thorough testing of Workspace features (chat, settings, member management, context limits)
+    *   Address any remaining UI glitches or inconsistencies
+    *   Complete improvements to the Discord integration workflow
+*   **Future:** Implement robust logging, refactor remaining large components, potentially enhance Team-based workspace access logic.
 
 ## Deployment
 

@@ -9,22 +9,30 @@ async function decryptToken(supposedlyEncryptedToken: string): Promise<string> {
   return supposedlyEncryptedToken;
 }
 
+// Helper function for delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  let agentId: string | null = null;
   try {
-    // 1. Extract agentId from request body
     const body = await req.json();
-    const agentId = body?.agentId;
-    // const url = new URL(req.url);
-    // const agentId = url.searchParams.get('agentId'); // Old method: query param
+    agentId = body?.agentId;
     if (!agentId) {
       throw new Error('agentId is required in the request body.');
     }
+  } catch(e) {
+     return new Response(JSON.stringify({ error: 'Bad Request: Invalid JSON body or missing agentId.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+  }
 
+  try {
     // 2. Create Supabase client using Service Role Key to bypass RLS
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -51,47 +59,96 @@ serve(async (req) => {
     const botToken = agentData.discord_bot_key; 
     console.log(`[discord-get-bot-guilds] Using token (last 5 chars): ...${botToken.slice(-5)} to fetch guilds.`);
 
-    // 5. Call Discord API - Get Guilds
-    const discordApiBase = 'https://discord.com/api/v10';
-    console.log(`[discord-get-bot-guilds] Fetching from: ${discordApiBase}/users/@me/guilds`);
-    const guildsResponse = await fetch(`${discordApiBase}/users/@me/guilds`, {
-      headers: {
-        Authorization: `Bot ${botToken}`,
-      },
-    });
+    // --- Retry Logic for Discord API Call --- 
+    let attempts = 0;
+    let guildsResponse: Response | null = null;
+    let responseText: string | null = null;
+    let responseStatus: number | null = null;
+    const maxAttempts = 2; // Try once, then retry once
+    const retryDelay = 500; // 500ms delay between attempts
 
-    const responseStatus = guildsResponse.status;
-    const responseText = await guildsResponse.text();
-    console.log(`[discord-get-bot-guilds] Discord API response status: ${responseStatus}`);
-    console.log(`[discord-get-bot-guilds] Discord API response body: ${responseText}`);
+    while (attempts < maxAttempts) {
+      attempts++;
+      console.log(`[discord-get-bot-guilds] Attempt ${attempts}/${maxAttempts} to fetch guilds for agent ${agentId}...`);
+      try {
+        const discordApiBase = 'https://discord.com/api/v10';
+        guildsResponse = await fetch(`${discordApiBase}/users/@me/guilds`, {
+          headers: {
+            Authorization: `Bot ${botToken}`,
+          },
+        });
 
-    if (!guildsResponse.ok) {
-      console.error(`Discord API error (${responseStatus}): ${responseText}`); 
-      throw new Error(`Failed to fetch guilds from Discord: ${guildsResponse.statusText}`);
+        responseStatus = guildsResponse.status;
+        responseText = await guildsResponse.text(); // Read text response
+
+        console.log(`[discord-get-bot-guilds] Attempt ${attempts} - Discord API response status: ${responseStatus}`);
+
+        if (guildsResponse.ok) {
+          break; // Success, exit the loop
+        } else {
+          console.warn(`[discord-get-bot-guilds] Attempt ${attempts} failed with status ${responseStatus}. Response: ${responseText}`);
+          if (attempts >= maxAttempts) {
+             // Exhausted attempts, throw error based on last response
+             throw new Error(`Discord API Error (${responseStatus}): ${responseText || guildsResponse.statusText}`);
+          } else {
+             // Wait before retrying
+             console.log(`[discord-get-bot-guilds] Waiting ${retryDelay}ms before retry...`);
+             await delay(retryDelay);
+          }
+        }
+      } catch (fetchError) {
+        console.error(`[discord-get-bot-guilds] Error during fetch attempt ${attempts}:`, fetchError);
+        if (attempts >= maxAttempts) {
+          // If fetch itself failed on last attempt, throw
+          throw new Error(`Network or other error during Discord API call: ${fetchError.message}`);
+        }
+         // Wait before retrying even on network error
+         console.log(`[discord-get-bot-guilds] Waiting ${retryDelay}ms before retry after fetch error...`);
+         await delay(retryDelay);
+      }
+    }
+    // --- End Retry Logic --- 
+
+    // If loop finished and guildsResponse is still null or not ok, something went wrong despite retries
+    if (!guildsResponse || !guildsResponse.ok || responseText === null) {
+        console.error(`[discord-get-bot-guilds] Failed to fetch guilds after ${maxAttempts} attempts for agent ${agentId}. Last status: ${responseStatus}`);
+         // Use the status and text from the last failed attempt captured above
+        return new Response(JSON.stringify({ 
+            error: `Failed to fetch guilds from Discord after retries. Last Status: ${responseStatus}`, 
+            discord_response: responseText 
+        }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: responseStatus && responseStatus >= 400 && responseStatus < 500 ? responseStatus : 502, // Forward 4xx, use 502 otherwise
+        });
     }
 
-    let guilds: any[] = [];
+    // Parse the successful response
+    let guilds: any[];
     try {
-        guilds = JSON.parse(responseText);
-        console.log(`[discord-get-bot-guilds] Parsed guilds successfully:`, guilds);
+      guilds = JSON.parse(responseText);
     } catch (parseError) {
-        console.error(`[discord-get-bot-guilds] Failed to parse Discord API response JSON:`, parseError);
-        throw new Error(`Failed to parse guilds response from Discord.`);
+      console.error(`[discord-get-bot-guilds] Failed to parse Discord API response JSON for agent ${agentId}:`, parseError, `Response Text: ${responseText}`);
+      return new Response(JSON.stringify({ error: 'Failed to parse guilds response from Discord.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500, 
+      });
     }
     
     // 7. Return formatted data (just id and name)
     const simplifiedGuilds = guilds.map(g => ({ id: g.id, name: g.name }));
-    console.log(`[discord-get-bot-guilds] Returning simplified guilds:`, simplifiedGuilds);
+    console.log(`[discord-get-bot-guilds] Successfully fetched and returned ${simplifiedGuilds.length} guilds for agent ${agentId}.`);
     return new Response(JSON.stringify(simplifiedGuilds), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
 
   } catch (error) {
-    console.error("Error in discord-get-bot-guilds function:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    // Catch-all for errors before the retry loop (e.g., fetching agent token, initial setup)
+    console.error(`[discord-get-bot-guilds] Pre-Discord call error for agent ${agentId}:`, error);
+    return new Response(JSON.stringify({ error: error.message || 'An unexpected error occurred before contacting Discord.' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400, // Use 400 for client errors, 500 for server errors
-    })
+      // Use specific status codes if available (like 404/500 from token fetch), otherwise 500
+      status: error.status || 500, 
+    });
   }
 })

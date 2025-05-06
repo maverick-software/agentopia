@@ -88,9 +88,11 @@ function DiscordConnectComponent({
   connection,
   hasCredentials,
   onConnectionChange,
+  saveDiscordBotToken,
   discord_app_id,
   onGenerateInviteLink,
   isGeneratingInvite,
+  isSavingToken,
   workerStatus,
   onActivate,
   onDeactivate,
@@ -107,7 +109,6 @@ function DiscordConnectComponent({
 
   // Modal states
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isSavingCredentials, setIsSavingCredentials] = useState(false);
 
   // Local state for modal inputs
   const placeholderKey = "••••••••••••••••"; // Define placeholder
@@ -145,48 +146,57 @@ function DiscordConnectComponent({
   const handleOpenSettingsModal = () => setIsSettingsModalOpen(true);
   const handleCloseSettingsModal = () => setIsSettingsModalOpen(false);
 
-  const handleSaveChangesFromCredentialsModal = () => {
-    setIsSavingCredentials(true); // Start saving
-    
-    // Apply changes immediately to parent
+  const handleSaveChangesFromCredentialsModal = async () => {
+    // Apply App ID and Public Key changes immediately to parent (synchronous part)
     onConnectionChange('discord_app_id', modalAppId);
     onConnectionChange('discord_public_key', modalPublicKey);
     
-    // --- Bot Key Saving Logic (Requires Backend Function) ---
-    // Check if the user actually entered a new key (i.e., it's not the placeholder and not empty)
     const shouldSaveKey = modalBotKey && modalBotKey !== placeholderKey;
     if (shouldSaveKey) {
-      console.log("[DiscordConnect] User entered a new bot key. Need to implement secure save call.");
-      // TODO: Call the secure backend function here (e.g., secureUpdateBotKey(modalBotKey) from hook)
-      // secureUpdateBotKey(modalBotKey); // Example call
+      console.log("[DiscordConnect] User entered a new bot key. Attempting to save...");
+      try {
+        await saveDiscordBotToken(modalBotKey); // Call the save function from props
+        // Success: hook will re-fetch details, which might close modal if hasCredentials changes etc.
+        // Or, we can close modal explicitly after successful save if desired.
+        // For now, let the re-fetch handle UI updates.
+        console.log("[DiscordConnect] Bot token save process initiated via hook.");
+        // If save is successful and leads to hasCredentials changing, useEffects will handle modal closure/UI update.
+        // If modal should always close after attempting save:
+        // handleCloseSettingsModal(); 
+      } catch (saveError: any) {
+        console.error("[DiscordConnect] Error saving bot token via hook:", saveError);
+        setError(saveError.message || "Failed to save bot token.");
+        // Do not close modal on error, so user can see the error / retry.
+      }
     } else {
       console.log("[DiscordConnect] Bot key not changed or is placeholder, skipping key save.");
+      // If only App ID/Public Key changed, and no token save attempt, and modal needs to close:
+      // handleCloseSettingsModal();
     }
-    // --------------------------------------------------------
-
-    // Simulate save delay - ideally wait for actual save confirmation
-    setTimeout(() => {
-      setIsSavingCredentials(false);
-      // Potentially close modal or trigger refetch here after real save
-    }, 1000);
   };
   
-  const handleClearCredentials = () => {
-    // Clear local modal state
+  const handleClearCredentials = async () => {
     setModalBotKey('');
     setModalAppId('');
     setModalPublicKey('');
     
-    // Update parent state for App ID / Public Key
     onConnectionChange('discord_app_id', '');
     onConnectionChange('discord_public_key', '');
     
-    // If agent is active, deactivate it
-    if (workerStatus === 'active' && !isDeactivating) {
-      onDeactivate();
+    // Also clear the bot token in the database using the save function
+    try {
+      await saveDiscordBotToken(''); // Send empty string to clear
+      console.log("[DiscordConnect] Bot token cleared via hook.");
+    } catch (clearError: any) {
+        console.error("[DiscordConnect] Error clearing bot token via hook:", clearError);
+        setError(clearError.message || "Failed to clear bot token.");
+        // Proceed with deactivation and modal closure even if clearing token fails, 
+        // as App ID/Pub Key are already cleared locally.
     }
     
-    // Close the modal and reset UI state (will rely on hasCredentials becoming false after refetch)
+    if (workerStatus === 'active' && !isDeactivating) {
+      await onDeactivate();
+    }
     handleCloseSettingsModal();
   };
 
@@ -239,7 +249,7 @@ function DiscordConnectComponent({
       )} */}
           
       {/* Server Box */}
-      <div className="flex items-start space-x-4"> 
+      <div className="flex items-start space-x-4 pt-2.5"> 
         {/* Server display box - make it grow */}
         <div 
           className="flex-grow relative flex items-center p-4 bg-[#2e3543] rounded-lg border border-[#484f5c] shadow-md overflow-hidden cursor-pointer hover:bg-[#333a4a] transition-colors"
@@ -271,7 +281,7 @@ function DiscordConnectComponent({
         </div>
       </div>
 
-      <div className="text-sm text-gray-400 bg-gray-800 p-4 rounded-md border border-gray-700">
+      <div className="text-sm text-gray-400 mt-2">
         <p>
           Manage your Discord bot configuration and settings here. Visit the{" "}
           <a 
@@ -284,6 +294,7 @@ function DiscordConnectComponent({
           </a>{" "}
           to create or edit your bot application.
         </p>
+        {error && <p className="text-sm text-destructive mt-2">Error: {error}</p>} {/* Display local errors */}
       </div>
 
       {/* Modals */}
@@ -307,7 +318,7 @@ function DiscordConnectComponent({
         setModalPublicKey={setModalPublicKey}
         onSave={handleSaveChangesFromCredentialsModal}
         onClear={handleClearCredentials}
-        isSavingCredentials={isSavingCredentials}
+        isSavingCredentials={isSavingToken}
         initialTab={hasCredentials ? "server" : "credentials"}
       />
     </div>

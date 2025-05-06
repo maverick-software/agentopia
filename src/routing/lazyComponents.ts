@@ -13,7 +13,8 @@ export const RegisterPage = lazy(() => import('../pages/RegisterPage').then(modu
 
 export const AgentsPage = lazy(() => import('../pages/AgentsPage.tsx').then(module => ({ default: module.AgentsPage })));
 // Note: AgentEditPage is currently directly imported in AppRouter.tsx
-export const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })));
+// export const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })));
+export const AgentEditPage = lazy(() => import('../pages/agents/[agentId]/edit'));
 export const AgentChatPage = lazy(() => import('../pages/AgentChatPage.tsx').then(module => ({ default: module.AgentChatPage })));
 export const DatastoresPage = lazy(() => import('../pages/DatastoresPage.tsx').then(module => ({ default: module.DatastoresPage })));
 export const DatastoreEditPage = lazy(() => import('../pages/DatastoreEditPage.tsx'));
