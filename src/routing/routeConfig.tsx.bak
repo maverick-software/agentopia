@@ -49,7 +49,7 @@ import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 // Import DashboardPage directly for debugging
 import { DashboardPage } from '../pages/DashboardPage';
-import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
+import { AgentEditPage } from '../pages/AgentEditPage'; // Direct import
 
 // Define the application routes using the RouteConfig structure
 export const appRoutes: RouteConfig[] = [

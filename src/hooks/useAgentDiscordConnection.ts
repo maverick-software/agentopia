@@ -92,11 +92,11 @@ export function useAgentDiscordConnection(agentId: string | undefined): UseAgent
           console.log(`[useAgentDiscordConnection] No connection record found for agent ${agentId}.`);
       }
 
-      // Determine 'hasCredentials' status
-      const credentialsPresent = !!connectionData?.discord_app_id &&
-                                 !!connectionData?.discord_public_key &&
-                                 fetchedGuildsSuccessfully; // Implicitly checks if bot key worked
-
+      // Determine 'hasCredentials' status - MODIFY THIS SECTION
+      // Instead of requiring guild fetch success, just require app ID and public key
+      const credentialsPresent = !!connectionData?.discord_app_id && 
+                                 !!connectionData?.discord_public_key;
+      
       console.log(`[useAgentDiscordConnection] Credentials Check: AppID=${!!connectionData?.discord_app_id}, PubKey=${!!connectionData?.discord_public_key}, Guilds Fetched=${fetchedGuildsSuccessfully} => hasCredentials=${credentialsPresent}`);
       setHasCredentials(credentialsPresent);
 
