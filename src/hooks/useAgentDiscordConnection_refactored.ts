@@ -141,7 +141,7 @@ export function useAgentDiscordConnection_refactored(agentId: string | undefined
     try {
         const { error: upsertError } = await supabase
             .from('agent_discord_connections')
-            .upsert({ agent_id: agentId, ...newConnectionState }, { onConflict: 'agent_id' })
+            .upsert({ agent_id: agentId, [field]: value }, { onConflict: 'agent_id' }) 
             .select(); 
         if (upsertError) throw upsertError;
         
@@ -149,15 +149,6 @@ export function useAgentDiscordConnection_refactored(agentId: string | undefined
 
         const currentBasicCredentials = !!newConnectionState.discord_app_id && !!newConnectionState.discord_public_key;
         setHasCredentials(currentBasicCredentials);
-
-        if (field === 'discord_app_id' || field === 'discord_public_key' || field === 'guild_id') {
-            if (currentBasicCredentials) {
-                 console.log("[useAgentDiscordConnection_refactored] Critical connection field updated. Re-fetching all details.");
-                await fetchConnectionDetails();
-            } else {
-                setAllGuilds([]); 
-            }
-        }
     } catch (err: any) {
         console.error(`Error upserting connection field ${field}:`, err);
         setError(err.message || `Failed to update ${field}.`);

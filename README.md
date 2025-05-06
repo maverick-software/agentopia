@@ -192,7 +192,7 @@ Located in `services/`. These are designed for persistent execution on a server 
 ## Known Issues & Refactoring
 
 *   **Missing Logs:** Critical logging across services and functions needs implementation.
-*   **Large Files:** Some page components may exceed recommended size limits and could benefit from refactoring (`DatastoresPage`).
+*   **Large Files:** Some page components may exceed recommended size limits and could benefit from refactoring (`src/pages/AgentEditPage.tsx`, `src/pages/DatastoresPage.tsx`).
 *   **Team Membership Access:** The `fetchWorkspaces` hook doesn't currently grant workspace access based on Team membership; this might need enhancement.
 *   **UI Component Completeness:** Ensure all necessary Shadcn UI components are created/installed.
 

@@ -87,7 +87,7 @@ const AgentEditPage = () => {
 
         const fetchAgentAndRelatedData = async () => {
             setLoading(true);
-            setError(null); 
+            setError(null);
             setAgentData(null); 
             setAvailableDatastores([]);
 
@@ -103,7 +103,7 @@ const AgentEditPage = () => {
                 if (!agent) throw new Error('Agent not found or access denied.');
 
                 setAgentData(agent);
-                
+
                 const { data: stores, error: dsError } = await supabase
                     .from('datastores')
                     .select('id, name, type')
@@ -138,7 +138,7 @@ const AgentEditPage = () => {
     }, []);
 
     const handleEditorChange = useCallback((fieldName: string, value: string) => {
-        const agentDataKey = fieldName === 'system_instructions' ? 'system_instructions' :
+        const agentDataKey = fieldName === 'system_instructions' ? 'system_instructions' : 
                              fieldName === 'assistant_instructions' ? 'assistant_instructions' : null;
         if (agentDataKey) {
             setAgentData(prev => (prev ? { ...prev, [agentDataKey]: value } : { [agentDataKey]: value } as Partial<Agent>));
@@ -219,8 +219,8 @@ const AgentEditPage = () => {
                         Back to Agents
                     </Link>
                 </Button>
-            </div>
-        );
+             </div>
+    );
     }
 
     return (
@@ -536,11 +536,11 @@ const AgentEditPage = () => {
                     </DialogHeader>
                     
                     <div className="py-4">
-                        <AgentFormInstructions
-                            systemInstructions={agentData.system_instructions || ''}
-                            assistantInstructions={agentData.assistant_instructions || ''}
-                            handleEditorChange={handleEditorChange}
-                        />
+                       <AgentFormInstructions
+                           systemInstructions={agentData.system_instructions || ''}
+                           assistantInstructions={agentData.assistant_instructions || ''}
+                           handleEditorChange={handleEditorChange}
+                       />
                     </div>
                     
                     <DialogFooter>
@@ -563,21 +563,21 @@ const AgentEditPage = () => {
                     </DialogHeader>
                     
                     <div className="py-4">
-                        <AgentDatastoreSelector
-                            agentId={agentId}
-                            availableDatastores={availableDatastores}
-                            selectedVectorStore={selectedVectorStore}
-                            selectedKnowledgeStore={selectedKnowledgeStore}
-                            onSelectDatastore={() => {}}
+                       <AgentDatastoreSelector
+                           agentId={agentId}
+                           availableDatastores={availableDatastores}
+                           selectedVectorStore={selectedVectorStore}
+                           selectedKnowledgeStore={selectedKnowledgeStore}
+                           onSelectDatastore={() => {}}
                             onConnectDatastores={async () => {
                                 setShowDatastoreModal(false);
                                 toast("Datastores connected!");
                             }}
-                            loadingAvailable={false}
-                            connecting={false}
-                        />
+                           loadingAvailable={false}
+                           connecting={false}
+                       />
                     </div>
-                    
+
                     <DialogFooter>
                         <DialogClose asChild>
                             <Button variant="outline">Cancel</Button>
@@ -585,7 +585,7 @@ const AgentEditPage = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+            </div>
     );
 };
 
