@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+When this protocol is tagged, you are to 
+
+1) Research the topic, create a plan for implementation, and develop a work breakdown structure checklist (WBS). 
+   a) you are to research both the codebase (i.e. grep, listdir), the README.md and the web through this process.
+2) Then, you are to go to line by line on the WBS, research that task, its dependencies, associated files in the codecase, and create a mini plan for that task. 
+3) You are up to update the WBS checklist item with notes for yourself about exactly how you will implement it, even adding code to it if necessary. 
+4) You are to add everything you need to rememeber and consider for that checklist item as a subitem, before moving on to the next checklist item and then doing the same. 
+
+
+You will complete this planning process before creating or altering a single file.
