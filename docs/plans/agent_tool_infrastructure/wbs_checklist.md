@@ -65,6 +65,12 @@
 ### 3.3 Secrets Injection for Tools
 - [ ] 3.3.1 Implement: Secure process for the Droplet Tool Management Agent to fetch necessary API keys/secrets from a secure endpoint on Agentopia backend (which gets them from Supabase Vault) and provide them to the specific tool instance (e.g., as environment variables during Docker run, or in a config file).
 
+**==> Return Point Reminder <==**
+**Upon substantial completion of Phase 3 (Tool Installation & Activation Framework), especially items 3.2.3 (Endpoint Discovery) and 3.3.1 (Secrets Injection), the necessary infrastructure components should be in place to proceed with the Agentopia-side integration of specific tools.**
+**Return to: `docs/plans/advanced_reasoning_capability/wbs_checklist.md`**
+**Resume at: Phase 2.A (Agentopia Client-Side Integration for Reasoning MCP)**
+**============================**
+
 ## Phase 4: Agentopia UI/UX for Tool Environment & Toolbelt Management
 
 ### 4.1 Tool Catalog Display
