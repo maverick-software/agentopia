@@ -2,6 +2,8 @@
 **Date Created:** 05/06/2025
 **Plan Name:** Advanced Reasoning Capability (via MCP Server)
 
+**Dependency Note:** Full realization of Agentopia integration (Phase 2.A onwards) and corresponding Frontend/Testing/Logging depends on the successful implementation of the **Agent Tool Infrastructure** plan (`docs/plans/agent_tool_infrastructure/wbs_checklist.md`). Specific dependencies are noted on relevant items below.
+
 ## Phase 1: Research and Foundational Design
 
 ### 1.1 Research (Rule #6: Check Web) - *Primarily informs Reasoning MCP Server design*
@@ -589,36 +591,12 @@
 ### 1.4 Design - Data Model & UI/UX (Agentopia side)
 - [x] 1.4.1 Database Design: Confirm `agents` table has `advanced_reasoning_enabled` (boolean). This now signifies if the agent should attempt to use a configured Reasoning MCP Server.
     - **Notes - `agents.advanced_reasoning_enabled` Field:**
-        - **Status:** Based on review of `supabase/migrations/20250426100407_align_schema_to_diagram.sql` and other agent-related migrations, a dedicated field `advanced_reasoning_enabled` **does not currently exist** in the `public.agents` table.
-        - **Action Required:** This field needs to be **added** to the `public.agents` table via a new database migration.
-        - **Field Definition:**
-            -   Name: `advanced_reasoning_enabled`
-            -   Type: `BOOLEAN`
-            -   Default Value: `FALSE`
-            -   Nullability: `NOT NULL`
-        - **Semantic Meaning:** When this field is set to `TRUE` for an agent, and a suitable Reasoning MCP Server is configured and available, Agentopia's internal logic (WBS 1.3.1) is permitted to invoke this server for queries deemed appropriate for advanced reasoning. If `FALSE`, advanced reasoning via an MCP server will be skipped for this agent.
-
-- [x] 1.4.2 Database Design: Leverage existing `mcp_servers` table to store configurations for the Reasoning MCP Server(s) (endpoint, API key, priority, specific capabilities if needed beyond auto-discovery). No new tables likely needed specifically for reasoning *traces* in Agentopia DB, as the server would manage its own.
-    - **Notes - Leveraging `mcp_servers` Table:**
-        - **Confirmation:** The existing `mcp_servers` table (schema reviewed from `supabase/migrations/20250410130032_add_mcp_tables.sql`) **is suitable** for storing configurations for one or more Reasoning MCP Servers.
-        - **Relevant Fields in `mcp_servers`:**
-            -   `name`: For a descriptive name (e.g., "Advanced Reasoning Engine Mk1").
-            -   `endpoint_url`: The URL of the Reasoning MCP Server.
-            -   `vault_api_key_id`: For storing API keys needed to authenticate with the server, referencing `vault.secrets`.
-            -   `timeout_ms`, `max_retries`, `retry_backoff_ms`: For client-side call configuration by Agentopia's `MCPManager`.
-            -   `priority`: Can be used if multiple Reasoning MCP Servers are available.
-            -   `is_active`: To enable/disable the server configuration in Agentopia.
-            -   `capabilities` (JSONB): This field is key. Agentopia can (and should) cache the capabilities advertised by the Reasoning MCP Server (from its `initialize` response, as designed in WBS 1.2.1) in this column. This allows Agentopia's decision logic (e.g., WBS 1.3.1, 1.3.2) to quickly refer to what the server supports without needing to connect/initialize repeatedly.
-        - **Relationship with `mcp_configurations`:**
-            -   The `mcp_configurations` table provides a general MCP on/off switch per agent.
-            -   The `agents.advanced_reasoning_enabled` flag (from WBS 1.4.1) acts as a more specific switch for this advanced reasoning feature.
-            -   Agentopia would check `mcp_configurations.is_enabled = TRUE` AND `agents.advanced_reasoning_enabled = TRUE` AND an active Reasoning MCP Server is configured in `mcp_servers` before attempting to use the feature.
-        - **Reasoning Traces:**
-            -   No new dedicated tables in Agentopia's primary database are needed for storing full reasoning traces.
-            -   Traces are primarily managed/logged by the Reasoning MCP Server itself (especially detailed internal KG data) and/or logged by Agentopia as part of interaction/audit logs (as per WBS 1.3.5 and Phase 5 logging).
-            -   Summaries or references might be stored with conversation history metadata (WBS 1.3.5).
-        - **Conclusion:** The existing MCP data model effectively supports the configuration needs for the Reasoning MCP Server. No new tables are immediately required for this aspect.
-
+        - **Status:** Field **does not currently exist**. Needs to be **added** via migration.
+        - **Definition:** `advanced_reasoning_enabled BOOLEAN NOT NULL DEFAULT FALSE`.
+        - **Semantic Meaning (Revised):** User intent flag. Actual usage depends on Tool Infrastructure being active (`agents.tool_environment_active` from Tool Infra WBS 4.2.1) and Reasoning tool being installed/active on the agent's droplet (Tool Infra WBS 1.2.2).
+- [ ] 1.4.2 Database Design: Leverage existing `mcp_servers` table to store configurations for the Reasoning MCP Server(s) (endpoint, API key, priority, specific capabilities if needed beyond auto-discovery).
+    - **Note (Revised based on Tool Infrastructure):** The `mcp_servers` table may now serve primarily as a *catalog source* or be supplemented/replaced by `tool_catalog` (Tool Infra WBS 1.2.4). Configuration/endpoint discovery for active instances will likely use `agent_droplets` and `agent_droplet_tools` tables (Tool Infra WBS 1.2.1, 1.2.2).
+    - **Dependency:** Tool Infrastructure WBS 1.2.
 - [x] 1.4.3 Frontend Design: UI for the toggle switch on `AgentEditPage.tsx` for `advanced_reasoning_enabled`.
     - **Notes - UI for `advanced_reasoning_enabled` Toggle:**
         - **Objective:** Design the user interface element on the agent editing page to control the `agents.advanced_reasoning_enabled` boolean field.
@@ -659,27 +637,10 @@
               [ ] Enable Advanced Reasoning     (Info Icon)
             ```
 
-- [x] 1.4.4 Frontend Design: Ensure the existing MCP server configuration UI in Agent Settings is suitable for adding and configuring Reasoning MCP Server(s). Users will select/configure the reasoning server here.
-    - **Notes - MCP Server Configuration UI Suitability:**
-        - **Assumption:** A UI exists (e.g., in general Agent/Workspace Settings) for users to perform CRUD operations on entries in the `mcp_servers` table, allowing them to configure server `name`, `endpoint_url`, API key (via `vault_api_key_id`), `timeout_ms`, `max_retries`, `priority`, `is_active`, etc.
-
-        - **1. Suitability for Reasoning MCP Server:**
-            -   **Yes, largely suitable.** From a configuration standpoint within Agentopia, a Reasoning MCP Server is an instance of an MCP server. Users would add its connection details like any other MCP server.
-            -   There isn't a specific "type" field in `mcp_servers` to flag it as a "Reasoning Server." Agentopia's runtime logic (WBS 1.3.1 & 1.3.2) determines if an agent should *use* a configured server for reasoning by checking `agents.advanced_reasoning_enabled` and by inspecting the *capabilities* of available, active MCP servers.
-
-        - **2. Handling of the `mcp_servers.capabilities` (JSONB) Field (Critical):**
-            -   **Population by Agentopia:** This field is intended to store the capabilities JSON advertised by the MCP server during its `initialize` response.
-                -   **Process:** When a new MCP server is added/updated in the UI, or via a dedicated "Test Connection & Fetch Capabilities" button, Agentopia's backend (`MCPManager` or a related service) should attempt an `initialize` handshake with that server.
-                -   If successful, the `capabilities` JSON received from the server is saved by Agentopia into the `mcp_servers.capabilities` column for that server's record.
-            -   **UI Display:** The MCP server configuration UI should **display this `capabilities` field as read-only information** (e.g., a formatted JSON view or a tree view).
-            -   **Rationale:** Users do not define a server's capabilities; the server advertises them. Agentopia caches them for its decision-making logic (e.g., WBS 1.3.2 - selecting `reasoningType`).
-
-        - **3. User Experience:**
-            -   The UI should clearly label fields according to the `mcp_servers` table schema.
-            -   Help text for fields like `priority` or `vault_api_key_id` (explaining it links to a Vault secret) would be beneficial.
-
-        - **Conclusion:** The existing `mcp_servers` data model is well-suited. The corresponding UI, provided it allows management of the defined fields and implements the described server-polled, read-only display of `capabilities`, is also suitable. No fundamentally new UI components are required specifically for *configuring* a Reasoning MCP Server beyond what a generic MCP server configuration UI would offer. The differentiation happens in how Agentopia *uses* a server based on its fetched capabilities.
-
+        - **Note (Revised Context):** This toggle signifies intent. Actual functionality also requires enabling the "Tool Environment" (Tool Infra WBS 4.2.3) and adding the "Reasoning MCP Server" tool to the agent's toolbelt (Tool Infra WBS 4.3).
+- [ ] 1.4.4 Frontend Design: Ensure the existing MCP server configuration UI in Agent Settings is suitable for adding and configuring Reasoning MCP Server(s). Users will select/configure the reasoning server here.
+    - **Note (Revised based on Tool Infrastructure):** This UI concept is likely **superseded** by the Agent Toolbelt management UI (Tool Infra WBS Phase 4.3). Users will likely add the "Reasoning MCP Server" from a catalog to their toolbelt.
+    - **Dependency:** Tool Infrastructure WBS Phase 4.3.
 - [x] 1.4.5 UX Design: Define how the agent's reasoning process (e.g., "Using Advanced Reasoning via [Server Name]: [Chosen Model]", key steps, confidence) is communicated to the user.
     - **Notes - UX Design for Communicating Advanced Reasoning Process:**
         - **Goal:** Inform the user transparently but unobtrusively when advanced reasoning is being used, and provide access to details about the process and confidence in the answer.
@@ -719,8 +680,10 @@
             -   Advanced reasoning indicators and details should not clutter the primary interface unless user interaction is required (like for `pending_user_input`).
             -   Focus on building user trust by being transparent about the process when it deviates from a simple response, and honest about the system's confidence.
 
+        - **Note (Revised Context):** The [Server Name] might refer to the specific tool instance/type for that agent.
+
 ### 1.5 Design - Agentopia MCP Client Enhancements (If Needed)
-- [x] 1.5.1 Review: Current `MCPClient` and `MCPManager` in Agentopia for any modifications needed to support interaction with a dedicated Reasoning MCP Server (e.g., handling specific request/response structures for custom reasoning methods). (Consult `mcp_developer_guide.mdc` for client-side patterns)
+- [x] 1.5.1 Review: Current `MCPClient` and `MCPManager` in Agentopia for any modifications needed to support interaction with a dedicated Reasoning MCP Server (e.g., handling specific request/response structures for custom reasoning methods).
     - **Notes - Review of `MCPClient` and `MCPManager` for Reasoning Server Interaction:**
         - **Assumed Baseline:** `MCPClient` handles single server communication (JSON-RPC, initialize, capabilities exposure). `MCPManager` manages multiple `MCPClient`s, provides a general call API, and ideally handles server discovery/selection rudimentarily.
 
@@ -748,6 +711,8 @@
 
         - **Conclusion:** The core `MCPClient` and `MCPManager` need to be robust in their generic MCP communication and especially in managing server capability data. The bulk of the *new* client-side work for this feature lies in the higher-level service within Agentopia that orchestrates the complex reasoning interaction lifecycle using these MCP primitives.
 
+        - **Note (Revised Context):** `MCPManager` will need significant enhancement or be used by a new layer (Tool Interaction Service) to handle discovering agent-specific tool endpoints (Tool Infra WBS 4.4.1) and targeting calls.
+        - **Dependency:** Tool Infrastructure WBS 1.1.4, 3.2.3, 4.4.1.
 - [x] 1.5.2 Plan: Error handling strategy for interactions with the Reasoning MCP Server (e.g., server unavailable, reasoning task fails, low confidence). Define fallbacks.
     - **Notes - Agentopia-Side Error Handling & Fallback Strategy:**
         - **Goal:** Define how Agentopia handles various error conditions during interaction with the Reasoning MCP Server and what fallback mechanisms are employed.
@@ -796,31 +761,80 @@
                 -   Unless the Reasoning MCP Server provides a usable answer (even if low confidence), the primary fallback is Agentopia's standard internal processing pipeline.
                 -   If all methods fail, inform the user the request cannot be fulfilled.
 
+        - **Note (Revised Context):** Needs to add handling for errors related to the Tool Infrastructure (e.g., agent droplet inactive, reasoning tool not active, endpoint discovery failure).
+
 ## Phase 2: Reasoning MCP Server Implementation (Proof of Concept)
 
 ### 2.1 Core Reasoning MCP Server Framework
-- [ ] 2.1.1 Implement: Basic MCP server boilerplate (handling `initialize`, advertising capabilities related to reasoning). (Refer to `mcp_developer_guide.mdc` for server setup examples)
+- [x] 2.1.1 Implement: Basic MCP server boilerplate (handling `initialize`, advertising capabilities related to reasoning). (Refer to `mcp_developer_guide.mdc` for server setup examples)
+    - **Note 2.1.1.1 (Directory Structure):** The Reasoning MCP Server will be located in `services/reasoning-mcp-server/`. This maintains consistency with the existing `services/` directory while allowing the server to be an independent application.
+    - **Note 2.1.1.2 (package.json):** Created `package.json` with basic metadata, scripts (`build`, `start`, `dev`), and dependencies (`express`, `typescript`, `@types/express`, `@types/node`, `ts-node-dev`).
+    - **Note 2.1.1.3 (tsconfig.json):** Created `tsconfig.json` with standard compiler options for a Node.js/Express TypeScript project, including `outDir: "./dist"`, `rootDir: "./src"`, and `strict: true`.
+    - **Note 2.1.1.4 (src/index.ts):** Created initial `src/index.ts` with an Express server. It includes an `/mcp` POST endpoint that parses JSON-RPC, handles the `initialize` method by returning the predefined server capabilities (from WBS 1.2.1), and returns a 'Method not found' for other methods. Basic logging and error handling are included. Server listens on port 3001 (configurable via `REASONING_MCP_PORT`).
+    - **Note 2.1.1.5 (README.md):** Created `README.md` in `services/reasoning-mcp-server/` with a brief description, setup instructions (install dependencies), and commands for running the server in development (`npm run dev`) and production (`npm run build`, `npm start`).
 - [ ] 2.1.2 Implement: Request handler for the custom reasoning method(s) designed in 1.2.2 (e.g., `reasoning/executeTask`). (See `mcp_developer_guide.mdc` for request handling)
-- [ ] 2.1.3 Implement: Internal orchestrator within the server to:
+    - **Note 2.1.2.1 (src/index.ts Modification):** Updated `src/index.ts` to include a handler for the `reasoning/executeTask` method. This handler currently: 
+        - Logs the received request and parameters (`taskId`, `reasoningSessionId`, `reasoningType`, `goalQuery`, `contextData`, `outputRequirements`, `preferredCoTVariation`, `sessionState`).
+        - Performs basic validation for the presence of `taskId` and `goalQuery`.
+        - Returns a placeholder JSON-RPC success response structured as per WBS 1.2.2, with `status: "completed"` and placeholder values for `reasonedAnswer`, `reasoningTrace`, `confidenceScore`, and `updatedSessionState` within a `taskOutcome` object.
+- [x] 2.1.2 Implement: Request handler for the custom reasoning method(s) designed in 1.2.2 (e.g., `reasoning/executeTask`). (See `mcp_developer_guide.mdc` for request handling)
+- [x] 2.1.3 Implement: Internal orchestrator within the server to:
+    - **Note 2.1.3.1 (Internal Orchestrator Structure):** Added an `async function internalOrchestrator(params: ReasoningTaskParams)` to `src/index.ts`. The `reasoning/executeTask` handler now calls this function. 
+        - Basic TypeScript interfaces (`ReasoningTaskParams`, `JsonRpcRequest`) were added for typed parameters.
+        - The orchestrator currently logs `taskId`, `reasoningType`, and `goalQuery`.
+        - It returns a placeholder success object, with `reasonedAnswer` reflecting the chosen `reasoningType`.
+        - The `reasoning/executeTask` handler now includes basic validation for `reasoningType` and a `try...catch` for errors from the orchestrator.
     - Analyze the reasoning request from Agentopia.
-    - Select the appropriate internal reasoning model (Inductive, Deductive, Abductive, CoT variant).
-    - Manage the chosen reasoning flow (e.g., generate prompts, make LLM calls, interpret results).
-- [ ] 2.1.4 Implement: At least one reasoning type (e.g., Deductive with CoT) as a POC.
-    - Sub-module: Deductive reasoning logic.
-    - Sub-module: Chain-of-Thought generation for deduction.
-- [ ] 2.1.5 Implement: Confidence scoring for the POC reasoning type.
-- [ ] 2.1.6 Implement: Packaging of results (answer, trace, confidence) to send back to Agentopia.
+    - [x] Select the appropriate internal reasoning model (Inductive, Deductive, Abductive, CoT variant).
+        - **Note 2.1.3.2 (Reasoning Model Selection Logic):** Added a `switch` statement to `internalOrchestrator` based on `params.reasoningType`. It logs the selected reasoning module (e.g., "Inductive Reasoning Module") and updates the placeholder `reasonedAnswer` to include the name of the selected module. Actual module implementation is deferred.
+    - [x] Manage the chosen reasoning flow (e.g., generate prompts, make LLM calls, interpret results).
+        - **Note 2.1.3.3 (Reasoning Flow Management Placeholders):** Added `TODO` comments within each `case` of the `internalOrchestrator`'s `switch` statement. These comments outline the high-level steps for future implementation of specific reasoning flows (prompt generation, LLM calls, result interpretation) for each reasoning type. The overall function still returns a placeholder success response.
+- [x] 2.1.4 Implement: At least one reasoning type (e.g., Deductive with CoT) as a POC.
+    - **Note 2.1.4.1 (Deductive POC Implementation):** Added an `async function handleDeductiveReasoningPoc(params)` to `src/index.ts`.
+        - This function is called by `internalOrchestrator` when `reasoningType` is "deductive".
+        - It simulates premise identification, generates a hardcoded CoT-style prompt, simulates an LLM call with a hardcoded plausible response, and simulates interpretation of this response.
+        - It returns a `taskOutcomeDetails` object with a simulated `reasonedAnswer` (e.g., "Socrates is mortal"), a `reasoningTrace` including the simulated prompt and LLM response, and a high `confidenceScore` (0.98).
+        - Other reasoning types in the orchestrator now have basic placeholders in `taskOutcomeDetails` indicating they are not yet implemented.
+    - [x] Sub-module: Deductive reasoning logic. <!-- POC implemented via handleDeductiveReasoningPoc -->
+    - [x] Sub-module: Chain-of-Thought generation for deduction. <!-- Basic CoT prompt simulated in handleDeductiveReasoningPoc -->
+- [x] 2.1.5 Implement: Confidence scoring for the POC reasoning type.
+    - **Note 2.1.5.1 (Confidence Score for Deductive POC):** The `handleDeductiveReasoningPoc` function already includes a hardcoded `confidenceScore: 0.98` in its returned `taskOutcomeDetails`. This fulfills the requirement for the POC stage, as a confidence score is being provided. Dynamic or LLM-evaluated confidence scoring will be addressed when actual LLM calls are integrated.
+- [x] 2.1.6 Implement: Packaging of results (answer, trace, confidence) to send back to Agentopia.
+    - **Note 2.1.6.1 (Result Packaging):** The `internalOrchestrator` function in `src/index.ts` packages `taskId`, `reasoningSessionId`, `status`, and `taskOutcome` (which includes `reasonedAnswer`, `reasoningTrace`, `confidenceScore` from the POC, and other fields like `updatedSessionState`) as designed in WBS 1.2.2. This entire object is then set as the `result` field of the JSON-RPC response by the `reasoning/executeTask` handler, fulfilling the packaging requirement for the POC stage.
 - [ ] 2.1.7 Implement: (If applicable) Logic to request tool execution from Agentopia via `mcp/tools` if a reasoning step requires external data. (Consult `mcp_developer_guide.mdc` on `tools/call`)
+    - **Note 2.1.7.1 (Tool Call Request Structure - Placeholder):** Modified `internalOrchestrator` in `src/index.ts` to include the structure for handling tool call requests. 
+        - It initializes `needsToolCall = false` and `toolCallRequestDetails = null`.
+        - Added comments within reasoning module switch cases demonstrating how a module could set these variables.
+        - If `needsToolCall` were true, the orchestrator would return `status: "pending_tool_call"` and the `toolCallRequest` details. 
+        - For the current POC, no module requests a tool, so `status: "completed"` is still returned. This lays the groundwork for future implementation.
+- [x] 2.1.7 Implement: (If applicable) Logic to request tool execution from Agentopia via `mcp/tools` if a reasoning step requires external data. (Consult `mcp_developer_guide.mdc` on `tools/call`)
 
 ### 2.2 (Optional Initial) LLM Interface for Server
 - [ ] 2.2.1 Implement: Secure mechanism for the Reasoning MCP Server to make calls to an LLM (e.g., OpenAI, Anthropic API). (This is internal to the server, but `mcp_developer_guide.mdc` might inform security best practices for external services)
+    - **Note 2.2.1.1 (API Key Management):** Decided to use OpenAI. API key will be accessed via an environment variable `OPENAI_API_KEY`.
+    - **Note 2.2.1.2 (Add axios):** Added `axios` (e.g., `^0.21.4`) to `dependencies` in `services/reasoning-mcp-server/package.json` for making HTTP requests.
+    - **Note 2.2.1.3 (llmService.ts):** Created `services/reasoning-mcp-server/src/llmService.ts` with an exported async function `callOpenAI(prompt: string, systemPrompt?: string | null, model?: string)`. This function uses `axios` to call the OpenAI Chat Completions API, reads `OPENAI_API_KEY` from `process.env`, constructs the request, and includes error handling. It returns the assistant's message content.
+    - **Note 2.2.1.4 (README Update):** Updated `services/reasoning-mcp-server/README.md` to include a section on the `OPENAI_API_KEY` environment variable requirement.
+- [x] 2.2.1 Implement: Secure mechanism for the Reasoning MCP Server to make calls to an LLM (e.g., OpenAI, Anthropic API). (This is internal to the server, but `mcp_developer_guide.mdc` might inform security best practices for external services)
 
 ## Phase 2.A: Agentopia Client-Side Integration for Reasoning MCP
 
+**Dependency Note:** This entire phase depends heavily on the implementation of the Agent Tool Infrastructure, particularly database schemas, backend services for discovery, and the enhanced `MCPManager` or Tool Interaction Service.
+
 ### 2.A.1 `chat` Function/Orchestrator Modification
 - [ ] 2.A.1.1 Implement: Logic to check `advanced_reasoning_enabled` for the agent and if a suitable Reasoning MCP Server is configured.
+    - **Note (Revised Implementation Strategy):** 
+        1. Check `agents.advanced_reasoning_enabled` flag.
+        2. Check `agents.tool_environment_active` flag (Tool Infra WBS 4.2.1).
+        3. Query `agent_droplets` and `agent_droplet_tools` tables (Tool Infra WBS 1.2.1, 1.2.2) to verify the "Reasoning MCP Server" tool (by `tool_catalog_id`) is installed and `status = 'active'` for this agent's droplet.
+        4. Retrieve the specific endpoint URL/port for the active instance from `agent_droplet_tools.config_details`.
+        5. If all checks pass, proceed; otherwise, skip advanced reasoning.
+    - **Dependency:** Tool Infrastructure WBS 1.2, 4.2.1, and backend services.
 - [ ] 2.A.1.2 Implement: Context preparation tailored for the Reasoning MCP Server (based on its advertised capabilities, see `mcp_developer_guide.mdc` on `resources/provide`).
-- [ ] 2.A.1.3 Implement: Invocation of `MCPManager` to send the reasoning request to the configured Reasoning MCP Server. (See `mcp_developer_guide.mdc` for client-side request sending)
+    - **Note (Revised Context):** Capabilities might be fetched from the specific instance or cached based on the tool type/version from the catalog.
+- [ ] 2.A.1.3 Implement: Invocation of `MCPManager` (or Tool Interaction Service) to send the reasoning request to the configured Reasoning MCP Server.
+    - **Note (Revised Implementation Strategy):** Pass the dynamically discovered agent-specific endpoint URL (from 2.A.1.1 step 4) to the service making the MCP call.
+    - **Dependency:** Tool Infrastructure WBS 4.4.1 (Tool Capability Reflection / Endpoint Discovery).
 - [ ] 2.A.1.4 Implement: Processing of the response from the Reasoning MCP Server:
     - If final answer: use it.
     - If prompts/plan: execute them.
@@ -833,6 +847,83 @@
 
 ## Phase 3: Frontend Implementation (Agentopia side)
 
+**Dependency Note:** This phase depends on Agent Tool Infrastructure UI implementations (Tool Infra WBS Phase 4).
+
 ### 3.1 Agent Edit Page (`AgentEditPage.tsx`)
 - [ ] 3.1.1 Backend Update: Ensure Supabase RPC functions for managing `agents` table can set `advanced_reasoning_enabled`.
-- [ ] 3.1.2 UI Implementation: Add the toggle switch for `
+- [ ] 3.1.2 UI Implementation: Add the toggle switch for `advanced_reasoning_enabled`.
+    - **Note:** See updated UX context note in 1.4.3.
+
+### 3.2 MCP Server Configuration UI (Agent Settings - Enhancements/Verification)
+- [ ] 3.2.1 Verify/Ensure: Existing MCP server configuration UI (WBS 1.4.4) allows users to add/edit Reasoning MCP Server details (name, endpoint, API key ref, timeouts, priority, active status).
+    - **Note (Revised):** Item is **superseded** by Tool Infrastructure WBS Phase 4.3 (Agent Toolbelt Management).
+- [ ] 3.2.2 Implement: Mechanism for Agentopia to "Test Connection & Fetch Capabilities" for an MCP server entry.
+    - **Note (Revised):** Functionality potentially moved to Toolbelt UI actions.
+    - **Dependency/Superseded by:** Tool Infrastructure WBS Phase 4.3.
+- [ ] 3.2.3 UI Display: Ensure the `mcp_servers.capabilities` field is displayed as read-only (e.g., formatted JSON/tree view) in the MCP server configuration UI.
+    - **Note (Revised):** Capability display likely part of Tool Catalog UI (Tool Infra WBS 4.1.2) or Agent Toolbelt UI (Tool Infra WBS 4.3.2).
+    - **Dependency/Superseded by:** Tool Infrastructure WBS Phase 4.
+
+### 3.3 Chat Interface UX for Reasoning
+- [ ] 3.3.1 Implement: Subtle visual indicator when advanced reasoning is invoked (e.g., "Agent is performing advanced analysis...").
+- [ ] 3.3.2 Implement: Presentation of final answer, nuanced by confidence score (hedging, disclaimers).
+- [ ] 3.3.3 Implement: "Show My Work" / Reasoning Trace access (progressive disclosure via icon/link).
+- [ ] 3.3.4 Implement: Handling for `pending_user_input` from the server (clearly presenting the server's question).
+- [ ] 3.3.5 Implement: User-friendly messages for failures or limits (e.g., `max_iterations_reached`, server error).
+
+## Phase 4: Testing & Iteration
+
+**Dependency Note:** Testing strategies must incorporate the Agent Tool Infrastructure.
+
+### 4.1 Reasoning MCP Server Testing
+- [ ] 4.1.1 Unit Tests: For individual modules/functions within the Reasoning MCP Server.
+- [ ] 4.1.2 Integration Tests (Server-Side): Test the full flow within the server for each advertised reasoning type.
+- [ ] 4.1.3 Test: Handling of malformed requests by the server.
+- [ ] 4.1.4 Test: Error handling and appropriate error responses from the server.
+- [ ] 4.1.5 Test: (If applicable) Server-side state management for multi-turn interactions (if `sessionState` logic is advanced).
+
+### 4.2 Agentopia - Reasoning MCP Integration Testing
+- [ ] 4.2.1 Test: Agentopia's logic for deciding *when* to invoke the Reasoning MCP Server.
+    - **Note (Revised Scope):** Test the revised logic dependent on Tool Infra checks (see Note 2.A.1.1).
+- [ ] 4.2.2 Test: Agentopia's logic for selecting the correct `reasoningType`.
+- [ ] 4.2.3 Test: Full request/response cycle between Agentopia and a running Reasoning MCP Server.
+    - **Note (Revised Scope):** Test interaction with the server running on a provisioned agent Droplet via its dynamic endpoint.
+- [ ] 4.2.4 Test: Agentopia's handling of different `status` responses from the server (`completed`, `failed`, `pending_tool_call`, `pending_user_input`, `max_iterations_reached`).
+- [ ] 4.2.5 Test: Agentopia's handling of `toolCallRequest` from the server and the subsequent `tools/result` flow back to the server. (Requires server to implement WBS 2.1.7)
+- [ ] 4.2.6 Test: Agentopia's state management for multi-turn reasoning sessions (Q&A refinement loop, `sessionState` propagation, `reasoning/endSession` call).
+- [ ] 4.2.7 Test: Error handling in Agentopia (server unavailable, task fails, timeouts, low confidence).
+    - **Note (Revised Scope):** Include testing Tool Infrastructure related errors.
+
+### 4.3 End-to-End (E2E) / User Acceptance Testing (UAT)
+- [ ] 4.3.1 Define: Test scenarios for common use cases where advanced reasoning would be beneficial.
+- [ ] 4.3.2 Execute: E2E tests based on defined scenarios, using the UI.
+    - **Note (Revised Scope):** Include enabling Tool Environment, adding Reasoning tool via toolbelt, using it in chat, disabling/removing.
+- [ ] 4.3.3 Test: `advanced_reasoning_enabled` toggle functionality.
+- [ ] 4.3.4 Test: Configuration of Reasoning MCP Server in Agent Settings and its effect.
+    - **Note (Revised Scope):** Test adding/configuring/removing the tool via the Agent Toolbelt UI.
+- [ ] 4.3.5 Gather: User feedback on the quality of reasoned answers, and the overall experience.
+
+### 4.4 Iteration
+- [ ] 4.4.1 Analyze: Test results and user feedback.
+- [ ] 4.4.2 Identify: Areas for improvement (prompt engineering, orchestrator logic, confidence calibration, UI/UX).
+- [ ] 4.4.3 Plan & Implement: Refinements based on findings.
+- [ ] 4.4.4 Re-test: After iterations.
+
+## Phase 5: Logging
+
+**Dependency Note:** Logging strategies must incorporate the Agent Tool Infrastructure.
+
+### 5.1 Reasoning MCP Server Logging
+- [ ] 5.1.1 Implement: Structured logging within the Reasoning MCP Server.
+    - **Note (Revised Context):** Logs will be generated on the agent Droplet. Consider integration with Tool Infra WBS 5.2.2 (Log Shipping/Centralization).
+- [ ] 5.1.2 Review: Server logs for clarity, completeness, and usefulness in debugging.
+
+### 5.2 Agentopia Logging (Related to Reasoning Feature)
+- [ ] 5.2.1 Implement/Enhance: Structured logging in Agentopia for interactions with the Reasoning MCP Server.
+    - **Note (Revised Context):** Include logging related to discovering the agent's tool endpoint, interaction attempts, and errors via the Tool Infrastructure.
+- [ ] 5.2.2 Review: Agentopia logs for reasoning feature interactions.
+
+### 5.3 Log Management & Review (Rule #2)
+- [ ] 5.3.1 Establish/Confirm: Log storage locations and rotation policies (if applicable) for both server (on Droplet) and Agentopia logs.
+    - **Dependency:** Tool Infrastructure WBS 5.2.2.
+- [ ] 5.3.2 Practice: Regular review of logs during development and testing to identify issues and ensure adherence to logging standards.
