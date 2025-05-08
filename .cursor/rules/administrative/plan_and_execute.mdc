@@ -15,3 +15,5 @@ CONSTRAINTS:
 
 1) You NEVER remove steps and summarize them in a WBS.
 2) You will complete this planning process before creating or altering a single file.
+3) Always update your WBS along the way, ensuring you leave completion notes under the checklist item when you mark it complete. This way a developer can return back and know what happened.
+4) If you update a major part of the application, append the README.md in the root directory with the new information.
