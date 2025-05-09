@@ -40,6 +40,35 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Admin client - for backend service-to-service communication
+let supabaseAdminClient: SupabaseClient | null = null;
+
+export const getSupabaseAdmin = (): SupabaseClient => {
+  if (supabaseAdminClient) {
+    return supabaseAdminClient;
+  }
+
+  const adminUrl = process.env.SUPABASE_URL; // Assuming same URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!adminUrl || !serviceRoleKey) {
+    throw new Error(
+      'Supabase URL or Service Role Key is not defined for admin client.'
+    );
+  }
+
+  supabaseAdminClient = createClient(adminUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    // Add any other admin-specific options if needed
+  });
+
+  console.log('Supabase admin client initialized.');
+  return supabaseAdminClient;
+};
+
 // Export types for better type safety
 export type Database = {
   public: {

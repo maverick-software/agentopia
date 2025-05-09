@@ -5,6 +5,8 @@
 // The actual path might vary based on dots-wrapper structure, e.g., dots-wrapper/dist/modules/droplet
 // For now, let's assume it's directly accessible or we define our own simplified versions.
 
+export { Droplet } from 'dots-wrapper'; // Re-exporting for use by other services
+
 /**
  * Represents a DigitalOcean Droplet resource as potentially returned by dots-wrapper.
  * This is a simplified example; refer to dots-wrapper documentation for the full type.

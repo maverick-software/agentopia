@@ -1,39 +1,96 @@
+// Forcing linter re-evaluation after tsconfig.node.json change.
 import { createApiClient } from 'dots-wrapper';
-import { IAPIClient } from 'dots-wrapper/dist/client'; // Correct import path for IAPIClient if needed
+// Removed: import { IAPIClient } from 'dots-wrapper/dist/client';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Placeholder for a function that securely retrieves secrets from Supabase Vault
-// This should be implemented as part of the Agentopia backend's existing secret management.
-async function getSecretFromVault(secretName: string): Promise<string | undefined> {
-  // In a real scenario, this would interact with Supabase Vault.
-  // For now, it might try to read from an environment variable or return a placeholder.
-  // Ensure this is securely implemented in the actual backend.
-  console.warn(`Attempting to get secret: ${secretName}. Ensure this is securely implemented.`);
-  if (secretName === 'DIGITALOCEAN_API_TOKEN') {
-    // return process.env.DIGITALOCEAN_API_TOKEN; // Example for Node.js environment
-    return 'YOUR_DO_API_TOKEN_PLACEHOLDER'; // TODO: Replace with actual secure retrieval
-  }
-  return undefined;
+// Define the type for the DigitalOcean API client based on the return type of createApiClient
+export type DotsApiClient = ReturnType<typeof createApiClient>;
+
+// Initialize Supabase Admin Client
+// Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in the environment for this service
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+let supabaseAdmin: SupabaseClient | null = null;
+if (supabaseUrl && supabaseServiceRoleKey) {
+  supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false }, // Backend service, no session needed
+  });
+  console.info('Supabase admin client initialized for DigitalOcean service.');
+} else {
+  console.error(
+    'Supabase URL or Service Role Key not found in environment. Vault operations will fail for DigitalOcean service.'
+  );
 }
 
-let apiClientInstance: IAPIClient | null = null;
+interface VaultResponse {
+  key: string | null;
+  // Add other potential fields from the vault response if necessary
+}
+
+async function getSecretFromVault(secretId: string): Promise<string | null> {
+  if (!supabaseAdmin) {
+    console.error('Supabase admin client not initialized. Cannot fetch secret from vault.');
+    return null;
+  }
+  if (!secretId) {
+    console.warn('getSecretFromVault: No secret ID provided.');
+    return null;
+  }
+
+  try {
+    console.log(`getSecretFromVault: Attempting to retrieve secret for vault ID: ${secretId}`);
+    const { data, error } = await supabaseAdmin
+      .rpc('get_secret', { secret_id: secretId })
+      .single();
+
+    if (error) {
+      console.error(`getSecretFromVault: Error retrieving secret from vault (ID: ${secretId}):`, error);
+      return null;
+    }
+
+    const vaultResponse = data as VaultResponse; // Type assertion
+    if (vaultResponse?.key) {
+      console.log(`getSecretFromVault: Successfully retrieved secret for vault ID: ${secretId}`);
+      return vaultResponse.key;
+    } else {
+      console.warn(
+        `getSecretFromVault: Secret retrieved but key was null or empty for vault ID: ${secretId}`
+      );
+      return null;
+    }
+  } catch (error) {
+    console.error(`getSecretFromVault: Exception during secret retrieval for vault ID: ${secretId}:`, error);
+    return null;
+  }
+}
+
+let apiClientInstance: DotsApiClient | null = null;
 
 /**
  * Initializes and returns the DigitalOcean API client.
  * Fetches the API token from a secure vault.
- * @returns {Promise<IAPIClient>} The initialized API client.
+ * @returns {Promise<DotsApiClient>} The initialized API client.
  * @throws {Error} If the API token cannot be retrieved or client initialization fails.
  */
-export async function getDOClient(): Promise<IAPIClient> {
+export async function getDOClient(): Promise<DotsApiClient> {
   if (apiClientInstance) {
     return apiClientInstance;
   }
 
-  const apiToken = await getSecretFromVault('DIGITALOCEAN_API_TOKEN');
+  const apiTokenSecretId = process.env.DO_API_TOKEN_VAULT_ID;
+  if (!apiTokenSecretId) {
+    console.error(
+      'DigitalOcean API token Vault ID (DO_API_TOKEN_VAULT_ID) is not configured in environment.'
+    );
+    throw new Error('DigitalOcean API token Vault ID is not configured.');
+  }
 
-  if (!apiToken || apiToken === 'YOUR_DO_API_TOKEN_PLACEHOLDER') {
-    // In a real app, you might throw an error or have a more robust fallback/logging
-    console.error('DigitalOcean API token is not configured. Please set it in Vault.');
-    throw new Error('DigitalOcean API token is not configured.');
+  const apiToken = await getSecretFromVault(apiTokenSecretId);
+
+  if (!apiToken) {
+    console.error('Failed to retrieve DigitalOcean API token from Vault.');
+    throw new Error('Failed to retrieve DigitalOcean API token from Vault.');
   }
 
   try {
@@ -42,13 +99,15 @@ export async function getDOClient(): Promise<IAPIClient> {
     return apiClientInstance;
   } catch (error) {
     console.error('Failed to initialize DigitalOcean API client:', error);
-    throw new Error('Failed to initialize DigitalOcean API client.');
+    // Ensure the error is typed or cast to access error.message if needed
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to initialize DigitalOcean API client: ${errorMessage}`);
   }
 }
 
 // Optional: A way to get the client synchronously if it's guaranteed to be initialized
 // Use with caution, prefer getDOClient for async safety.
-export function getDOClientSync(): IAPIClient {
+export function getDOClientSync(): DotsApiClient {
   if (!apiClientInstance) {
     throw new Error('DigitalOcean API client has not been initialized. Call getDOClient() first.');
   }

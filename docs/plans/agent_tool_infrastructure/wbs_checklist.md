@@ -306,9 +306,28 @@
 
 ## Phase 2: Droplet Provisioning & Management Service (Agentopia Backend)
 
-### 2.1 DigitalOcean API Integration
-- [ ] 2.1.1 Implement: Service/module in Agentopia backend to wrap DigitalOcean API calls (create, delete, get status of Droplets using chosen SDK/library).
-- [ ] 2.1.2 Implement: Error handling and retry logic for DigitalOcean API interactions.
+### 2.1 Backend: DigitalOcean Provisioning & Management Service
+- [x] 2.1.1 Implement: DigitalOcean API Wrapper Service (`digitalocean_service`).
+    - **Note:** Create client, implement functions for create, get, delete droplets, list droplets by tag. Base path: `src/services/digitalocean_service/`.
+    - **Files:** `client.ts`, `droplets.ts`, `types.ts`, `index.ts` (and potentially `firewalls.ts`, `volumes.ts` later).
+    - **Status:** [COMPLETED]
+- [x] 2.1.2 Implement: Error handling and retry logic within `digitalocean_service` (e.g., using `exponential-backoff`).
+    - **Status:** [IN PROGRESS] -> [COMPLETED] - Basic structure implemented, needs real-world error pattern verification.
+- [x] 2.1.3 Implement: Agent Environment Orchestration Service (`agent_environment_service`).
+    - **Note:** Handles logic for `ensureToolEnvironmentReady` (checks DB, provisions if needed via `digitalocean_service`), `getAgentDropletDetails`, `provisionAgentDroplet`, `deprovisionAgentDroplet`.
+    - **Files:** `manager.ts`, `types.ts`, `index.ts`. Base path: `src/services/agent_environment_service/`.
+    - **Status:** [COMPLETED]
+    - **Note 2.1.3.1 (Caveat):** Implemented using temporary `any` casts for Supabase interactions due to outdated `database.types.ts`. Requires `database.types.ts` to be regenerated and casts removed. Affected by linter issues with `digitalocean_service` import path in current user's `manager.ts`.
+- [x] 2.1.4 Implement: Database interaction logic within `agent_environment_service` for `agent_droplets` table (CRUD operations, status updates).
+    - **Status:** [COMPLETED] (Implemented as part of 2.1.3)
+    - **Note 2.1.4.1 (Caveat):** Subject to the same caveats as 2.1.3 regarding outdated `database.types.ts` and temporary `any` casts.
+- [x] 2.1.5 Implement: Heartbeat mechanism from Droplet Tool Management Agent (DTMA) to Agentopia backend (updating `agent_droplets.last_heartbeat_at` and `status`).
+    - **Status:** [COMPLETED] - Supabase Edge Function `supabase/functions/heartbeat/index.ts` created. Requires user review, env var setup, CORS, deployment, and testing.
+    - **Note 2.1.5.1:** Assumes `database.types.ts` will be made available in `supabase/functions/_shared/` for Edge Function use.
+- [x] 2.1.6 Implement: Secure endpoint on Agentopia backend for DTMA to call for fetching tool secrets from Vault.
+    - **Status:** [COMPLETED] - Supabase Edge Function `supabase/functions/fetch-tool-secrets/index.ts` created.
+    - **Note 2.1.6.1 (Action Required):** Requires refinement of secret mapping logic (how `tool_catalog.required_secrets_schema` or `agent_droplet_tools.config_values` maps required secret names to specific Vault IDs for an instance).
+    - **Note 2.1.6.2:** Requires user review, env var setup, CORS, deployment, testing, and assumes `database.types.ts` availability in `_shared`.
 
 ### 2.2 Droplet Lifecycle Management
 - [ ] 2.2.1 Implement: Logic to trigger Droplet provisioning when a new "Tool Environment" is requested for an agent.
@@ -319,3 +338,52 @@
 - [ ] 2.2.3 Implement: Logic to de-provision Droplets (e.g., when "Tool Environment" is deactivated or agent is deleted).
     - **Note:** Ensure tools are gracefully stopped if possible. Update `agent_droplets` table.
 - [ ] 2.2.4 Implement: Periodic status checks for active Agent Droplets from Agentopia backend. Update `agent_droplets.status`
+
+## Phase 3: Droplet Tool Management Agent (DTMA) & Tool Deployment
+
+### 3.1 DTMA Implementation
+- [x] 3.1.1 Design: DTMA architecture, API definition, security model.
+    - **Status:** [COMPLETED]
+    - **Note 3.1.1.1 (Architecture):** Lightweight agent on droplet, bridge between Agentopia backend and Docker tools.
+    - **Note 3.1.1.2 (Tech Stack):** Node.js recommended (Express/Fastify, axios/node-fetch, dockerode).
+    - **Note 3.1.1.3 (DTMA API - Inbound):** Listens on HTTPS (e.g., port 30000). Requires Bearer token auth (`dtma_auth_token`). Endpoints: POST /tools/install, POST /tools/start, POST /tools/stop, DELETE /tools/uninstall, GET /status.
+    - **Note 3.1.1.4 (Agentopia API - Outbound Calls):** Calls Agentopia backend `POST /api/v1/heartbeat` and `POST /api/v1/fetch-tool-secrets` using its `dtma_auth_token`.
+    - **Note 3.1.1.5 (Configuration):** Reads `dtma_auth_token` from `/etc/dtma.conf` (set by cloud-init). Reads Agentopia API base URL from env var/config.
+    - **Note 3.1.1.6 (Security):** HTTPS for own API, token auth, secure secret handling (via Agentopia API), Docker socket permissions, runs as non-root if possible.
+    - **Note 3.1.1.7 (Bootstrap):** Requires Node.js, Docker installed on droplet. DTMA needs installation & setup as a service (e.g., systemd) via `user_data`.
+- [ ] 3.1.2 Implement: DTMA basic scaffolding (Node.js project setup, simple HTTP server).
+- [ ] 3.1.3 Implement: DTMA interaction with Docker (using e.g., `dockerode` library).
+- [ ] 3.1.4 Implement: DTMA API endpoints (install, start, stop, uninstall tools based on backend commands).
+- [ ] 3.1.5 Implement: DTMA logic for securely fetching secrets from Agentopia backend API.
+- [ ] 3.1.6 Implement: DTMA logic for sending heartbeat/status updates to Agentopia backend API.
+
+### 3.2 Droplet Bootstrap & DTMA Setup
+- [x] 3.2.1 Define: Droplet base image and initial setup requirements (OS, Docker, Node.js, DTMA dependencies).
+    - **Note 3.2.1.1 (Base Image):** Ubuntu 22.04 LTS (or latest stable LTS).
+    - **Note 3.2.1.2 (Pre-installed/Bootstrapped):**
+        - Docker Engine
+        - Node.js (version compatible with DTMA, e.g., v18, v20)
+        - Git
+        - `curl`, `gnupg` (for adding repositories)
+        - Standard build tools if DTMA needs compilation (`build-essential` or similar).
+    - **Note 3.2.1.3 (User):** A dedicated user for running the DTMA service (e.g., `dtma_user` or use `ubuntu` if appropriate).
+- [x] 3.2.2 Implement: Bootstrap script (`user_data` for DigitalOcean) to install Docker, Node.js, clone DTMA, install dependencies, build DTMA (if necessary), and set up DTMA config file (`/etc/dtma.conf` with auth token).
+    - **Note 3.2.2.1 (Implementation Details):** Implemented in `agent_environment_service/manager.ts` within the `createUserDataScript` function.
+    - **Note 3.2.2.2 (Enhancements 2025-05-08):** Refined script to include logging to `/var/log/dtma-bootstrap.log`. Parameters for DTMA Git Repo URL and Agentopia API URL are now used more robustly and have more realistic defaults (though they should be overridden by environment variables `DTMA_GIT_REPO_URL` and `AGENTOPIA_API_URL` in the backend service).
+    - **Note 3.2.2.3 (Linter):** The TypeScript linter shows false positive errors on lines where shell variables (e.g., `\${DTMA_DIR}`) are used within `bash -c "..."` commands inside the template literal. This is due to the linter misinterpreting the correctly escaped shell variable as a TypeScript template variable. The generated script is expected to be correct.
+- [ ] 3.2.3 Test and refine: The bootstrap script on a sample DO Droplet.
+    - **Tasks:**
+        - Manually provision a DO droplet with the generated `user_data`.
+        - SSH into the droplet.
+        - Verify Docker installation and status.
+        - Verify Node.js installation and version.
+        - Verify DTMA code is cloned to the correct directory (e.g., `/opt/agentopia/dtma`).
+        - Verify DTMA dependencies are installed (`node_modules` present).
+        - Verify DTMA build is successful (`dist` folder present if applicable).
+        - Verify DTMA config file (`/etc/dtma.conf`) is created with the correct auth token and API URL.
+        - Verify `dtma.service` `systemd` unit file is created in `/etc/systemd/system/`.
+        - Verify `dtma` service is enabled and running (`systemctl status dtma`).
+        - Check DTMA logs (`journalctl -u dtma` and `/var/log/dtma-bootstrap.log`).
+        - Ensure the DTMA agent starts and attempts to send a heartbeat.
+- [ ] 3.2.4 Implement: `systemd` service configuration for DTMA to ensure it runs on startup and restarts on failure.
+    - **Note 3.2.4.1:** This is part of the `createUserDataScript` (WBS 3.2.2). Verification will occur during WBS 3.2.3.
