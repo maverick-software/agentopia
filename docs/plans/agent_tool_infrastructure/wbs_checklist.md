@@ -333,10 +333,40 @@
 - [ ] 2.2.1 Implement: Logic to trigger Droplet provisioning when a new "Tool Environment" is requested for an agent.
     - **Note:** This includes selecting Droplet image (e.g., base OS, Docker pre-installed), region, size.
     - **Note:** Update `agent_droplets` table with Droplet details and status.
+    - [x] 2.2.1.1 Design & Implement: Supabase Edge Function (e.g., manage-agent-tool-environment) for frontend to call.
+        - **Status:** [PARTIALLY COMPLETE]
+        - **Note:** Edge function `manage-agent-tool-environment/index.ts` created (05/08/2025).
+        - [x] 2.2.1.1.1 Define: API contract (e.g., POST /api/v1/agents/{agentId}/tool-environment).
+            - **Status:** [COMPLETE] (Defined as POST /api/v1/manage-agent-tool-environment/{agentId})
+        - [x] 2.2.1.1.2 Implement: User authentication & agent ownership authorization in Edge Function.
+            - **Status:** [COMPLETE] (Implemented 05/08/2025)
+        - [ ] 2.2.1.1.3 Implement: Internal authenticated call from Edge Function to Node.js backend service that invokes ensureToolEnvironmentReady.
+            - **Note:** Helper `callInternalNodeService` sketched in Edge Function.
+    - [ ] 2.2.1.2 Implement: Internal Node.js backend endpoint (e.g., POST /internal/agents/{agentId}/ensure-tool-environment) called by Edge Function, which in turn calls `agent_environment_service.ensureToolEnvironmentReady`.
+    - [x] 2.2.1.3 Implement: Frontend UI on Agent Edit Page - "Activate Tool Environment" toggle.
+        - **Status:** [PARTIALLY COMPLETE]
+        - **Note:** UI (Switch, state, handler, status display) added to `src/pages/agents/[agentId]/edit.tsx` (05/08/2025).
+        - [ ] 2.2.1.3.1 Refine: State management for toggle, status display (including fetching initial status from `agent_droplets`).
+            - **Note:** Initial status fetch from `agent_droplets` added to `useEffect` (05/08/2025).
+        - [x] 2.2.1.3.2 Implement: Frontend API client function (e.g., in `src/lib/api/toolEnvironments.ts`) to call the Edge Function.
+            - **Status:** [COMPLETE] (Created `src/lib/api/toolEnvironments.ts` and integrated 05/08/2025)
+        - [ ] 2.2.1.3.3 Refine: UI logic for toggle interaction, loading states, and comprehensive feedback.
 - [ ] 2.2.2 Implement: Agent Droplet bootstrap/setup script.
-    - **Note:** Runs on first boot. Installs common dependencies, security updates, sets up the agent-side listener/service for tool management (from 3.1.2).
 - [ ] 2.2.3 Implement: Logic to de-provision Droplets (e.g., when "Tool Environment" is deactivated or agent is deleted).
     - **Note:** Ensure tools are gracefully stopped if possible. Update `agent_droplets` table.
+    - [x] 2.2.3.1 Design & Implement: Supabase Edge Function endpoint for de-provisioning (e.g., DELETE /api/v1/agents/{agentId}/tool-environment within `manage-agent-tool-environment` function).
+        - **Status:** [PARTIALLY COMPLETE]
+        - **Note:** Covered by `manage-agent-tool-environment/index.ts` (handling DELETE) created (05/08/2025).
+        - [x] 2.2.3.1.1 Define: API contract.
+            - **Status:** [COMPLETE] (Defined as DELETE /api/v1/manage-agent-tool-environment/{agentId})
+        - [x] 2.2.3.1.2 Implement: User authentication & agent ownership authorization in Edge Function.
+            - **Status:** [COMPLETE] (Covered by 2.2.1.1.2)
+        - [ ] 2.2.3.1.3 Implement: Internal authenticated call from Edge Function to Node.js backend service that invokes deprovisionAgentDroplet.
+            - **Note:** Helper `callInternalNodeService` (for DELETE) sketched in Edge Function.
+    - [ ] 2.2.3.2 Implement: Internal Node.js backend endpoint (e.g., DELETE /internal/agents/{agentId}/tool-environment) called by Edge Function, which in turn calls `agent_environment_service.deprovisionAgentDroplet`.
+    - [x] 2.2.3.3 Implement: Frontend UI on Agent Edit Page - "Deactivate Tool Environment" via toggle.
+        - **Status:** [PARTIALLY COMPLETE]
+        - **Note:** Covered by UI changes in 2.2.1.3.x.
 - [ ] 2.2.4 Implement: Periodic status checks for active Agent Droplets from Agentopia backend. Update `agent_droplets.status`
 
 ## Phase 3: Droplet Tool Management Agent (DTMA) & Tool Deployment
@@ -351,11 +381,17 @@
     - **Note 3.1.1.5 (Configuration):** Reads `dtma_auth_token` from `/etc/dtma.conf` (set by cloud-init). Reads Agentopia API base URL from env var/config.
     - **Note 3.1.1.6 (Security):** HTTPS for own API, token auth, secure secret handling (via Agentopia API), Docker socket permissions, runs as non-root if possible.
     - **Note 3.1.1.7 (Bootstrap):** Requires Node.js, Docker installed on droplet. DTMA needs installation & setup as a service (e.g., systemd) via `user_data`.
-- [ ] 3.1.2 Implement: DTMA basic scaffolding (Node.js project setup, simple HTTP server).
-- [ ] 3.1.3 Implement: DTMA interaction with Docker (using e.g., `dockerode` library).
-- [ ] 3.1.4 Implement: DTMA API endpoints (install, start, stop, uninstall tools based on backend commands).
-- [ ] 3.1.5 Implement: DTMA logic for securely fetching secrets from Agentopia backend API.
+- [x] 3.1.2 Implement: DTMA basic scaffolding (Node.js project setup, simple HTTP server).
+    - **Status:** [LARGELY COMPLETE] - `dtma/src/index.ts` sets up Express server. Project structure in place.
+- [x] 3.1.3 Implement: DTMA interaction with Docker (using e.g., `dockerode` library).
+    - **Status:** [LARGELY COMPLETE] - `dtma/src/docker_manager.ts` implements core Docker operations.
+- [x] 3.1.4 Implement: DTMA API endpoints (install, start, stop, uninstall tools based on backend commands).
+    - **Status:** [LARGELY COMPLETE] - `dtma/src/routes/tool_routes.ts` defines `/tools/install, /start, /stop, /uninstall, /status`.
+- [x] 3.1.5 Implement: DTMA logic for securely fetching secrets from Agentopia backend API.
+    - **Status:** [LARGELY COMPLETE] - Implemented in `/tools/start` endpoint via `agentopia_api_client.ts`.
 - [ ] 3.1.6 Implement: DTMA logic for sending heartbeat/status updates to Agentopia backend API.
+    - **Status:** [PARTIALLY COMPLETE] - Heartbeat sending is implemented in `index.ts` via `agentopia_api_client.ts`. 
+    - **Note 3.1.6.1 (Gaps):** Payload is missing `system_status` (CPU, Mem, Disk) and detailed `tool_statuses` (from Docker manager). These are marked as TODOs in `dtma/src/index.ts`.
 
 ### 3.2 Droplet Bootstrap & DTMA Setup
 - [x] 3.2.1 Define: Droplet base image and initial setup requirements (OS, Docker, Node.js, DTMA dependencies).

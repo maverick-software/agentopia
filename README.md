@@ -192,7 +192,10 @@ Located in `services/`. These are designed for persistent execution on a server 
 ## Known Issues & Refactoring
 
 *   **Missing Logs:** Critical logging across services and functions needs implementation.
-*   **Large Files:** Some page components may exceed recommended size limits and could benefit from refactoring (`src/pages/AgentEditPage.tsx`, `src/pages/DatastoresPage.tsx`).
+*   **Large Files:** 
+    *   Some frontend page components may exceed recommended size limits and could benefit from refactoring (e.g., `src/pages/agents/[agentId]/edit.tsx`, `src/pages/DatastoresPage.tsx` - line counts need re-verification).
+    *   The core `supabase/functions/chat/index.ts` function is ~695 lines and should be reviewed for refactoring.
+*   **Suboptimal Tokenizer:** The `ContextBuilder` in `supabase/functions/chat/context_builder.ts` uses a basic character count for token estimation; consider replacing with `tiktoken` for accuracy.
 *   **Team Membership Access:** The `fetchWorkspaces` hook doesn't currently grant workspace access based on Team membership; this might need enhancement.
 *   **UI Component Completeness:** Ensure all necessary Shadcn UI components are created/installed.
 

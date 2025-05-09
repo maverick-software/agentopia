@@ -1,0 +1,40 @@
+# Agentopia Agent Tool Infrastructure Environment Variables
+
+# DigitalOcean API Configuration
+DO_API_TOKEN=your_do_api_token_here
+# Alternative: Vault ID for API token if using vault storage
+DO_API_TOKEN_VAULT_ID=your_vault_id_here
+
+# Droplet Configuration Defaults
+DO_DEFAULT_REGION=nyc3
+DO_DEFAULT_SIZE=s-1vcpu-1gb
+DO_DEFAULT_IMAGE=ubuntu-22-04-x64
+# SSH keys are optional but recommended for access
+# DO_DEFAULT_SSH_KEY_IDS=
+DO_BACKUP_ENABLED=false
+DO_MONITORING=true
+
+# DTMA Configuration
+# We need to decide how to handle this since there's no external repo
+# Option 1: Create a GitHub repo for the DTMA code
+# DTMA_GIT_REPO_URL=https://github.com/your-org/agentopia-dtma.git
+# DTMA_GIT_BRANCH=main
+#
+# Option 2: Modify bootstrap script to use a different approach
+# Leave these commented for now
+
+# Agentopia API Configuration
+BACKEND_URL=http://localhost:3000
+# Generate a random string for this using: openssl rand -hex 16
+INTERNAL_API_SECRET=your_random_secret_here
+AGENTOPIA_API_URL=http://localhost:3000/functions/v1
+
+# Supabase Configuration
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Test Configuration
+TEST_AGENT_ID=test-agent-1
+
+# DTMA API Port (defaults to 30000 if not specified)
+PORT=30000 

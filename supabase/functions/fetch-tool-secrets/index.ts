@@ -24,9 +24,16 @@ function getSupabaseAdminClient(req: Request): SupabaseClient {
   });
 }
 
-interface VaultSecret {
-  name: string; // The key name the tool expects (e.g., OPENAI_API_KEY)
-  vault_id: string; // The ID/name of the secret in Supabase Vault
+// Interface for the structure within tool_catalog.required_secrets_schema
+interface RequiredSecretSchemaEntry {
+  name: string; // User-friendly name of the secret
+  env_var_name: string; // The environment variable name the tool expects
+  description?: string;
+}
+
+// Structure assumed in agent_droplet_tools.config_values for storing the mapping
+interface ConfiguredSecretVaultIDs {
+  [env_var_name: string]: string; // e.g., { "OPENAI_API_KEY": "vault-uuid-for-openai-key" }
 }
 
 serve(async (req) => {
@@ -61,7 +68,7 @@ serve(async (req) => {
     const payload = await req.json();
     toolInstanceDbId = payload.tool_instance_db_id;
     if (!toolInstanceDbId) throw new Error('tool_instance_db_id is required in payload.');
-  } catch (e) {
+  } catch (e: any) {
     return new Response(JSON.stringify({ error: `Invalid JSON payload: ${e.message}` }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -93,7 +100,6 @@ serve(async (req) => {
       .select(`
         id,
         agent_droplet_id,
-        tool_catalog_id,
         config_values, 
         tool_catalog (
           required_secrets_schema
@@ -120,46 +126,47 @@ serve(async (req) => {
     // OR `toolInstanceData.config_values.secret_mappings` contains this info.
     // Simplified: Assume `toolInstanceData.tool_catalog.required_secrets_schema` contains `VaultSecret[]` directly.
     
-    let requiredSecrets: VaultSecret[] = [];
-    const schema = toolInstanceData.tool_catalog?.required_secrets_schema;
-    if (Array.isArray(schema)) {
-        // Basic validation that elements look like VaultSecret
-        requiredSecrets = schema.filter(s => typeof s === 'object' && s !== null && 'name' in s && 'vault_id' in s) as VaultSecret[];
-    }
-
-    if (requiredSecrets.length === 0) {
-      return new Response(JSON.stringify({ secrets: {} }), { // No secrets configured/required
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 6. Fetch secrets from Vault using RPC
     const fetchedSecrets: { [key: string]: string | null } = {};
-    for (const secretToFetch of requiredSecrets) {
-      try {
-        const { data: rpcData, error: rpcError } = await supabaseAdmin
-          .rpc('get_secret', { secret_id: secretToFetch.vault_id })
-          // .single() often not needed if rpc returns a single value directly or is void
+    const requiredSecretsSchema = toolInstanceData.tool_catalog?.required_secrets_schema as RequiredSecretSchemaEntry[] | null;
+    const configuredSecretVaultIDs = toolInstanceData.config_values?.secret_vault_ids as ConfiguredSecretVaultIDs | null;
 
-        if (rpcError) {
-          console.error(`Error fetching Vault secret (vault_id: ${secretToFetch.vault_id}) for tool ${toolInstanceDbId}:`, rpcError.message);
-          fetchedSecrets[secretToFetch.name] = null; // Indicate fetch failure for this secret
+    if (requiredSecretsSchema && Array.isArray(requiredSecretsSchema) && configuredSecretVaultIDs) {
+      for (const schemaEntry of requiredSecretsSchema) {
+        if (schemaEntry && typeof schemaEntry === 'object' && schemaEntry.env_var_name) {
+          const vaultId = configuredSecretVaultIDs[schemaEntry.env_var_name];
+          if (vaultId && typeof vaultId === 'string') {
+            try {
+              const { data: rpcData, error: rpcError } = await supabaseAdmin
+                .rpc('get_secret', { secret_id: vaultId });
+
+              if (rpcError) {
+                console.error(`Error fetching Vault secret (vault_id: ${vaultId}) for env_var ${schemaEntry.env_var_name}:`, rpcError.message);
+                fetchedSecrets[schemaEntry.env_var_name] = null;
+              } else {
+                fetchedSecrets[schemaEntry.env_var_name] = (rpcData as any)?.key || null;
+              }
+            } catch (e: any) {
+              console.error(`Exception fetching Vault secret (vault_id: ${vaultId}) for env_var ${schemaEntry.env_var_name}:`, e.message);
+              fetchedSecrets[schemaEntry.env_var_name] = null;
+            }
+          } else {
+            console.warn(`Vault ID not configured for required secret env_var: ${schemaEntry.env_var_name} in tool instance ${toolInstanceDbId}`);
+            fetchedSecrets[schemaEntry.env_var_name] = null; // Indicate missing configuration
+          }
         } else {
-          // Assuming rpcData is the direct secret value (string) or an object like { key: string }
-          // Based on digitalocean_service/client.ts, get_secret RPC returns { key: string | null }
-          fetchedSecrets[secretToFetch.name] = (rpcData as any)?.key || null;
+            console.warn('Invalid entry in required_secrets_schema:', schemaEntry);
         }
-      } catch (e) {
-        console.error(`Exception fetching Vault secret (vault_id: ${secretToFetch.vault_id}):`, e.message);
-        fetchedSecrets[secretToFetch.name] = null;
       }
+    } else {
+      console.log('No required secrets schema found in catalog or no configured vault IDs in tool instance, or schema/config is not in expected format.');
+      // No secrets defined as required or no mappings, return empty secrets object
     }
     
     return new Response(JSON.stringify({ secrets: fetchedSecrets }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Fetch-Tool-Secrets: Unhandled exception:', error.message, error.stack);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

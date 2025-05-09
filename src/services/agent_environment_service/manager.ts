@@ -7,11 +7,13 @@ import { getSupabaseAdmin } from '../../lib/supabase'; // Assuming admin client 
 import {
   createDigitalOceanDroplet,
   deleteDigitalOceanDroplet,
+  getDigitalOceanDroplet, // Added import
   Droplet,
   CreateDropletServiceOptions // Added here
 } from '../digitalocean_service'; // Corrected path and consolidated imports
 import { Database, Json } from '../../types/database.types'; // Added Json import
 import * as crypto from 'crypto';
+import { DigitalOceanResourceNotFoundError } from '../digitalocean_service/errors'; // Added import
 
 /**
  * Retrieves agent droplet details from the database.
@@ -193,6 +195,9 @@ echo "--- DTMA setup complete ---"
 `;
 }
 
+const MAX_POLL_ATTEMPTS = 30; // e.g., 30 attempts * 10 seconds = 5 minutes max wait
+const POLL_INTERVAL_MS = 10000; // 10 seconds
+
 /**
  * Provisions a new DigitalOcean droplet for an agent based on the determined configuration.
  * This is an internal helper function.
@@ -205,18 +210,16 @@ async function provisionAgentDroplet(
   const uniqueDropletName = `agent-${agentId}-env-${Date.now().toString().slice(-6)}`;
   const dtmaAuthToken = crypto.randomBytes(32).toString('hex');
 
-  // Get DTMA repo URL/branch and API URL from env or config
-  const dtmaRepoUrl = process.env.DTMA_GIT_REPO_URL; // Must be configured
-  const dtmaGitBranch = process.env.DTMA_GIT_BRANCH; // Optional, defaults to main
-  const agentopiaApiUrl = process.env.AGENTOPIA_API_URL; // Backend API base for DTMA
+  const dtmaRepoUrl = process.env.DTMA_GIT_REPO_URL;
+  const dtmaGitBranch = process.env.DTMA_GIT_BRANCH;
+  const agentopiaApiUrl = process.env.AGENTOPIA_API_URL;
 
-  if (!dtmaRepoUrl) {
-      console.error('DTMA_GIT_REPO_URL environment variable is not set. Cannot provision droplet.');
-      throw new Error('DTMA Git repository URL is not configured.');
-  }
-
-  // Construct user_data using the helper function
-  const userDataScript = createUserDataScript(dtmaAuthToken, agentopiaApiUrl, dtmaRepoUrl, dtmaGitBranch);
+  // Remove the requirement for DTMA_GIT_REPO_URL
+  // Use a default GitHub URL if not provided (you can create a public repo for this)
+  const defaultGitRepo = 'https://github.com/agentopia/dtma.git'; // Replace with your actual public repo
+  const effectiveRepoUrl = dtmaRepoUrl || defaultGitRepo;
+  
+  const userDataScript = createUserDataScript(dtmaAuthToken, agentopiaApiUrl, effectiveRepoUrl, dtmaGitBranch);
 
   const doOptions: CreateDropletServiceOptions = {
     name: uniqueDropletName,
@@ -225,67 +228,110 @@ async function provisionAgentDroplet(
     image: provisionConfig.image, 
     ssh_keys: provisionConfig.ssh_key_ids,
     tags: provisionConfig.tags || [`agent-id:${agentId}`],
-    user_data: userDataScript, // Use the generated cloud-init script
+    user_data: userDataScript,
     vpc_uuid: provisionConfig.vpc_uuid,
     ipv6: provisionConfig.enable_ipv6 ?? false,
     monitoring: provisionConfig.monitoring ?? true,
     with_droplet_agent: provisionConfig.with_droplet_agent ?? true,
   };
 
-  let digitalOceanDroplet: Droplet;
+  let initialDropletResponse: Droplet;
   try {
     console.log(`Attempting to create DigitalOcean droplet "${uniqueDropletName}"...`);
-    digitalOceanDroplet = await createDigitalOceanDroplet(doOptions);
-    console.log(`DigitalOcean droplet created successfully: ID ${digitalOceanDroplet.id}, Name: ${digitalOceanDroplet.name}`);
+    initialDropletResponse = await createDigitalOceanDroplet(doOptions);
+    console.log(`DigitalOcean droplet creation initiated: ID ${initialDropletResponse.id}, Name: ${initialDropletResponse.name}, Status: ${initialDropletResponse.status}`);
   } catch (error) {
     console.error(`Failed to create DigitalOcean droplet for agent ${agentId}:`, error);
+    // TODO: Update agent_droplets record with error_creation status if one was preemptively created
     throw error; 
   }
 
-  interface IPV4NetworkInterface { // Explicit type for clarity
+  // Poll for active status
+  let attempts = 0;
+  let currentDropletState = initialDropletResponse;
+  while (attempts < MAX_POLL_ATTEMPTS && currentDropletState.status !== 'active') {
+    attempts++;
+    console.log(`Polling droplet ${currentDropletState.id} status (Attempt ${attempts}/${MAX_POLL_ATTEMPTS}). Current status: ${currentDropletState.status}. Waiting ${POLL_INTERVAL_MS / 1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    try {
+      currentDropletState = await getDigitalOceanDroplet(currentDropletState.id);
+    } catch (pollError) {
+      console.error(`Error polling droplet ${currentDropletState.id} status:`, pollError);
+      // If polling itself fails (e.g. network, or droplet disappears during polling after creation error from DO perspective)
+      // We might want to break or throw, depending on how critical immediate status is.
+      // For now, if it was a ResourceNotFound, assume it truly vanished post-creation signal.
+      if (pollError instanceof DigitalOceanResourceNotFoundError) {
+        console.error(`Droplet ${currentDropletState.id} disappeared during polling. Aborting.`);
+        throw new Error(`Droplet ${currentDropletState.id} was not found during status polling.`);
+      }
+      // For other poll errors, we might log and let the loop continue or break.
+      // Let's break and rely on the status from last successful poll or initial creation.
+      break; 
+    }
+  }
+
+  if (currentDropletState.status !== 'active') {
+    console.error(`Droplet ${currentDropletState.id} did not become active after ${attempts} attempts. Last status: ${currentDropletState.status}`);
+    // TODO: Update agent_droplets record with error_creation status
+    throw new Error(`Droplet ${currentDropletState.id} failed to become active. Last status: ${currentDropletState.status}`);
+  }
+
+  console.log(`Droplet ${currentDropletState.id} is now active.`);
+
+  interface IPV4NetworkInterface { 
     ip_address: string;
     netmask: string;
     gateway: string;
     type: 'public' | 'private';
   }
 
-  const publicIpV4 = (digitalOceanDroplet.networks.v4 as IPV4NetworkInterface[]).find(
+  const publicIpV4 = (currentDropletState.networks.v4 as IPV4NetworkInterface[]).find(
     (net: IPV4NetworkInterface) => net.type === 'public'
   )?.ip_address;
 
   if (!publicIpV4) {
-    console.warn(`Droplet ${digitalOceanDroplet.id} created but no public IPv4 address found immediately.`);
+    console.warn(`Droplet ${currentDropletState.id} is active but no public IPv4 address found.`);
+    // This might be an issue, decide if to throw or proceed with null IP
   }
 
-  // Use the generated Supabase type for insert operations
   type AgentDropletInsert = Database['public']['Tables']['agent_droplets']['Insert'];
   
+  const mapDOStatusToInternalStatus = (doStatus: string): Database['public']['Enums']['droplet_status_enum'] => {
+    switch (doStatus) {
+      case 'new': return 'creating';
+      case 'active': return 'active';
+      case 'off': return 'unresponsive';
+      case 'archive': return 'deleted';
+      default: console.warn(`Unknown DO status: ${doStatus}`); return 'unresponsive';
+    }
+  };
+
   const newDropletRecord: AgentDropletInsert = {
     agent_id: agentId,
-    do_droplet_id: digitalOceanDroplet.id,
-    name: digitalOceanDroplet.name,
+    do_droplet_id: currentDropletState.id,
+    name: currentDropletState.name,
     ip_address: publicIpV4 || null, 
-    status: digitalOceanDroplet.status as Database['public']['Enums']['droplet_status_enum'], 
-    region_slug: digitalOceanDroplet.region.slug,
-    size_slug: digitalOceanDroplet.size_slug,
-    image_slug: typeof digitalOceanDroplet.image.slug === 'string' ? digitalOceanDroplet.image.slug : 
-                  (digitalOceanDroplet.image.name || provisionConfig.image),
-    tags: digitalOceanDroplet.tags || provisionConfig.tags,
-    configuration: provisionConfig as unknown as Json, // Cast to satisfy Json type 
+    status: mapDOStatusToInternalStatus(currentDropletState.status), // Should be 'active' here
+    region_slug: currentDropletState.region.slug,
+    size_slug: currentDropletState.size_slug,
+    image_slug: typeof currentDropletState.image.slug === 'string' ? currentDropletState.image.slug :
+                  (currentDropletState.image.name || provisionConfig.image),
+    tags: currentDropletState.tags || provisionConfig.tags,
+    configuration: provisionConfig as unknown as Json, 
     dtma_auth_token: dtmaAuthToken, 
     dtma_last_known_version: null,
     dtma_last_reported_status: null,
   };
 
   const { data: insertedData, error: insertError } = await supabase
-    .from('agent_droplets') // Removed 'as any'
+    .from('agent_droplets')
     .insert(newDropletRecord)
     .select()
     .single();
 
   if (insertError) {
     console.error(
-      `Failed to insert agent droplet record DB for agent ${agentId}, DO ID ${digitalOceanDroplet.id}:`,
+      `Failed to insert agent droplet record DB for agent ${agentId}, DO ID ${currentDropletState.id}:`,
       insertError
     );
     throw new Error(
@@ -297,13 +343,12 @@ async function provisionAgentDroplet(
     throw new Error('DB insert returned no data after droplet creation.');
   }
   
-  // insertedData should now conform to the Row type from Database types
   const resultRecord: AgentDropletRecord = {
     id: insertedData.id,
     agent_id: insertedData.agent_id,
     do_droplet_id: insertedData.do_droplet_id,
     name: insertedData.name || '', 
-    ip_address: insertedData.ip_address as string | null, // Cast from unknown
+    ip_address: insertedData.ip_address as string | null,
     status: insertedData.status, 
     region_slug: insertedData.region_slug,
     size_slug: insertedData.size_slug,
@@ -313,7 +358,6 @@ async function provisionAgentDroplet(
     updated_at: new Date(insertedData.updated_at),
     error_message: insertedData.error_message,
   };
-
   return resultRecord;
 }
 
@@ -389,11 +433,9 @@ export async function ensureToolEnvironmentReady(
  */
 export async function deprovisionAgentDroplet(
   agentId: string
-  // dropletId?: string // Optional: specify by our DB ID if multiple droplets per agent were allowed
 ): Promise<{ success: boolean; message?: string }> {
   const supabase = getSupabaseAdmin();
 
-  // 1. Find the agent's droplet record
   const agentDroplet = await getAgentDropletDetails(agentId);
 
   if (!agentDroplet || !agentDroplet.do_droplet_id) {
@@ -401,7 +443,6 @@ export async function deprovisionAgentDroplet(
     return { success: true, message: 'No active droplet to deprovision or missing DO ID.' };
   }
 
-  // 2. Call DigitalOcean service to delete the droplet
   try {
     console.log(`Attempting to delete DigitalOcean droplet ID ${agentDroplet.do_droplet_id} for agent ${agentId}...`);
     await deleteDigitalOceanDroplet(agentDroplet.do_droplet_id);
@@ -411,32 +452,26 @@ export async function deprovisionAgentDroplet(
       `Failed to delete DigitalOcean droplet ID ${agentDroplet.do_droplet_id} for agent ${agentId}:`,
       error
     );
-    // If DO API reports 404 (not found), it might already be deleted.
-    // This depends on how dots-wrapper/DO API surfaces errors.
-    // For now, if error.status === 404 (axios-like error), we can consider it 'successfully' deleted.
-    // This needs to be verified with actual error structure from digitalocean_service.
-    if (error.response?.status === 404) {
-        console.warn(`Droplet ${agentDroplet.do_droplet_id} not found on DigitalOcean. Assuming already deleted.`);
+    if (error instanceof DigitalOceanResourceNotFoundError) { // Updated check
+        console.warn(`Droplet ${agentDroplet.do_droplet_id} not found on DigitalOcean (caught DigitalOceanResourceNotFoundError). Assuming already deleted.`);
     } else {
-      // TODO: Convert to a custom service error
-      // Don't update DB status if DO deletion failed for other reasons, allow for retry.
+      // TODO: Convert to a custom service error for other DigitalOceanServiceError types?
+      console.error('Unhandled error during DO droplet deletion:', error);
       return { success: false, message: `DO API error: ${error.message || 'Unknown error'}` };
     }
   }
 
-  // 3. Update the status in the agent_droplets table
-  // type AgentDropletUpdate = Database['public']['Tables']['agent_droplets']['Update'];
   const updatePayload = {
-    status: 'deleted', // Or 'deprovisioned'
-    ip_address: null, // Clear IP address
+    status: 'deleted' as const, // Use const assertion for type safety with enum
+    ip_address: null,
     updated_at: new Date().toISOString(),
-    dtma_auth_token: null, // Also clear the auth token
+    dtma_auth_token: null,
     dtma_last_known_version: null,
     dtma_last_reported_status: null,
   };
 
   const { error: updateError } = await supabase
-    .from('agent_droplets') // Removed 'as any'
+    .from('agent_droplets')
     .update(updatePayload)
     .eq('id', agentDroplet.id);
 
@@ -445,8 +480,6 @@ export async function deprovisionAgentDroplet(
       `Failed to update agent droplet status to 'deleted' DB for agent ${agentId}, DO ID ${agentDroplet.do_droplet_id}:`,
       updateError
     );
-    // Even if DB update fails, DO droplet deletion was likely initiated.
-    // This state needs monitoring/reconciliation.
     return { success: false, message: `DB update failed after DO deletion: ${updateError.message}` };
   }
 

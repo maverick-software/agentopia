@@ -5,8 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { 
     Loader2, ArrowLeft, Save, Database, Wrench, 
-    Edit, Settings, PencilLine, ImagePlus, Power,
-    Info
+    Edit, Settings, PencilLine, ImagePlus, Power
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { AgentFormInstructions } from '@/components/agent-edit/AgentFormInstructions';
@@ -22,7 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -36,13 +35,6 @@ import {
     DialogClose
 } from "@/components/ui/dialog";
 
-// Import actual API functions
-import {
-    activateAgentToolEnvironment,
-    deactivateAgentToolEnvironment,
-    // getAgentToolEnvironmentStatus // Not actively used if status fetched with agent
-} from '@/lib/api/toolEnvironments'; // Assuming this path
-
 const AgentEditPage = () => {
     const { agentId } = useParams<{ agentId: string }>();
     const supabase = useSupabaseClient();
@@ -53,16 +45,16 @@ const AgentEditPage = () => {
         hasCredentials,
         workerStatus,
         allGuilds,
-        isActivating: discordIsActivating,
-        isDeactivating: discordIsDeactivating,
+        isActivating,
+        isDeactivating,
         isGeneratingInvite,
         isSavingToken,
         loading: discordLoading,
         error: discordError,
         updateConnectionField,
         saveDiscordBotToken,
-        activate: activateDiscord,
-        deactivate: deactivateDiscord,
+        activate,
+        deactivate,
         generateInviteLink,
     } = useAgentDiscordConnection_refactored(agentId);
 
@@ -78,12 +70,6 @@ const AgentEditPage = () => {
     const [showDatastoreModal, setShowDatastoreModal] = useState(false);
     const [showProfileImageModal, setShowProfileImageModal] = useState(false);
 
-    // State for Tool Environment
-    type ToolEnvStatus = 'inactive' | 'activating' | 'active' | 'deactivating' | 'error' | 'unknown';
-    const [toolEnvStatus, setToolEnvStatus] = useState<ToolEnvStatus>('unknown'); // Start with unknown until fetched
-    const [toolEnvMessage, setToolEnvMessage] = useState<string | null>(null);
-    const [dropletIp, setDropletIp] = useState<string | null>(null);
-
     const [personalityTemplates, setPersonalityTemplates] = useState<any[]>([
         { id: 'helpful', name: 'Helpful', description: 'Friendly and eager to assist' },
         { id: 'professional', name: 'Professional', description: 'Formal and business-oriented' },
@@ -93,8 +79,9 @@ const AgentEditPage = () => {
     useEffect(() => {
         if (!agentId || !user) {
             setLoading(false); 
-            if (agentData !== null) setAgentData(null);
-            setToolEnvStatus('inactive'); // Default if no agent/user
+            if (agentData !== null) {
+                 setAgentData(null);
+            }
             return; 
         }
 
@@ -103,14 +90,11 @@ const AgentEditPage = () => {
             setError(null);
             setAgentData(null); 
             setAvailableDatastores([]);
-            setToolEnvStatus('unknown'); // Reset while loading
-            setDropletIp(null);
-            setToolEnvMessage(null);
 
             try {
                 const { data: agent, error: agentError } = await supabase
                     .from('agents')
-                    .select(`*, agent_datastores(datastore_id), agent_droplets(status, ip_address)`)
+                    .select(`*, agent_datastores(datastore_id)`)
                     .eq('id', agentId)
                     .eq('user_id', user.id)
                     .single();
@@ -119,35 +103,6 @@ const AgentEditPage = () => {
                 if (!agent) throw new Error('Agent not found or access denied.');
 
                 setAgentData(agent);
-
-                const dropletInfo = (agent as any).agent_droplets?.[0];
-                if (dropletInfo) {
-                    switch (dropletInfo.status) {
-                        case 'active':
-                            setToolEnvStatus('active');
-                            setDropletIp(dropletInfo.ip_address);
-                            break;
-                        case 'creating':
-                        case 'pending_creation':
-                            setToolEnvStatus('activating');
-                            break;
-                        case 'deleting':
-                        case 'pending_deletion':
-                            setToolEnvStatus('deactivating');
-                            break;
-                        case 'error_creation':
-                        case 'error_deletion':
-                        case 'unresponsive':
-                            setToolEnvStatus('error');
-                            setToolEnvMessage(`Droplet is in '${dropletInfo.status}' state.`);
-                            break;
-                        default:
-                            setToolEnvStatus('inactive');
-                            break;
-                    }
-                } else {
-                    setToolEnvStatus('inactive');
-                }
 
                 const { data: stores, error: dsError } = await supabase
                     .from('datastores')
@@ -160,8 +115,6 @@ const AgentEditPage = () => {
                 console.error("[AgentEditPage] Error fetching data:", err);
                 setError(err.message);
                 setAgentData(null);
-                setToolEnvStatus('error');
-                setToolEnvMessage("Failed to load agent or tool environment data.");
             } finally {
                 setLoading(false);
             }
@@ -180,7 +133,7 @@ const AgentEditPage = () => {
         setAgentData(prev => (prev ? { ...prev, [name]: value } : { [name]: value } as Partial<Agent>));
     }, []);
     
-    const handleDiscordBotActiveSwitchChange = useCallback((checked: boolean, name: string = 'active') => {
+    const handleSwitchChange = useCallback((checked: boolean, name: string = 'active') => {
         setAgentData(prev => (prev ? { ...prev, [name]: checked } : { [name]: checked } as Partial<Agent>));
     }, []);
 
@@ -198,108 +151,49 @@ const AgentEditPage = () => {
     }, []);
 
     const handleSave = async () => {
-        if (!agentId || !user || !agentData) {
-            setError("Cannot save, agent data is not available.");
-            return;
-        }
-        setSaving(true);
-        setError(null);
-        try {
-            const updatePayload: Partial<Agent> = {
-                name: agentData.name || undefined,
-                description: agentData.description || undefined,
-                personality: agentData.personality || undefined,
-                active: agentData.active === null ? false : agentData.active,
-                system_instructions: agentData.system_instructions || undefined,
-                assistant_instructions: agentData.assistant_instructions || undefined,
-                avatar_url: agentData.avatar_url,
-            };
+      if (!agentId || !user || !agentData) {
+        setError("Cannot save, agent data is not available.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      try {
+          const updatePayload: Partial<Agent> = {
+              name: agentData.name || undefined,
+              description: agentData.description || undefined,
+              personality: agentData.personality || undefined,
+              active: agentData.active === null ? false : agentData.active,
+              system_instructions: agentData.system_instructions || undefined,
+              assistant_instructions: agentData.assistant_instructions || undefined,
+              avatar_url: agentData.avatar_url,
+          };
 
-            const { error: updateError } = await supabase
-                .from('agents')
-                .update(updatePayload)
-                .eq('id', agentId)
-                .eq('user_id', user.id);
+          const { error: updateError } = await supabase
+              .from('agents')
+              .update(updatePayload)
+              .eq('id', agentId)
+              .eq('user_id', user.id);
 
-            if (updateError) throw updateError;
+          if (updateError) throw updateError;
 
-            toast.success('Agent saved successfully!');
-        } catch (err: any) {
-            console.error("Save failed:", err);
-            setError(`Save failed: ${err.message}`);
-            toast.error(`Save failed: ${err.message}`);
-        } finally {
-            setSaving(false);
-        }
+          toast.success('Agent saved successfully!');
+      } catch (err: any) {
+          console.error("Save failed:", err);
+          setError(`Save failed: ${err.message}`);
+          toast.error(`Save failed: ${err.message}`);
+      } finally {
+          setSaving(false);
+      }
     };
 
-    const handleToolEnvironmentToggle = async (activate: boolean) => {
-        if (!agentId) {
-            toast.error("Agent ID is missing. Cannot manage tool environment.");
-            return;
-        }
-
-        setToolEnvMessage(null);
-        // const originalStatus = toolEnvStatus; // Keep for potential revert logic
-        // const originalIp = dropletIp;
-
-        if (activate) {
-            setToolEnvStatus('activating');
-            setDropletIp(null);
-            toast.promise(
-                activateAgentToolEnvironment(agentId), // Using imported function
-                {
-                    loading: 'Activating tool environment...',
-                    success: (result: any) => {
-                        // Assuming result.data contains { status: string, ip_address?: string }
-                        // The Edge function might return the current status from the DB or DO
-                        if (result.data?.status === 'active') {
-                            setToolEnvStatus('active');
-                            setDropletIp(result.data?.ip_address || null);
-                        } else {
-                            // If not immediately active, remain in 'activating' for polling or next status update
-                            setToolEnvStatus('activating'); 
-                        }
-                        setToolEnvMessage(result.message || 'Activation initiated.');
-                        return result.message || 'Activation initiated successfully!';
-                    },
-                    error: (err: any) => {
-                        setToolEnvStatus('error');
-                        setToolEnvMessage(err.message || 'Failed to activate tool environment.');
-                        return err.message || 'Failed to activate tool environment.';
-                    },
-                }
-            );
-        } else {
-            setToolEnvStatus('deactivating');
-            toast.promise(
-                deactivateAgentToolEnvironment(agentId), // Using imported function
-                {
-                    loading: 'Deactivating tool environment...',
-                    success: (result: any) => {
-                        setToolEnvStatus('inactive');
-                        setDropletIp(null);
-                        setToolEnvMessage(result.message || 'Deactivation initiated.');
-                        return result.message || 'Deactivation initiated successfully!';
-                    },
-                    error: (err: any) => {
-                        setToolEnvStatus('error');
-                        setToolEnvMessage(err.message || 'Failed to deactivate tool environment.');
-                        return err.message || 'Failed to deactivate tool environment.';
-                    },
-                }
-            );
-        }
-    };
-    
     const getStatusBadge = () => {
-        if (!agentData) return null;
-        
-        return agentData.active ? (
-            <Badge variant="default" className="ml-2 bg-green-500/20 text-green-500 hover:bg-green-500/20">Active</Badge>
-        ) : (
-            <Badge variant="secondary" className="ml-2">Inactive</Badge>
-        );
+      if (!agentData) return null;
+      
+      return agentData.active ? (
+        <Badge variant="default" className="ml-2 bg-green-500/20 text-green-500 hover:bg-green-500/20">Active</Badge>
+      ) : (
+        <Badge variant="secondary" className="ml-2">Inactive</Badge>
+      );
     };
 
     if (loading) {
@@ -326,7 +220,7 @@ const AgentEditPage = () => {
                     </Link>
                 </Button>
              </div>
-        );
+    );
     }
 
     return (
@@ -347,14 +241,20 @@ const AgentEditPage = () => {
                     className="w-full sm:w-auto"
                 >
                     {saving ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                        </>
                     ) : (
-                        <><Save className="mr-2 h-4 w-4" />Save Agent</>
+                        <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Save Agent
+                        </>
                     )}
                 </Button>
             </div>
 
-            {error && !toolEnvMessage && (
+            {error && (
                 <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -504,7 +404,7 @@ const AgentEditPage = () => {
                                 <Button 
                                     variant={agentData?.active ? "default" : "outline"}
                                     size="sm"
-                                    onClick={() => handleDiscordBotActiveSwitchChange(!agentData?.active, 'active')}
+                                    onClick={() => handleSwitchChange(!agentData?.active)}
                                     className={`${
                                         agentData?.active 
                                             ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
@@ -528,16 +428,16 @@ const AgentEditPage = () => {
                                 hasCredentials={hasCredentials}
                                 workerStatus={workerStatus || 'inactive'}
                                 allGuilds={allGuilds}
-                                isActivating={discordIsActivating} 
-                                isDeactivating={discordIsDeactivating}
+                                isActivating={isActivating}
+                                isDeactivating={isDeactivating}
                                 isGeneratingInvite={isGeneratingInvite}
                                 isSavingToken={isSavingToken}
                                 discordLoading={discordLoading}
                                 discordError={discordError}
                                 onConnectionChange={updateConnectionField}
                                 saveDiscordBotToken={saveDiscordBotToken}
-                                activate={activateDiscord} 
-                                deactivate={deactivateDiscord}
+                                activate={activate}
+                                deactivate={deactivate}
                                 generateInviteLink={generateInviteLink}
                             />
                         </CardContent>
@@ -545,70 +445,22 @@ const AgentEditPage = () => {
 
                     <Card>
                         <CardHeader className="pb-3">
-                            <CardTitle>Tools & Dedicated Environment</CardTitle>
-                            <CardDescription>Manage dedicated environment and tools for this agent.</CardDescription>
+                            <CardTitle>Tools</CardTitle>
+                            <CardDescription>Connect to external tools and services</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between p-2 rounded-md bg-muted/10 hover:bg-muted/20">
-                                <Label htmlFor="tool-env-switch" className="font-medium">
-                                    Dedicated Tool Environment
-                                </Label>
-                                <Switch
-                                    id="tool-env-switch"
-                                    checked={toolEnvStatus === 'active' || toolEnvStatus === 'activating'}
-                                    onCheckedChange={handleToolEnvironmentToggle}
-                                    disabled={toolEnvStatus === 'activating' || toolEnvStatus === 'deactivating'}
-                                />
+                        <CardContent>
+                            <div className="text-center py-6 text-muted-foreground">
+                                <Wrench className="h-10 w-10 mx-auto opacity-50 mb-2" />
+                                <p>No tools connected</p>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="mt-4"
+                                    onClick={() => toast("Tools integration coming soon!")}
+                                >
+                                    Add Tools
+                                </Button>
                             </div>
-                            
-                            {(toolEnvStatus === 'activating' || toolEnvStatus === 'deactivating') && (
-                                <Alert variant="default" className={`border-opacity-50 text-sm ${toolEnvStatus === 'activating' ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-400' : 'bg-orange-500/10 border-orange-500 text-orange-700 dark:text-orange-400'}`}>
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2 inline-block" />
-                                    <AlertDescription className="inline">
-                                        {toolEnvStatus === 'activating' ? 'Activating environment... Please wait.' : 'Deactivating environment...'}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                            {toolEnvStatus === 'active' && (
-                                <Alert variant="default" className="bg-green-500/10 border-green-500/50 text-green-700 dark:text-green-500 text-sm">
-                                    <Power className="h-4 w-4 mr-2 inline-block" />
-                                    <AlertDescription className="inline">
-                                        Environment Active. {dropletIp && `IP: ${dropletIp}`}
-                                        {toolEnvMessage && toolEnvMessage !== 'Activation initiated.' && toolEnvMessage !== 'Activated successfully!' && <span className="block text-xs opacity-80 pt-1">{toolEnvMessage}</span>}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                            {toolEnvStatus === 'inactive' && toolEnvMessage && toolEnvMessage !== 'Deactivation initiated.' && (
-                                <Alert variant="default" className="text-sm">
-                                    <Info className="h-4 w-4 mr-2 inline-block" />
-                                    <AlertDescription className="inline">{toolEnvMessage}</AlertDescription>
-                                </Alert>
-                            )}
-                            {toolEnvStatus === 'error' && toolEnvMessage && (
-                                <Alert variant="destructive" className="text-sm">
-                                    <AlertTitle>Error</AlertTitle>
-                                    <AlertDescription>{toolEnvMessage}</AlertDescription>
-                                </Alert>
-                            )}
-
-                            {toolEnvStatus === 'active' && (
-                                <div className="pt-4 mt-2 border-t border-border">
-                                    <p className="text-sm text-muted-foreground mb-3">Manage installed tools on the droplet:</p>
-                                    <div className="text-center py-4 text-muted-foreground bg-muted/20 rounded-md">
-                                        <Wrench className="h-8 w-8 mx-auto opacity-40 mb-2" />
-                                        <p className="text-xs">Tool management coming soon.</p>
-                                    </div>
-                                </div>
-                            )}
-                            {(toolEnvStatus === 'inactive' || toolEnvStatus === 'unknown') && !toolEnvMessage && (
-                                 <p className="text-sm text-muted-foreground text-center py-3">Activate the dedicated environment to manage and run agent-specific tools.</p>
-                            )}
-                             {toolEnvStatus === 'unknown' && (
-                                <Alert variant="default" className="text-sm">
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2 inline-block" />
-                                    <AlertDescription className="inline">Checking tool environment status...</AlertDescription>
-                                </Alert>
-                            )}
                         </CardContent>
                     </Card>
 
@@ -634,9 +486,15 @@ const AgentEditPage = () => {
                     className="w-full"
                 >
                     {saving ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                        </>
                     ) : (
-                        <><Save className="mr-2 h-4 w-4" />Save Agent</>
+                        <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Save Agent
+                        </>
                     )}
                 </Button>
             </div>
@@ -727,7 +585,7 @@ const AgentEditPage = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+            </div>
     );
 };
 

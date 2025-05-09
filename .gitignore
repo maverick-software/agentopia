@@ -64,3 +64,14 @@ dist-ssr
 
 # Log files
 ./logs/
+
+# Context documents to keep (most recent 5)
+!docs/context/ai_context_Thu_05-08-2025_21-43-44.md
+!docs/context/ai_context_2025-05-08_14-13-22.md
+!docs/context/ai_context_05062025_063223.md
+!docs/context/ai_context_2025-05-05_19-59-58.md
+!docs/context/ai_context_2025-05-05_16-12-13.md
+
+# Older context documents to ignore
+docs/context/ai_context_*.md
+docs/context/ai_context_2025-04-30.md
