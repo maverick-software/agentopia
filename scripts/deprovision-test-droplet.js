@@ -1,8 +1,11 @@
 // Deprovision Test Droplet Script
 // This script tests deprovisioning a DigitalOcean droplet for an agent
 
-require('dotenv').config(); // Load .env file
-const axios = require('axios');
+import dotenv from 'dotenv';
+import axios from 'axios';
+
+// Load environment variables
+dotenv.config();
 
 // Configuration (ideally from .env file)
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';

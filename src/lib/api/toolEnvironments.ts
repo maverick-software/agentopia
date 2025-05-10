@@ -64,6 +64,32 @@ export async function deactivateAgentToolEnvironment(agentId: string): Promise<T
 }
 
 /**
+ * Fetches the current status of the agent's tool environment directly from the database.
+ * @param agentId The ID of the agent to get the droplet status for
+ * @returns The agent droplet details or null if not found
+ */
+export async function fetchAgentDropletStatus(agentId: string): Promise<any> {
+  if (!agentId) throw new Error('Agent ID is required to fetch droplet status.');
+
+  try {
+    const { data, error } = await supabase
+      .from('agent_droplets')
+      .select('*')
+      .eq('agent_id', agentId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (error) throw error;
+    
+    return data; // Will be null if no droplet found
+  } catch (err) {
+    console.error('Error fetching agent droplet status:', err);
+    throw err;
+  }
+}
+
+/**
  * Fetches the current status of the agent's tool environment.
  * (Placeholder - this might call a different endpoint or be part of agent data loading)
  */

@@ -1,8 +1,14 @@
 // Deploy Test Droplet Script
 // This script tests deploying a DigitalOcean droplet for agent tools
 
-require('dotenv').config(); // Load .env file
-const axios = require('axios');
+import dotenv from 'dotenv';
+import axios from 'axios';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import path from 'path';
+
+// Load environment variables
+dotenv.config();
 
 // Configuration (ideally from .env file)
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';

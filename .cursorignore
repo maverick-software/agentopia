@@ -1,0 +1,6 @@
+# Ignore all environment files
+!.env
+!**/.env
+
+# Dependencies
+node_modules/

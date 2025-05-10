@@ -5,8 +5,8 @@ logs.txt
 services/**/.env
 
 # Ignore all environment files
-.env
-**/.env
+# .env
+# **/.env
 
 # Dependencies
 node_modules/

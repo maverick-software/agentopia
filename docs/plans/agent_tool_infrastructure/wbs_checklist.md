@@ -1,35 +1,36 @@
 # WBS Checklist: Agent Tool Infrastructure
 **Date Created:** 05/06/2025
 **Plan Name:** Agent Tool Infrastructure
-**Goal:** To design and implement a system where Agentopia agents can have dedicated DigitalOcean Droplets provisioned to host their specific tools (including MCP Servers and other backend processes), allowing for modular tool management, installation, activation, and secure operation.
+**Goal:** To design and implement a system where Agentopia user accounts can have a shared DigitalOcean Droplet provisioned to host multiple tool instances (including MCP Servers and other backend processes). This shared droplet will allow multiple agents belonging to the same user account to connect to specific tool instances, enabling modular tool management, installation, activation, and secure operation.
 
 ## Phase 1: Foundational Design & Provider Setup
 
 ### 1.1 Core Architecture & Strategy
 - [x] 1.1.1 Define: Overall architecture for agent-specific tool environments on DigitalOcean.
-    - **Note 1.1.1.1 (Architectural Outline):**
-        - **Goal:** Create isolated, dynamically provisioned environments on DigitalOcean Droplets for each agent that enables the "Tool Environment" feature.
+    - **Note 1.1.1.1 (Architectural Outline - REVISED for Account-Level Shared Droplets):**
+        - **Goal:** Create a shared, dynamically provisioned environment on a DigitalOcean Droplet for each user account that enables the "Tool Environment" feature. This droplet will host multiple tool instances, accessible by agents belonging to that account.
         - **Components & Responsibilities:**
             - **1. Agentopia Frontend:**
-                -   User toggles "Tool Environment" on/off for an agent.
-                -   User manages the agent's "Toolbelt" (adding/removing/configuring tools from a catalog).
+                -   User manages account-level "Tool Environment" (activation/deactivation).
+                -   User manages the "Toolbelt" (adding/removing/configuring tool *blueprints* from a catalog that can be instantiated on the account droplet).
+                -   User/Agent links specific agents to active tool *instances* running on the account droplet.
             - **2. Agentopia Backend:**
-                -   Manages core DB tables (`agents`, `tool_catalog`, `agent_droplets`, `agent_droplet_tools`).
+                -   Manages core DB tables (`users`, `agents`, `tool_catalog`, `account_tool_environments`, `account_tool_instances`, `agent_tool_instance_links`).
                 -   Handles frontend requests.
-                -   Contains **Provisioning Service:** Communicates with DigitalOcean API (via selected SDK/library) to create/delete Droplets based on `agents.tool_environment_active` status. Updates `agent_droplets` table.
-                -   Contains **Tool Management Service:** Communicates with the agent running on the droplet (see below) to install/uninstall/start/stop/configure tools. Updates `agent_droplet_tools`. Manages secure secret fetching (from Vault) and delivery for tools.
-                -   Contains **Agent Orchestration Logic:** (e.g., within `chat` service) Checks agent status, discovers active tool endpoints from `agent_droplet_tools`, interacts with tools (e.g., MCP calls) on the specific Droplet.
-            - **3. Agent-Specific Droplet (DigitalOcean):**
+                -   Contains **Provisioning Service:** Communicates with DigitalOcean API to create/delete account-level Droplets based on `account_tool_environments` status. Updates `account_tool_environments` table.
+                -   Contains **Tool Instance Management Service:** Communicates with the Droplet Tool Management Agent (DTMA) on the account droplet to manage the lifecycle (start/stop/configure) of individual tool *instances* (e.g., MCP server processes). Updates `account_tool_instances` table. Manages secure secret fetching (from Vault) and delivery for tool instances.
+                -   Contains **Agent Orchestration Logic:** (e.g., within `chat` service) Checks agent status, discovers active tool instance endpoints (e.g., specific MCP server host:port) from `account_tool_instances` (via `agent_tool_instance_links`), interacts with tools on the account droplet.
+            - **3. Account-Specific Shared Droplet (DigitalOcean):**
                 -   Standardized base image (e.g., Ubuntu + Docker).
-                -   Runs a **Droplet Tool Management Agent** (service/script): Listens for commands from Agentopia Backend Tool Management Service (via secure API/SSH/etc.), executes tool lifecycle actions (docker run/stop, script execution), fetches secrets securely, reports status.
-                -   Runs **Tool Instances** (e.g., Reasoning MCP Server in Docker): Configured by the Droplet Tool Management Agent, receives secrets, listens for operational requests (e.g., MCP calls from Agentopia Backend).
-            - **4. Tool Catalog (`tool_catalog` table):** Defines available tools, their packaging (Docker image/script), versions, default configs.
-        - **Data/Control Flow Summary:**
-            -   User Action (UI) -> Agentopia Backend API -> DB Update + Provisioning/Tool Mgmt Service Action.
-            -   Agentopia Tool Mgmt Service Command -> Droplet Tool Mgmt Agent.
-            -   Droplet Tool Mgmt Agent -> Tool Lifecycle Control (Docker/Script).
-            -   Tool Instance Status -> Droplet Tool Mgmt Agent -> Agentopia Backend (DB Update).
-            -   Agent Chat -> Agentopia Orchestration -> Discover Tool Endpoint (DB Query) -> Agentopia Backend MCP Call -> Tool Instance on Droplet -> Response -> Agentopia Orchestration -> User.
+                -   Runs a **Droplet Tool Management Agent (DTMA)** service: Listens for commands from Agentopia Backend Tool Instance Management Service, executes tool instance lifecycle actions (e.g., `docker run` with specific ports/configs for each MCP server process), manages port allocation for instances, fetches secrets securely for instances, reports status of the droplet and all managed tool instances.
+                -   Runs **Tool Instances** (e.g., multiple Reasoning MCP Server processes, each in its own Docker container on a unique port): Configured by the DTMA, receives secrets, listens for operational requests (e.g., MCP calls from Agentopia Backend via an agent).
+            - **4. Tool Catalog (`tool_catalog` table):** Defines available tool *blueprints*, their packaging (Docker image/script), versions, default configs, required secrets.
+        - **Data/Control Flow Summary (for an MCP Server instance):**
+            -   User Action (UI) -> Agentopia Backend API -> DB Update + Provisioning/Tool Instance Mgmt Service Action.
+            -   Agentopia Tool Instance Mgmt Service Command (e.g., "start MCP server for agent X on account Y's droplet") -> DTMA.
+            -   DTMA -> Allocates port, starts MCP server process (Docker container) with specific config -> Updates `account_tool_instances` via Agentopia backend.
+            -   Agent links to this specific instance (via `agent_tool_instance_links`).
+            -   Agent Chat -> Agentopia Orchestration -> Discover specific MCP instance host:port (DB Query) -> Agentopia Backend MCP Call -> Specific MCP Server process on Account Droplet -> Response -> Agentopia Orchestration -> User.
     - **Note:** Document data flow, Agentopia backend responsibilities, Droplet responsibilities, and user interaction points.
 - [x] 1.1.2 Research & Select: DigitalOcean API interaction library/SDK for Node.js (e.g., `digitalocean-js`, official REST API with `axios`).
     - **Note 1.1.2.1 (Selected Library):** Selected `dots-wrapper` (npm package). It is actively maintained (v3.11.16, published 2 months ago as of 05/06/2025), TypeScript-first, and provides comprehensive API coverage.
@@ -75,6 +76,11 @@
     - **Note 1.1.4.4 (Alternatives Considered & Rejected for now):**
         - **SSH-based commands:** Less structured, harder to manage state and complex data exchange.
         - **Message Queue:** Adds infrastructural complexity (message broker) for the primary command/control flow. Could be considered for future asynchronous eventing *from* droplets if needed, but not for the core management API.
+    - **Note 1.1.4.5 (API Communication Direction - Implementation Decision):**
+        - **Direct Supabase Edge Functions Access:** DTMA agents on droplets will communicate directly with Supabase Edge Functions at the URL `https://{project-id}.supabase.co/functions/v1`.
+        - This bypasses the Netlify frontend completely for the agent-to-backend communication path.
+        - Benefits: Lower latency, more reliable (eliminates a network hop), better security (direct backend communication).
+        - Implementation: Set `AGENTOPIA_API_BASE_URL` in the DTMA config to point directly to the Supabase Edge Functions URL, not the Netlify frontend URL.
 - [x] 1.1.5 Setup: DigitalOcean account access, API token generation, and project setup within DigitalOcean if required. Store API token securely (e.g., Agentopia backend environment variable or Vault).
     - **Note 1.1.5.1 (Action Required by Team):** This task requires manual setup within the DigitalOcean account and Supabase Vault. The AI cannot perform these actions directly.
     - **Note 1.1.5.2 (Steps for Team):**
@@ -98,14 +104,14 @@
     - **Note 1.1.5.3 (Agentopia Backend Integration):** The Agentopia backend's "Provisioning Service" will need to be configured to securely fetch this `DIGITALOCEAN_API_TOKEN` from Supabase Vault when making calls to the DigitalOcean API via the `dots-wrapper` library.
 
 ### 1.2 Database Design (Supabase)
-- [x] 1.2.1 Design: Schema for `agent_droplets` table.
-    - **Fields:** `id`, `agent_id` (FK to `agents`), `droplet_id` (DigitalOcean ID), `ip_address`, `status` (e.g., pending, active, error, deleted), `region`, `size`, `created_at`, `updated_at`.
-    - **Note 1.2.1.1 (Detailed Schema Design):**
-        - **Table Name:** `agent_droplets`
-        - **Purpose:** Stores information about DigitalOcean Droplets provisioned for an agent's tool environment.
-        - **Enum Type for Status:**
+- [x] 1.2.1 Design: Schema for `account_tool_environments` table.
+    - **Fields:** `id`, `user_id` (FK to `auth.users`), `do_droplet_id` (DigitalOcean ID), `ip_address`, `status` (e.g., pending, active, error, deleted), `region`, `size`, `created_at`, `updated_at`.
+    - **Note 1.2.1.1 (Detailed Schema Design - REVISED):**
+        - **Table Name:** `account_tool_environments`
+        - **Purpose:** Stores information about DigitalOcean Droplets provisioned for a user account's shared tool environment.
+        - **Enum Type for Status (can reuse `droplet_status_enum` if appropriate, or define a new one if states differ significantly for account-level):**
           ```sql
-          CREATE TYPE droplet_status_enum AS ENUM (
+          CREATE TYPE account_environment_status_enum AS ENUM (
               'pending_creation',
               'creating',
               'active',
@@ -119,10 +125,10 @@
           ```
         - **Columns:**
             - `id`: `UUID`, PK, `default gen_random_uuid()`
-            - `agent_id`: `UUID`, FK to `public.agents(id)`, `NOT NULL`, `UNIQUE`
+            - `user_id`: `UUID`, FK to `auth.users(id)`, `NOT NULL`, `UNIQUE` (One tool environment droplet per user)
             - `do_droplet_id`: `BIGINT`, `UNIQUE` (once populated, should be `NOT NULL` after creation confirmed)
             - `ip_address`: `INET`, `NULLABLE`
-            - `status`: `droplet_status_enum`, `NOT NULL`, `default 'pending_creation'`
+            - `status`: `account_environment_status_enum`, `NOT NULL`, `default 'pending_creation'`
             - `region_slug`: `TEXT`, `NOT NULL` (e.g., `nyc3`)
             - `size_slug`: `TEXT`, `NOT NULL` (e.g., `s-1vcpu-1gb`)
             - `image_slug`: `TEXT`, `NOT NULL` (e.g., `ubuntu-22-04-x64-docker`)
@@ -132,65 +138,77 @@
             - `created_at`: `TIMESTAMPTZ`, `NOT NULL`, `default now()`
             - `updated_at`: `TIMESTAMPTZ`, `NOT NULL`, `default now()` (auto-update via trigger recommended)
         - **Indexes:**
-            - On `agent_id`
+            - On `user_id`
             - On `do_droplet_id`
             - On `status`
-- [x] 1.2.2 Design: Schema for `agent_droplet_tools` table (tools installed on specific droplets).
-    - **Fields:** `id`, `agent_droplet_id` (FK to `agent_droplets`), `tool_catalog_id` (FK to a new `tool_catalog` table, see 1.2.4), `status` (e.g., installing, active, error, pending_config), `version`, `config_details` (JSONB, for tool-specific settings like port, internal paths), `created_at`, `updated_at`.
-    - **Note 1.2.2.1 (Detailed Schema Design):**
-        - **Table Name:** `agent_droplet_tools`
-        - **Purpose:** Manages lifecycle and configuration of tools installed on an agent's DigitalOcean Droplet.
+- [ ] 1.2.2 Design: Schema for `account_tool_instances` table (tool instances running on account droplets).
+    - **Fields:** `id`, `account_tool_environment_id` (FK to `account_tool_environments`), `tool_catalog_id` (FK to `tool_catalog`), `status` (e.g., starting, running, stopped, error), `port` (network port on the droplet), `config_details` (JSONB), `created_at`, `updated_at`.
+    - **Note 1.2.2.1 (Detailed Schema Design - NEW):**
+        - **Table Name:** `account_tool_instances`
+        - **Purpose:** Manages lifecycle and runtime configuration of individual tool instances (e.g., MCP server processes) running on an account's shared DigitalOcean Droplet.
         - **Enum Type for Status:**
           ```sql
-          CREATE TYPE tool_installation_status_enum AS ENUM (
-              'pending_install',
-              'installing',
-              'active',
-              'error_install',
-              'pending_uninstall',
-              'uninstalling',
-              'uninstalled',
-              'error_uninstall',
-              'pending_config',
-              'stopped',
+          CREATE TYPE tool_instance_status_enum AS ENUM (
+              'pending_start',
               'starting',
+              'running',
               'stopping',
+              'stopped',
               'error_runtime',
-              'disabled'
+              'pending_removal',
+              'removed'
           );
           ```
         - **Columns:**
             - `id`: `UUID`, PK, `default gen_random_uuid()`
-            - `agent_droplet_id`: `UUID`, FK to `public.agent_droplets(id)`, `NOT NULL`
+            - `account_tool_environment_id`: `UUID`, FK to `public.account_tool_environments(id)`, `NOT NULL`
             - `tool_catalog_id`: `UUID`, FK to `public.tool_catalog(id)`, `NOT NULL`
-            - `version_to_install`: `TEXT`, `NOT NULL` (e.g., "1.0.2", "latest")
-            - `actual_installed_version`: `TEXT`, `NULLABLE` (Reported by Droplet Agent)
-            - `status`: `tool_installation_status_enum`, `NOT NULL`, `default 'pending_install'`
-            - `config_values`: `JSONB`, `NULLABLE`, `default '{}'` (Resolved config for this instance)
-            - `runtime_details`: `JSONB`, `NULLABLE`, `default '{}'` (Info from Droplet Agent, e.g., port, container ID)
+            - `instance_name`: `TEXT`, `NULLABLE` (User-defined friendly name for this instance, e.g., "My Main Reasoning Server")
+            - `version_to_run`: `TEXT`, `NOT NULL` (e.g., "1.0.2", "latest")
+            - `actual_running_version`: `TEXT`, `NULLABLE` (Reported by DTMA)
+            - `status`: `tool_instance_status_enum`, `NOT NULL`, `default 'pending_start'`
+            - `config_values_override`: `JSONB`, `NULLABLE`, `default '{}'` (Specific config overrides for this instance beyond catalog defaults)
+            - `runtime_details`: `JSONB`, `NULLABLE`, `default '{}'` (Info from DTMA, e.g., assigned port, container ID, specific endpoints)
             - `error_message`: `TEXT`, `NULLABLE` (For error states)
-            - `enabled`: `BOOLEAN`, `NOT NULL`, `default true` (Administratively enabled/disabled)
             - `created_at`: `TIMESTAMPTZ`, `NOT NULL`, `default now()`
             - `updated_at`: `TIMESTAMPTZ`, `NOT NULL`, `default now()` (auto-update via trigger recommended)
         - **Indexes:**
-            - On `agent_droplet_id`
+            - On `account_tool_environment_id`
             - On `tool_catalog_id`
             - On `status`
+- [ ] 1.2.2A Design: Schema for `agent_tool_instance_links` table (linking agents to specific tool instances).
+    - **Fields:** `id`, `agent_id` (FK to `agents`), `account_tool_instance_id` (FK to `account_tool_instances`), `is_active_link`, `created_at`.
+    - **Note 1.2.2A.1 (Detailed Schema Design - NEW):**
+        - **Table Name:** `agent_tool_instance_links`
+        - **Purpose:** Connects an agent to a specific running tool instance on an account's shared droplet. An agent might be linked to multiple tool instances.
+        - **Columns:**
+            - `id`: `UUID`, PK, `default gen_random_uuid()`
+            - `agent_id`: `UUID`, FK to `public.agents(id)`, `NOT NULL`
+            - `account_tool_instance_id`: `UUID`, FK to `public.account_tool_instances(id)`, `NOT NULL`
+            - `link_activated_at`: `TIMESTAMPTZ`, `NULLABLE` (When this specific link became active for the agent)
+            - `link_deactivated_at`: `TIMESTAMPTZ`, `NULLABLE` (If the link is made inactive)
+            - `created_at`: `TIMESTAMPTZ`, `NOT NULL`, `default now()`
+            - `updated_at`: `TIMESTAMPTZ`, `NOT NULL`, `default now()`
+        - **Constraints:**
+            - `UNIQUE(agent_id, account_tool_instance_id)` (An agent can only be linked to a specific instance once)
+        - **Indexes:**
+            - On `agent_id`
+            - On `account_tool_instance_id`
 - [x] 1.2.3 Design: Secrets management strategy for third-party tool API keys (e.g., OpenAI API key for the Reasoning MCP Server).
-    - **Note:** Leverage Supabase Vault. Design how secrets in Vault will be associated with specific `agent_droplet_tools` entries or `agent_droplets`. How does the tool on the droplet securely access its key?
+    - **Note:** Leverage Supabase Vault. Design how secrets in Vault will be associated with specific `account_tool_instances` entries or `account_tool_environments`. How does the tool on the droplet securely access its key?
     - **Note 1.2.3.1 (Core Principles):**
         - All sensitive third-party API keys are stored exclusively in Supabase Vault.
-        - Secrets are never stored in plain text in database tables like `agent_droplet_tools` or `tool_catalog`.
+        - Secrets are never stored in plain text in database tables like `account_tool_instances` or `tool_catalog`.
         - The principle of least privilege should apply to accessing secrets.
     - **Note 1.2.3.2 (Association of Secrets with Tools):**
         - **1. Definition in `tool_catalog`:** The `tool_catalog` entry for each tool will define a schema of *expected secret keys* that the tool requires to function (e.g., `[{"name": "OPENAI_API_KEY", "description": "OpenAI API Key for LLM calls", "env_var_name": "OPENAI_API_KEY"}]`). This could be part of `default_config_template` or a dedicated field like `required_secrets_schema`.
-        - **2. Mapping during Tool Configuration:** When a user adds/configures a tool for their agent (creating/updating an `agent_droplet_tools` entry), the Agentopia backend will facilitate mapping these required secret keys to specific secrets stored in Supabase Vault. The `agent_droplet_tools.config_values` might store non-sensitive references or placeholders, or the Agentopia backend maintains this mapping internally/derives it based on user setup for that tool instance.
+        - **2. Mapping during Tool *Instance* Configuration:** When a user configures/starts an *instance* of a tool for their account (creating/updating an `account_tool_instances` entry), the Agentopia backend will facilitate mapping these required secret keys to specific secrets stored in Supabase Vault. The `account_tool_instances.config_values_override` might store non-sensitive references or placeholders, or the Agentopia backend maintains this mapping internally/derives it based on user setup for that tool instance.
     - **Note 1.2.3.3 (Secure Retrieval by Tool on Droplet - Recommended Flow):**
         - **Runtime Retrieval via Droplet Tool Management Agent:** This is the preferred method.
         - **Flow:**
-            - a. The Droplet Tool Management Agent (DTMA), before starting a specific tool instance (e.g., a Docker container), identifies the secrets required for that tool based on its configuration (derived from `tool_catalog` and `agent_droplet_tools`).
-            - b. The DTMA makes a secure, authenticated API call (HTTPS) to a dedicated endpoint on the Agentopia backend (e.g., `/api/v1/agent-tool-secrets/{agent_droplet_tool_id}`). The DTMA authenticates using its unique token (as per 1.1.4 design).
-            - c. The Agentopia backend verifies the DTMA's identity and its authorization to fetch secrets for the specified `agent_droplet_tool_id`.
+            - a. The Droplet Tool Management Agent (DTMA), before starting a specific tool instance (e.g., a Docker container), identifies the secrets required for that tool based on its configuration (derived from `tool_catalog` and `account_tool_instances`).
+            - b. The DTMA makes a secure, authenticated API call (HTTPS) to a dedicated endpoint on the Agentopia backend (e.g., `/api/v1/account-tool-secrets/{account_tool_instance_id}`). The DTMA authenticates using its unique token (as per 1.1.4 design, associated with the `account_tool_environment`).
+            - c. The Agentopia backend verifies the DTMA's identity and its authorization to fetch secrets for the specified `account_tool_instance_id`.
             - d. The Agentopia backend retrieves the actual secret values from Supabase Vault based on the mapping established during tool configuration.
             - e.  The Agentopia backend transmits the secret values securely (over HTTPS) back to the DTMA on the droplet.
             - f. The DTMA receives the secret values and injects them directly into the tool's runtime environment (e.g., as environment variables when executing `docker run -e SECRET_NAME=secret_value ...`). Secrets should be held in memory and not written to disk on the droplet by the DTMA if avoidable.
@@ -243,9 +261,10 @@
             - On `categories` (GIN index)
             - On `status`
 - [x] 1.2.5 Implement: Initial database migrations for the new tables.
-    - **Note 1.2.5.1 (Migration Script Created):** The SQL migration script `supabase/migrations/20250506000000_create_tool_infrastructure_tables.sql` has been created. It includes definitions for:
-        - ENUM types: `droplet_status_enum`, `tool_installation_status_enum`, `tool_packaging_type_enum`, `catalog_tool_status_enum`.
-        - Tables: `agent_droplets`, `tool_catalog`, `agent_droplet_tools` with specified columns, primary keys, foreign keys (with `ON DELETE CASCADE`/`RESTRICT` as appropriate), defaults, and indexes.
+    - **Note 1.2.5.1 (Migration Script Created - NEEDS REVISION):** The SQL migration script `supabase/migrations/20250506000000_create_tool_infrastructure_tables.sql` was previously created for the per-agent model. It needs to be **revised or replaced** to include definitions for:
+        - ENUM types: `account_environment_status_enum`, `tool_instance_status_enum` (and confirm if `tool_packaging_type_enum`, `catalog_tool_status_enum` are still accurate).
+        - Tables: `account_tool_environments`, `account_tool_instances`, `agent_tool_instance_links`, and `tool_catalog` (review `tool_catalog` for any changes needed to support the instance model).
+        - Ensure all columns, primary keys, foreign keys (with appropriate `ON DELETE` behavior), defaults, and indexes are correctly defined for the new schema.
         - A common function `trigger_set_timestamp()` and associated triggers on each table to auto-update `updated_at` columns.
     - **Note 1.2.5.2 (Next Steps for Team):**
         - Review the generated migration script for correctness and completeness.
@@ -287,7 +306,7 @@
     - **Note 1.3.2.4 (Tool-Specific Inbound Rules - Dynamically Managed by Agentopia Backend):**
         - For tools (e.g., MCP Servers) that require direct inbound connections from the Agentopia backend:
             - When such a tool is activated on a droplet, the Agentopia backend (e.g., Tool Management Service) will use the DigitalOcean API (`dots-wrapper`) to add a rule to the droplet's effective firewall configuration.
-            - **Port:** Specific to the tool (defined in `tool_catalog` or discovered from `agent_droplet_tools.runtime_details`).
+            - **Port:** Specific to the tool (defined in `tool_catalog` or discovered from `account_tool_instances.runtime_details`).
             - **Source:** Restricted to known Agentopia backend static IP address(es)/ranges.
             - When the tool is deactivated/uninstalled, the Agentopia backend will remove this firewall rule.
     - **Note 1.3.2.5 (Implementation Detail):**
@@ -306,120 +325,88 @@
 
 ## Phase 2: Droplet Provisioning & Management Service (Agentopia Backend)
 
-### 2.1 Backend: DigitalOcean Provisioning & Management Service
+### 2.1 Backend: DigitalOcean Provisioning & Management Service for Account Environments
 - [x] 2.1.1 Implement: DigitalOcean API Wrapper Service (`digitalocean_service`).
     - **Note:** Create client, implement functions for create, get, delete droplets, list droplets by tag. Base path: `src/services/digitalocean_service/`.
     - **Files:** `client.ts`, `droplets.ts`, `types.ts`, `index.ts` (and potentially `firewalls.ts`, `volumes.ts` later).
     - **Status:** [COMPLETED]
 - [x] 2.1.2 Implement: Error handling and retry logic within `digitalocean_service` (e.g., using `exponential-backoff`).
-    - **Status:** [IN PROGRESS] -> [COMPLETED] - Basic structure implemented, needs real-world error pattern verification.
-- [x] 2.1.3 Implement: Agent Environment Orchestration Service (`agent_environment_service`).
-    - **Note:** Handles logic for `ensureToolEnvironmentReady` (checks DB, provisions if needed via `digitalocean_service`), `getAgentDropletDetails`, `provisionAgentDroplet`, `deprovisionAgentDroplet`.
-    - **Files:** `manager.ts`, `types.ts`, `index.ts`. Base path: `src/services/agent_environment_service/`.
-    - **Status:** [COMPLETED]
-    - **Note 2.1.3.1 (Caveat):** Implemented using temporary `any` casts for Supabase interactions due to outdated `database.types.ts`. Requires `database.types.ts` to be regenerated and casts removed. Affected by linter issues with `digitalocean_service` import path in current user's `manager.ts`.
-- [x] 2.1.4 Implement: Database interaction logic within `agent_environment_service` for `agent_droplets` table (CRUD operations, status updates).
-    - **Status:** [COMPLETED] (Implemented as part of 2.1.3)
-    - **Note 2.1.4.1 (Caveat):** Subject to the same caveats as 2.1.3 regarding outdated `database.types.ts` and temporary `any` casts.
-- [x] 2.1.5 Implement: Heartbeat mechanism from Droplet Tool Management Agent (DTMA) to Agentopia backend (updating `agent_droplets.last_heartbeat_at` and `status`).
-    - **Status:** [COMPLETED] - Supabase Edge Function `supabase/functions/heartbeat/index.ts` created. Requires user review, env var setup, CORS, deployment, and testing.
-    - **Note 2.1.5.1:** Assumes `database.types.ts` will be made available in `supabase/functions/_shared/` for Edge Function use.
+    - **Status:** [COMPLETED] - Basic structure implemented, needs real-world error pattern verification.
+- [ ] 2.1.3 Implement: Account Environment Orchestration Service (`account_environment_service`).
+    - **Note:** Handles logic for `ensureAccountToolEnvironmentReady` (checks DB, provisions if needed via `digitalocean_service` for a user account), `getAccountEnvironmentDetails`, `provisionAccountEnvironment`, `deprovisionAccountEnvironment`. This service manages the lifecycle of the shared droplet for a user account.
+    - **Files:** `manager.ts`, `types.ts`, `index.ts`. Base path: `src/services/account_environment_service/` (rename from `agent_environment_service`).
+    - **Status:** [NEEDS REFACTORING from agent_environment_service]
+    - **Note 2.1.3.1 (Refactoring Scope):** Adapt existing `agent_environment_service` to `account_environment_service`. Change function signatures and logic to operate on `user_id` and `account_tool_environments` table instead of `agent_id` and `agent_droplets`.
+- [x] 2.1.4 Implement: Database interaction logic within `account_environment_service` for `account_tool_environments` table (CRUD operations, status updates).
+    - **Status:** [NEEDS REFACTORING from agent_environment_service] (Logic to be adapted as part of 2.1.3 refactoring)
+    - **Note 2.1.4.1 (Caveat):** Subject to the same caveats as 2.1.3 regarding outdated `database.types.ts` and temporary `any` casts if not yet resolved.
+- [x] 2.1.5 Implement: Heartbeat mechanism from Droplet Tool Management Agent (DTMA) to Agentopia backend (updating `account_tool_environments.last_heartbeat_at` and `status`).
+    - **Status:** [COMPLETED] - Supabase Edge Function `supabase/functions/heartbeat/index.ts` created. Payload needs to be updated to include `account_tool_environment_id` instead of `agent_droplet_id`, and DTMA needs to report status of multiple tool instances.
+    - **Note 2.1.5.1:** Assumes `database.types.ts` will be made available in `supabase/functions/_shared/` for Edge Function use. DTMA will send `account_tool_environment_id` (obtained from its config) and a list of statuses for managed tool instances.
 - [x] 2.1.6 Implement: Secure endpoint on Agentopia backend for DTMA to call for fetching tool secrets from Vault.
     - **Status:** [COMPLETED] - Supabase Edge Function `supabase/functions/fetch-tool-secrets/index.ts` created.
-    - **Note 2.1.6.1 (Action Required):** Requires refinement of secret mapping logic (how `tool_catalog.required_secrets_schema` or `agent_droplet_tools.config_values` maps required secret names to specific Vault IDs for an instance).
+    - **Note 2.1.6.1 (Action Required):** Endpoint needs to expect `account_tool_instance_id` to fetch secrets for a specific tool instance. Logic for mapping `tool_catalog.required_secrets_schema` or `account_tool_instances.config_values_override` to Vault IDs needs to ensure it works per instance.
     - **Note 2.1.6.2:** Requires user review, env var setup, CORS, deployment, testing, and assumes `database.types.ts` availability in `_shared`.
 
 ### 2.2 Droplet Lifecycle Management
-- [ ] 2.2.1 Implement: Logic to trigger Droplet provisioning when a new "Tool Environment" is requested for an agent.
-    - **Note:** This includes selecting Droplet image (e.g., base OS, Docker pre-installed), region, size.
-    - **Note:** Update `agent_droplets` table with Droplet details and status.
-    - [x] 2.2.1.1 Design & Implement: Supabase Edge Function (e.g., manage-agent-tool-environment) for frontend to call.
-        - **Status:** [PARTIALLY COMPLETE]
-        - **Note:** Edge function `manage-agent-tool-environment/index.ts` created (05/08/2025).
-        - [x] 2.2.1.1.1 Define: API contract (e.g., POST /api/v1/agents/{agentId}/tool-environment).
-            - **Status:** [COMPLETE] (Defined as POST /api/v1/manage-agent-tool-environment/{agentId})
-        - [x] 2.2.1.1.2 Implement: User authentication & agent ownership authorization in Edge Function.
-            - **Status:** [COMPLETE] (Implemented 05/08/2025)
-        - [ ] 2.2.1.1.3 Implement: Internal authenticated call from Edge Function to Node.js backend service that invokes ensureToolEnvironmentReady.
-            - **Note:** Helper `callInternalNodeService` sketched in Edge Function.
-    - [ ] 2.2.1.2 Implement: Internal Node.js backend endpoint (e.g., POST /internal/agents/{agentId}/ensure-tool-environment) called by Edge Function, which in turn calls `agent_environment_service.ensureToolEnvironmentReady`.
-    - [x] 2.2.1.3 Implement: Frontend UI on Agent Edit Page - "Activate Tool Environment" toggle.
-        - **Status:** [PARTIALLY COMPLETE]
-        - **Note:** UI (Switch, state, handler, status display) added to `src/pages/agents/[agentId]/edit.tsx` (05/08/2025).
-        - [ ] 2.2.1.3.1 Refine: State management for toggle, status display (including fetching initial status from `agent_droplets`).
-            - **Note:** Initial status fetch from `agent_droplets` added to `useEffect` (05/08/2025).
-        - [x] 2.2.1.3.2 Implement: Frontend API client function (e.g., in `src/lib/api/toolEnvironments.ts`) to call the Edge Function.
-            - **Status:** [COMPLETE] (Created `src/lib/api/toolEnvironments.ts` and integrated 05/08/2025)
-        - [ ] 2.2.1.3.3 Refine: UI logic for toggle interaction, loading states, and comprehensive feedback.
-- [ ] 2.2.2 Implement: Agent Droplet bootstrap/setup script.
-- [ ] 2.2.3 Implement: Logic to de-provision Droplets (e.g., when "Tool Environment" is deactivated or agent is deleted).
-    - **Note:** Ensure tools are gracefully stopped if possible. Update `agent_droplets` table.
-    - [x] 2.2.3.1 Design & Implement: Supabase Edge Function endpoint for de-provisioning (e.g., DELETE /api/v1/agents/{agentId}/tool-environment within `manage-agent-tool-environment` function).
-        - **Status:** [PARTIALLY COMPLETE]
-        - **Note:** Covered by `manage-agent-tool-environment/index.ts` (handling DELETE) created (05/08/2025).
-        - [x] 2.2.3.1.1 Define: API contract.
-            - **Status:** [COMPLETE] (Defined as DELETE /api/v1/manage-agent-tool-environment/{agentId})
-        - [x] 2.2.3.1.2 Implement: User authentication & agent ownership authorization in Edge Function.
-            - **Status:** [COMPLETE] (Covered by 2.2.1.1.2)
-        - [ ] 2.2.3.1.3 Implement: Internal authenticated call from Edge Function to Node.js backend service that invokes deprovisionAgentDroplet.
-            - **Note:** Helper `callInternalNodeService` (for DELETE) sketched in Edge Function.
-    - [ ] 2.2.3.2 Implement: Internal Node.js backend endpoint (e.g., DELETE /internal/agents/{agentId}/tool-environment) called by Edge Function, which in turn calls `agent_environment_service.deprovisionAgentDroplet`.
-    - [x] 2.2.3.3 Implement: Frontend UI on Agent Edit Page - "Deactivate Tool Environment" via toggle.
-        - **Status:** [PARTIALLY COMPLETE]
-        - **Note:** Covered by UI changes in 2.2.1.3.x.
-- [ ] 2.2.4 Implement: Periodic status checks for active Agent Droplets from Agentopia backend. Update `agent_droplets.status`
+- [ ] 2.2.1 Implement: Logic to trigger Account Tool Environment (Droplet) provisioning when a user enables it for their account.
+    - **Note:** This includes selecting Droplet image, region, size. Update `account_tool_environments` table.
+    - [ ] 2.2.1.1 Design & Implement: Supabase Edge Function (e.g., `manage-account-tool-environment`) for frontend to call.
+        - **Status:** [NEEDS REVISION from manage-agent-tool-environment]
+        - **Note:** Adapt existing `manage-agent-tool-environment` Edge Function. It will operate on `user_id` (from JWT) or `account_id`.
+        - [ ] 2.2.1.1.1 Define: API contract (e.g., POST /api/v1/tool-environment/manage - body contains `action: 'enable' | 'disable'`).
+            - **Status:** [NEEDS REVISION]
+        - [ ] 2.2.1.1.2 Implement: User authentication in Edge Function.
+            - **Status:** [LARGELY COMPLETE, confirm user scope]
+        - [ ] 2.2.1.1.3 Implement: Internal authenticated call from Edge Function to Node.js backend service that invokes `account_environment_service.ensureAccountToolEnvironmentReady` or `deprovisionAccountEnvironment`.
+            - **Status:** [NEEDS REVISION]
+    - [ ] 2.2.1.2 Implement: Internal Node.js backend endpoint (e.g., POST /internal/tool-environment/ensure) called by Edge Function.
+        - **Status:** [NEEDS REVISION]
+    - [ ] 2.2.1.3 Implement: Frontend UI on Account Settings Page or Dedicated "Tools" Page - "Activate My Tool Environment" toggle/button.
+        - **Status:** [NEW TASK / SIGNIFICANT REVISION of previous agent-level UI]
+        - [ ] 2.2.1.3.1 Design: UI for account-level tool environment activation and status display.
+        - [ ] 2.2.1.3.2 Implement: State management for toggle/button, status display (fetching initial status from `account_tool_environments`).
+        - [ ] 2.2.1.3.3 Implement: Frontend API client function (e.g., in `src/lib/api/accountToolEnvironments.ts`) to call the new Edge Function.
+        - [ ] 2.2.1.3.4 Refine: UI logic for interaction, loading states, and comprehensive feedback.
+- [x] 2.2.2 Implement: Account Droplet bootstrap/setup script (`user_data`).
+    - **Status:** [LARGELY COMPLETE] (from `agent_environment_service/manager.ts` `createUserDataScript`)
+    - **Note:** Script needs to ensure DTMA receives `account_tool_environment_id` (instead of `agent_droplet_id`) and is aware it's managing a shared environment. Logging and config paths might need slight adjustments if any. The core DTMA installation process should remain similar.
+- [ ] 2.2.3 Implement: Logic to de-provision Account Tool Environment Droplet (e.g., when user deactivates it).
+    - **Note:** Ensure DTMA attempts to gracefully stop all tool instances. Update `account_tool_environments` table.
+    - [ ] 2.2.3.1 Design & Implement: Supabase Edge Function endpoint for de-provisioning (within `manage-account-tool-environment` function with `action: 'disable'`).
+        - **Status:** [NEEDS REVISION]
+        - [ ] 2.2.3.1.1 Define: API contract (Covered by 2.2.1.1.1).
+        - [ ] 2.2.3.1.2 Implement: User authentication (Covered by 2.2.1.1.2).
+        - [ ] 2.2.3.1.3 Implement: Internal call to backend service for `deprovisionAccountEnvironment` (Covered by 2.2.1.1.3).
+    - [ ] 2.2.3.2 Implement: Internal Node.js backend endpoint for de-provisioning (Covered by 2.2.1.2).
+    - [ ] 2.2.3.3 Implement: Frontend UI for deactivation (Covered by 2.2.1.3).
+- [x] 2.2.4 Implement: Periodic status checks for active Account Tool Environments from Agentopia backend. Update `account_tool_environments.status`.
+    - **Status:** [LARGELY COMPLETE] (Heartbeat mechanism will serve this purpose, backend logic might need to interpret DTMA heartbeats to update overall environment status).
+- [ ] 2.2.5 Implement: Automated deployment verification tests for account-level environments.
+    - **Status:** [NEEDS REVISION]
+    - **Note:** Scripts like `check-environment.js` and `deploy-agent-droplet.js` need to be adapted for account-level provisioning and the new multi-instance model.
 
-## Phase 3: Droplet Tool Management Agent (DTMA) & Tool Deployment
+## Phase 2A: Tool Instance Management (Agentopia Backend)
 
-### 3.1 DTMA Implementation
-- [x] 3.1.1 Design: DTMA architecture, API definition, security model.
-    - **Status:** [COMPLETED]
-    - **Note 3.1.1.1 (Architecture):** Lightweight agent on droplet, bridge between Agentopia backend and Docker tools.
-    - **Note 3.1.1.2 (Tech Stack):** Node.js recommended (Express/Fastify, axios/node-fetch, dockerode).
-    - **Note 3.1.1.3 (DTMA API - Inbound):** Listens on HTTPS (e.g., port 30000). Requires Bearer token auth (`dtma_auth_token`). Endpoints: POST /tools/install, POST /tools/start, POST /tools/stop, DELETE /tools/uninstall, GET /status.
-    - **Note 3.1.1.4 (Agentopia API - Outbound Calls):** Calls Agentopia backend `POST /api/v1/heartbeat` and `POST /api/v1/fetch-tool-secrets` using its `dtma_auth_token`.
-    - **Note 3.1.1.5 (Configuration):** Reads `dtma_auth_token` from `/etc/dtma.conf` (set by cloud-init). Reads Agentopia API base URL from env var/config.
-    - **Note 3.1.1.6 (Security):** HTTPS for own API, token auth, secure secret handling (via Agentopia API), Docker socket permissions, runs as non-root if possible.
-    - **Note 3.1.1.7 (Bootstrap):** Requires Node.js, Docker installed on droplet. DTMA needs installation & setup as a service (e.g., systemd) via `user_data`.
-- [x] 3.1.2 Implement: DTMA basic scaffolding (Node.js project setup, simple HTTP server).
-    - **Status:** [LARGELY COMPLETE] - `dtma/src/index.ts` sets up Express server. Project structure in place.
-- [x] 3.1.3 Implement: DTMA interaction with Docker (using e.g., `dockerode` library).
-    - **Status:** [LARGELY COMPLETE] - `dtma/src/docker_manager.ts` implements core Docker operations.
-- [x] 3.1.4 Implement: DTMA API endpoints (install, start, stop, uninstall tools based on backend commands).
-    - **Status:** [LARGELY COMPLETE] - `dtma/src/routes/tool_routes.ts` defines `/tools/install, /start, /stop, /uninstall, /status`.
-- [x] 3.1.5 Implement: DTMA logic for securely fetching secrets from Agentopia backend API.
-    - **Status:** [LARGELY COMPLETE] - Implemented in `/tools/start` endpoint via `agentopia_api_client.ts`.
-- [ ] 3.1.6 Implement: DTMA logic for sending heartbeat/status updates to Agentopia backend API.
-    - **Status:** [PARTIALLY COMPLETE] - Heartbeat sending is implemented in `index.ts` via `agentopia_api_client.ts`. 
-    - **Note 3.1.6.1 (Gaps):** Payload is missing `system_status` (CPU, Mem, Disk) and detailed `tool_statuses` (from Docker manager). These are marked as TODOs in `dtma/src/index.ts`.
-
-### 3.2 Droplet Bootstrap & DTMA Setup
-- [x] 3.2.1 Define: Droplet base image and initial setup requirements (OS, Docker, Node.js, DTMA dependencies).
-    - **Note 3.2.1.1 (Base Image):** Ubuntu 22.04 LTS (or latest stable LTS).
-    - **Note 3.2.1.2 (Pre-installed/Bootstrapped):**
-        - Docker Engine
-        - Node.js (version compatible with DTMA, e.g., v18, v20)
-        - Git
-        - `curl`, `gnupg` (for adding repositories)
-        - Standard build tools if DTMA needs compilation (`build-essential` or similar).
-    - **Note 3.2.1.3 (User):** A dedicated user for running the DTMA service (e.g., `dtma_user` or use `ubuntu` if appropriate).
-- [x] 3.2.2 Implement: Bootstrap script (`user_data` for DigitalOcean) to install Docker, Node.js, clone DTMA, install dependencies, build DTMA (if necessary), and set up DTMA config file (`/etc/dtma.conf` with auth token).
-    - **Note 3.2.2.1 (Implementation Details):** Implemented in `agent_environment_service/manager.ts` within the `createUserDataScript` function.
-    - **Note 3.2.2.2 (Enhancements 2025-05-08):** Refined script to include logging to `/var/log/dtma-bootstrap.log`. Parameters for DTMA Git Repo URL and Agentopia API URL are now used more robustly and have more realistic defaults (though they should be overridden by environment variables `DTMA_GIT_REPO_URL` and `AGENTOPIA_API_URL` in the backend service).
-    - **Note 3.2.2.3 (Linter):** The TypeScript linter shows false positive errors on lines where shell variables (e.g., `\${DTMA_DIR}`) are used within `bash -c "..."` commands inside the template literal. This is due to the linter misinterpreting the correctly escaped shell variable as a TypeScript template variable. The generated script is expected to be correct.
-- [ ] 3.2.3 Test and refine: The bootstrap script on a sample DO Droplet.
-    - **Tasks:**
-        - Manually provision a DO droplet with the generated `user_data`.
-        - SSH into the droplet.
-        - Verify Docker installation and status.
-        - Verify Node.js installation and version.
-        - Verify DTMA code is cloned to the correct directory (e.g., `/opt/agentopia/dtma`).
-        - Verify DTMA dependencies are installed (`node_modules` present).
-        - Verify DTMA build is successful (`dist` folder present if applicable).
-        - Verify DTMA config file (`/etc/dtma.conf`) is created with the correct auth token and API URL.
-        - Verify `dtma.service` `systemd` unit file is created in `/etc/systemd/system/`.
-        - Verify `dtma` service is enabled and running (`systemctl status dtma`).
-        - Check DTMA logs (`journalctl -u dtma` and `/var/log/dtma-bootstrap.log`).
-        - Ensure the DTMA agent starts and attempts to send a heartbeat.
-- [ ] 3.2.4 Implement: `systemd` service configuration for DTMA to ensure it runs on startup and restarts on failure.
-    - **Note 3.2.4.1:** This is part of the `createUserDataScript` (WBS 3.2.2). Verification will occur during WBS 3.2.3.
+- [ ] 2A.1 Design: Backend Service for Tool Instance Management (`tool_instance_service`).
+    - **Note:** This service will handle creating, starting, stopping, and deleting tool instances on an account's shared droplet by communicating with the DTMA.
+    - **Responsibilities:**
+        - Validate requests against `tool_catalog` and `account_tool_environments`.
+        - Interact with DTMA via a client (needs a DTMA client/API wrapper).
+        - Manage CRUD operations for `account_tool_instances` table.
+        - Manage CRUD operations for `agent_tool_instance_links` table.
+    - **Files:** `manager.ts`, `types.ts`, `index.ts` (e.g., `src/services/tool_instance_service/`).
+- [ ] 2A.2 Implement: `tool_instance_service` basic structure.
+- [ ] 2A.3 Implement: Logic in `tool_instance_service` to request DTMA to start a new tool instance (e.g., an MCP server process).
+    - **Note:** Includes telling DTMA which tool from catalog, version, any specific config overrides, and potentially suggested port or letting DTMA allocate port.
+    - **Note:** DTMA will respond with actual port and other runtime details, which get stored in `account_tool_instances.runtime_details`.
+- [ ] 2A.4 Implement: Logic in `tool_instance_service` to request DTMA to stop/remove a tool instance.
+- [ ] 2A.5 Implement: Database interaction logic for `account_tool_instances` and `agent_tool_instance_links` within `tool_instance_service`.
+- [ ] 2A.6 Design & Implement: Supabase Edge Function(s) for frontend to manage tool instances and agent links.
+    - **Examples:** `POST /api/v1/tool-instances` (start new), `DELETE /api/v1/tool-instances/{instance_id}`, `POST /api/v1/agent-links` (link agent to instance), `DELETE /api/v1/agent-links/{link_id}`.
+    - **Note:** These will call the internal `tool_instance_service`.
+- [ ] 2A.7 Implement: Frontend UI for managing tool instances on the account droplet.
+    - **Note:** Display list of available tools from catalog, allow starting new instances, show running instances with their status/ports.
+    - **Note:** Allow configuring specific instances (if applicable).
+- [ ] 2A.8 Implement: Frontend UI for linking agents to specific running tool instances.
+    - **Note:** Likely on agent configuration page, select from available `account_tool_instances` for that user.

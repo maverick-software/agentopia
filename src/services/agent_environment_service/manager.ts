@@ -63,9 +63,33 @@ async function getAgentDropletDetails(agentId: string): Promise<AgentDropletReco
 
 // Function to create the cloud-init user data script
 function createUserDataScript(dtmaAuthToken: string, agentopiaApiBaseUrl?: string, dtmaGitRepo?: string, dtmaGitBranch?: string): string {
-  const repoUrl = dtmaGitRepo || 'https://github.com/your-org/dtma-agent.git'; // A more realistic default, but should be overridden
+  const repoUrl = dtmaGitRepo || 'https://github.com/maverick-software/dtma-agent.git'; // Default to our managed repo
   const branch = dtmaGitBranch || 'main';
-  const apiUrl = agentopiaApiBaseUrl || 'http://<your-backend-ip-or-domain>:54321/functions/v1'; // Needs to be resolvable from droplet
+  
+  // Prioritize Supabase Edge Functions URL if available
+  // Determine URL type for appropriate defaults
+  const isSupabaseUrl = agentopiaApiBaseUrl?.includes('supabase.co/functions/v1');
+  const isNetlifyUrl = agentopiaApiBaseUrl?.includes('netlify.app');
+  
+  // Set a reasonable default API URL with appropriate warning
+  const apiUrl = agentopiaApiBaseUrl || (
+    isSupabaseUrl 
+      ? 'https://txhscptzjrrudnqwavcb.supabase.co/functions/v1'  // Direct Supabase Edge Functions (preferred)
+      : (isNetlifyUrl
+          ? 'https://agentopia-staging.netlify.app/functions/v1'  // Netlify (fallback)
+          : 'http://localhost:54321/functions/v1')               // Local development (last resort)
+  );
+  
+  if (!agentopiaApiBaseUrl) {
+    console.warn(`Warning: No AGENTOPIA_API_URL provided. Using default: ${apiUrl}`);
+    console.warn('The droplet may not be able to connect to the API. Set AGENTOPIA_API_URL in your environment.');
+  }
+  
+  // Log important information about the configuration
+  console.log('Creating user data script with configuration:');
+  console.log(`- API URL: ${apiUrl}`);
+  console.log(`- DTMA Repo: ${repoUrl} (branch: ${branch})`);
+  
   const nodeVersion = '20';
   const dtmaRunUser = 'ubuntu';
   const logFile = '/var/log/dtma-bootstrap.log';
@@ -97,6 +121,8 @@ RUN_USER="${dtmaRunUser}" # Injected from function arg
 export DEBIAN_FRONTEND=noninteractive
 
 echo "--- Starting DTMA Setup Script ---"
+echo "Using API URL: ${apiUrl}"
+echo "Using DTMA repo: ${repoUrl} (branch: ${branch})"
 
 # --- Install Prerequisites ---
 echo "Installing prerequisites..."
@@ -151,10 +177,10 @@ if [ -d "\${DTMA_DIR}" ]; then
   
   echo "Installing DTMA dependencies as user \${RUN_USER}..."
   # Run npm install as the RUN_USER in the DTMA_DIR
-  sudo -u "\${RUN_USER}" bash -c "cd \"${DTMA_DIR}\" && npm install --production --unsafe-perm"
+  sudo -u "\${RUN_USER}" bash -c "cd \${DTMA_DIR} && npm install --production --unsafe-perm"
   
   echo "Building DTMA as user \${RUN_USER}..."
-  sudo -u "\${RUN_USER}" bash -c "cd \"${DTMA_DIR}\" && npm run build"
+  sudo -u "\${RUN_USER}" bash -c "cd \${DTMA_DIR} && npm run build"
   
   echo "Ensuring \${DTMA_DIR} is owned by \${RUN_USER} post-build..."
   chown -R "\${RUN_USER}":"\${RUN_USER}" "\${DTMA_DIR}"

@@ -234,3 +234,63 @@ Located in `services/`. These are designed for persistent execution on a server 
 *   **Frontend:** Static deployment (Netlify, Vercel).
 *   **Supabase:** Deploy functions and DB migrations via CLI or Git integration.
 *   **Backend Services:** Requires Node.js/PM2 environment (e.g., DigitalOcean Droplet). See previous README section for detailed steps on setting up `worker-manager` with PM2.
+
+## Agent Tool Infrastructure
+
+The Agent Tool Infrastructure allows Agentopia agents to have dedicated DigitalOcean Droplets provisioned to host their specific tools.
+
+### API Keys and Configuration
+
+Create a `.env` file with the following variables for the Agent Tool Infrastructure:
+
+```bash
+# DigitalOcean API Configuration
+DO_API_TOKEN=your_digitalocean_api_token
+
+# Droplet Configuration
+DO_DEFAULT_REGION=nyc3
+DO_DEFAULT_SIZE=s-1vcpu-1gb
+DO_DEFAULT_IMAGE=ubuntu-22-04-x64
+DO_DEFAULT_SSH_KEY_IDS=your_ssh_key_ids_comma_separated
+DO_BACKUP_ENABLED=false
+DO_MONITORING=true
+
+# DTMA Configuration
+DTMA_GIT_REPO_URL=https://github.com/maverick-software/dtma-agent.git
+DTMA_GIT_BRANCH=main
+
+# IMPORTANT: Use the direct Supabase Edge Functions URL (not Netlify)
+AGENTOPIA_API_URL=https://txhscptzjrrudnqwavcb.supabase.co/functions/v1
+
+# API Security
+INTERNAL_API_SECRET=generate_this_securely_with_crypto_randomBytes
+```
+
+### Setting Up DigitalOcean API Token
+
+1. Log in to the DigitalOcean control panel
+2. Navigate to API → Generate New Token
+3. Name: `agentopia-tool-droplet-manager`
+4. Scopes: Select Read and Write permissions
+5. Copy the generated token immediately (it won't be shown again)
+6. Add the token to your environment variables or Supabase Vault
+
+### Testing Your Configuration
+
+Verify your DigitalOcean API token is working:
+
+```bash
+node scripts/check-do-token.js
+```
+
+For testing deployment without requiring a public API URL:
+
+```bash
+node scripts/offline-deployment-test.js
+```
+
+### Deployment Notes
+
+- The DTMA (Droplet Tool Management Agent) communicates directly with Supabase Edge Functions, bypassing the Netlify frontend for better performance and reliability.
+- Configure `AGENTOPIA_API_URL` to point directly to Supabase Edge Functions rather than going through Netlify.
+- When running in production, ensure proper firewalls and security measures are in place for the DigitalOcean droplets.

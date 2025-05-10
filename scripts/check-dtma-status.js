@@ -1,8 +1,11 @@
 // Check DTMA Status Script
 // This script checks the status of a deployed DTMA agent on a droplet
 
-require('dotenv').config(); // Load .env file
-const axios = require('axios');
+import dotenv from 'dotenv';
+import axios from 'axios';
+
+// Load environment variables
+dotenv.config();
 
 // Get IP address from command line argument or environment variable
 const dropletIp = process.argv[2] || process.env.DROPLET_IP;
