@@ -38,7 +38,6 @@ const navItems: NavItem[] = [
     children: [
       { to: '/agents', icon: Users, label: 'View Agents' },
       { to: '/memory', icon: MemoryStick, label: 'Memory' },
-      { to: '/tools', icon: Wrench, label: 'Tools' },
       { 
         to: '/teams', // Direct link now
         icon: Building2, 
@@ -46,6 +45,7 @@ const navItems: NavItem[] = [
       },
     ]
   },
+  { to: '/tools', icon: Wrench, label: 'Tools' },
   { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },

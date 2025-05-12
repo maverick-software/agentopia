@@ -235,62 +235,82 @@ Located in `services/`. These are designed for persistent execution on a server 
 *   **Supabase:** Deploy functions and DB migrations via CLI or Git integration.
 *   **Backend Services:** Requires Node.js/PM2 environment (e.g., DigitalOcean Droplet). See previous README section for detailed steps on setting up `worker-manager` with PM2.
 
-## Agent Tool Infrastructure
+## Agent Tool Infrastructure (Refactored for Shared Account-Level Droplets)
 
-The Agent Tool Infrastructure allows Agentopia agents to have dedicated DigitalOcean Droplets provisioned to host their specific tools.
+The Agent Tool Infrastructure has been **refactored** to support a new model where Agentopia user accounts can have a **shared DigitalOcean Droplet** provisioned. This shared droplet is capable of hosting multiple, isolated tool instances (e.g., MCP Servers, other backend processes) that can be utilized by agents belonging to that user account.
 
-### API Keys and Configuration
+This marks a shift from the previous model of one droplet per agent.
 
-Create a `.env` file with the following variables for the Agent Tool Infrastructure:
+### Key Architectural Changes:
+
+*   **Account-Level Shared Droplets:** One DigitalOcean droplet per user account that enables the "Tool Environment" feature.
+*   **Multiple Tool Instances:** The shared droplet will host multiple tool instances (e.g., MCP servers), typically as Docker containers.
+*   **Droplet Tool Management Agent (DTMA):** A lightweight agent (planned as a Node.js application) runs on the account droplet. It manages the lifecycle of tool instances, handles secure secret fetching, and reports status to the Agentopia backend.
+*   **New Backend Services:**
+    *   `account_environment_service`: Manages the lifecycle of the shared account droplet.
+    *   `tool_instance_service`: Manages individual tool instances on an account's droplet.
+*   **Updated Database Schema:** Includes new tables like `account_tool_environments`, `tool_catalog`, `account_tool_instances`, and `agent_tool_instance_links` to support this new model.
+
+### Detailed Plan & Work Breakdown Structure (WBS):
+
+For a comprehensive understanding of the new architecture, including detailed designs, API specifications, and a full task breakdown, please refer to the **Work Breakdown Structure document**:
+
+*   **WBS Location:** `docs/plans/agent_tool_infrastructure/wbs_checklist.md`
+
+This document is the primary source of truth for the ongoing development of this feature.
+
+### API Keys and Configuration (Legacy Section - Review WBS for current needs)
+
+**Note:** The environment variables listed below were for the *previous* per-agent droplet infrastructure. While some (like `DO_API_TOKEN`) are still relevant, the overall configuration strategy, especially for the DTMA and its communication with the Agentopia backend, is now defined in the WBS. **Please consult the WBS (section 1.1.5, 3.1.1.5, 3.2.2.2) for the most up-to-date configuration requirements.**
 
 ```bash
 # DigitalOcean API Configuration
-DO_API_TOKEN=your_digitalocean_api_token
+DO_API_TOKEN=your_digitalocean_api_token # Still needed
 
-# Droplet Configuration
-DO_DEFAULT_REGION=nyc3
-DO_DEFAULT_SIZE=s-1vcpu-1gb
-DO_DEFAULT_IMAGE=ubuntu-22-04-x64
-DO_DEFAULT_SSH_KEY_IDS=your_ssh_key_ids_comma_separated
-DO_BACKUP_ENABLED=false
-DO_MONITORING=true
+# Droplet Configuration (Defaults might be managed differently now - see WBS)
+# DO_DEFAULT_REGION=nyc3
+# DO_DEFAULT_SIZE=s-1vcpu-1gb
+# DO_DEFAULT_IMAGE=ubuntu-22-04-x64
+# DO_DEFAULT_SSH_KEY_IDS=your_ssh_key_ids_comma_separated
+# DO_BACKUP_ENABLED=false
+# DO_MONITORING=true
 
-# DTMA Configuration
-DTMA_GIT_REPO_URL=https://github.com/maverick-software/dtma-agent.git
-DTMA_GIT_BRANCH=main
+# DTMA Configuration (Specifics defined in WBS - e.g. passed via user_data)
+# DTMA_GIT_REPO_URL=https://github.com/maverick-software/dtma-agent.git # May still be used
+# DTMA_GIT_BRANCH=main
 
-# IMPORTANT: Use the direct Supabase Edge Functions URL (not Netlify)
-AGENTOPIA_API_URL=https://txhscptzjrrudnqwavcb.supabase.co/functions/v1
+# Agentopia API URL (DTMA now calls Supabase Edge Functions directly)
+AGENTOPIA_API_URL=https://txhscptzjrrudnqwavcb.supabase.co/functions/v1 # IMPORTANT: Use direct Supabase URL
+VITE_SUPABASE_URL=https://txhscptzjrrudnqwavcb.supabase.co
 
-# API Security
-INTERNAL_API_SECRET=generate_this_securely_with_crypto_randomBytes
+# API Security (Internal API secret for backend-to-backend, DTMA uses its own token)
+# INTERNAL_API_SECRET=generate_this_securely_with_crypto_randomBytes
 ```
 
 ### Setting Up DigitalOcean API Token
 
+This process remains largely the same:
 1. Log in to the DigitalOcean control panel
 2. Navigate to API → Generate New Token
-3. Name: `agentopia-tool-droplet-manager`
-4. Scopes: Select Read and Write permissions
-5. Copy the generated token immediately (it won't be shown again)
-6. Add the token to your environment variables or Supabase Vault
+3. Name: `agentopia-tool-droplet-manager` (or similar)
+4. Scopes: Select Read and Write permissions for Droplets.
+5. Copy the generated token immediately.
+6. Store this token securely, ideally in Supabase Vault, to be accessed by the Agentopia backend. (Refer to WBS 1.1.5.2)
 
-### Testing Your Configuration
+### Testing Your Configuration (Legacy Scripts - May Need Updates)
 
-Verify your DigitalOcean API token is working:
-
-```bash
-node scripts/check-do-token.js
-```
-
-For testing deployment without requiring a public API URL:
+**Note:** The scripts mentioned below (`check-do-token.js`, `offline-deployment-test.js`) were for the previous infrastructure. They may need to be updated or new testing scripts developed to align with the `account_environment_service` and the new DTMA interactions.
 
 ```bash
-node scripts/offline-deployment-test.js
+# node scripts/check-do-token.js # Verify this script's relevance
 ```
 
-### Deployment Notes
+```bash
+# node scripts/offline-deployment-test.js # Verify this script's relevance
+```
 
-- The DTMA (Droplet Tool Management Agent) communicates directly with Supabase Edge Functions, bypassing the Netlify frontend for better performance and reliability.
-- Configure `AGENTOPIA_API_URL` to point directly to Supabase Edge Functions rather than going through Netlify.
-- When running in production, ensure proper firewalls and security measures are in place for the DigitalOcean droplets.
+### Deployment Notes (Updated)
+
+- The DTMA (Droplet Tool Management Agent) on the shared account droplet communicates directly with **Supabase Edge Functions**.
+- Configure `AGENTOPIA_API_URL` (or a similar variable used by the DTMA, as per WBS 3.1.1.5 and 3.2.2.2) to point directly to your Supabase Edge Functions URL.
+- Ensure robust firewall configurations (e.g., DigitalOcean Cloud Firewalls) and security measures are in place for the account-level DigitalOcean droplets, managed as per the designs in WBS Phase 1.3.
