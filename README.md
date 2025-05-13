@@ -34,6 +34,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   Agent Creation & Configuration
 *   Team Management
 *   Datastore Management (Pinecone RAG)
+*   Knowledge Graph Integration (GetZep) for advanced memory, contextual understanding, and reasoning.
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -56,6 +57,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   **Discord Integration:** Discord.js (Node.js)
 *   **Backend Services Host:** DigitalOcean Droplet (Managed by PM2)
 *   **Process Management:** PM2
+*   **Knowledge Graph:** GetZep
 
 ## Project Structure
 
@@ -200,6 +202,7 @@ Located in `services/`. These are designed for persistent execution on a server 
 
 *   `worker-manager`: Listens for requests (e.g., from `manage-discord-worker`) and uses the PM2 API to start/stop `discord-worker` processes for individual agents.
 *   `discord-worker`: A Node.js process connecting a specific agent to the Discord Gateway, listening for mentions, calling the `chat` function, and sending responses back to Discord.
+*   `reasoning-mcp-server`: Provides advanced reasoning capabilities by leveraging a Knowledge Graph (GetZep) for complex queries and context persistence.
 
 ## Core Workflows
 
