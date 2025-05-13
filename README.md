@@ -59,37 +59,55 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 
 ## Project Structure
 
-*(High-level overview, see inline comments in the structure below for more details)*
+*(High-level overview of the Agentopia monorepo)*
 
 ```
 .
-├── .cursor/              # Cursor AI configuration, rules (incl. UI/UX Design.mdc)
-├── docs/                 # Project documentation (protocols, context, plans, bugs)
-├── logs/                 # Application logs directory (Needs Implementation)
-├── public/               # Static assets for Vite frontend
-├── services/             # Backend microservices (run on DigitalOcean Droplet)
-│   ├── discord-worker/   # Connects specific agent to Discord Gateway
-│   └── worker-manager/   # Manages discord-worker instances via PM2 API
-├── src/                  # Frontend source code (React/Vite)
+├── .bolt/                # Bolt local development environment configuration
+├── .cursor/              # Cursor AI configuration, rules, and context
+├── .git/                 # Git version control files (typically hidden)
+├── archived/             # Archived or deprecated code and resources
+├── backups/              # Backup files
+├── database/             # Database related files (e.g., local seeds, schemas - distinct from supabase/migrations)
+├── discord-gateway-client/ # Client for interacting with Discord Gateway (potential core for discord-worker)
+├── dist/                 # Build output directory (e.g., for frontend or services)
+├── docs/                 # Project documentation (protocols, context, plans, ADRs)
+├── dtma/                 # Droplet Tool Management Agent (DTMA) related code/configuration
+├── dtma-agent/           # Code for the DTMA agent that runs on provisioned droplets
+├── logs/                 # Application and service logs
+├── node_modules/         # Project dependencies (typically hidden and not version controlled)
+├── public/               # Static assets for the Vite frontend (images, fonts, etc.)
+├── scripts/              # Utility scripts for development, deployment, or tasks
+├── services/             # Backend microservices
+│   ├── discord-worker/   # Connects a specific agent to Discord Gateway
+│   ├── reasoning-mcp-server/ # Server for Multi-Cloud Proxy (MCP) reasoning capabilities
+│   └── worker-manager/   # Manages discord-worker instances (e.g., via PM2 API)
+├── src/                  # Frontend source code (React/Vite/TypeScript)
+│   ├── app/              # Next.js 13+ app directory structure (if migrating/using)
 │   ├── components/       # Reusable UI components (incl. /ui with Shadcn)
-│   ├── contexts/         # React contexts (Auth, DB)
-│   ├── hooks/            # Custom React hooks (useWorkspaces, useChatMessages, etc.)
-│   ├── lib/              # Library initializations (Supabase client, utils)
-│   ├── pages/            # Page components
-│   ├── routing/          # Routing configuration (AppRouter, routeConfig)
-│   └── types/            # Shared TypeScript type definitions for frontend
-├── supabase/             # Supabase specific files
-│   ├── functions/        # Supabase Edge Functions (chat, discord handlers, etc.)
-│   └── migrations/       # Database migration files
-├── .env                  # Frontend/Vite environment variables (see .env.example)
-├── .gitignore            # Git ignore rules
-├── ecosystem.config.js   # PM2 configuration (for services)
-├── index.html            # Main HTML entry point for Vite frontend
-├── package.json          # Project dependencies and scripts
-├── README.md             # This file
+│   ├── contexts/         # React contexts (Authentication, Database, etc.)
+│   ├── hooks/            # Custom React hooks
+│   ├── lib/              # Library initializations (Supabase client, utility functions)
+│   ├── pages/            # Page components (may be partially or fully replaced by /app)
+│   ├── styles/           # Global styles and Tailwind base configuration
+│   └── types/            # Shared TypeScript type definitions
+├── supabase/             # Supabase specific backend files
+│   ├── functions/        # Supabase Edge Functions (serverless backend logic)
+│   └── migrations/       # Database schema migration files
+├── utils/                # General utility functions shared across the project
+├── .env                  # Example or local environment variables (SHOULD NOT BE COMMITTED if it contains secrets)
+├── .gitignore            # Specifies intentionally untracked files that Git should ignore
+├── components.json       # Configuration for Shadcn UI components
+├── eslint.config.js      # ESLint configuration file
+├── index.html            # Main HTML entry point for the Vite frontend
+├── package.json          # Defines project dependencies and scripts
+├── postcss.config.js     # PostCSS configuration
+├── README.md             # This file - project overview and developer guide
 ├── tailwind.config.js    # Tailwind CSS configuration
-├── vite.config.ts        # Vite build tool configuration
-└── ... (tsconfig files, etc.)
+├── tsconfig.json         # TypeScript compiler options for the project
+├── tsconfig.app.json     # TypeScript compiler options specific to the frontend app
+├── tsconfig.node.json    # TypeScript compiler options for Node.js parts (e.g., scripts, services)
+└── vite.config.ts        # Vite build tool configuration
 ```
 
 ## Getting Started
@@ -280,8 +298,8 @@ DO_API_TOKEN=your_digitalocean_api_token # Still needed
 # DTMA_GIT_BRANCH=main
 
 # Agentopia API URL (DTMA now calls Supabase Edge Functions directly)
-AGENTOPIA_API_URL=https://txhscptzjrrudnqwavcb.supabase.co/functions/v1 # IMPORTANT: Use direct Supabase URL
-VITE_SUPABASE_URL=https://txhscptzjrrudnqwavcb.supabase.co
+AGENTOPIA_API_URL=https://your-project-id.supabase.co/functions/v1 # IMPORTANT: Use direct Supabase URL
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
 
 # API Security (Internal API secret for backend-to-backend, DTMA uses its own token)
 # INTERNAL_API_SECRET=generate_this_securely_with_crypto_randomBytes
