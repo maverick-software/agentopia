@@ -110,19 +110,21 @@ export interface ClientToolExecutionResult {
   error?: string;
 }
 
-// --- MCP Server Configuration (Matches DB schema, excludes sensitive/DB-only fields) ---
+// --- Toolbox Configuration (Matches relevant parts of DB schema for what might be configured or displayed) ---
+// This was MCPServerConfig. It described a server entry linked to an mcp_configuration.
+// It will be re-evaluated in the context of Toolboxes, Deployed Services, and Agent Toolbelt items.
 export interface MCPServerConfig {
-  id: number; // DB ID
-  config_id: number;
-  name: string;
-  endpoint_url: string;
-  vault_api_key_id?: string | null; // UUID reference to Vault secret
+  id: number; // DB ID of the mcp_servers record
+  config_id: number; // DB ID of the parent mcp_configurations record
+  name: string; // User-defined name for the server/connection
+  endpoint_url: string; // The actual URL of the external MCP server
+  vault_api_key_id?: string | null; // UUID reference to Vault secret for API key
   timeout_ms: number;
   max_retries: number;
   retry_backoff_ms: number;
-  priority: number;
+  priority: number; // For ordering if multiple servers are used for an agent
   is_active: boolean;
-  capabilities?: MCPServerCapabilities | null; // Store discovered capabilities
+  capabilities?: MCPServerCapabilities | null; // Store discovered capabilities from the server
 }
 
 // --- Aggregated Results (Internal to MCPManager) ---

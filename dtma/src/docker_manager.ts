@@ -1,5 +1,5 @@
 import Dockerode from 'dockerode';
-import stream from 'stream'; // Needed for stream manipulation
+import * as streamModule from 'stream'; // Needed for stream manipulation, aliased to avoid conflict
 
 // Initialize Dockerode
 // By default, it connects to the Docker socket at /var/run/docker.sock
@@ -16,7 +16,7 @@ export async function pullImage(imageName: string): Promise<void> {
   console.log(`Attempting to pull image: ${imageName}...`);
   
   return new Promise((resolve, reject) => {
-    docker.pull(imageName, (err: Error, streamInstance: stream.Readable) => {
+    docker.pull(imageName, (err: Error, streamInstance: streamModule.Readable) => {
       if (err) {
         console.error(`Error pulling image ${imageName}:`, err);
         return reject(err);
@@ -44,7 +44,7 @@ export async function pullImage(imageName: string): Promise<void> {
       
       // Pipe to null stream to consume data if not piping to stdout
       if (!process.stdout.isTTY) { // Simple check if we're piping progress
-         streamInstance.pipe(new stream.Writable({ write: (chunk, encoding, next) => next() }));
+         streamInstance.pipe(new streamModule.Writable({ write: (chunk, encoding, next) => next() }));
       }
     });
   });
@@ -153,6 +153,91 @@ export async function listContainers(all: boolean = false, filters?: object): Pr
     return containers;
   } catch (error) {
     console.error('Error listing containers:', error);
+    throw error;
+  }
+}
+
+/**
+ * Executes a command in a running Docker container.
+ * @param containerIdOrName - The ID or name of the container.
+ * @param command - The command and its arguments (e.g., ['echo', 'hello world']).
+ * @param envVars - Optional environment variables for this specific execution (e.g., ['VAR_NAME=value']).
+ * @returns Promise<string> - The output stream from the command execution.
+ * @throws {Error} If execution fails.
+ */
+export async function executeInContainer(
+  containerIdOrName: string,
+  command: string[],
+  envVars?: string[]
+): Promise<string> {
+  console.log(`Executing command in container "${containerIdOrName}": ${command.join(' ')}`);
+  try {
+    const container = docker.getContainer(containerIdOrName);
+    const execOptions: Dockerode.ExecCreateOptions = {
+      Cmd: command,
+      Env: envVars,
+      AttachStdout: true,
+      AttachStderr: true,
+    };
+
+    const exec = await container.exec(execOptions);
+
+    return new Promise((resolve, reject) => {
+      exec.start({ hijack: true, stdin: false }, (err: Error | null, stream: NodeJS.ReadWriteStream | undefined) => {
+        if (err) {
+          console.error(`Error starting exec in container "${containerIdOrName}":`, err);
+          return reject(err);
+        }
+
+        if (!stream) {
+            console.error('No stream returned from exec.start');
+            return reject(new Error('No stream returned from exec.start for container ' + containerIdOrName));
+        }
+
+        let output = '';
+        let errorOutput = '';
+
+        // Demultiplex the stream (Docker sends stdout and stderr multiplexed)
+        const stdout = new streamModule.PassThrough();
+        const stderr = new streamModule.PassThrough();
+        container.modem.demuxStream(stream, stdout, stderr);
+
+        stdout.on('data', (chunk: Buffer) => {
+          output += chunk.toString('utf8');
+        });
+
+        stderr.on('data', (chunk: Buffer) => {
+          errorOutput += chunk.toString('utf8');
+        });
+
+        stream.on('end', async () => {
+          try {
+            const inspectResult = await exec.inspect();
+            if (inspectResult.ExitCode !== 0) {
+              console.error(
+                `Command in container "${containerIdOrName}" exited with code ${inspectResult.ExitCode}: ${errorOutput || output}`
+              );
+              return reject(
+                new Error(
+                  `Command exited with code ${inspectResult.ExitCode}: ${errorOutput || output}`
+                )
+              );
+            }
+            resolve(output);
+          } catch (inspectError) {
+            console.error('Error inspecting exec results:', inspectError);
+            reject(inspectError);
+          }
+        });
+
+        stream.on('error', (streamErr: Error) => {
+            console.error(`Error during command execution stream for "${containerIdOrName}":`, streamErr);
+            reject(streamErr);
+        });
+      });
+    });
+  } catch (error) {
+    console.error(`Error executing command in container "${containerIdOrName}":`, error);
     throw error;
   }
 } 

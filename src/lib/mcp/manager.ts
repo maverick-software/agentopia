@@ -3,6 +3,12 @@ import { MCPClient } from './client.ts';
 import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults, ServerResourceUpdate, MCPServerCapabilities } from './types.ts';
 // TODO: Import logger type
 
+/**
+ * Manages interactions with one or more MCP-compliant servers for a given agent context.
+ * Processes context data by sending it to configured Toolboxes/Deployed Services sequentially based on priority.
+ * Aggregates results (e.g., enriched context, tool calls) from these services.
+ * This manager will be significantly refactored to work with the new Toolbox/DTMA architecture.
+ */
 export class MCPManager {
     private configs: (MCPServerConfig & { api_key?: string | null })[];
     private clients: Map<number, MCPClient>; // Map server ID to client instance
@@ -22,7 +28,7 @@ export class MCPManager {
     }
 
     /**
-     * Processes context data by sending it to configured MCP servers sequentially based on priority.
+     * Processes context data by sending it to configured Toolboxes/Deployed Services sequentially based on priority.
      * Aggregates results.
      */
     async processContext(contextData: AgentopiaContextData[]): Promise<AggregatedMCPResults> {
@@ -59,9 +65,11 @@ export class MCPManager {
                      console.log(`${this.logPrefix} No relevant context determined for server ${config.name}. Skipping send.`);
                 }
 
-            } catch (error) {
-                console.error(`${this.logPrefix} Error processing server ${config.name} (ID: ${config.id}):`, error);
-                aggregatedResults.errors.push({ serverId: config.id, error });
+            } catch (error: any) {
+                // Ensure we always have an Error object
+                const e = error instanceof Error ? error : new Error(String(error));
+                console.error(`${this.logPrefix} Error processing server ${config.name} (ID: ${config.id}):`, e);
+                aggregatedResults.errors.push({ serverId: config.id, error: e });
                 // Continue with the next server even if one fails
                 console.log(`${this.logPrefix} Continuing to next server after error.`);
             }

@@ -31,7 +31,6 @@ import {
     TeamDetailsPage,
     EditTeamPage,
     SettingsPage,
-    MCPPage,
     MonitoringPage,
     AdminUserManagement,
     AdminAgentManagement,
@@ -41,7 +40,12 @@ import {
     WorkspacePage, // Added WorkspacePage
     WorkspacesListPage, // Added WorkspacesListPage
     CreateWorkspacePage,
-    WorkspaceSettingsPage
+    WorkspaceSettingsPage,
+    ToolboxesPage,
+    ToolboxDetailPage,
+    // AgentStorePage, // Commented out
+    // DatasetStorePage, // Commented out
+    // NotFoundPage, // Commented out
 } from './lazyComponents';
 
 // Manually import the new non-lazy pages
@@ -78,10 +82,13 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces/:roomId/settings', element: WorkspaceSettingsPage, protection: 'protected', layout: false },
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: false },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
-  { path: '/tools', element: MCPPage, protection: 'protected', layout: true },
+  { path: '/tools', element: ToolboxesPage, protection: 'protected', layout: true },
+  { path: '/toolboxes/:toolboxId', element: ToolboxDetailPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
+  // { path: 'agent-store', element: AgentStorePage, protection: 'protected', layout: true }, // Commented out
+  // { path: 'dataset-store', element: DatasetStorePage, protection: 'protected', layout: true }, // Commented out
   
   // Admin routes (nested under a protected layout)
   {

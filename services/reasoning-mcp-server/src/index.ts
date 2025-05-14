@@ -249,7 +249,7 @@ app.post('/mcp', async (req: Request, res: Response) => {
 });
 
 app.listen(port, () => {
-  console.log(`Reasoning MCP Server listening on port ${port}`);
+  console.log(`Reasoning Toolbox Support Server listening on port ${port}`);
   console.log(`MCP endpoint available at http://localhost:${port}/mcp`);
 });
 

@@ -3,12 +3,25 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import si from 'systeminformation'; // Added import
-import { authenticateDtmaRequest } from './auth_middleware.js'; // Use .js extension for ESM imports
+import { authenticateBackendRequest } from './auth_middleware.js'; // Renamed import
 import toolRoutes from './routes/tool_routes.js'; // Use .js extension
-import { sendHeartbeat } from './agentopia_api_client.js';
-import { listContainers } from './docker_manager.js'; // Added import for listContainers
+import { sendHeartbeat, DtmaHeartbeatPayload } from './agentopia_api_client.js'; // Import DtmaHeartbeatPayload
+import { listContainers, inspectContainer } from './docker_manager.js'; // Added import for listContainers and inspectContainer
 import Dockerode from 'dockerode'; // Added Dockerode for Port type
 import http from 'http'; // Added http import for Server type
+
+// --- DTMA Internal State ---
+// This map will store details about managed tool instances, keyed by instanceNameOnToolbox
+export interface ManagedToolInstance {
+    accountToolInstanceId: string;
+    // Add other relevant details received during deployment if needed
+    dockerImageUrl: string; 
+    creationPortBindings?: Dockerode.PortMap; // Store the port bindings used at creation
+}
+export const managedInstances = new Map<string, ManagedToolInstance>();
+
+// TODO: Persist and load this map if DTMA needs to recover state across restarts.
+// For now, it's in-memory and repopulated via backend commands / DTMA restarts clean.
 
 // --- Constants & Config ---
 const __filename = fileURLToPath(import.meta.url);
@@ -42,6 +55,8 @@ async function getSystemStatus() {
         used_bytes: mainFs.used,
         free_bytes: mainFs.size - mainFs.used, // Calculate free based on total and used for consistency
       } : { error: 'Could not determine main filesystem usage.' },
+      // Add uptime, network stats, etc. if useful for backend
+      uptime_seconds: si.time().uptime,
     };
   } catch (error) {
     console.error('Error fetching system status:', error);
@@ -49,36 +64,34 @@ async function getSystemStatus() {
   }
 }
 
-// --- Tool Status Function ---
-async function getToolStatuses() {
-  try {
-    // List all containers managed by this DTMA (or all running, depending on desired scope)
-    // For now, let's get all containers, could be filtered by labels later if DTMA adds labels
-    const containers = await listContainers(true); // Get all containers (running or not)
-
-    return containers.map(container => ({
-      id: container.Id,
-      names: container.Names.map((name: string) => name.startsWith('/') ? name.substring(1) : name),
-      image: container.Image,
-      image_id: container.ImageID,
-      command: container.Command,
-      created: container.Created, // Timestamp
-      state: container.State, // e.g., 'running', 'exited'
-      status: container.Status, // e.g., 'Up 2 hours', 'Exited (0) 5 minutes ago'
-      ports: container.Ports.map((port: Dockerode.Port) => ({
-        ip: port.IP,
-        private_port: port.PrivatePort,
-        public_port: port.PublicPort,
-        type: port.Type,
-      })),
-      // Potentially add labels or mounts if relevant for Agentopia backend
-      // labels: container.Labels,
-      // mounts: container.Mounts,
-    }));
-  } catch (error) {
-    console.error('Error fetching tool statuses:', error);
-    return [{ error: 'Failed to fetch tool statuses' }]; // Return array with error object
+// --- Tool Status Function (for heartbeat and /status endpoint) ---
+async function getManagedToolInstanceStatuses(): Promise<DtmaHeartbeatPayload['tool_statuses']> {
+  const statuses: DtmaHeartbeatPayload['tool_statuses'] = [];
+  for (const [instanceName, managedDetail] of managedInstances.entries()) {
+    try {
+      // instanceName here is the container name DTMA uses (instanceNameOnToolbox)
+      const inspectInfo = await inspectContainer(instanceName);
+      statuses.push({
+        account_tool_instance_id: managedDetail.accountToolInstanceId,
+        status_on_toolbox: inspectInfo.State.Status || 'unknown', // e.g., running, exited
+        runtime_details: {
+          container_id: inspectInfo.Id,
+          image: inspectInfo.Config.Image,
+          started_at: inspectInfo.State.StartedAt,
+          state_details: inspectInfo.State, // Includes Running, Paused, Restarting, OOMKilled, Dead, Pid, ExitCode, Error, FinishedAt
+        },
+      });
+    } catch (error: any) {
+      // If inspect fails (e.g., container not found unexpectedly), report error for this instance
+      console.warn(`Error inspecting container ${instanceName} for status:`, error.message);
+      statuses.push({
+        account_tool_instance_id: managedDetail.accountToolInstanceId,
+        status_on_toolbox: 'error_inspecting',
+        runtime_details: { error: error.message },
+      });
+    }
   }
+  return statuses;
 }
 
 // --- Initialization ---
@@ -100,13 +113,13 @@ async function loadDtmaVersion() {
 async function startHeartbeat() { // Made async to await getSystemStatus
   console.log(`Starting heartbeat interval (${HEARTBEAT_INTERVAL_MS}ms)`);
   
-  const getHeartbeatPayload = async () => {
+  const getHeartbeatPayload = async (): Promise<DtmaHeartbeatPayload> => {
     const systemStatus = await getSystemStatus();
-    const toolStatuses = await getToolStatuses(); // Call the new function
+    const toolStatuses = await getManagedToolInstanceStatuses(); // Use new function
     return {
       dtma_version: dtmaVersion,
       system_status: systemStatus,
-      tool_statuses: toolStatuses, // Include tool statuses
+      tool_statuses: toolStatuses,
     };
   };
 
@@ -125,12 +138,56 @@ app.get('/health', (req: Request, res: Response) => {
   res.status(200).send('OK');
 });
 
+// --- New /status endpoint ---
+app.get('/status', authenticateBackendRequest, async (req: Request, res: Response) => {
+  try {
+    const systemMetrics = await getSystemStatus();
+    const toolInstanceDetails: Array<any> = []; // Type this more strictly later
+    
+    for (const [instanceName, managedDetail] of managedInstances.entries()) {
+        let status = 'unknown';
+        let metrics = {};
+        let containerId: string | undefined = undefined;
+        try {
+            const inspectData = await inspectContainer(instanceName);
+            status = inspectData.State?.Status || 'unknown';
+            containerId = inspectData.Id;
+            // TODO: Add per-instance metrics if possible (e.g., from docker stats)
+            // For now, just basic status from inspect.
+            // metrics = await getContainerStats(instanceName); // Placeholder for future enhancement
+        } catch (e: any) {
+            console.warn(`Could not inspect container ${instanceName} for /status endpoint: ${e.message}`);
+            status = 'error_inspecting';
+            if (e.code === 404 || (e.message && e.message.includes('No such container'))) {
+                status = 'not_found'; // More specific status if container is gone
+            }
+        }
+        toolInstanceDetails.push({
+            account_tool_instance_id: managedDetail.accountToolInstanceId,
+            instance_name_on_toolbox: instanceName,
+            status: status,
+            container_id: containerId,
+            // metrics: metrics, // Uncomment when metrics are implemented
+        });
+    }
+
+    res.status(200).json({
+      dtma_version: dtmaVersion,
+      system_metrics: systemMetrics,
+      tool_instances: toolInstanceDetails,
+    });
+  } catch (error: any) {
+    console.error('Error handling /status request:', error);
+    res.status(500).json({ error: 'Failed to retrieve DTMA status' });
+  }
+});
+
 // Apply authentication middleware to all routes below this point
 // Or apply specifically to tool routes
-// app.use(authenticateDtmaRequest); 
+// app.use(authenticateBackendRequest); // Changed from authenticateDtmaRequest
 
 // Mount tool management routes
-app.use('/tools', authenticateDtmaRequest, toolRoutes);
+app.use('/tools', authenticateBackendRequest, toolRoutes); // Changed from authenticateDtmaRequest
 
 // Default route for handling 404s on API paths
 app.use((req: Request, res: Response) => {

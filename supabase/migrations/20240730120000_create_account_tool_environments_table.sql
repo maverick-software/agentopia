@@ -60,10 +60,10 @@ WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Service roles can access all account tool environments"
 ON public.account_tool_environments
 FOR ALL
-USING (get_my_claim('role') = '"service_role"'::jsonb)
-WITH CHECK (get_my_claim('role') = '"service_role"'::jsonb);
+USING (get_my_claim('role') = 'service_role')
+WITH CHECK (get_my_claim('role') = 'service_role');
 
-COMMENT ON TABLE public.account_tool_environments IS 'Stores information about shared DigitalOcean Droplets provisioned for a user account\'s tool environment.';
+COMMENT ON TABLE public.account_tool_environments IS 'Stores information about shared DigitalOcean Droplets provisioned for a user account''s tool environment.';
 COMMENT ON COLUMN public.account_tool_environments.user_id IS 'The user account this tool environment belongs to.';
 COMMENT ON COLUMN public.account_tool_environments.do_droplet_id IS 'The DigitalOcean ID of the provisioned droplet.';
 COMMENT ON COLUMN public.account_tool_environments.status IS 'The current status of the account tool environment.';
@@ -138,10 +138,10 @@ WITH CHECK (
 CREATE POLICY "Service roles can access all account tool environment tools"
 ON public.account_tool_environment_active_tools
 FOR ALL
-USING (get_my_claim('role') = '"service_role"'::jsonb) 
-WITH CHECK (get_my_claim('role') = '"service_role"'::jsonb);
+USING (get_my_claim('role') = 'service_role')
+WITH CHECK (get_my_claim('role') = 'service_role');
 
-COMMENT ON TABLE public.account_tool_environment_active_tools IS 'Tracks tools that are installed or active on a user account\'s shared tool environment.';
+COMMENT ON TABLE public.account_tool_environment_active_tools IS 'Tracks tools that are installed or active on a user account''s shared tool environment.';
 COMMENT ON COLUMN public.account_tool_environment_active_tools.account_tool_environment_id IS 'The ID of the account tool environment.';
 COMMENT ON COLUMN public.account_tool_environment_active_tools.tool_catalog_id IS 'The ID of the tool from the tool catalog.';
 COMMENT ON COLUMN public.account_tool_environment_active_tools.status IS 'The current status of the tool installation.';

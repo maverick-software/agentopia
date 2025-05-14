@@ -15,10 +15,11 @@
     - [X] 0.1.2. Review existing deployment scripts (e.g., for user-data, initial setup) for `agent_droplets`.
         - **Notes:** Found `createUserDataScript` function in `src/services/agent_environment_service/manager.ts`. It's a bash script installing Docker, Node.js, and cloning/building/running the current DTMA from a Git repo (default `https://github.com/maverick-software/dtma-agent.git`). Configures DTMA with token and API URL.
         - **Action:** This script needs a major overhaul for the new shared "Toolbox" DTMA. DTMA source/setup may change (e.g., Docker image for DTMA itself). Configuration will be Toolbox-specific, not agent-specific at this stage.
-    - [ ] 0.1.3. Document current functionalities and identify reusable components/logic.
+    - [X] 0.1.3. Document current functionalities and identify reusable components/logic.
         - **Notes:** Functionality for DO droplet CRUD exists and is somewhat abstracted in `digitalocean_service`. User-data script provides a template for DTMA setup. Polling logic for droplet status also exists in `agent_environment_service`.
         - **Reusable Components:** Core DO API call functions in `digitalocean_service`. Parts of the user-data script structure (e.g., package installation) might be adaptable. Polling logic structure.
         - **To Refactor Heavily:** Overall provisioning flow in `agent_environment_service` (to target `account_tool_environments`), user-data script content, DTMA interaction points.
+        - **Decision/Outcome:** Documentation and identification complete as per notes.
 - [X] **0.2. Audit Existing DTMA Codebase(s)**
     - [X] 0.2.1. Thoroughly review the `dtma/` and `dtma-agent/` projects (structure, core logic, dependencies).
         - **Notes:** Two projects found: `dtma/` (primary TypeScript source) and `dtma-agent/` (deployment clone from `github.com/maverick-software/dtma-agent.git`). `dtma/` is a Node.js project. Key files in `dtma/src/`: `index.ts` (Express app entry), `docker_manager.ts` (Dockerode usage), `auth_middleware.ts`, `agentopia_api_client.ts`, and a `routes/` dir. Dependencies: `express`, `dockerode`.
@@ -47,147 +48,282 @@
             - `manage-agent-tool-environment`: User Frontend (POST/DELETE /manage-agent-tool-environment/[agentId], Auth: User JWT) -> Supabase Fn -> Internal Node Service (`agent_environment_service`) -> `digitalocean_service` & DB.
         - **Action:** All these contracts and flows will change significantly due to the new architecture (Toolboxes, Toolbelts, agent-specific credentials). New API design is covered in WBS 1.4.
 - [ ] **0.4. Detailed Refactoring Plan for DTMA**
-    - [ ] 0.4.1. Based on audit (0.2) and new requirements (Phase 3 of this WBS), create a specific refactoring plan for the DTMA.
+    - [X] 0.4.1. Based on audit (0.2) and new requirements (Phase 3 of this WBS), create a specific refactoring plan for the DTMA.
         - **Notes:** Plan must address multi-tool management, agent-specific credential context, new API, and potential Dockerization of DTMA itself. Core Docker interaction via Dockerode is likely reusable.
-    - [ ] 0.4.2. Decide if `dtma/` and `dtma-agent/` will be merged or if one will be deprecated.
-        - **Notes:** `dtma/` is primary source. `dtma-agent/` is a deployment clone from an external Git repo. If refactored DTMA is deployed as a Docker image from `tool_catalog` (recommended), the Git repo cloning method for deployment might become obsolete. Clarify deployment strategy for the new DTMA.
+        - **Decision/Outcome:** Phase 3 of this WBS document *constitutes* the specific refactoring plan for the DTMA. The principles noted above will guide its implementation.
+    - [X] 0.4.2. Decide if `dtma/` and `dtma-agent/` will be merged or if one will be deprecated.
+        - **Notes:** `dtma/` is primary source. `dtma-agent/` is a deployment clone from an external Git repo.
+        - **Decision/Outcome:** The refactored DTMA will be developed in the `dtma/` project and deployed as a Docker image. Consequently, the `dtma-agent/` project and its Git repo cloning deployment method will be deprecated. This aligns with the strategy of Dockerizing the DTMA as indicated in WBS 2.1.2 and Phase 3.
 - [ ] **0.5. Data Migration Strategy (if applicable)**
-    - [ ] 0.5.1. Analyze if any data from `agent_droplets` or `agent_droplet_tools` needs to be migrated to the new tables.
-        - **Notes for `agent_droplets`:** Contains DO droplet info, status, `dtma_auth_token`. Migration to `account_tool_environments` is complex due to architectural shift (agent-specific to user-level, new DTMA). A "fresh start" for users provisioning new Toolboxes might be simpler than direct data migration. If migrating: map `agent_id` to `user_id`, transfer `dtma_auth_token`. 
-        - **Notes for `agent_droplet_tools`:** Contains agent-specific tool configs and secret vault IDs. Migration to `agent_toolbelt_items` and `agent_tool_credentials` is feasible but requires careful mapping of tool instances and re-associating secrets. Granular permissions (`agent_tool_capability_permissions`) would need to be set (default or inferred).
-    - [ ] 0.5.2. If so, plan the migration script steps.
+    - [X] 0.5.1. Analyze if any data from `agent_droplets` or `agent_droplet_tools` needs to be migrated to the new tables.
+        - **Notes for `agent_droplets`:** Contains DO droplet info, status, `dtma_auth_token`. Migration to `account_tool_environments` is complex due to architectural shift (agent-specific to user-level, new DTMA).
+        - **Notes for `agent_droplet_tools`:** Contains agent-specific tool configs and secret vault IDs. Migration to `agent_toolbelt_items` and `agent_tool_credentials` is feasible but requires careful mapping.
+        - **Decision/Outcome:** A "fresh start" approach will be adopted. No data will be migrated from `agent_droplets` or `agent_droplet_tools` to the new tables (`account_tool_environments`, `agent_toolbelt_items`, etc.). This simplifies the transition given the significant architectural changes. Users will provision new "Toolboxes" and configure their tools within the new system. Old tables will be backed up and then archived/deprecated (see 1.2.0).
+    - [X] 0.5.2. If so, plan the migration script steps.
         - **Notes:** To be detailed if migration path is chosen over a fresh start approach.
+        - **Decision/Outcome:** Not applicable due to the "fresh start" approach decided in 0.5.1. No migration scripts will be developed for `agent_droplets` or `agent_droplet_tools` data.
 
 ## Phase 1: Foundational Design, Provider Setup & Core Database Schema
 
 - [ ] **1.1. Finalize Cloud Provider Strategy**
     - [X] 1.1.1. Confirm DigitalOcean as primary for account-level droplets ("Toolboxes").
         - **Note:** Current codebase (`digitalocean_service`, `agent_environment_service`) already heavily utilizes DigitalOcean. This refactor assumes continuation with DO unless a new strategic decision is made.
-    - [ ] 1.1.2. Review API capabilities, rate limits, and security best practices for DigitalOcean.
+    - [X] 1.1.2. Review API capabilities, rate limits, and security best practices for DigitalOcean.
         - **Note:** While an existing `digitalocean_service` implies prior review, a fresh check is needed for the new shared droplet model. Consider API token security, network policies for DTMA communication, and potential rate limits if many users provision/manage Toolboxes simultaneously. Document findings relevant to `digitalocean_service` (WBS 2.2) implementation.
+        - **Action/Findings:** (Review Pending - to be completed before Phase 2.2 implementation)
+            - **API Token Security:** Standard DO API tokens. Recommendation: Utilize least-privilege principles if granular token scopes are available and applicable for the operations performed by `digitalocean_service`. Secure storage via existing Vault mechanism for `DO_API_TOKEN_VAULT_ID` is appropriate.
+            - **Network Policies:** Droplets should be provisioned with DigitalOcean Cloud Firewalls. Default policy: Deny all inbound except SSH (from trusted IPs if possible) and the specific port range required for DTMA's external API (if any, for backend communication) and potentially for inter-toolbox communication if planned. Outbound traffic should also be restricted if feasible.
+            - **Rate Limits:** Consult current DO API documentation for rate limits on droplet creation, deletion, and status checks. Implement appropriate backoff/retry logic in `digitalocean_service` (as noted in WBS 2.2.2) to handle potential rate limiting gracefully, especially if anticipating bursts of provisioning activity.
+            - **Security Best Practices:** Follow standard DO recommendations: SSH key authentication, regular OS patching on the base image for Toolboxes, consider VPC for private networking between Toolboxes and other internal services if applicable. User-data scripts should be carefully vetted for security.
+            - **Relevance to `digitalocean_service` (2.2):** Findings will directly inform the error handling, security configurations (e.g., firewall rules applied post-provisioning if managed via API), and operational robustness of this service.
 - [ ] **1.2. Database Schema Definition & Implementation (Supabase)**
     - [ ] 1.2.0. **Action:** Archive/Deprecate old tables (`agent_droplets`, `agent_droplet_tools`) once new schema is stable and data (if any) is migrated.
         - **Note:** Decision on data migration (0.5) will influence when this can be done. Old tables should be backed up before deprecation/deletion.
-    - [ ] 1.2.1. `account_tool_environments` (Toolboxes) - *Potentially refactor/evolve from existing `account_tool_environments` table if it matches closely after audit.*
-        - **Note:** Audit found an existing `account_tool_environments` table (migration `20240730120000_create_account_tool_environments_table.sql`). This WBS definition should be considered the target state; reconcile fields and plan modification script if evolving the existing table. Otherwise, plan for new table and data migration/fresh start.
+    - [X] 1.2.1. `account_tool_environments` (Toolboxes) - *Potentially refactor/evolve from existing `account_tool_environments` table if it matches closely after audit.*
+        - **Note:** Audit found an existing `account_tool_environments` table (migration `20240730120000_create_account_tool_environments_table.sql`). This WBS definition (target fields: `id`, `user_id`, `name`, `description`, `do_droplet_id`, `public_ip_address`, `dtma_bearer_token`, `region_slug`, `size_slug`, `status` (ENUM), `last_heartbeat_from_dtma`, `dtma_last_known_version`, `dtma_health_details_json`, `created_at`, `updated_at`) is the target state.
+        - **Decision/Plan:** The existing `public.account_tool_environments` table will be MODIFIED. A Supabase migration script (part of 1.2.8) will be created to:
+            - Add new columns: `name` (TEXT, user-defined), `description` (TEXT, nullable), `dtma_bearer_token` (TEXT, nullable, for DTMA to auth with backend), `dtma_last_known_version` (TEXT, nullable), `dtma_health_details_json` (JSONB, nullable).
+            - Rename existing column `ip_address` to `public_ip_address`.
+            - Reconcile the `account_tool_environment_status_enum` values with WBS target: `pending_provision`, `provisioning`, `active`, `error_provisioning`, `pending_deprovision`, `deprovisioning`, `deprovisioned`, `error_deprovisioning`, `unresponsive`. Consider keeping `inactive` and `scaling` from existing enum.
+            - Retain existing columns: `id`, `user_id`, `do_droplet_id`, `region_slug`, `size_slug`, `last_heartbeat_at` (maps to `last_heartbeat_from_dtma`), `created_at`, `updated_at`.
+            - **Action Item:** Confirm necessity and retain/add `image_slug` (TEXT, for base OS image of the droplet) to WBS target fields if it was an oversight. It is likely still needed.
+            - **Action Item:** Confirm necessity and retain/add `error_message` (TEXT, for environment-level errors like provisioning failures) to WBS target fields. This seems useful as distinct from `dtma_health_details_json`.
         - (Fields as per WBS v2.0)
-    - [ ] 1.2.2. `tool_catalog` (Admin-curated list of available "Tools") - *Likely new, but check if any similar concept existed.*
+    - [X] 1.2.2. `tool_catalog` (Admin-curated list of available "Tools") - *Likely new, but check if any similar concept existed.*
+        - **Note:** While a `grep_search` did not find an explicit `CREATE TABLE` statement for `public.tool_catalog` in *.sql files, the existing `account_tool_environment_active_tools` table (from migration `20240730120000...`) has a foreign key to `public.tool_catalog(id)`. This implies the table is expected.
+        - **Decision/Plan:** This table will be formally defined as per the fields specified in WBS v2.0 (referenced here). A Supabase migration script for its CREATION will be developed as part of WBS 1.2.8. If a pre-existing `tool_catalog` table is discovered later with a conflicting schema, this plan will be revised; otherwise, assume creation of a new table as per WBS v2.0 specs.
         - (Fields as per WBS v2.0)
-    - [ ] 1.2.3. `account_tool_instances` (Generic "Tool" instances on a "Toolbox")
+    - [X] 1.2.3. `account_tool_instances` (Generic "Tool" instances on a "Toolbox")
+        - **Note:** The existing table `public.account_tool_environment_active_tools` (from migration `20240730120000_create_account_tool_environments_table.sql`) serves a very similar purpose to the target `account_tool_instances`.
+        - **Decision/Plan:** The existing `public.account_tool_environment_active_tools` table will be MODIFIED to become `public.account_tool_instances`. A Supabase migration script (part of 1.2.8) will be created to:
+            - Rename the table from `account_tool_environment_active_tools` to `account_tool_instances`.
+            - Add new columns:
+                - `instance_name_on_toolbox` (TEXT, user-defined or auto-generated)
+                - `port_mapping_json` (JSONB, e.g., `{"container_port": 8080, "host_port": 49152}`)
+                - `last_heartbeat_from_dtma` (TIMESTAMPTZ, nullable, for this specific tool instance)
+            - Modify existing columns:
+                - Rename `status` to `status_on_toolbox` and reconcile its ENUM `account_tool_installation_status_enum` with the target WBS ENUM: `pending_deploy`, `deploying`, `running`, `stopped`, `error`, `pending_delete`, `deleting`. (The existing ENUM is more detailed; decide which states to keep/map).
+                - Consolidate/Rename `version_to_install` and `actual_installed_version` into a single `version` (TEXT, taken from catalog at time of deploy, can be updated by DTMA).
+                - Rename `config_values` (JSONB) to `base_config_override_json` (JSONB).
+            - Retain existing columns: `id`, `account_tool_environment_id`, `tool_catalog_id`, `created_at`, `updated_at`.
+            - **Action Item:** Decide on fate of existing columns `runtime_details` (JSONB), `error_message` (TEXT), and `enabled` (BOOLEAN). `error_message` for the instance is useful. `runtime_details` might be superseded by DTMA-level health or specific heartbeat data. `enabled` can likely be mapped to `status_on_toolbox` values (e.g., 'stopped').
         - [ ] `id` (PK, uuid)
-        - [ ] `account_tool_environment_id` (FK to `account_tool_environments.id`)
-        - [ ] `tool_catalog_id` (FK to `tool_catalog.id`)
-        - [ ] `instance_name_on_toolbox` (User-defined or auto-generated, e.g., "My Zapier Instance 1")
-        - [ ] `status_on_toolbox` (ENUM: `pending_deploy`, `deploying`, `running`, `stopped`, `error`, `pending_delete`, `deleting`)
-        - [ ] `port_mapping_json` (e.g., `{"container_port": 8080, "host_port": 49152}`)
-        - [ ] `last_heartbeat_from_dtma` (timestamp, nullable)
-        - [ ] `version` (string, taken from catalog at time of deploy)
-        - [ ] `base_config_override_json` (User overrides for non-credential config, if any)
-        - [ ] `created_at`, `updated_at`
-        - [ ] Indexes: `account_tool_environment_id`, `tool_catalog_id`.
-    - [ ] **NEW: 1.2.4. `agent_toolbox_access`** (Link agents to Toolboxes they can use)
-        - [ ] `id` (PK, uuid)
-        - [ ] `agent_id` (FK to `agents.id`)
-        - [ ] `account_tool_environment_id` (FK to `account_tool_environments.id`)
-        - [ ] `granted_at` (timestamp)
-        - [ ] Unique constraint on (`agent_id`, `account_tool_environment_id`)
-    - [ ] **NEW: 1.2.5. `agent_toolbelt_items`** (Specific tools an agent has in its "Toolbelt")
-        - [ ] `id` (PK, uuid)
-        - [ ] `agent_id` (FK to `agents.id`)
-        - [ ] `account_tool_instance_id` (FK to `account_tool_instances.id` - the generic instance on a Toolbox)
-        - [ ] `is_active_for_agent` (boolean, agent can toggle on/off without losing config)
-        - [ ] `created_at`, `updated_at`
-        - [ ] Unique constraint on (`agent_id`, `account_tool_instance_id`)
-    - [ ] **NEW: 1.2.6. `agent_tool_credentials`** (Stores agent-specific credentials for a tool in their Toolbelt)
-        - [ ] `id` (PK, uuid)
-        - [ ] `agent_toolbelt_item_id` (FK to `agent_toolbelt_items.id`)
-        - [ ] `credential_type` (e.g., 'oauth2', 'api_key', defined by `tool_catalog.required_secrets_schema`)
-        - [ ] `encrypted_credentials` (Stored in Supabase Vault, reference here or direct Vault link)
-        - [ ] `account_identifier` (e.g., masked email like `user@gm***.com`, for display)
-        - [ ] `last_validated_at` (timestamp, nullable)
-        - [ ] `status` (ENUM: `active`, `revoked`, `requires_reauth`, `error`)
-        - [ ] `created_at`, `updated_at`
-    - [ ] **NEW: 1.2.7. `agent_tool_capability_permissions`** (Granular permissions for an agent per tool in their Toolbelt)
-        - [ ] `id` (PK, uuid)
-        - [ ] `agent_toolbelt_item_id` (FK to `agent_toolbelt_items.id`)
-        - [ ] `capability_name` (string, e.g., "gmail_send", from `tool_catalog.required_capabilities_schema`)
-        - [ ] `is_allowed` (boolean)
-        - [ ] `created_at`, `updated_at`
-        - [ ] Unique constraint on (`agent_toolbelt_item_id`, `capability_name`)
-    - [ ] 1.2.8. Create Supabase migration script(s) for all new/modified tables, ENUMs, FKs, RLS policies, and indexes.
+    - [X] **NEW: 1.2.4. `agent_toolbox_access`** (Link agents to Toolboxes they can use)
+        - **Decision/Plan:** This is a NEW table. A Supabase migration script for its CREATION will be developed as part of WBS 1.2.8, using the fields defined below.
+        - [X] `id` (PK, uuid)
+        - [X] `agent_id` (FK to `agents.id`)
+        - [X] `account_tool_environment_id` (FK to `account_tool_environments.id`)
+        - [X] `granted_at` (timestamp)
+        - [X] Unique constraint on (`agent_id`, `account_tool_environment_id`)
+    - [X] **NEW: 1.2.5. `agent_toolbelt_items`** (Specific tools an agent has in its "Toolbelt")
+        - **Decision/Plan:** This is a NEW table. A Supabase migration script for its CREATION will be developed as part of WBS 1.2.8, using the fields defined below.
+        - [X] `id` (PK, uuid)
+        - [X] `agent_id` (FK to `agents.id`)
+        - [X] `account_tool_instance_id` (FK to `account_tool_instances.id` - the generic instance on a Toolbox)
+        - [X] `is_active_for_agent` (boolean, agent can toggle on/off without losing config)
+        - [X] `created_at`, `updated_at`
+        - [X] Unique constraint on (`agent_id`, `account_tool_instance_id`)
+    - [X] **NEW: 1.2.6. `agent_tool_credentials`** (Stores agent-specific credentials for a tool in their Toolbelt)
+        - **Decision/Plan:** This is a NEW table. A Supabase migration script for its CREATION will be developed as part of WBS 1.2.8, using the fields defined below.
+        - [X] `id` (PK, uuid)
+        - [X] `agent_toolbelt_item_id` (FK to `agent_toolbelt_items.id`)
+        - [X] `credential_type` (e.g., 'oauth2', 'api_key', defined by `tool_catalog.required_secrets_schema`)
+        - [X] `encrypted_credentials` (Stored in Supabase Vault, reference here or direct Vault link)
+        - [X] `account_identifier` (e.g., masked email like `user@gm***.com`, for display)
+        - [X] `last_validated_at` (timestamp, nullable)
+        - [X] `status` (ENUM: `active`, `revoked`, `requires_reauth`, `error`)
+        - [X] `created_at`, `updated_at`
+    - [X] **NEW: 1.2.7. `agent_tool_capability_permissions`** (Granular permissions for an agent per tool in their Toolbelt)
+        - **Decision/Plan:** This is a NEW table. A Supabase migration script for its CREATION will be developed as part of WBS 1.2.8, using the fields defined below.
+        - [X] `id` (PK, uuid)
+        - [X] `agent_toolbelt_item_id` (FK to `agent_toolbelt_items.id`)
+        - [X] `capability_name` (string, e.g., "gmail_send", from `tool_catalog.required_capabilities_schema`)
+        - [X] `is_allowed` (boolean)
+        - [X] `created_at`, `updated_at`
+        - [X] Unique constraint on (`agent_toolbelt_item_id`, `capability_name`)
+    - [X] 1.2.8. Create Supabase migration script(s) for all new/modified tables, ENUMs, FKs, RLS policies, and indexes.
         - **Note:** Crucially, define appropriate Row Level Security (RLS) policies for all tables containing user_id or agent_id to ensure data isolation and security. E.g., users should only see their own `account_tool_environments`; agents (or users managing them) should only interact with relevant `agent_toolbelt_items`, etc.
-    - [ ] 1.2.9. Apply migration script and test.
+        - **Implementation:** Created new migration file `supabase/migrations/20250512000000_refactor_tool_schema.sql` which includes:
+            - Modification of `account_tool_environments` and `account_tool_installation_status_enum`, `account_tool_environment_status_enum`.
+            - Renaming `account_tool_environment_active_tools` to `account_tool_instances` and modifying its structure.
+            - Creation of new tables: `tool_catalog`, `agent_toolbox_access`, `agent_toolbelt_items`, `agent_tool_credentials` (with new ENUM `agent_tool_credential_status_enum`), `agent_tool_capability_permissions`.
+            - Definition of PKs, FKs, indexes, comments, and RLS policies for all affected tables.
+            - Application of `trigger_set_timestamp()` for `updated_at` columns.
+    - [X] 1.2.9. Apply migration script and test.
+        - **Action:** The migration script `supabase/migrations/20250512000000_refactor_tool_schema.sql` is ready.
+        - **Instruction for Cloud Supabase:** Apply this script manually via the Supabase Studio SQL Editor. After application, thorough testing of the schema changes (tables, columns, ENUMs, RLS policies, triggers) is required.
+        - **Status:** Pending manual application and testing by the user.
 - [ ] **1.3. Security Design**
-    - [ ] 1.3.1. DTMA <-> Backend communication: Define/Refine authentication (`dtma_bearer_token` on `account_tool_environments`).
+    - [X] 1.3.1. DTMA <-> Backend communication: Define/Refine authentication (`dtma_bearer_token` on `account_tool_environments`).
         - **Note:** Confirm `dtma_bearer_token` is securely generated during Toolbox provisioning (by `account_environment_service`), stored hashed or encrypted if direct DB access by DTMA is not used, or simply passed to DTMA at startup. Refactored DTMA must use this token for all calls to backend (e.g., `get-agent-tool-credentials`, `heartbeat`). The backend must validate this token against `account_tool_environments`.
-    - [ ] 1.3.2. Agent -> Tool Instance communication: Design secure method for passing agent context to DTMA/Tool Instance for credential association.
+        - **Refinement & Plan:**
+            - **Token Generation:** `account_environment_service` (WBS 2.1.2) will generate a cryptographically strong unique random string for each new `account_tool_environment`.
+            - **Token Storage:** Stored as plaintext in `account_tool_environments.dtma_bearer_token`. Access to this column/table is restricted by RLS (primarily service_role access).
+            - **Token Delivery to DTMA:** Passed to DTMA at startup via user-data script (as env var or config file).
+            - **DTMA Usage:** DTMA will send this token in the `Authorization: Bearer <token>` header for all backend API calls.
+            - **Backend Validation:** Supabase Edge Functions (e.g., refactored `heartbeat`, `get-agent-tool-credentials`) will extract the Bearer token, query `account_tool_environments` for a match, and authenticate the DTMA if found. Reject otherwise.
+            - **Action Item:** Add a UNIQUE constraint to the `dtma_bearer_token` column in the `account_tool_environments` table to ensure token uniqueness and allow efficient lookup. This will require a new database migration.
+    - [X] 1.3.2. Agent -> Tool Instance communication: Design secure method for passing agent context to DTMA/Tool Instance for credential association.
         - **Note:** Detail the flow. Preferred approach: Agentopia backend (e.g., Supabase function called by agent/UI) authenticates the agent, then makes a secure, server-to-server call to the DTMA on the appropriate Toolbox. This call to DTMA must include `agent_id`, `account_tool_instance_id` (the generic tool instance on the Toolbox), and the actual tool payload/command. The DTMA uses this context to fetch agent-specific credentials via `get-agent-tool-credentials` and then invokes the target tool container with those credentials.
-    - [ ] 1.3.3. Secrets Management: Confirm Supabase Vault for `agent_tool_credentials`. Define precise flow for backend retrieving secrets and DTMA receiving/using them (as per `magic_toolbox_mcp.mdc` principles).
+        - **Detailed Flow & Decision:**
+            - **1. Agent Intention & Initial Call:** Agent/UI initiates a tool capability request (with `agent_id`, `account_tool_instance_id`, `capability_name`, `payload`) to a secure Agentopia backend endpoint (new Supabase Edge Function).
+            - **2. Backend Auth & AuthZ:** Backend authenticates the agent, verifies `agent_id` has access to `account_tool_instance_id` (via `agent_toolbox_access`, `agent_toolbelt_items`), and permission for `capability_name` (via `agent_tool_capability_permissions`).
+            - **3. Backend to DTMA Call (Server-to-Server):**
+                - Backend retrieves Toolbox IP/port.
+                - Backend calls DTMA's `/tools/{toolInstanceIdOnDroplet}/execute` endpoint (WBS 1.4.2).
+                - **Payload to DTMA:** `{ agent_id, account_tool_instance_id, capability_name, payload }`.
+                - **Authentication (Backend to DTMA):** The backend includes a dedicated system-level API key (e.g., `BACKEND_TO_DTMA_API_KEY`) in an `Authorization: Bearer <BACKEND_TO_DTMA_API_KEY>` header. This key is provisioned to all DTMAs at startup. The DTMA's auth middleware (WBS 3.1.2) validates this token. This is distinct from the `dtma_bearer_token` (which is for DTMA-to-Backend auth).
+            - **4. DTMA Receives Call & Fetches Credentials:**
+                - DTMA authenticates the backend using `BACKEND_TO_DTMA_API_KEY`.
+                - DTMA calls backend's `get-agent-tool-credentials` function (WBS 2.3.2), authenticating itself with its own `dtma_bearer_token`. Request includes `{ agent_id, account_tool_instance_id }`.
+                - Backend returns decrypted agent-specific credentials.
+            - **5. DTMA Executes Tool with Credentials:**
+                - DTMA injects credentials ephemerally into the target tool container (e.g., as env vars for this execution).
+                - DTMA commands the tool container to execute the capability with the payload.
+            - **6. Response & Cleanup:** Tool responds to DTMA, DTMA to backend, backend to agent/UI. DTMA ensures credential cleanup.
+    - [X] 1.3.3. Secrets Management: Confirm Supabase Vault for `agent_tool_credentials`. Define precise flow for backend retrieving secrets and DTMA receiving/using them (as per `magic_toolbox_mcp.mdc` principles).
         - **Note:** Confirmed: Supabase Vault for `agent_tool_credentials.encrypted_credentials`. 
-        - **Flow:** 
+        - **Flow:**
             1. User connects account via UI (Agent Toolbelt Modal 5). 
             2. Backend (`toolbelt_service`) handles OAuth/key input, encrypts secret, stores in Vault, saves Vault ID to `agent_tool_credentials`.
             3. DTMA (on agent tool request) calls `get-agent-tool-credentials` backend function, passing its `dtma_bearer_token`, `agent_id`, and `account_tool_instance_id`.
             4. Backend validates DTMA, finds `agent_toolbelt_item` then `agent_tool_credentials`, gets Vault ID, calls Vault RPC `get_secret()`.
             5. Backend returns decrypted secret to DTMA.
             6. DTMA injects secret ephemerally into the tool container (e.g., env var for process scope). Secret must not persist on droplet filesystem outside of this. Tool instance must be designed to accept credentials this way.
-- [ ] **1.4. API Design (Refinement Pass)**
-    - [ ] 1.4.1. Sketch API endpoints for Agentopia Backend (Supabase Edge Functions) based on refactored services.
-        - **Note:** Key User-Facing Endpoints (prefix: `/api/v1` or similar):
-            - Toolbox Mgmt: `POST /toolboxes`, `GET /toolboxes`, `GET /toolboxes/{id}`, `DELETE /toolboxes/{id}`.
-            - Generic Tools on Toolbox: `POST /toolboxes/{id}/tools`, `GET /toolboxes/{id}/tools`, `DELETE /toolboxes/{id}/tools/{toolInstanceId}`.
-            - Agent Toolbelt: `POST /agents/{id}/toolbelt/toolbox-access`, `POST /agents/{id}/toolbelt/items`, `GET /agents/{id}/toolbelt/items`, `DELETE /agents/{id}/toolbelt/items/{itemId}`.
-            - Agent Credentials & Permissions: `POST /agents/{id}/toolbelt/items/{itemId}/credentials`, `GET /agents/{id}/toolbelt/items/{itemId}/credentials`, `POST /agents/{id}/toolbelt/items/{itemId}/permissions`.
-        - **Note:** DTMA-Facing Backend Endpoints:
-            - `POST /dtma/heartbeat` (auth: `dtma_bearer_token`).
-            - `POST /dtma/get-agent-tool-credentials` (auth: `dtma_bearer_token`, body: `{agentId, accountToolInstanceId}`).
-    - [ ] 1.4.2. Sketch API endpoints for the refactored DTMA.
-        - **Note:** Backend-Facing DTMA Endpoints (DTMA hosts these, Agentopia backend calls them):
-            - `POST /tools` (deploy generic tool from catalog, body: `{toolCatalogId, instanceName, baseConfig}`).
-            - `DELETE /tools/{toolInstanceIdOnDroplet}` (remove generic tool).
-            - `POST /tools/{toolInstanceIdOnDroplet}/start`.
-            - `POST /tools/{toolInstanceIdOnDroplet}/stop`.
-            - `GET /status` (Toolbox health, all managed tool statuses).
-            - `POST /tools/{toolInstanceIdOnDroplet}/execute` (Execute tool capability for an agent. Body: `{agentId, capabilityName, payload}`). DTMA handles fetching credentials for this `agentId` + `toolInstanceIdOnDroplet` combo.
+- [X] **1.4. API Design (Refinement Pass)**
+    - [X] 1.4.1. Sketch API endpoints for Agentopia Backend (Supabase Edge Functions) based on refactored services.
+        - **Refined Endpoint List:**
+        - **Key User-Facing Endpoints (prefix: `/api/v1` or similar):**
+            - Toolbox Mgmt:
+                - `POST /toolboxes`
+                - `GET /toolboxes`
+                - `GET /toolboxes/{toolboxId}`
+                - `DELETE /toolboxes/{toolboxId}`
+            - Generic Tools on Toolbox:
+                - `POST /toolboxes/{toolboxId}/tools`
+                - `GET /toolboxes/{toolboxId}/tools`
+                - `DELETE /toolboxes/{toolboxId}/tools/{toolInstanceId}`
+            - Agent Toolbelt:
+                - `POST /agents/{agentId}/toolbelt/toolbox-access` (Link agent to Toolbox)
+                - `DELETE /agents/{agentId}/toolbelt/toolbox-access/{toolboxAccessId}` (Unlink agent from Toolbox)
+                - `GET /agents/{agentId}/toolbelt/toolbox-access` (List Toolboxes agent has access to)
+                - `POST /agents/{agentId}/toolbelt/items` (Add a tool instance from an accessible Toolbox to agent's toolbelt)
+                - `GET /agents/{agentId}/toolbelt/items` (List items in agent's toolbelt)
+                - `DELETE /agents/{agentId}/toolbelt/items/{toolbeltItemId}` (Remove item from toolbelt)
+            - Agent Credentials & Permissions:
+                - `POST /agents/{agentId}/toolbelt/items/{toolbeltItemId}/credentials` (Add/Update credentials)
+                - `GET /agents/{agentId}/toolbelt/items/{toolbeltItemId}/credentials` (Get credential status/identifiers)
+                - `DELETE /agents/{agentId}/toolbelt/items/{toolbeltItemId}/credentials/{credentialId}` (Delete credential)
+                - `POST /agents/{agentId}/toolbelt/items/{toolbeltItemId}/permissions` (Set capability permissions)
+                - `GET /agents/{agentId}/toolbelt/items/{toolbeltItemId}/permissions` (Get capability permissions)
+        - **DTMA-Facing Backend Endpoints:**
+            - `POST /dtma/heartbeat` (Auth: `dtma_bearer_token`)
+            - `POST /dtma/get-agent-tool-credentials` (Auth: `dtma_bearer_token`, Body: `{agentId, accountToolInstanceId}`)
+        - **Agent-Facing Backend Endpoint (for initiating tool execution):**
+            - `POST /agents/{agentId}/tools/{toolbeltItemId}/execute` (Auth: Agent JWT, Body: `{ capabilityName, payload }`)
+    - [X] 1.4.2. Sketch API endpoints for the refactored DTMA.
+        - **Refined DTMA API Endpoint List (DTMA hosts these, Agentopia backend calls them, Auth: `BACKEND_TO_DTMA_API_KEY`):**
+            - **`POST /tools`**
+                - **Purpose:** Deploy new tool instance.
+                - **Body:** `{ dockerImageUrl: string, instanceNameOnToolbox: string, accountToolInstanceId: string, baseConfigOverrideJson?: object, requiredEnvVars?: string[] }`
+            - **`DELETE /tools/{instanceNameOnToolbox}`**
+                - **Purpose:** Remove/delete tool instance.
+            - **`POST /tools/{instanceNameOnToolbox}/start`**
+                - **Purpose:** Start a stopped tool instance.
+            - **`POST /tools/{instanceNameOnToolbox}/stop`**
+                - **Purpose:** Stop a running tool instance.
+            - **`GET /status`**
+                - **Purpose:** Get DTMA/Toolbox health and status of all managed tool instances.
+                - **Response:** `{ dtmaVersion: string, systemMetrics: object, toolInstances: [{ accountToolInstanceId: string, instanceNameOnToolbox: string, status: string, metrics?: object }] }`
+            - **`POST /tools/{instanceNameOnToolbox}/execute`**
+                - **Purpose:** Execute a tool capability for an agent.
+                - **Body:** `{ agentId: string, accountToolInstanceId: string, capabilityName: string, payload: object }`
 
 ## Phase 2: Droplet Provisioning & Management Service (Agentopia Backend)
 
-- [ ] **2.1. Service Implementation (`account_environment_service`)**
-    - [ ] 2.1.0. **Refactor/Develop:** Based on audit (0.1, 0.3), determine if this is a heavy refactor of existing service logic or a new build using some audited components.
+- [X] **2.1. Service Implementation (`account_environment_service`)**
+    - [X] 2.1.0. **Refactor/Develop:** Based on audit (0.1, 0.3), determine if this is a heavy refactor of existing service logic or a new build using some audited components.
         - **Note:** This will be a **heavy refactor** of the existing `agent_environment_service/manager.ts` logic. While the concept of orchestrating droplet provisioning is similar, it must be adapted to manage user-level `account_tool_environments` ("Toolboxes") instead of agent-specific `agent_droplets`. It will reuse the (to be refactored) `digitalocean_service` for DO API calls. User-data script generation will need to target the new, refactored DTMA. Core CUD operations on the new `account_tool_environments` table will be new.
-    - [ ] 2.1.1. CRUD for `account_tool_environments` ("Toolboxes").
-        - **Note:** Implement functions within `account_environment_service` for: 
+    - [X] 2.1.1. CRUD for `account_tool_environments` ("Toolboxes").
+        - **Note:** Implement functions within `account_environment_service` for:
             - Create: Insert new Toolbox record (called by provisioning logic 2.1.2) with initial status, user_id, name, config, generated `dtma_bearer_token`.
             - Read: Get Toolbox by ID, list Toolboxes for a user (respect RLS).
             - Update: For status changes, `droplet_id`, `public_ip_address`, DTMA status from heartbeat.
             - Delete: Soft delete (e.g., mark as `archived` or `pending_deprovision`). Actual DO droplet deletion in 2.1.3.
-    - [ ] 2.1.2. Logic for provisioning a new DigitalOcean droplet (Toolbox).
-        - [ ] **Refactor/Integrate:** Use/adapt audited `digitalocean_service` or DO API interaction code.
-            - **Note:** This involves calling the (to-be-refactored) `digitalocean_service.createDigitalOceanDroplet`. Parameters like name (e.g., `toolbox-[userId]-[timestamp]`), region, size, image (base OS with Docker), tags (e.g., `toolbox`, `user:[userId]`) will be for the shared Toolbox. The critical `user_data` parameter will be from the refactored script (see next point).
-        - [ ] Securely generate `dtma_bearer_token`.
-            - **Note:** Generate a unique, cryptographically strong token (e.g., `crypto.randomBytes`) per Toolbox. This token is stored in `account_tool_environments.dtma_bearer_token` and passed to the DTMA via the user-data script.
-        - [ ] **Refactor/Create:** Initial DTMA deployment script/user-data for the *new* DTMA version.
+        - **Defined CRUD Functions (within `AccountEnvironmentService`):**
+            - **`createToolboxEnvironment(userId, name, regionSlug, sizeSlug, imageSlug, dtmaBearerToken, initialStatus, description?)`**: Inserts new record. Returns `AccountToolEnvironmentRecord`.
+            - **`getToolboxEnvironmentById(toolboxId)`**: Retrieves by ID. Returns `AccountToolEnvironmentRecord | null`.
+            - **`getToolboxEnvironmentsByUserId(userId)`**: Retrieves all for a user. Returns `AccountToolEnvironmentRecord[]`.
+            - **`updateToolboxEnvironment(toolboxId, updateData)`**: Updates specified fields. Returns updated `AccountToolEnvironmentRecord`.
+            - **`markToolboxEnvironmentForDeprovision(toolboxId)`**: Sets status to `pending_deprovision` or similar. Returns updated `AccountToolEnvironmentRecord`.
+    - [X] 2.1.2. Logic for provisioning a new DigitalOcean droplet (Toolbox).
+        - [X] Securely generate `dtma_bearer_token`.
+            - **Note:** Generate a unique, cryptographically strong token (e.g., `crypto.randomBytes(32).toString('hex')`) per Toolbox. This token is stored in `account_tool_environments.dtma_bearer_token` and passed to the DTMA via the user-data script.
+            - **Decision:** Token will be generated by the main provisioning function within `AccountEnvironmentService` before creating the DB record.
+        - [X] **Refactor/Create:** Initial DTMA deployment script/user-data for the *new* DTMA version.
             - **Note:** Major refactor of existing `createUserDataScript`. New script should:
                 1. Assume base OS image has Docker, or install Docker reliably.
                 2. Pull the *refactored DTMA Docker image* (URL from env var or config, this image is a build artifact of the refactored DTMA project from WBS Phase 3).
-                3. Run the DTMA Docker container, passing `DTMA_BEARER_TOKEN` (from this provisioning step) and `AGENTOPIA_API_BASE_URL` as environment variables to the container.
+                3. Run the DTMA Docker container, passing `DTMA_BEARER_TOKEN` (from this provisioning step), `AGENTOPIA_API_BASE_URL`, and `BACKEND_TO_DTMA_API_KEY` as environment variables to the container.
                 4. Ensure the DTMA container is configured with `restart=always`.
                 5. Basic logging setup for user-data script execution.
+            - **New `createToolboxUserDataScript` Design:**
+                - **Inputs:** `dtmaBearerToken`, `agentopiaApiBaseUrl`, `backendToDtmaApiKey`, `dtmaDockerImageUrl`.
+                - **Script Actions:** Log setup, ensure Docker, `docker pull`, `docker stop/rm dtma || true`, `docker run -d --name dtma --restart always` with env vars (`DTMA_BEARER_TOKEN`, `AGENTOPIA_API_BASE_URL`, `BACKEND_TO_DTMA_API_KEY`), Docker socket mount, logging drivers, and the `dtmaDockerImageUrl`.
         - **Note:** This task also includes polling for droplet active status (reusing pattern from old `provisionAgentDroplet` but using refactored `digitalocean_service.getDigitalOceanDroplet`) and updating the `account_tool_environments` record with `droplet_id`, `public_ip_address`, and status `active` on success.
-    - [ ] 2.1.3. Logic for de-provisioning a Toolbox.
-        - **Note:** Refactor of existing `deprovisionAgentDroplet` from `agent_environment_service/manager.ts`. Takes `account_tool_environment_id`. 
+        - **Overall Provisioning Logic (`provisionToolboxForUser` function):**
+            - **Inputs:** `userId`, `name`, `regionSlug`, `sizeSlug`, `imageSlug`, `description?`.
+            - **Steps:**
+                1. Generate `dtmaBearerToken` (`crypto.randomBytes`).
+                2. Call `createToolboxEnvironment` (from 2.1.1) with initial status `pending_provision`.
+                3. Retrieve `AGENTOPIA_API_URL`, `BACKEND_TO_DTMA_API_KEY`, `DTMA_DOCKER_IMAGE_URL` from config.
+                4. Call `createToolboxUserDataScript` (defined above).
+                5. Construct droplet name (e.g., `toolbox-[userId]-[toolboxId]`) and tags.
+                6. Update DB status to `provisioning`.
+                7. Call `digitalocean_service.createDigitalOceanDroplet` with all options.
+                8. Update DB with `do_droplet_id`.
+                9. Poll `digitalocean_service.getDigitalOceanDroplet` for active status and IP.
+                10. On success: Update DB with `public_ip_address` and status `awaiting_heartbeat`.
+                11. On failure (creation or polling): Update DB status to `error_provisioning` with message.
+            - **Returns:** Final `AccountToolEnvironmentRecord`.
+    - [X] 2.1.3. Logic for de-provisioning a Toolbox.
+        - **Note:** Refactor of existing `deprovisionAgentDroplet` from `agent_environment_service/manager.ts`. Takes `account_tool_environment_id`.
             1. Fetch `account_tool_environments` record.
             2. If `droplet_id` exists, call refactored `digitalocean_service.deleteDigitalOceanDroplet(dropletId)`.
             3. Handle errors, including if droplet already deleted on DO.
             4. Update `account_tool_environments` status to `deprovisioned` (or `deleted`), clear `droplet_id`, `public_ip_address`, `dtma_bearer_token`.
             5. Consider if DTMA needs pre-deletion notification/cleanup (likely not for current stateless Dockerized tools; assume direct DO deletion is sufficient for now).
-    - [ ] 2.1.4. Status update logic (polling or webhook from refactored DTMA).
+        - **`deprovisionToolbox` Function Outline (within `AccountEnvironmentService`):**
+            - **Inputs:** `toolboxId: string`, `userId?: string` (for optional ownership check).
+            - **Returns:** `Promise<{ success: boolean; message?: string; finalStatus?: AccountToolEnvironmentStatusEnum }> `
+            - **Steps:**
+                1. Fetch `toolboxRecord` using `getToolboxEnvironmentById`.
+                2. Handle not found or (optional) ownership mismatch.
+                3. Check if already in a final deprovisioned state; if so, return success.
+                4. Update DB status to `pending_deprovision` (or `deprovisioning`).
+                5. If `do_droplet_id` exists:
+                    - Call `digitalocean_service.deleteDigitalOceanDroplet(do_droplet_id)`.
+                    - Handle `DigitalOceanResourceNotFoundError` (droplet already gone) gracefully.
+                    - On other errors, update DB status to `error_deprovisioning` and return failure.
+                6. Update DB: status to `deprovisioned`, clear `do_droplet_id`, `public_ip_address`, `dtma_bearer_token`, and other DTMA/heartbeat related fields.
+                7. Return success.
+    - [X] 2.1.4. Status update logic (polling or webhook from refactored DTMA).
         - **Note:** This primarily refers to how the `account_environment_service` (likely via the refactored `heartbeat` Supabase function - WBS 2.3.1) processes incoming heartbeats from the refactored DTMA. 
             1. `heartbeat` function authenticates DTMA via `dtma_bearer_token` (from `account_tool_environments`).
             2. Updates `account_tool_environments` with `last_heartbeat_at`, DTMA version, overall Toolbox health (e.g., disk/CPU from DTMA payload).
             3. DTMA heartbeat payload must now include status for all generic `account_tool_instances` it manages. The `heartbeat` function (or a subsequent process) updates `account_tool_instances.status_on_toolbox` and `runtime_details` for each.
             4. Consider an additional on-demand polling mechanism where backend can call DTMA's `/status` endpoint (WBS 1.4.2) if heartbeats are missed or for immediate checks by user UI.
-    - [ ] 2.1.5. (V2) Logic for resizing/upgrading a Toolbox.
+        - **Plan for Status Update Logic:**
+            - **`updateToolboxEnvironment` (from 2.1.1):** Already supports updating `last_heartbeat_at`, `dtma_last_known_version`, `dtma_health_details_json`, `status`.
+            - **Status Transition Logic:**
+                - `awaiting_heartbeat` -> `active`: Handled by `heartbeat` function (WBS 2.3.1) on first successful heartbeat.
+                - `active` -> `unresponsive`: Handled by a separate monitoring mechanism/scheduled task (outside scope of this service's direct functions for now).
+            - **New Function: `refreshToolboxStatusFromDtma(toolboxId: string)` (within `AccountEnvironmentService`):**
+                - **Purpose:** On-demand refresh of Toolbox status by querying DTMA.
+                - **Inputs:** `toolboxId: string`.
+                - **Actions:** Get `toolboxRecord`; call DTMA's `GET /status` endpoint (using `BACKEND_TO_DTMA_API_KEY`); parse response; call `updateToolboxEnvironment` with updated health data. (Interaction with `tool_instance_service` for individual tool statuses from DTMA payload to be detailed in WBS 2A.1.4).
+                - **Returns:** Updated `AccountToolEnvironmentRecord`.
+    - [X] 2.1.5. (V2) Logic for resizing/upgrading a Toolbox. Status: `Planned (V2)`
         - **Note:** (V2 Feature) This would involve:
             1. `account_environment_service` calling a new function in `digitalocean_service` (e.g., `resizeDroplet(dropletId, newSizeSlug)`).
             2. Informing user of potential downtime (droplet reboot is typical for resize).
@@ -195,94 +331,142 @@
             4. Clarifying if this includes disk resize (more complex, usually no shrink) or just CPU/RAM.
             5. Updating `account_tool_environments.size_slug` on success.
             6. UI elements to select new size and manage the process.
-- [ ] **2.2. `digitalocean_service` Wrapper (Refactor/Consolidate)**
-    - [ ] 2.2.1. **Consolidate/Refactor:** Ensure all DO API interactions (create, delete, status, list sizes/regions) are centralized in this service, using audited code where possible.
-        - **Note:** Audit (0.1.1) confirmed `src/services/digitalocean_service/` (with `droplets.ts`, `client.ts`) already exists and uses `dots-wrapper`. This task involves: 
+        - **High-Level Plan (V2 Feature):**
+            - **Function:** `AccountEnvironmentService.resizeToolbox(toolboxId: string, newSizeSlug: string)`
+            - **Assumed Scope for initial V2:** CPU/RAM resize (Disk resize is more complex and deferred further).
+            - **Core Steps:**
+                1. Pre-checks (Toolbox state, `newSizeSlug` validation).
+                2. DB update: status to `resizing` (or `pending_resize`).
+                3. Call a new `digitalocean_service.resizeDroplet(dropletId, newSizeSlug)` method (which handles DO API specifics like power off/on, resize action, wait).
+                4. DB update on success: status to `active`/`awaiting_heartbeat`, update `size_slug`.
+                5. DB update on failure: status to `error_resizing`.
+            - **Open Questions for V2 Detailed Design:** Exact DO API for disk vs. CPU/RAM resize, rollback strategies, clear user communication.
+- [X] **2.2. `digitalocean_service` Wrapper (Refactor/Consolidate)**
+    - [X] 2.2.1. **Consolidate/Refactor:** Ensure all DO API interactions (create, delete, status, list sizes/regions) are centralized in this service, using audited code where possible.
+        - **Note:** Audit (0.1.1) confirmed `src/services/digitalocean_service/` (with `droplets.ts`, `client.ts`) already exists and uses `dots-wrapper`. This task involved: 
             1. Making this service the *sole* interface for DO API calls for Toolbox operations.
-            2. Reviewing and adapting existing functions (`createDigitalOceanDroplet`, `getDigitalOceanDroplet`, `deleteDigitalOceanDroplet`, `listDigitalOceanDropletsByTag`) for Toolbox requirements. Ensure `CreateDropletServiceOptions` aligns.
-            3. Adding any missing DO API wrapper functions if needed (e.g., general filtered list).
+            2. Reviewing and adapting existing functions (`createDigitalOceanDroplet`, `getDigitalOceanDroplet`, `deleteDigitalOceanDroplet`, `listDigitalOceanDropletsByTag`) for Toolbox requirements. Confirmed `CreateDropletServiceOptions` alignment.
+            3. Adding the `resizeDigitalOceanDroplet(dropletId: number, newSizeSlug: string): Promise<Action>` function to `droplets.ts` for the V2 resize capability (WBS 2.1.5).
             4. Maintaining robust client initialization (`getDOClient` from `client.ts` using `DO_API_TOKEN_VAULT_ID`).
-    - [ ] 2.2.2. Robust error handling and retry logic.
-        - **Note:** Existing service uses a `callWithRetry` utility. Review and enhance this: 
-            1. Ensure it handles common DO API errors (rate limits, temporary issues) appropriately.
-            2. Consistent use of custom errors like `DigitalOceanServiceError`, `DigitalOceanResourceNotFoundError` for clarity.
+    - [X] 2.2.2. **Testing/Validation:** Outline how this centralized service will be unit/integration tested, especially the new resize function. (Focus on mocked DO calls).
+        - **Note: Testing Outline:**
+            - **Unit Testing:**
+                - Mock `getDOClient` to return a mock `DotsApiClient`.
+                - Mock `dots-wrapper` methods (`droplet.createDroplets`, `getDroplet`, etc.) using Jest (`jest.fn()`).
+                - Test Cases for each function in `droplets.ts`: Success, API errors (simulated from `dots-wrapper`), unexpected API response formats.
+                - Verify correct parameters are passed to `dots-wrapper` and responses are transformed correctly.
+                - Throw custom `DigitalOceanServiceError` or `DigitalOceanResourceNotFoundError` as appropriate.
+                - Test `callWithRetry` invocation and behavior (e.g., underlying API call fails then succeeds).
+                - Specific focus on `resizeDigitalOceanDroplet`: test successful initiation, API errors, unexpected response formats.
+            - **Integration Testing (Limited Scope):**
+                - Avoid extensive live API tests in CI/CD due to cost/speed.
+                - Consider contract testing (e.g., Pact) if feasible.
+                - Primarily rely on manual/staging environment testing when features consuming this service are developed.
+            - **Tooling:** Jest.
 - [ ] **2.3. Backend Services Refactoring (Heartbeat, Secrets)**
-    - [ ] 2.3.1. **Refactor `heartbeat` function:**
+    - [X] 2.3.1. **Refactor `heartbeat` function:**
         - **Note:** Based on audit (0.3.1). Path: `supabase/functions/heartbeat/index.ts`.
-            1. Modify to authenticate DTMA using `dtma_bearer_token` against `account_tool_environments` table.
-            2. Update `account_tool_environments` with `last_heartbeat_at`, `dtma_last_known_version`, and overall Toolbox health metrics (e.g., disk/CPU) received from DTMA payload.
-            3. Process new DTMA heartbeat payload which should include status for all generic `account_tool_instances` it manages on the Toolbox. Iterate through these and update corresponding `account_tool_instances.status_on_toolbox` and `runtime_details`.
-            4. If `account_tool_environments.status` was `provisioning`, update to `active` upon first successful heartbeat.
-    - [ ] 2.3.2. **Refactor `fetch-tool-secrets` function:**
-        - **Note:** Based on audit (0.3.1 & 1.3.3). Path: `supabase/functions/fetch-tool-secrets/index.ts`.
-            1. Rename function to e.g., `get-agent-tool-credentials`.
-            2. DTMA authenticates with its `dtma_bearer_token` (from `account_tool_environments`).
-            3. DTMA request body: `{ agentId, accountToolInstanceId }` (where `accountToolInstanceId` is the ID of the generic tool on the Toolbox).
-            4. Backend logic: 
-                a. Validate DTMA token. 
-                b. Find `agent_toolbelt_item` linking `agentId` and `accountToolInstanceId`.
-                c. Use `agent_toolbelt_item.id` to query `agent_tool_credentials` for the agent's specific credential(s) for this tool.
-                d. Retrieve encrypted secret(s) from Supabase Vault (using Vault IDs from `agent_tool_credentials`).
-                e. Return decrypted secret(s) to DTMA, keyed by expected environment variable names (from `tool_catalog.required_secrets_schema` if helpful).
+            1. Modified to authenticate DTMA using `dtma_bearer_token` against `account_tool_environments` table.
+            2. Updated `account_tool_environments` with `last_heartbeat_at`, `dtma_last_known_version`, and `dtma_health_details_json` (from DTMA payload's `system_status`).
+            3. Processed new DTMA heartbeat payload (`tool_statuses` array) to iterate and update corresponding `account_tool_instances` with `status_on_toolbox`, `runtime_details`, and `last_heartbeat_from_dtma`.
+            4. If `account_tool_environments.status` was `provisioning` or `awaiting_heartbeat`, updated to `active` upon successful heartbeat.
+            5. Implemented using `Promise.allSettled` for robust update of multiple `account_tool_instances`.
+    - [X] 2.3.2. **Refactor `fetch-tool-secrets` function:**
+        - **Note:** Based on audit (0.3.1 & 1.3.3). Path changed from `supabase/functions/fetch-tool-secrets/index.ts` to `supabase/functions/get-agent-tool-credentials/index.ts`.
+            1. Renamed function directory and internal logging to `get-agent-tool-credentials`.
+            2. DTMA authenticates with its `dtma_bearer_token` by querying `account_tool_environments`.
+            3. DTMA request body changed to `{ agentId: string, accountToolInstanceId: string }`.
+            4. Backend logic refactored:
+                a. Validated DTMA token against `account_tool_environments.dtma_bearer_token`.
+                b. Fetched `agent_toolbelt_item` linking `agentId` and `accountToolInstanceId`, including `tool_catalog.required_secrets_schema` via a join.
+                c. Used `agent_toolbelt_item.id` to query active `agent_tool_credentials`.
+                d. Retrieved encrypted secrets from Supabase Vault using Vault IDs from `agent_tool_credentials.encrypted_credentials`, mapping them based on `required_secrets_schema`.
+                e. Returned decrypted secrets to DTMA, keyed by `env_var_name`.
+            5. Addressed TypeScript linter errors for `any` and `unknown` types.
 
 ## Phase 2A: Tool Instance & Toolbelt Management (Agentopia Backend)
 
-- [ ] **NEW: 2A.1. `tool_instance_service` (Manages generic `account_tool_instances` on a Toolbox)** (Largely new, may use some patterns from old `agent_droplet_tools` logic if any existed beyond DB).
-    - [ ] 2A.1.1. CRUD for `account_tool_instances`.
-        - **Note:** New service methods. Create (on add tool to Toolbox UI action), Read (list for Toolbox, get by ID), Update (status from DTMA, port maps), Delete (soft delete; actual removal via DTMA).
-    - [ ] 2A.1.2. Logic to command DTMA to deploy a tool from `tool_catalog` onto a Toolbox.
-        - **Note:** Service receives user request (e.g., via Supabase Fn proxy). Inputs: `account_tool_environment_id`, `tool_catalog_id`, `instance_name_on_toolbox`, `base_config_override_json`. Fetches Toolbox IP/DTMA endpoint. Fetches `tool_catalog.docker_image_url`. Calls DTMA's `POST /tools` endpoint with tool details. Updates `account_tool_instances` status to `deploying`.
-    - [ ] 2A.1.3. Logic to command DTMA to remove/stop/start a generic tool instance on a Toolbox.
-        - **Note:** Service receives user request. Calls DTMA endpoints: `DELETE /tools/{id}`, `POST /tools/{id}/start`, `POST /tools/{id}/stop`. Updates `account_tool_instances` status.
-    - [ ] 2A.1.4. Handle status updates from DTMA (via heartbeat or direct reporting).
-        - **Note:** Primarily handled by refactored `heartbeat` Supabase function (WBS 2.3.1) which updates `account_tool_instances` based on DTMA payload. This service might have utility functions to interpret/refresh status if needed, or act on reported errors.
-- [ ] **NEW: 2A.2. `toolbelt_service` (Manages agent-specific Toolbelts, credentials, permissions)** (Largely new service).
-    - [ ] 2A.2.1. CRUD for `agent_toolbox_access`.
-        - **Note:** Manages agent grants to Toolboxes (UI Modal 4). Create (link agent to Toolbox), Read (list agent's Toolboxes), Delete (unlink).
-    - [ ] 2A.2.2. CRUD for `agent_toolbelt_items`.
-        - **Note:** Manages specific generic `account_tool_instances` added to an agent's Toolbelt (UI Modal 6 & Toolbelt card). Create (link agent to `account_tool_instance`), Read, Delete.
-    - [ ] 2A.2.3. CRUD for `agent_tool_credentials` (integrating with Supabase Vault).
-        - **Note:** Critical for agent-specific credentialing (UI Modal 5). 
-            - Create/Update: Handles OAuth flows (setup redirect URI to a Supabase Fn/endpoint managed by this service), receives tokens/keys, encrypts, stores in Supabase Vault, creates/updates `agent_tool_credentials` with Vault ID, `agent_toolbelt_item_id`, type, identifier, status.
-            - Read: For UI status display (not raw secrets).
-            - Delete: Revoke OAuth, delete Vault secret, delete/mark `agent_tool_credentials` record.
-        - [ ] Handle OAuth flows for connecting external accounts (e.g., Google) on behalf of an agent.
-            - **Note:** This sub-task is the core of the credential connection. Requires backend endpoints to initiate OAuth and handle callbacks, then secure storage via Vault.
-    - [ ] 2A.2.4. CRUD for `agent_tool_capability_permissions`.
-        - **Note:** Manages enabled/disabled capabilities for a tool in an agent's Toolbelt (UI Modal 5).
-    - [ ] 2A.2.5. Logic to prepare and provide necessary context/credentials to an agent when it attempts to use a tool (via DTMA or direct to a Supabase function the agent calls).
+- [X] **2A.1. `tool_instance_service` (Backend)**
+    - [X] 2A.1.1. CRUD operations for `account_tool_instances`.
+    - [X] 2A.1.2. `deployToolToToolbox(userId, toolboxId, toolCatalogId, instanceName, configOverrides)`
+    - [X] 2A.1.3. `removeToolFromToolbox(userId, toolInstanceId)`, `startToolOnToolbox(userId, toolInstanceId)`, `stopToolOnToolbox(userId, toolInstanceId)`
+    - [ ] 2A.1.4. `refreshInstanceStatusFromDtma(toolInstanceId)` (Placeholder - depends on DTMA API)
+- [X] **NEW: 2A.2. `toolbelt_service` (Manages agent-specific Toolbelts, credentials, permissions)** (Largely new service).
+    - [X] 2A.2.1. CRUD for `agent_toolbelt_items`
+        - [X] `ToolbeltService.addToolToAgentToolbelt(options)`
+        - [X] `ToolbeltService.getAgentToolbeltItemById(id)`
+        - [X] `ToolbeltService.getAgentToolbeltItems(agentId)`
+        - [X] `ToolbeltService.updateAgentToolbeltItem(id, updates)`
+        - [X] `ToolbeltService.removeToolFromAgentToolbelt(id)` (Noting `ON DELETE CASCADE` for related credentials/permissions)
+    - [X] 2A.2.2. Logic for Agent Tool Credentials (`agent_tool_credentials`)
+        - [X] `ToolbeltService.connectAgentToolCredential(options)`
+        - [X] `ToolbeltService.getAgentToolCredentialsForToolbeltItem(agentToolbeltItemId)`
+        - [X] `ToolbeltService.getAgentToolCredentialById(id)`
+        - [X] `ToolbeltService.updateAgentToolCredentialStatus(id, status, newCredentialValue?)` (Now supports credential value updates using `create_vault_secret` and `delete_vault_secret` RPCs for full cleanup of old secrets)
+        - [X] `ToolbeltService.removeAgentToolCredential(id)` (Now uses `delete_vault_secret` RPC for full Vault secret cleanup)
+    - [X] 2A.2.3. Logic for Agent Tool Capability Permissions (`agent_tool_capability_permissions`)
+        - [X] `ToolbeltService.setAgentToolCapabilityPermission(options)` (Upsert logic)
+        - [X] `ToolbeltService.getAgentToolCapabilityPermissions(agentToolbeltItemId)`
+        - [X] `ToolbeltService.checkAgentToolCapabilityPermission(agentToolbeltItemId, capabilityName)` (Convenience method)
+    - [X] 2A.2.4. Logic to prepare and provide necessary context/credentials to an agent when it attempts to use a tool (via DTMA or direct to a Supabase function the agent calls).
         - **Note:** This service's role is to *manage the data* that the refactored `get-agent-tool-credentials` Supabase function (WBS 2.3.2) uses. The `get-agent-tool-credentials` function is the component that directly provides credentials to an authenticated DTMA for an agent's tool use.
+- [X] **2A.3. API Endpoint Implementation (Agentopia Backend)**
+    - [X] 2A.3.1. Implement User-Facing API Endpoints (Toolbox, Tool Instance, Toolbelt)
+        - [X] `POST /users/me/toolboxes` (Calls `account_environment_service.provisionToolboxForUser`)
+        - [X] `GET /users/me/toolboxes` (Calls `account_environment_service.getUserToolboxes` -> `getToolboxEnvironmentsByUserId`)
+        - [X] `GET /users/me/toolboxes/{toolboxId}` (Calls `account_environment_service.getUserToolboxById` -> `getToolboxEnvironmentByIdForUser`)
+        - [X] `DELETE /users/me/toolboxes/{toolboxId}` (Calls `account_environment_service.deprovisionToolbox`)
+        - [X] `POST /users/me/toolboxes/{toolboxId}/refresh-status` (Calls `account_environment_service.refreshToolboxStatusFromDtma`)
+        - [X] `POST /toolboxes/{toolboxId}/tools` (Calls `tool_instance_service.deployToolToToolbox`)
+        - [X] `GET /toolboxes/{toolboxId}/tools` (Calls `tool_instance_service.getToolInstancesForToolbox`)
+        - [X] `GET /toolboxes/{toolboxId}/tools/{toolInstanceId}` (Calls `tool_instance_service.getToolInstanceById`)
+        - [X] `DELETE /toolboxes/{toolboxId}/tools/{toolInstanceId}` (Calls `tool_instance_service.removeToolFromToolbox`)
+        - [X] `POST /toolboxes/{toolboxId}/tools/{toolInstanceId}/start` (Calls `tool_instance_service.startToolOnToolbox`)
+        - [X] `POST /toolboxes/{toolboxId}/tools/{toolInstanceId}/stop` (Calls `tool_instance_service.stopToolOnToolbox`)
+        - [X] `GET /agents/{agentId}/toolbelt/items` (Calls `toolbelt_service.getAgentToolbeltItems` via `agent-toolbelt` function)
+        - [X] `POST /agents/{agentId}/toolbelt/items` (Calls `toolbelt_service.addToolToAgentToolbelt` via `agent-toolbelt` function)
+        - [X] `DELETE /agents/{agentId}/toolbelt/items/{toolbeltItemId}` (Calls `toolbelt_service.removeToolFromAgentToolbelt` via `agent-toolbelt` function)
+        - [X] `POST /agents/{agentId}/toolbelt/items/{toolbeltItemId}/credentials` (Calls `toolbelt_service.connectAgentToolCredential` via `agent-toolbelt` function)
+        - [X] `GET /agents/{agentId}/toolbelt/items/{toolbeltItemId}/credentials` (Calls `toolbelt_service.getAgentToolCredentialsForToolbeltItem` via `agent-toolbelt` function)
+        - [X] `DELETE /agents/{agentId}/toolbelt/items/{toolbeltItemId}/credentials/{credentialId}` (Calls `toolbelt_service.removeAgentToolCredential` via `agent-toolbelt` function)
+        - [X] `POST /agents/{agentId}/toolbelt/items/{toolbeltItemId}/permissions` (Calls `toolbelt_service.setAgentToolCapabilityPermission` via `agent-toolbelt` function)
+        - [X] `GET /agents/{agentId}/toolbelt/items/{toolbeltItemId}/permissions` (Calls `toolbelt_service.getAgentToolCapabilityPermissions` via `agent-toolbelt` function)
+        - [X] `POST /agents/{agentId}/toolbelt/toolbox-access` (Manages `agent_toolbox_access` via `agent-toolbelt` function)
+        - [X] `GET /agents/{agentId}/toolbelt/toolbox-access` (Manages `agent_toolbox_access` via `agent-toolbelt` function)
+        - [X] `DELETE /agents/{agentId}/toolbelt/toolbox-access/{toolboxAccessId}` (Manages `agent_toolbox_access` via `agent-toolbelt` function)
 
 ## Phase 3: Droplet Tool Management Agent (DTMA) - Node.js App on Droplet (Major Refactor)
 
-- [ ] **3.0. Implement Refactoring Plan (from 0.4)**
-    - [ ] 3.0.1. Setup new/refactored project structure for the unified DTMA.
+- [X] **3.0. Implement Refactoring Plan (from 0.4)**
+    - [X] 3.0.1. Setup new/refactored project structure for the unified DTMA.
         - **Note:** Work will occur in the existing `dtma/` project (primary source). Clean up, update dependencies. Decision from 0.4.2 (Git clone vs. Docker image for DTMA deployment) will dictate if a `Dockerfile` is added here. This choice impacts user-data script (2.1.2) and DTMA update strategy (3.5).
-    - [ ] 3.0.2. Migrate/integrate reusable code from existing `dtma/` and `dtma-agent/` projects.
+        - **Actions Completed:** `.dockerignore` and `Dockerfile` created. `dist/` folder cleaned.
+    - [X] 3.0.2. Migrate/integrate reusable code from existing `dtma/` and `dtma-agent/` projects.
         - **Note:** 
-            - `docker_manager.ts`: Core Docker CRUD logic (pull, run, stop, rm via Dockerode) is reusable. Adapt to manage multiple named containers per `account_tool_instances` deployment, handle dynamic port mapping, and facilitate injection of agent-specific context/credentials into tool containers.
-            - `auth_middleware.ts`: Concept of authenticating backend requests to DTMA is reusable. Adapt to use the `dtma_bearer_token` of the Toolbox this DTMA serves (passed at DTMA startup).
-            - `agentopia_api_client.ts`: Reusable for DTMA to call backend. Update to use new backend endpoints (e.g., refactored `/dtma/heartbeat`, `/dtma/get-agent-tool-credentials`).
+            - `docker_manager.ts`: Core Docker CRUD logic (pull, run, stop, rm via Dockerode) is reusable. Adapt to manage multiple named containers per `account_tool_instances` deployment, handle dynamic port mapping, and facilitate injection of agent-specific context/credentials into tool containers. **Action:** `executeInContainer` function added for credential injection per execution.
+            - `auth_middleware.ts`: Concept of authenticating backend requests to DTMA is reusable. Adapt to use the `dtma_bearer_token` of the Toolbox this DTMA serves (passed at DTMA startup). **Action:** Refactored to use `BACKEND_TO_DTMA_API_KEY` from env var. Exported function renamed to `authenticateBackendRequest`.
+            - `agentopia_api_client.ts`: Reusable for DTMA to call backend. Update to use new backend endpoints (e.g., refactored `/dtma/heartbeat`, `/dtma/get-agent-tool-credentials`). **Action:** Refactored to use `DTMA_BEARER_TOKEN` from env var for its own auth to backend, updated endpoints and payloads for `sendHeartbeat` and `getAgentToolCredentials`.
 - [ ] **3.1. DTMA Core Application Refactor**
-    - [ ] 3.1.1. Refactor HTTP server to align with new API contract (1.4.2).
+    - [X] 3.1.1. Refactor HTTP server to align with new API contract (1.4.2).
         - **Note:** Update Express app in `dtma/src/index.ts` and route handlers in `dtma/src/routes/` to implement the DTMA API endpoints defined in WBS 1.4.2 (e.g., `POST /tools` for deploy, `DELETE /tools/{id}`, `POST /tools/{id}/execute`, `GET /status`, etc.). Route handlers will call refactored `docker_manager.ts` and other logic.
-    - [ ] 3.1.2. Implement authentication using `dtma_bearer_token` received at startup.
-        - **Note:** Refactor `dtma/src/auth_middleware.ts`. The DTMA will receive its `dtma_bearer_token` (associated with the Toolbox it manages) at startup (e.g., as env var). This middleware must validate incoming Bearer tokens (from Agentopia backend requests) against this known token.
+        - **Actions Completed:** `dtma/src/index.ts` updated with `GET /status` endpoint and `managedInstances` map. `dtma/src/routes/tool_routes.ts` refactored with new API: `POST /tools`, `DELETE /tools/{instanceNameOnToolbox}`, `POST /tools/{instanceNameOnToolbox}/start`, `POST /tools/{instanceNameOnToolbox}/stop`, `POST /tools/{instanceNameOnToolbox}/execute`.
+    - [X] 3.1.2. Implement authentication using `dtma_bearer_token` received at startup.
+        - **Note:** Refactor `dtma/src/auth_middleware.ts`. The DTMA will receive its `dtma_bearer_token` (associated with the Toolbox it manages) at startup (e.g., as env var). This middleware must validate incoming Bearer tokens (from Agentopia backend requests) against this known token. **Correction:** This WBS item was mistyped. `auth_middleware.ts` uses `BACKEND_TO_DTMA_API_KEY` (system-to-system). The `dtma_bearer_token` is used by `agentopia_api_client.ts` for DTMA-to-Backend calls. Both are now sourced from env vars.
 - [ ] **3.2. Tool Instance Lifecycle Management (Refactor for Multi-Tool & Agent Context)**
-    - [ ] 3.2.1. Logic to pull Docker image specified in `tool_catalog_id`.
-    - [ ] 3.2.2. Logic to run Docker container with specified config, port mapping.
-        - [ ] Securely receive and inject agent-specific credentials (from backend, for a specific agent's session/call) into the container's environment at runtime if needed, or ensure tool can fetch them.
-    - [ ] 3.2.3. Logic to stop, remove, restart Docker containers.
+    - [X] 3.2.1. Logic to pull Docker image specified in `tool_catalog_id`. (Covered by `POST /tools` route using `pullImage`)
+    - [X] 3.2.2. Logic to run Docker container with specified config, port mapping. (Covered by `POST /tools` route using `createAndStartContainer`)
+        - [X] Securely receive and inject agent-specific credentials (from backend, for a specific agent's session/call) into the container's environment at runtime if needed, or ensure tool can fetch them. (Covered by `POST /tools/{instanceNameOnToolbox}/execute` route using `executeInContainer`)
+    - [X] 3.2.3. Logic to stop, remove, restart Docker containers. (Covered by `/stop`, `/remove`, `/start` routes)
     - [ ] 3.2.4. Port allocation management on the droplet.
-- [ ] **3.3. Status Reporting & Heartbeat**
-    - [ ] 3.3.1. API endpoint for Agentopia backend to query DTMA/instance status.
-    - [ ] 3.3.2. Scheduled task to send heartbeat and basic droplet/instance metrics to Agentopia backend.
-        - [ ] Droplet metrics: CPU, memory, disk usage.
-        - [ ] Per-instance metrics (if possible via Docker stats): CPU, memory usage.
-- [ ] **3.4. Secure Credential Handling (Agent-Specific)**
-    - [ ] 3.4.1. If DTMA brokers calls: Logic to receive an agent-identifying token/context.
-    - [ ] 3.4.2. Logic to request the specific agent's credentials for that tool from the Agentopia backend (short-lived).
-    - [ ] 3.4.3. Mechanism to pass these credentials to the correct running tool instance for the scope of the agent's request. This is critical and complex. The tool instance itself must be designed to accept/use these per-request credentials.
+- [X] **3.3. Status Reporting & Heartbeat**
+    - [X] 3.3.1. API endpoint for Agentopia backend to query DTMA/instance status. (Implemented as `GET /status` in `index.ts`)
+    - [X] 3.3.2. Scheduled task to send heartbeat and basic droplet/instance metrics to Agentopia backend. (Implemented in `index.ts` `startHeartbeat`, using `getSystemStatus` and `getManagedToolInstanceStatuses`)
+        - [X] Droplet metrics: CPU, memory, disk usage. (Covered by `getSystemStatus`)
+        - [X] Per-instance metrics (if possible via Docker stats): CPU, memory usage. (Currently reports inspect data; direct stats is a TODO in `GET /status` and could be added to heartbeat)
+- [X] **3.4. Secure Credential Handling (Agent-Specific)**
+    - [X] 3.4.1. If DTMA brokers calls: Logic to receive an agent-identifying token/context. (Handled in `POST /execute` body)
+    - [X] 3.4.2. Logic to request the specific agent's credentials for that tool from the Agentopia backend (short-lived). (Implemented in `POST /execute` via `getAgentToolCredentials`)
+    - [X] 3.4.3. Mechanism to pass these credentials to the correct running tool instance for the scope of the agent's request. This is critical and complex. The tool instance itself must be designed to accept/use these per-request credentials. (Implemented in `POST /execute` via `executeInContainer` by passing credentials as env vars for the exec process)
 - [ ] **3.5. Initial Deployment & Update Strategy for DTMA itself.**
 
 ## Phase 4: Frontend UI Refactoring & Enhancements (Agentopia Web App)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAgents } from '../../hooks/useAgents'; // Adjust path if needed
-import type { Agent } from '../../types';
+import { useAgents, AgentSummary } from '../../hooks/useAgents'; // Adjust path if needed
+// import type { Agent } from '../../types'; // This can be changed to AgentSummary if Agent type is not fully needed
 import { Loader2 } from 'lucide-react';
 
 interface AgentSelectorProps {
@@ -20,17 +20,23 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   required = false,
   disabled = false
 }) => {
-  const { agents: allAgents, loading, error, fetchAllAgents } = useAgents();
+  const { 
+    agentSummaries, 
+    agentSummariesLoading, 
+    agentSummariesError, 
+    fetchAgentSummaries 
+  } = useAgents();
   const [selectedAgent, setSelectedAgent] = useState<string>(initialSelectedAgentId || '');
 
   useEffect(() => {
-    fetchAllAgents();
-    // Only depends on fetchAllAgents which depends on user, so runs once on mount/user change
-  }, [fetchAllAgents]);
+    fetchAgentSummaries();
+    // Only depends on fetchAgentSummaries which depends on user, so runs once on mount/user change
+  }, [fetchAgentSummaries]);
 
   const availableAgents = useMemo(() => {
-    return allAgents.filter(agent => !excludeAgentIds.includes(agent.id));
-  }, [allAgents, excludeAgentIds]);
+    // Ensure agentSummaries is not undefined before filtering
+    return (agentSummaries || []).filter(agent => !excludeAgentIds.includes(agent.id));
+  }, [agentSummaries, excludeAgentIds]);
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const agentId = event.target.value;
@@ -55,24 +61,24 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
           value={selectedAgent}
           onChange={handleChange}
           required={required}
-          disabled={loading || disabled || availableAgents.length === 0}
+          disabled={agentSummariesLoading || disabled || availableAgents.length === 0}
           className={selectClasses}
         >
-          <option value="">{loading ? 'Loading agents...' : '-- Select an Agent --'}</option>
+          <option value="">{agentSummariesLoading ? 'Loading agents...' : '-- Select an Agent --'}</option>
           {availableAgents.map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.name}
             </option>
           ))}
         </select>
-        {loading && (
+        {agentSummariesLoading && (
           <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
             <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
           </div>
         )}
       </div>
-      {error && <p className="mt-1 text-xs text-red-400">Error loading agents: {error.message}</p>}
-      {!loading && availableAgents.length === 0 && !error && (
+      {agentSummariesError && <p className="mt-1 text-xs text-red-400">Error loading agents: {agentSummariesError.message}</p>}
+      {!agentSummariesLoading && availableAgents.length === 0 && !agentSummariesError && (
         <p className="mt-1 text-xs text-gray-400">No available agents found.</p>
       )}
     </div>

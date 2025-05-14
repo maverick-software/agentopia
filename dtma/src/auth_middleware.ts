@@ -1,58 +1,33 @@
 import { Request, Response, NextFunction } from 'express';
-import fs from 'fs/promises';
-import path from 'path';
 
-const DTMA_CONFIG_PATH = '/etc/dtma.conf'; // Path where user_data writes the token
+// The expected API key for authenticating requests from the Agentopia backend to this DTMA.
+// This should be set as an environment variable when the DTMA container is run.
+const BACKEND_API_KEY = process.env.BACKEND_TO_DTMA_API_KEY;
 
-let expectedToken: string | null = null;
-
-// Function to read the token from the config file
-async function loadExpectedToken(): Promise<string | null> {
-  if (expectedToken) return expectedToken;
-
-  try {
-    const configContent = await fs.readFile(DTMA_CONFIG_PATH, 'utf-8');
-    const match = configContent.match(/^DTMA_AUTH_TOKEN=(\S+)$/m);
-    if (match && match[1]) {
-      expectedToken = match[1];
-      console.log('DTMA authentication token loaded successfully.');
-      return expectedToken;
-    }
-    console.error(`Could not parse DTMA_AUTH_TOKEN from ${DTMA_CONFIG_PATH}.`);
-    return null;
-  } catch (error: any) {
-    // Handle file not found specifically during startup?
-    if (error.code === 'ENOENT') {
-        console.error(`${DTMA_CONFIG_PATH} not found. DTMA cannot authenticate requests.`);
-    } else {
-        console.error(`Error reading DTMA config file ${DTMA_CONFIG_PATH}:`, error);
-    }
-    return null;
-  }
+if (!BACKEND_API_KEY) {
+  console.error('CRITICAL: BACKEND_TO_DTMA_API_KEY environment variable is not set. DTMA cannot authenticate backend requests.');
+  // Optional: exit the process if this is considered a fatal startup error
+  // process.exit(1);
 }
 
-// Load the token asynchronously when the module is loaded
-// In a real app, might want more robust error handling or retries
-loadExpectedToken();
-
-export async function authenticateDtmaRequest(req: Request, res: Response, next: NextFunction) {
-  const currentExpectedToken = await loadExpectedToken(); // Ensure token is loaded
-
-  if (!currentExpectedToken) {
-    console.error('DTMA auth token not loaded. Denying request.');
-    return res.status(500).json({ error: 'DTMA configuration error' });
+export function authenticateBackendRequest(req: Request, res: Response, next: NextFunction) {
+  if (!BACKEND_API_KEY) {
+    // This check is a safeguard; the initial check should prevent the app from running misconfigured.
+    console.error('DTMA is misconfigured: BACKEND_TO_DTMA_API_KEY is missing. Denying request.');
+    return res.status(500).json({ error: 'DTMA internal configuration error' });
   }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token format' });
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token format. Expected Bearer token.' });
   }
 
-  const receivedToken = authHeader.substring(7);
+  const receivedToken = authHeader.substring(7); // Extract token after "Bearer "
 
-  if (receivedToken !== currentExpectedToken) {
-    console.warn('Received invalid DTMA token.');
-    return res.status(403).json({ error: 'Forbidden: Invalid token' });
+  if (receivedToken !== BACKEND_API_KEY) {
+    console.warn('Forbidden: Received invalid BACKEND_TO_DTMA_API_KEY.');
+    // Avoid logging the received token itself for security, unless in verbose debug mode.
+    return res.status(403).json({ error: 'Forbidden: Invalid authentication token' });
   }
 
   // Token is valid, proceed to the next handler

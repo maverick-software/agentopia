@@ -12,7 +12,7 @@ const corsHeaders = {
 };
 
 // Helper to create Supabase admin client (move to _shared if used by multiple functions)
-function getSupabaseAdminClient(req: Request): SupabaseClient {
+function getSupabaseAdminClient(req: Request): SupabaseClient<Database> {
   // Deno imports from esm.sh may not have process.env directly
   // Supabase Edge Functions have access to environment variables set in the dashboard
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -76,55 +76,104 @@ serve(async (req) => {
   }
 
   // Extract expected fields from payload (add validation as needed)
-  const { dtma_version, system_status, tool_statuses } = requestPayload;
+  const { dtma_version, system_status, tool_statuses } = requestPayload as {
+    dtma_version?: string;
+    system_status?: Record<string, unknown>; // JSONB from DTMA
+    tool_statuses?: Array<{ // Array of statuses for each tool instance
+      account_tool_instance_id: string; // PK of account_tool_instances
+      instance_name_on_toolbox?: string; // For logging/reference
+      status_on_toolbox: Database['public']['Enums']['account_tool_installation_status_enum']; // ENUM
+      runtime_details?: Record<string, unknown>; // JSONB
+    }>;
+  };
 
   try {
     const supabaseAdmin = getSupabaseAdminClient(req);
 
-    // 2. Find agent_droplets record by dtma_auth_token
-    const { data: dropletData, error: fetchError } = await supabaseAdmin
-      .from('agent_droplets')
-      .select('id, status')
-      .eq('dtma_auth_token', dtmaAuthToken)
+    // 2. Find account_tool_environments record by dtma_bearer_token (Refactored)
+    const { data: toolboxData, error: fetchToolboxError } = await supabaseAdmin
+      .from('account_tool_environments')
+      .select('id, status') // Select fields needed for update logic
+      .eq('dtma_bearer_token', dtmaAuthToken)
       .single();
 
-    if (fetchError || !dropletData) {
-      console.error('Heartbeat: Error fetching droplet or token not found:', fetchError?.message);
-      // If PGRST116, it means no rows found -> token invalid
-      const status = fetchError?.code === 'PGRST116' ? 401 : 500;
-      const message = fetchError?.code === 'PGRST116' ? 'Unauthorized: Invalid token' : 'Internal server error: Could not verify token';
+    if (fetchToolboxError || !toolboxData) {
+      console.error('Heartbeat: Error fetching toolbox or token not found:', fetchToolboxError?.message);
+      const status = fetchToolboxError?.code === 'PGRST116' ? 401 : 500;
+      const message = fetchToolboxError?.code === 'PGRST116' ? 'Unauthorized: Invalid token' : 'Internal server error: Could not verify token';
       return new Response(JSON.stringify({ error: message }), {
         status: status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, // Added CORS
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // 3. Update the agent_droplets record
-    const updates: Partial<Database['public']['Tables']['agent_droplets']['Update']> = {
+    // 3. Update the account_tool_environments record (Refactored)
+    const toolboxUpdates: Partial<Database['public']['Tables']['account_tool_environments']['Update']> = {
       last_heartbeat_at: new Date().toISOString(),
-      dtma_last_known_version: dtma_version,      // Optional: store from payload
-      dtma_last_reported_status: { system_status, tool_statuses } as any, // Optional: store from payload. Cast to any if complex type.
+      dtma_last_known_version: dtma_version,
+      dtma_health_details_json: system_status as any, // Store system_status here
     };
 
-    if (dropletData.status === 'creating' || dropletData.status === 'pending_creation') {
-      updates.status = 'active';
+    // WBS 2.3.1, Point 4: Update status if was provisioning or awaiting_heartbeat
+    if (toolboxData.status === 'provisioning' || toolboxData.status === 'awaiting_heartbeat') {
+      toolboxUpdates.status = 'active';
     }
 
-    const { error: updateError } = await supabaseAdmin
-      .from('agent_droplets')
-      .update(updates)
-      .eq('id', dropletData.id);
+    const { error: updateToolboxError } = await supabaseAdmin
+      .from('account_tool_environments')
+      .update(toolboxUpdates)
+      .eq('id', toolboxData.id);
 
-    if (updateError) {
-      console.error('Heartbeat: Error updating droplet record:', updateError.message);
-      return new Response(JSON.stringify({ error: 'Internal server error: Failed to update droplet status' }), {
+    if (updateToolboxError) {
+      console.error('Heartbeat: Error updating toolbox record:', updateToolboxError.message);
+      return new Response(JSON.stringify({ error: 'Internal server error: Failed to update toolbox status' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, // Added CORS
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`Heartbeat successful for droplet ID: ${dropletData.id}`);
-    return new Response(null, { status: 204, headers: corsHeaders }); // 204 No Content for success and added CORS
+    // WBS 2.3.1, Point 3: Process tool_statuses to update account_tool_instances (New Logic)
+    if (tool_statuses && Array.isArray(tool_statuses)) {
+      const toolInstanceUpdatePromises = tool_statuses.map(async (toolStatus) => {
+        if (!toolStatus.account_tool_instance_id) {
+          console.warn('Heartbeat: Skipping tool status update due to missing account_tool_instance_id:', toolStatus);
+          return;
+        }
+        const instanceUpdates: Partial<Database['public']['Tables']['account_tool_instances']['Update']> = {
+          status_on_toolbox: toolStatus.status_on_toolbox,
+          runtime_details: toolStatus.runtime_details as any, // Cast if complex
+          last_heartbeat_from_dtma: new Date().toISOString(),
+        };
+        
+        const { error: updateInstanceError } = await supabaseAdmin
+          .from('account_tool_instances')
+          .update(instanceUpdates)
+          .eq('id', toolStatus.account_tool_instance_id);
+
+        if (updateInstanceError) {
+          console.error(
+            `Heartbeat: Error updating tool instance ${toolStatus.account_tool_instance_id} (Toolbox ID: ${toolboxData.id}):`,
+            updateInstanceError.message
+          );
+          // Decide if this error should fail the whole heartbeat or just be logged. For now, logging.
+        } else {
+          console.log(`Heartbeat: Successfully updated tool instance ${toolStatus.account_tool_instance_id} for toolbox ${toolboxData.id}`);
+        }
+      });
+      
+      // Wait for all tool instance updates to settle
+      // Using Promise.allSettled to ensure all attempts are made even if some fail
+      const results = await Promise.allSettled(toolInstanceUpdatePromises);
+      results.forEach(result => {
+        if (result.status === 'rejected') {
+          // Already logged within the map function, but could add summary logging here if needed.
+          console.warn('Heartbeat: A tool instance update promise was rejected.', result.reason);
+        }
+      });
+    }
+
+    console.log(`Heartbeat successful for toolbox ID: ${toolboxData.id}`);
+    return new Response(null, { status: 204, headers: corsHeaders });
 
   } catch (error) {
     console.error('Heartbeat: Unhandled exception:', error.message, error.stack);

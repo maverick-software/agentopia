@@ -1,34 +1,18 @@
 import axios from 'axios';
-import fs from 'fs/promises';
 
 // --- Configuration ---
-// TODO: Move configuration loading to a dedicated module
-const DTMA_CONFIG_PATH = '/etc/dtma.conf'; 
-const AGENTOPIA_API_BASE_URL = process.env.AGENTOPIA_API_BASE_URL || 'http://localhost:54321/functions/v1'; // Default to local Supabase URL
+const AGENTOPIA_API_BASE_URL = process.env.AGENTOPIA_API_BASE_URL;
+const DTMA_OWN_BEARER_TOKEN = process.env.DTMA_BEARER_TOKEN; // Renamed for clarity
 
-let dtmaAuthToken: string | null = null;
-
-async function getDtmaAuthToken(): Promise<string> {
-  if (dtmaAuthToken) return dtmaAuthToken;
-  try {
-    const configContent = await fs.readFile(DTMA_CONFIG_PATH, 'utf-8');
-    const match = configContent.match(/^DTMA_AUTH_TOKEN=(\S+)$/m);
-    if (match && match[1]) {
-      dtmaAuthToken = match[1];
-      console.log('DTMA auth token loaded for API client.');
-      return dtmaAuthToken;
-    }
-    throw new Error(`Could not parse DTMA_AUTH_TOKEN from ${DTMA_CONFIG_PATH}.`);
-  } catch (error: any) {
-    console.error(`Fatal: Failed to load DTMA auth token: ${error.message}`);
-    // If the token can't load, the DTMA cannot function. Exit or throw fatal.
-    // For now, throw to prevent operations without auth.
-    throw new Error(`DTMA Auth Token load failed: ${error.message}`);
-  }
+if (!AGENTOPIA_API_BASE_URL) {
+  console.error('CRITICAL: AGENTOPIA_API_BASE_URL environment variable is not set. DTMA cannot communicate with the backend.');
+  // process.exit(1); // Consider exiting if this is a fatal startup error
 }
 
-// Initialize token on load
-getDtmaAuthToken();
+if (!DTMA_OWN_BEARER_TOKEN) {
+  console.error('CRITICAL: DTMA_BEARER_TOKEN environment variable is not set. DTMA cannot authenticate itself to the backend.');
+  // process.exit(1); // Consider exiting
+}
 
 // --- API Client Instance ---
 const apiClient = axios.create({
@@ -37,59 +21,83 @@ const apiClient = axios.create({
 });
 
 // Add Authorization header interceptor
-apiClient.interceptors.request.use(async (config) => {
-  const token = await getDtmaAuthToken(); // Ensure token is loaded
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+apiClient.interceptors.request.use((config) => {
+  if (DTMA_OWN_BEARER_TOKEN) {
+    config.headers.Authorization = `Bearer ${DTMA_OWN_BEARER_TOKEN}`;
   }
+  // If token is somehow still not set here (despite initial check), 
+  // the request might fail at the backend, or we could throw an error here.
   return config;
 }, (error) => {
   return Promise.reject(error);
 });
 
+// --- Types for API Payloads/Responses (Define more accurately based on backend implementation) ---
+export interface DtmaHeartbeatPayload {
+  dtma_version: string;
+  system_status: Record<string, any>; // e.g., cpu, memory, disk
+  tool_statuses: Array<{
+    account_tool_instance_id: string;
+    status_on_toolbox: string; // Should match 'account_tool_installation_status_enum' values
+    runtime_details?: Record<string, any>;
+  }>;
+}
+
+export interface AgentToolCredentialsRequestPayload {
+  agentId: string;
+  accountToolInstanceId: string;
+}
+
+// Assuming secrets are returned as a simple key-value pair
+export type AgentToolCredentialsResponse = Record<string, string | null>; 
+
 // --- API Functions ---
 
 /**
  * Sends heartbeat data to the Agentopia backend.
- * @param heartbeatPayload - The data to send (dtma_version, system_status, etc.)
+ * @param heartbeatPayload - The data to send.
  */
-export async function sendHeartbeat(heartbeatPayload: any): Promise<void> {
+export async function sendHeartbeat(heartbeatPayload: DtmaHeartbeatPayload): Promise<void> {
   try {
-    console.log('Sending heartbeat...', heartbeatPayload);
-    const response = await apiClient.post('/heartbeat', heartbeatPayload); // Endpoint defined in WBS 2.1.5
-    if (response.status === 204) {
-        console.log('Heartbeat sent successfully.');
+    console.log('Sending heartbeat...', JSON.stringify(heartbeatPayload, null, 2));
+    // Endpoint updated as per WBS 1.4.1 (/dtma/heartbeat)
+    const response = await apiClient.post('/dtma/heartbeat', heartbeatPayload);
+    if (response.status === 200 || response.status === 204) { // Backend might return 200 with data or 204
+        console.log(`Heartbeat sent successfully (status: ${response.status}).`);
     } else {
-        // Log unexpected success status
-        console.warn(`Heartbeat API returned unexpected status: ${response.status}`);
+        console.warn(`Heartbeat API returned unexpected status: ${response.status}, data:`, response.data);
     }
   } catch (error: any) {
     console.error('Error sending heartbeat:', error.response?.data || error.message);
-    // Decide if this error should be propagated or just logged
   }
 }
 
 /**
- * Fetches secrets for a specific tool instance from the Agentopia backend.
- * @param toolInstanceDbId - The database ID of the agent_droplet_tools entry.
- * @returns Promise<{ [key: string]: string | null } | null> - Object containing secrets or null on error.
+ * Fetches agent-specific credentials for a tool instance from the Agentopia backend.
+ * Renamed from fetchToolSecrets and updated as per WBS 2.3.2 & 1.4.1.
+ * @param payload - Object containing agentId and accountToolInstanceId.
+ * @returns Promise<AgentToolCredentialsResponse | null> - Object containing secrets or null on error.
  */
-export async function fetchToolSecrets(toolInstanceDbId: string): Promise<{ [key: string]: string | null } | null> {
+export async function getAgentToolCredentials(
+  payload: AgentToolCredentialsRequestPayload
+): Promise<AgentToolCredentialsResponse | null> {
   try {
-    console.log(`Fetching secrets for tool instance: ${toolInstanceDbId}`);
-    const response = await apiClient.post('/fetch-tool-secrets', { // Endpoint defined in WBS 2.1.6
-        tool_instance_db_id: toolInstanceDbId 
-    }); 
+    console.log(`Fetching agent tool credentials for: agentId=${payload.agentId}, instanceId=${payload.accountToolInstanceId}`);
+    // Endpoint and payload updated as per WBS 1.4.1 & 2.3.2
+    const response = await apiClient.post('/dtma/get-agent-tool-credentials', payload);
     
-    if (response.status === 200 && response.data?.secrets) {
-      console.log(`Secrets received successfully for tool instance: ${toolInstanceDbId}`);
-      return response.data.secrets;
+    if (response.status === 200 && response.data) { // Expecting secrets directly in response.data
+      console.log(`Agent tool credentials received successfully for: agentId=${payload.agentId}, instanceId=${payload.accountToolInstanceId}`);
+      return response.data as AgentToolCredentialsResponse; // Assuming response.data is the secrets object
     } else {
-      console.warn(`Fetch secrets API returned unexpected status or data format: ${response.status}`);
+      console.warn(`Get agent tool credentials API returned unexpected status ${response.status} or data format:`, response.data);
       return null;
     }
   } catch (error: any) {
-    console.error(`Error fetching secrets for tool ${toolInstanceDbId}:`, error.response?.data || error.message);
-    return null; // Return null or throw, depending on how critical this is for the caller
+    console.error(
+        `Error fetching agent tool credentials for agentId=${payload.agentId}, instanceId=${payload.accountToolInstanceId}:`,
+        error.response?.data || error.message
+    );
+    return null;
   }
 } 

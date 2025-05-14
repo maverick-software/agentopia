@@ -24,7 +24,7 @@ export const CreateTeamPage = lazy(() => import('../pages/CreateTeamPage.tsx').t
 export const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage.tsx').then(module => ({ default: module.TeamDetailsPage })));
 export const EditTeamPage = lazy(() => import('../pages/EditTeamPage.tsx').then(module => ({ default: module.EditTeamPage })));
 export const SettingsPage = lazy(() => import('../pages/SettingsPage.tsx').then(module => ({ default: module.Settings })));
-export const MCPPage = lazy(() => import('../pages/MCPPage.tsx').then(module => ({ default: module.MCP })));
+export const ToolboxesPage = lazy(() => import('../pages/ToolboxesPage').then(module => ({ default: module.ToolboxesPage })));
 export const MonitoringPage = lazy(() => import('../pages/MonitoringPage.tsx').then(module => ({ default: module.Monitoring })));
 export const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement.tsx').then(module => ({ default: module.AdminUserManagement })));
 export const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement.tsx').then(module => ({ default: module.AdminAgentManagement })));
@@ -36,3 +36,10 @@ export const WorkspacesListPage = lazy(() => import('../pages/WorkspacesListPage
 export const CreateWorkspacePage = lazy(() => import('../pages/CreateWorkspacePage').then(module => ({ default: module.CreateWorkspacePage }))); 
 // Add WorkspaceSettingsPage
 export const WorkspaceSettingsPage = lazy(() => import('../pages/WorkspaceSettingsPage').then(module => ({ default: module.WorkspaceSettingsPage }))); 
+
+// Commenting out missing pages to resolve Vite errors
+// export const AgentStorePage = lazy(() => import('../pages/AgentStorePage.tsx'));
+// export const DatasetStorePage = lazy(() => import('../pages/DatasetStorePage.tsx'));
+// export const NotFoundPage = lazy(() => import('../pages/NotFoundPage.tsx')); 
+
+export const ToolboxDetailPage = lazy(() => import('../pages/ToolboxDetailPage').then(module => ({ default: module.ToolboxDetailPage }))); 
