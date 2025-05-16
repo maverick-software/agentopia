@@ -1,0 +1,44 @@
+// supabase/functions/discord-interaction-handler/index.ts (TEMPORARY MINIMAL VERSION)
+import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+
+console.log("Initializing MINIMAL PING 'discord-interaction-handler' function...");
+
+serve(async (req) => {
+  // Handle CORS preflight requests (optional, but good practice)
+  if (req.method === 'OPTIONS') {
+    console.log("Handling OPTIONS request");
+    return new Response("ok", { headers: { 
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' 
+    } });
+  }
+
+  console.log(`Minimal Handler Received request: ${req.method} ${req.url}`);
+
+  // Try to parse body and check for PING
+  try {
+    const body = await req.json();
+    if (body?.type === 1) {
+      console.log("Minimal Handler: Responding to PING request.");
+      return new Response(JSON.stringify({ type: 1 }), { 
+          headers: { 'Content-Type': 'application/json' },
+          status: 200 
+      });
+    } else {
+      console.log("Minimal Handler: Received non-PING interaction type:", body?.type);
+    }
+  } catch (e) {
+    console.error("Minimal Handler: Failed to parse request body as JSON:", e);
+    // Still return 400 for bad JSON, as Discord expects specific interactions
+    return new Response(JSON.stringify({ error: "Bad Request" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // If it wasn't a PING, return an error (Discord expects specific interaction types)
+  console.log("Minimal Handler: Unhandled interaction type.");
+  return new Response(JSON.stringify({ error: "Unhandled Interaction Type" }), { 
+      status: 400, // Use 400 Bad Request as we didn't handle the type
+      headers: { 'Content-Type': 'application/json' } 
+  });
+});
+
+console.log("Minimal PING 'discord-interaction-handler' function started.");

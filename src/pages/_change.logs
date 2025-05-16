@@ -1,0 +1,16 @@
+[2024-07-26] Modified `src/pages/DatastoresPage.tsx`:
+- Changed page title from "Datastores" to "Long Term Memory Storage".
+- Added a Brain icon (from lucide-react) next to the title.
+- Updated lucide-react import to include `Brain`.
+
+[2024-07-26] Modified `src/pages/DatastoresPage.tsx`:
+- Changed page title from "Long Term Memory Storage" to "Memory (LTSM)".
+
+[2024-07-26] Modified `src/pages/ToolboxesPage.tsx`:
+- Iteratively attempted to change the page title icon to `Toolbox` using `@lucide/lab` and different import strategies (`Icon` component, `createReactComponent`), including `npm install @lucide/lab` and `npm install lucide-react@latest`. These attempts resulted in persistent import errors.
+- Resolved by changing the page title icon to `Package`, a standard icon from `lucide-react`.
+- Final imports for the title icon use `Package` directly from `lucide-react`; `@lucide/lab` related imports for this specific icon were removed.
+
+[2024-07-26] Modified `src/pages/ToolboxesPage.tsx`:
+- Changed page title icon from `Server` to `Toolbox` (from `@lucide/lab`).
+- Updated lucide-react imports to use `Icon` component and import `toolbox` node from `@lucide/lab`. 

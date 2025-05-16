@@ -1,0 +1,22 @@
+- [ ] Create Team Rooms (workspaces)
+- [ ] Add images to agents
+- [ ] Password resets, Email verification, MFA via Authenticator, SMS
+- [ ] oAuth via Google
+- [ ] Delegated access for users.
+- [ ] MCP Tool Belts for agents (Zapier, Make.com Automation)
+- [ ] Scheduled tasks that can be assigned 'workflows' and have their prompts/instructions.
+- [ ] Invite External Agents (Make.com, n8n)
+- [ ] Default optimized prompt listing available MCP servers.
+- [ ] Optional Chain of Thought / Advanced Reasoning for agents.
+- [ ] Project creation and management with agent access control (CRUD/partial CRUD).
+- [ ] Project creation agent assist, which helps create all project docs/checklists after a series of questions.
+- [ ] Web Chatbots installable via script, assignable to agents.
+- [ ] Email, SMS, and additional communication channel notifications.
+- [ ] Voice capabilities for agents.
+- [ ] 3D visualization component for agent interaction.
+- [ ] Data ingestion (PDF, DOC, TXT, etc.) for agent memory/datastore.
+- [ ] API endpoint for agents to connect external platforms.
+- [ ] Custom prompts savable and usable as tools for agents.
+- [ ] Integration/management of external agent information.
+- [ ] Desktop client for local agent authentication and usage. 
+- [ ] Add a UI spot kind of like 'gem slots' where a user can choose to integrate Long Term Memory, Semantic Memory and Short Term Working Memory

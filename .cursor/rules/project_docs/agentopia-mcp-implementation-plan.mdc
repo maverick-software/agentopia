@@ -1,0 +1,195 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Agentopia MCP Client Implementation Project Plan
+
+## 1. Project Overview
+
+**Goal:** Enable Agentopia agents to act as MCP clients, allowing them to communicate with various MCP servers through a configurable interface in the agent settings panel.
+
+**Timeline:** 8 weeks total (detailed breakdown below)
+
+## 2. Requirements Analysis (Week 1)
+
+- **Task 1.1:** Review existing MCP client-server documentation and standards
+- **Task 1.2:** Document specific MCP integration requirements for Agentopia
+- **Task 1.3:** Identify integration points within the existing agent architecture
+- **Task 1.4:** Define the "Tools" UI section in agent management screens
+- **Task 1.5:** Create detailed specifications for MCP server configuration options
+
+**Deliverable:** Requirements specification document for MCP client implementation
+
+## 3. Design Phase (Weeks 2-3)
+
+### UI/Frontend Design (Week 2)
+- **Task 2.1:** Design "Tools" toggle section for agent settings in Streamlit
+- **Task 2.2:** Create mockups for MCP server configuration forms
+- **Task 2.3:** Design UI for managing multiple MCP server connections
+- **Task 2.4:** Implement validation rules for server configuration inputs
+
+### Backend Design (Week 3)
+- **Task 3.1:** Design MCP client library architecture
+- **Task 3.2:** Create database schema for storing MCP configurations
+- **Task 3.3:** Design API endpoints for MCP management
+- **Task 3.4:** Define interfaces for MCP context packaging and response handling
+
+**Deliverables:** 
+- UI mockups and design specifications
+- Database schema updates
+- API interface specifications
+
+## 4. Development Phase (Weeks 4-6)
+
+### Database Implementation (Week 4, Days 1-2)
+- **Task 4.1:** Extend PostgreSQL schema to include MCP configurations
+- **Task 4.2:** Create migration scripts
+- **Task 4.3:** Update Supabase integration to support new schema
+
+### Backend Implementation (Week 4, Days 3-5 & Week 5)
+- **Task 4.4:** Develop MCP client library in Python
+- **Task 4.5:** Implement server capability discovery mechanism
+- **Task 4.6:** Create context packaging and transmission modules
+- **Task 4.7:** Develop response parsing and integration logic
+- **Task 4.8:** Implement API endpoints for MCP management
+- **Task 4.9:** Create error handling and retry mechanisms
+
+### Frontend Implementation (Week 6)
+- **Task 4.10:** Implement "Tools" toggle in agent settings UI
+- **Task 4.11:** Develop MCP server configuration forms
+- **Task 4.12:** Create server connection testing UI components
+- **Task 4.13:** Implement server capability visualization
+
+**Deliverables:**
+- Working MCP client library
+- Database extensions
+- API endpoints for MCP management
+- Frontend components for MCP configuration
+
+## 5. Integration Phase (Week 7)
+
+- **Task 5.1:** Integrate MCP client library with agent execution pipeline
+- **Task 5.2:** Connect frontend components to backend API endpoints
+- **Task 5.3:** Implement dynamic configuration loading for agents
+- **Task 5.4:** Create logging mechanisms for MCP interactions
+- **Task 5.5:** Implement authentication and credential management
+
+**Deliverable:** Fully integrated MCP client functionality within Agentopia
+
+## 6. Testing and Quality Assurance (Week 8)
+
+- **Task 6.1:** Develop unit tests for MCP client library
+- **Task 6.2:** Create integration tests for full MCP workflow
+- **Task 6.3:** Perform load testing with multiple concurrent MCP server connections
+- **Task 6.4:** Conduct security testing for API key handling
+- **Task 6.5:** Perform end-to-end testing with sample MCP servers
+
+**Deliverable:** Test reports and validated MCP client implementation
+
+## 7. Documentation and Deployment
+
+- **Task 7.1:** Update system documentation to include MCP client functionality
+- **Task 7.2:** Create user guide for configuring MCP connections
+- **Task 7.3:** Document API endpoints and configuration options
+- **Task 7.4:** Prepare deployment scripts for Docker containers
+- **Task 7.5:** Create rollback procedures
+
+**Deliverable:** Complete documentation and deployment package
+
+## 8. Technical Implementation Details
+
+### Database Schema Additions
+
+```sql
+-- Table for MCP client configuration
+CREATE TABLE mcp_configurations (
+  id SERIAL PRIMARY KEY,
+  agent_id INTEGER REFERENCES agents(id),
+  is_enabled BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for MCP server connections
+CREATE TABLE mcp_servers (
+  id SERIAL PRIMARY KEY,
+  config_id INTEGER REFERENCES mcp_configurations(id),
+  name VARCHAR(255) NOT NULL,
+  endpoint_url VARCHAR(255) NOT NULL,
+  api_key VARCHAR(255),
+  timeout_ms INTEGER DEFAULT 5000,
+  max_retries INTEGER DEFAULT 3,
+  retry_backoff_ms INTEGER DEFAULT 1000,
+  priority INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  capabilities JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### API Endpoints
+
+```
+# MCP Configuration Management
+GET /api/v1/mcp/configurations - List all MCP configurations
+GET /api/v1/mcp/configurations/{id} - Get configuration details
+POST /api/v1/mcp/configurations - Create new configuration
+PUT /api/v1/mcp/configurations/{id} - Update configuration
+DELETE /api/v1/mcp/configurations/{id} - Delete configuration
+
+# MCP Server Management
+GET /api/v1/mcp/servers - List all MCP servers
+GET /api/v1/mcp/servers/{id} - Get server details
+POST /api/v1/mcp/servers - Add new server
+PUT /api/v1/mcp/servers/{id} - Update server
+DELETE /api/v1/mcp/servers/{id} - Delete server
+POST /api/v1/mcp/servers/{id}/test - Test server connection
+GET /api/v1/mcp/servers/{id}/capabilities - Discover server capabilities
+```
+
+### MCP Client Library Core Components
+
+1. **Configuration Manager:**
+   - Handles loading and validation of MCP server configurations
+   - Manages credential storage and retrieval
+
+2. **Connection Manager:**
+   - Establishes and maintains connections to MCP servers
+   - Implements retry logic and connection pooling
+
+3. **Context Packager:**
+   - Formats agent context data according to server specifications
+   - Handles compression and optimization
+
+4. **Response Processor:**
+   - Parses server responses
+   - Integrates responses back into agent workflows
+   - Handles error conditions
+
+5. **Capability Discovery:**
+   - Queries servers for supported operations
+   - Caches capability information
+   - Updates configuration based on capabilities
+
+## 9. Risk Management
+
+| Risk | Impact | Mitigation Strategy |
+|------|--------|---------------------|
+| MCP server incompatibility | High | Implement robust capability discovery and version negotiation |
+| Performance bottlenecks | Medium | Add request queueing and prioritization |
+| API key exposure | High | Encrypt all credentials and implement access controls |
+| Network failures | Medium | Implement comprehensive retry strategies |
+| Schema migrations issues | Medium | Create thorough testing procedures for migrations |
+
+## 10. Success Criteria
+
+The implementation will be considered successful when:
+
+1. Agents can be configured as MCP clients through the UI
+2. Multiple MCP servers can be added and managed per agent
+3. Agents successfully communicate with MCP servers when enabled
+4. The system properly handles server capability discovery
+5. Performance metrics show acceptable response times
+6. All security requirements for credential handling are met

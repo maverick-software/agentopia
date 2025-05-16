@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "@db/": "../db/",
+    "@lib/": "../lib/",
+    "@utils/": "../utils/",
+    "@shared/": "./_shared/",
+    "@services/": "./_shared_services/",
+    "services/": "../../src/services/"
+  }
+} 

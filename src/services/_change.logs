@@ -1,0 +1,25 @@
+[2024-07-29] Modified `digitalocean_service/client.ts`:
+- Refactored `getDOClient` function to retrieve `DO_API_TOKEN` directly from `Deno.env`.
+- Removed Supabase client initialization and `getSecretFromVault` function, as vault logic is no longer used for DO token.
+- Removed `getDOClientSync` function.
+- This change aligns with using Supabase Edge Function secrets directly instead of an external vault for the DigitalOcean API token. 
+
+[2024-07-30] Modified `account_environment_service/manager.ts`:
+- Changed `deprovisionToolbox` method to delete the `account_tool_environments` record from the database instead of updating its status to 'deprovisioned'.
+- Added a private helper method `_deleteToolboxEnvironmentRecord` to handle the database deletion logic.
+- This ensures that deprovisioned toolboxes are fully removed from the system records and subsequently the UI. 
+
+[2024-07-30] Modified `digitalocean_service/droplets.ts`:
+- Corrected droplet creation response parsing in `createDigitalOceanDroplet`.
+- The function now accesses `response.data.droplets[0]` instead of `response.droplets[0]` to align with the actual structure returned by the `dots-wrapper` (which includes the DigitalOcean API payload under a `data` property).
+- This fixes a 500 error in the `toolboxes-user` Edge Function caused by `DigitalOceanServiceError: Failed to parse create droplet response: Unexpected API response format.`. 
+
+[2024-07-30] Database Schema Change for `account_tool_environment_status_enum`:
+- Added new value `awaiting_heartbeat` to the `account_tool_environment_status_enum` via migration `20250516120000_add_awaiting_heartbeat_status.sql`.
+- This resolves an error where `AccountEnvironmentService` would fail to update the toolbox status to `awaiting_heartbeat` after successful IP polling because the enum value did not exist in the database.
+- This directly impacts `account_environment_service/manager.ts` by allowing its intended status update to succeed. 
+
+[2024-07-31] Investigation: DTMA Unreachable after Provisioning:
+- Corrected `DTMA_DOCKER_IMAGE_URL` environment variable for the `toolboxes-user` Supabase Edge Function. It was previously pointing to a git repository, now correctly set to `ghcr.io/maverick-software/dtma-manager:latest`.
+- Despite the correct Docker image URL, the Edge Function still fails to connect to the DTMA agent on newly provisioned droplets (e.g., at `http://<droplet_ip>:30300/status`), resulting in a 500 error during status refresh.
+- Next steps involve SSHing into the droplet to inspect Docker container status, container logs, user-data script execution logs (`/var/log/dtma-bootstrap.log`), firewall configuration, and listening ports to diagnose the DTMA agent's unreachability. 

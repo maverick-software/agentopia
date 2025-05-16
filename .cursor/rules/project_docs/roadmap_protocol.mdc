@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+In the folder /docs/plans/ there should be a roadmap.md file. Read the file, and act according the users request. If there is no file, create it. 

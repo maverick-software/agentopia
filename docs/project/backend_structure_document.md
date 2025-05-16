@@ -1,0 +1,170 @@
+# Agentopia Backend Structure Document
+
+This document outlines the backend architecture, databases, API endpoints, hosting, infrastructure components, and security measures for Agentopia. The document is written in everyday language and is designed to be easily understood even without a technical background.
+
+## 1. Backend Architecture
+
+The backend of Agentopia is built using a clear, modular structure that supports the creation and management of AI agents as well as seamless integration with Discord. Here’s a breakdown of the key points:
+
+- **Service-based Structure:** The project is divided into services (authentication, agents, datastores, discord integration, personality templates, LLM integration, etc.) with their respective endpoints and business logic. This modular approach makes it easier to update or add new features over time.
+- **Design Patterns and Frameworks:**
+  - **FastAPI:** A modern Python framework that helps create RESTful APIs quickly and efficiently.
+  - **Python 3.11+:** The programming language used to write the logic behind the services.
+- **Modularity for Scalability and Maintainability:** The backend is broken down into self-contained modules (e.g., authentication, agents, datastores). This means if one module needs changes or scaling, it can be updated without affecting the rest of the system.
+- **Performance:** FastAPI’s asynchronous operations and well-organized services ensure the system responds quickly, even when handling numerous agent interactions and API calls concurrently.
+
+## 2. Database Management
+
+Agentopia uses different databases for various types of data, ensuring optimal organization and performance. Here is an overview:
+
+- **Primary Data Storage:**
+  - **PostgreSQL (with pgvector extension):**
+    - Used via Supabase for storing structured data such as user information, agent configurations, personality templates, and settings.
+- **Vector Database:**
+  - **Pinecone:**
+    - Used for similarity searches which are key for evaluating and comparing agent contexts or personality traits.
+- **Graph Memory:**
+  - **GetZep:**
+    - Helps store and manage graph-based data, useful for maintaining and linking memories and interactions over time.
+
+The data in PostgreSQL is organized into logical tables that are related to each other. Using Supabase for the structured database helps in providing secure access, authentication, and key management for user data.
+
+## 3. Database Schema
+
+Below is a human-readable explanation of how the data is structured, along with an example of an SQL-based schema for PostgreSQL:
+
+### Explanation of the Schema
+
+- **Users/Admin Table:** Contains information about the system administrators who can log in to manage agents and platform settings.
+- **Agents Table:** Stores details of AI agents, including name, configuration details, active settings, and assigned personality templates.
+- **Templates Table:** Contains the various personality templates (DISC, Myers-Briggs, custom JSON templates, etc.) and associated settings.
+- **Datastores Table:** Organizes information related to agent assignments and data storage settings.
+- **Discord Integration Table:** Keeps records of Discord bot settings and mapping of agents to channels.
+
+### Example SQL Schema
+
+Below is an example of how the SQL schema might look:
+
+```
+-- Table for administrators and users
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL, -- e.g., 'admin', 'discord_owner'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for agents
+CREATE TABLE agents (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    template_id INTEGER REFERENCES templates(id),
+    datastore_id INTEGER REFERENCES datastores(id),
+    response_mode VARCHAR(50), -- e.g., 'all_messages', 'tag_based'
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for personality templates
+CREATE TABLE templates (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(50), -- e.g., 'DISC', 'Myers-Briggs', 'custom'
+    content JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for datastores
+CREATE TABLE datastores (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table for Discord integration settings
+CREATE TABLE discord_integration (
+    id SERIAL PRIMARY KEY,
+    agent_id INTEGER REFERENCES agents(id),
+    discord_channel_id VARCHAR(100) NOT NULL,
+    bot_token VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+*(Note: The actual schema may include additional tables, indexes, and constraints to support Pinecone, GetZep, and logging components.)*
+
+## 4. API Design and Endpoints
+
+Agentopia uses a RESTful API design created with FastAPI. This makes it easy for different parts of the system, including the admin dashboard and Discord bot, to communicate with the backend. Here’s an overview:
+
+- **RESTful API:**
+  - Clean and predictable endpoints to manage different entities (agents, templates, datastores, discord settings, LLM connections, etc.).
+  - Each module (like authentication, agents, etc.) has its own set of endpoints and business logic.
+- **Key Endpoints:**
+  - **Authentication Endpoints:** For user sign-ups, logins, and secure token management.
+  - **Agent Management Endpoints:** To create, update, assign, and deactivate AI agents.
+  - **Template Management Endpoints:** For uploading, downloading, and generating personality templates.
+  - **Datastore Endpoints:** To associate agents with specific data repositories.
+  - **Discord Integration Endpoints:** Handle Discord bot registration, channel mapping, and dynamic message response modes.
+  - **LLM Integration Endpoints:** Securely manage and route requests to various LLM providers such as OpenAI and Anthropic.
+
+## 5. Hosting Solutions
+
+Agentopia is hosted on a combination of cloud services to ensure reliability, scalability, and efficient management of resources:
+
+- **Digital Ocean:**
+  - Used for hosting the frontend and some backend components, ensuring cost-effective scalability.
+- **Supabase:**
+  - Provides the PostgreSQL database as a service with managed authentication and API security.
+
+The benefits include ease of setup, predictable costs, and the ability to scale resources during peak loads.
+
+## 6. Infrastructure Components
+
+The backend infrastructure is designed with a focus on performance and user experience. Components include:
+
+- **Load Balancers:** Distribute incoming traffic evenly across backend servers, preventing overload and ensuring a smooth user experience.
+- **Containerization with Docker:** Every service runs inside containers, making the deployment and development process more efficient and consistent.
+- **Caching Mechanisms:** To speed up frequently requested data and reduce the load on databases.
+- **Content Delivery Network (CDN):** Although not explicitly listed, the frontend static assets can be delivered via a CDN to reduce latency for end users.
+
+## 7. Security Measures
+
+Security is a top priority in Agentopia. Here’s how it’s managed:
+
+- **User Authentication and Authorization:**
+  - Managed via Supabase, ensuring that only verified users (admins and discord owners) can access and modify the system.
+- **API Key Management:**
+  - API keys for LLM services are never exposed to the frontend and are stored securely (with encryption) using Supabase integration.
+- **Data Encryption:**
+  - Sensitive data is encrypted at rest and in transit to prevent unauthorized access.
+- **Secure Access Practices:**
+  - All endpoints are guarded with authentication and rate limiting when necessary, reducing the risk of brute-force attacks.
+
+## 8. Monitoring and Maintenance
+
+To keep Agentopia running smoothly, the following practices are in place:
+
+- **Logging:**
+  - Comprehensive logging of API calls, agent interactions, and system activities which helps in troubleshooting issues as they occur.
+- **Performance Monitoring:**
+  - Tools are used to monitor server performance, database health, and overall response times.
+- **Regular Maintenance:**
+  - Scheduled updates and security patches, along with routine backups of databases (both PostgreSQL and vector stores).
+- **Alerting Systems:**
+  - Automated alerts help the team stay aware of any downtime or performance bottlenecks, ensuring timely intervention.
+
+## 9. Conclusion and Overall Backend Summary
+
+In summary, the Agentopia backend is structured with an emphasis on modularity, security, and scalability. Key highlights include:
+
+- A modular design using FastAPI and Python, making it easy to manage different aspects of the system independently.
+- An organized data storage strategy that leverages PostgreSQL (via Supabase), Pinecone, and GetZep to handle both structured and unstructured data efficiently.
+- A RESTful API design that supports both the admin dashboard and Discord interactions seamlessly.
+- Hosting on Digital Ocean in combination with managed services like Supabase offers both cost-effective scaling and reliability.
+- Robust security measures protect user data, API keys, and system integrity, while comprehensive logging and monitoring ensure that the platform remains performant and reliable.
+
+This backend architecture not only meets the current needs of Agentopia but is also built to adapt and grow as the project evolves over time.
