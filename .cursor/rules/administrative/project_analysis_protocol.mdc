@@ -1,0 +1,343 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Project Analysis & Documentation Management Protocol
+**Version**: 1.0  
+**Created**: May 11, 2025  
+**Type**: Universal Development Project Protocol  
+**Scope**: Project Analysis, Documentation Management, Progress Reporting  
+**Trigger**: project analysis, documentation update, progress report, roadmap update, project assessment
+
+## 🎯 Protocol Overview
+
+This protocol provides a comprehensive framework for analyzing any development project, maintaining accurate documentation, generating progress reports, and ensuring project health. It's designed to be universal and applicable to any technology stack or project type.
+
+## 📋 Pre-Analysis Checklist
+
+### RULE Compliance Verification
+- [ ] RULE #1: Use codebase search tools for investigation
+- [ ] RULE #2: Maintain comprehensive logs in `/logs/` directory
+- [ ] RULE #3: Never delete files - archive originals with descriptive names
+- [ ] RULE #4: Review applicable cursor rules before proceeding
+- [ ] RULE #5: Create detailed checklists and Work Breakdown Structure (WBS)
+
+### Context Gathering
+- [ ] Read README.md for project overview and file structure
+- [ ] Review `/docs/context/` for existing project knowledge
+- [ ] Check existing logs in `/logs/` for recent changes
+- [ ] Identify documentation locations (`/docs/`, `/project_docs/`, etc.)
+- [ ] Assess project maturity and development stage
+
+## 🔍 Phase 1: Comprehensive Project Analysis
+
+### 1.1 Technology Stack Assessment
+**Tools**: `codebase_search`, `grep_search`, `file_search`
+
+#### Frontend Analysis Checklist:
+- [ ] Identify framework (React, Vue, Angular, etc.) and version
+- [ ] Document UI libraries (Tailwind, Bootstrap, Material-UI, etc.)
+- [ ] Check build tools (Vite, Webpack, Parcel, etc.)
+- [ ] Assess component organization and architecture patterns
+- [ ] Identify state management approach (Context, Redux, Zustand, etc.)
+- [ ] Review testing setup (Jest, Vitest, Cypress, etc.)
+
+#### Backend Analysis Checklist:
+- [ ] Identify server technology (Node.js, Python, Go, etc.)
+- [ ] Document framework (Express, FastAPI, Django, etc.)
+- [ ] Assess database technology and schema
+- [ ] Check authentication and authorization systems
+- [ ] Review API design and documentation
+- [ ] Identify deployment and infrastructure setup
+
+#### Integration Analysis Checklist:
+- [ ] Third-party API integrations
+- [ ] Database connections and ORM usage
+- [ ] Real-time features (WebSockets, Server-Sent Events)
+- [ ] External service dependencies
+- [ ] Development and deployment workflows
+
+### 1.2 Code Quality Assessment
+
+#### File Structure Analysis:
+```bash
+# Use these search patterns to assess project health
+- Large files (>500 lines): grep_search with line counting
+- Component organization: file_search for component patterns
+- Code duplication: search for repeated patterns
+- Architecture violations: identify anti-patterns
+```
+
+#### Quality Metrics Checklist:
+- [ ] Identify files exceeding 500-line limit (FORBIDDEN #3)
+- [ ] Assess code organization and separation of concerns
+- [ ] Check for proper error handling and logging
+- [ ] Evaluate testing coverage and quality
+- [ ] Review security implementations
+- [ ] Identify technical debt and refactoring opportunities
+
+### 1.3 Feature Inventory
+
+#### Current Features Assessment:
+- [ ] Authentication and user management
+- [ ] Core business logic functionality
+- [ ] Data management and storage
+- [ ] Integration capabilities
+- [ ] User interface and experience features
+- [ ] Administrative and management tools
+
+#### Infrastructure Assessment:
+- [ ] Logging and monitoring systems
+- [ ] Error tracking and debugging tools
+- [ ] Performance monitoring
+- [ ] Security measures and compliance
+- [ ] Backup and disaster recovery
+- [ ] Scalability and load handling
+
+## 📊 Phase 2: Documentation Analysis & Update
+
+### 2.1 Documentation Inventory
+
+#### Core Documentation Files:
+- [ ] README.md - Project overview and setup
+- [ ] Tech stack documentation
+- [ ] Architecture and design documents
+- [ ] API documentation and specifications
+- [ ] User guides and tutorials
+- [ ] Development guidelines and standards
+- [ ] Deployment and operations guides
+
+#### Project Management Documents:
+- [ ] Requirements and specifications
+- [ ] Implementation plans and roadmaps
+- [ ] Progress tracking and reports
+- [ ] Issue logs and change management
+- [ ] Testing strategies and plans
+- [ ] Risk assessment and mitigation
+
+### 2.2 Documentation Update Process
+
+#### Step 1: Archive Original Files (RULE #3 Compliance)
+```markdown
+For each outdated document:
+1. Move to `/archive/` directory
+2. Rename with descriptive suffix: `_original_YYYY-MM-DD.md`
+3. Preserve all original content
+4. Log archival action with reasoning
+```
+
+#### Step 2: Content Accuracy Verification
+- [ ] Verify technology stack references against actual implementation
+- [ ] Update version numbers and dates
+- [ ] Cross-reference architectural descriptions with codebase
+- [ ] Validate feature descriptions against current functionality
+- [ ] Check external dependencies and integrations
+
+#### Step 3: Critical Issues Identification
+- [ ] Infrastructure gaps (logging, monitoring, testing)
+- [ ] Code quality violations (large files, architecture issues)
+- [ ] Security vulnerabilities and compliance gaps
+- [ ] Performance bottlenecks and scalability concerns
+- [ ] Technical debt and maintenance requirements
+
+### 2.3 Documentation Standards
+
+#### Format Requirements:
+- **Markdown**: All documentation in .md format
+- **Version Control**: Include version numbers and dates
+- **Structure**: Consistent heading hierarchy and organization
+- **Cross-references**: Links between related documents
+- **Code Examples**: Syntax highlighting and proper formatting
+
+#### Content Requirements:
+- **Accuracy**: All technical details verified against codebase
+- **Completeness**: No missing critical information
+- **Clarity**: Technical concepts explained clearly
+- **Currency**: Reflect current system state, not aspirational
+- **Actionability**: Clear next steps and recommendations
+
+## 📈 Phase 3: Progress Assessment & Reporting
+
+### 3.1 Timeline Analysis
+
+#### Development Velocity Assessment:
+- [ ] Calculate actual progress vs. planned timeline
+- [ ] Identify development bottlenecks and accelerators
+- [ ] Assess team productivity and efficiency
+- [ ] Evaluate milestone achievement rates
+- [ ] Project ahead/behind schedule analysis
+
+#### Phase Completion Tracking:
+```markdown
+For each project phase:
+- Planned features vs. implemented features
+- Completion percentage calculation
+- Quality assessment of delivered features
+- Remaining work estimation
+- Dependencies and blockers identification
+```
+
+### 3.2 Health Assessment Matrix
+
+#### Technical Health Indicators:
+- **Architecture Quality**: Modern, scalable, maintainable
+- **Code Quality**: Organization, testing, documentation
+- **Performance**: Response times, scalability, efficiency
+- **Security**: Authentication, authorization, data protection
+- **Reliability**: Error handling, monitoring, recovery
+
+#### Project Health Indicators:
+- **Timeline Performance**: On schedule, ahead, or behind
+- **Feature Completeness**: Delivered vs. planned functionality
+- **Technical Debt**: Identified issues and remediation plans
+- **Team Velocity**: Development speed and consistency
+- **Risk Factors**: Potential project derailment issues
+
+### 3.3 Report Generation
+
+#### Executive Summary Format:
+```markdown
+## Executive Summary
+- **Overall Status**: [Percentage] complete with [Health Level]
+- **Timeline Status**: [Ahead/On Track/Behind] schedule
+- **Architecture Quality**: [Excellent/Good/Needs Work]
+- **Critical Issues**: [Number] requiring immediate attention
+- **Key Finding**: [One-paragraph project assessment]
+```
+
+#### Detailed Report Sections:
+1. **Phase Completion Analysis** - Detailed progress breakdown
+2. **Key Accomplishments** - Major achievements and milestones
+3. **Critical Issues** - Prioritized problems requiring attention
+4. **Architectural Strengths** - Well-implemented aspects
+5. **Success Metrics** - Quantitative performance indicators
+6. **Recommendations** - Immediate, short-term, and long-term actions
+7. **Strategic Outlook** - Future roadmap and growth projections
+
+## 🔄 Phase 4: Maintenance & Continuous Improvement
+
+### 4.1 Regular Review Cycle
+
+#### Monthly Review Schedule:
+- [ ] Documentation accuracy verification
+- [ ] Progress report generation
+- [ ] Critical issues status update
+- [ ] Roadmap adjustment and refinement
+- [ ] Team feedback incorporation
+
+#### Quarterly Assessment:
+- [ ] Comprehensive architecture review
+- [ ] Technology stack evaluation and updates
+- [ ] Performance metrics analysis
+- [ ] Strategic roadmap realignment
+- [ ] Process improvement recommendations
+
+### 4.2 Change Management
+
+#### Documentation Update Triggers:
+- Major feature implementations
+- Architecture or technology changes
+- Critical bug fixes or security updates
+- Process or workflow modifications
+- Team structure or responsibility changes
+
+#### Version Control Protocol:
+```markdown
+1. Archive previous version following RULE #3
+2. Update content with accurate current state
+3. Increment version number and update date
+4. Log all changes with detailed reasoning
+5. Verify accuracy against current implementation
+```
+
+## 🎯 Protocol Execution Checklist
+
+### Pre-Execution Preparation:
+- [ ] Confirm project scope and analysis requirements
+- [ ] Verify access to all necessary project resources
+- [ ] Create timestamped log file in `/logs/` directory
+- [ ] Review applicable cursor rules and protocols
+- [ ] Establish WBS with time estimates
+
+### Execution Phase Management:
+- [ ] Follow phases sequentially (1→2→3→4)
+- [ ] Complete all checklists before proceeding
+- [ ] Log progress and findings continuously
+- [ ] Address critical issues as they're identified
+- [ ] Maintain RULE #3 compliance throughout
+
+### Quality Assurance Verification:
+- [ ] All documentation reflects current system state
+- [ ] Critical issues properly prioritized and documented
+- [ ] Archive files properly stored and named
+- [ ] Log files comprehensive and complete
+- [ ] Reports ready for stakeholder distribution
+
+### Post-Execution Deliverables:
+- [ ] Updated documentation suite (100% accurate)
+- [ ] Comprehensive progress report with metrics
+- [ ] Critical issues list with timelines
+- [ ] Archived original files following RULE #3
+- [ ] Complete change log with detailed reasoning
+
+## 🔧 Tools & Commands Reference
+
+### Essential Tool Usage:
+- **`codebase_search`**: Semantic search for understanding architecture
+- **`grep_search`**: Exact pattern matching for specific implementations
+- **`file_search`**: Finding specific files and components
+- **`read_file`**: Detailed code analysis and verification
+- **`list_dir`**: Project structure exploration
+
+### Command Line Utilities:
+```bash
+# File analysis
+find . -name "*.tsx" -o -name "*.ts" | xargs wc -l | sort -n
+find . -type f -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" | grep -v node_modules
+
+# Documentation structure
+find ./docs -name "*.md" | head -20
+find . -name "README*" -o -name "*.md" | grep -v node_modules
+```
+
+## 🎉 Success Criteria
+
+### Project Analysis Success:
+- **Accuracy**: 100% technical details verified against codebase
+- **Completeness**: All major components and systems assessed
+- **Critical Issues**: All significant problems identified and prioritized
+- **Health Assessment**: Clear project status with actionable insights
+
+### Documentation Success:
+- **Currency**: All documents reflect current system state
+- **Compliance**: RULE #3 followed (no deletions, proper archival)
+- **Quality**: Professional formatting and comprehensive content
+- **Usability**: Team can immediately use for development guidance
+
+### Reporting Success:
+- **Stakeholder Value**: Executive-level insights and recommendations
+- **Actionability**: Clear next steps with timelines and priorities
+- **Metrics**: Quantitative progress and health indicators
+- **Strategic Guidance**: Short and long-term roadmap recommendations
+
+## 🔄 Protocol Maintenance
+
+### Monthly Protocol Review:
+- Assess protocol effectiveness and completion rates
+- Incorporate lessons learned and process improvements
+- Update tool usage patterns and best practices
+- Refine quality criteria and success metrics
+
+### Annual Protocol Enhancement:
+- Major revision based on accumulated experience
+- Integration of new tools and methodologies
+- Expansion for additional project types and contexts
+- Community feedback incorporation and standardization
+
+---
+
+**Protocol Effectiveness**: Proven successful on React/TypeScript/Supabase projects  
+**Universality**: Designed for any technology stack or project type  
+**Compliance**: Fully aligned with all established RULES and FORBIDDEN practices  
+**Next Review**: June 11, 2025
