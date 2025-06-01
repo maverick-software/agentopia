@@ -1,0 +1,107 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP Developer Guide - Session Layer
+
+## MCP Session Layer
+
+The Session layer manages the lifecycle of a connection: initialization handshake, maintaining state, and termination. MCP sessions are stateful – once a client connects to a server, both sides exchange information about their capabilities and hold the session open for ongoing interactions.
+
+## Session Initialization (Handshake)
+
+When a new client-server connection is made (over the transport), an initialize handshake occurs to set up the session parameters. This is a three-step sequence:
+
+### 1. Client -> Server (initialize request)
+The client sends an initialize request containing its protocol version and a list of capabilities it supports. Capabilities are feature flags indicating what optional features the client can handle (for example, whether it supports receiving streaming outputs, or certain resource types). The request may also include a session ID or other info if resuming a session (commonly, a new session starts fresh).
+
+### 2. Server -> Client (initialize response)
+The server responds with its own supported protocol version and capabilities. Both sides now know what features they mutually support. For example, the server might advertise that it provides resources, tools, and requires authorization for certain tools, etc.
+
+### 3. Client -> Server (initialized notification)
+After receiving the server's response, the client sends an initialized notification to confirm the handshake is complete. This is a JSON-RPC notification (no reply expected) just to signal "acknowledged and ready".
+
+### Connection is ready
+At this point, both sides consider the session active and can begin normal message exchange.
+
+## Handshake Sequence
+
+In pseudo-sequence form:
+```
+Client -> initialize {version:..., capabilities:...}
+Server -> initializeResult {version:..., capabilities:...}
+Client -> initialized {} (notification)
+```
+
+Both client and server typically use their MCP SDK to perform this handshake automatically when `connect()` is called (as seen in client code earlier). For example, the Python client's `session.initialize()` will perform these steps under the hood.
+
+## Capabilities Negotiation
+
+This negotiation is crucial. MCP's design allows servers/clients to implement additional features progressively and advertise them. For instance, if a server implements the sampling capability (letting the client delegate some LLM sampling control), it will list that in its capabilities and the client will then know to expect certain messages related to sampling. If a feature isn't in both lists, it won't be used during that session. Always ensure the capability lists are accurate. The base protocol itself is considered a capability (with a version) that must match or be compatible.
+
+### Server Capabilities Declaration
+
+From a developer perspective, during server initialization you typically configure and declare capabilities. For example, using the TS SDK:
+
+```javascript
+const server = new Server({ name: "my-server", version: "1.0.0" }, {
+  capabilities: {
+    resources: {},   // support resource retrieval
+    tools: {},       // support tool invocation
+    // prompts: {}    // (if supporting prompts)
+    // other capabilities like auth or streaming flags...
+  }
+});
+```
+
+Likewise on the client side, you declare what you can handle. The SDKs usually fill this with sensible defaults or given options.
+
+## Session Architecture
+
+**MCP client-server session**: The host's MCP client and the server establish a session via either stdio or SSE (transport layer). After the handshake, the server can offer Tools, Resources, Prompts to the client. The client (and its LLM) can then invoke those tools or fetch resources. External APIs (Weather API, email service, database, etc.) are accessed by the server as needed to fulfill requests. The session layer ensures both sides track the conversation context if needed.
+
+### Key Session Characteristics
+
+Notably:
+- The host usually retains the conversation history with the LLM and inserts fetched resources or tool results into the prompt (the server doesn't see full conversation)
+- The server might maintain state like cached data, subscriptions (if client subscribed to resource updates), or in-progress operations tied to the session. It can use the session context to manage these
+- Each session is typically bound to a single user or purpose. If the host opens multiple sessions (e.g., one per document or one per user chat), they are isolated
+
+## Ongoing Session Management
+
+After initialization, the session layer doesn't require much developer intervention for basic cases – it mainly operates via the protocol's requests and notifications. However, there are some aspects to be aware of:
+
+### Keep-alive/Heartbeat
+MCP does not mandate a heartbeat, but if using long-lived SSE, ensure the connection remains alive (some SSE implementations send comments or ping events). The session ends if the transport disconnects.
+
+### Subscriptions
+If the server offers subscription capabilities (e.g. pushing events when a resource changes), the session will manage those. The client might call a subscribe method and the server will send notifications until unsubscribed or session ends.
+
+### Concurrency
+MCP allows interleaving requests (JSON-RPC 2.0 supports concurrent calls distinguished by id). The session layer (especially in SDKs) might queue or handle thread-safety. As a developer, if not using the SDK, you should ensure thread-safe handling of messages if the transport can deliver them concurrently.
+
+### Session Termination
+Either side can close the session. For example, the client might send a shutdown or simply close the connection (stdin EOF or closing SSE). The server should then clean up. A graceful shutdown might involve a specific JSON-RPC notification or method (some implementations use an exit or close notification). Ensure to handle partial operations if a session terminates unexpectedly.
+
+## Server-Side Session Management
+
+This includes tracking any per-session state (like auth tokens granted, see next section) and releasing resources when the session closes. If your server is stateless (each request independent), you might not need to track much. But if, say, a login happens in session, you'd store that in a session context object.
+
+## Client-Side Session Management
+
+The host application might expose UI elements for each connected server (e.g. showing what tools are available from that server). When a session starts, the host could list available tools and resources (by calling methods like `tools/list`, `resources/list`) to populate its UI or internal knowledge. Over the session, the host might also handle user preferences, like disabling a tool or revoking access, which could translate to the client instructing the server accordingly.
+
+## Session Layer Summary
+
+In summary, the Session layer is about establishing a shared understanding (capabilities, state) and keeping the link alive and orderly. With that in place, developers mostly interact with the Application layer – the actual functionality delivered via MCP.
+
+---
+
+**Related Files in This Guide Series:**
+- `01-overview-introduction.mdc` - Overview & Introduction
+- `02-transport-layer.mdc` - Transport Layer Implementation
+- `03-protocol-layer.mdc` - Protocol Layer & JSON-RPC
+- `05-application-layer.mdc` - Tools, Resources & Prompts
+- `06-authentication-oauth.mdc` - OAuth & Security
+- `07-summary-resources.mdc` - Implementation Summary & Sources

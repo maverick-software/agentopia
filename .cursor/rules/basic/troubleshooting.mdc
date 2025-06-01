@@ -1,0 +1,308 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: This document establishes universal rules for AI-driven problem-solving, ensuring structured reasoning, verification processes, and accurate decision-making.
+globs: 
+alwaysApply: false
+---
+# Comprehensive Troubleshooting Guide for AI Agents
+
+## **Purpose**
+This document establishes universal rules for AI-driven problem-solving, ensuring structured reasoning, verification processes, accurate decision-making, and comprehensive documentation workflows.
+
+Always remember that `.\README.md` holds the file and folder structure and notes.
+
+## **Contingencies**
+
+If using a database, if applicable, you first should pull a new schema dump and types file to ensure you can research and understand what is expected in the database if necessary.
+
+If available, also use the big_picture_protocol.mdc to help expand your thinking capabilities.
+
+---
+
+## **The Golden Rule: Question-First Methodology**
+
+The right set of questions always comes before finding the correct answer. Rather than making assumptions, ask yourself smart questions about the problem first. Don't get tunnel vision on the immediate problem, expand out and think big picture about why this might happen. It might require a little digging and asking the "Seven Layers of Why" and "IDEAL" or "Identify, Define Root Cause, Explore, Action, Look Back and Learn."
+
+Then, answer the question, then ask the next logical question. This is the key to success.
+
+If you cannot find the right question based on your own knowledge, use web research and forums to find the question.
+
+---
+
+## **1. General Problem-Solving Workflow**
+
+### **Core Principles:**
+1. **Confirm Understanding Before Acting**
+   - Always clarify the **intent and meaning of instructions** before taking action.
+   - Ask clarifying questions when faced with ambiguity.
+   - Avoid making assumptions unless backed by verified data.
+
+2. **Use Structured Reasoning Models**
+   - Select an appropriate reasoning model based on the problem type.
+   - Apply question-based filters to ensure completeness.
+
+3. **Perform Root-Cause Analysis**
+   - Identify the **real cause** of a problem instead of treating symptoms.
+   - Trace dependencies to detect **second-order and third-order effects**.
+
+4. **Verify Solutions Independently**
+   - Always **validate results** using multiple methods (logs, outputs, screenshots, or test cases).
+   - Log all actions taken for **self-audit and human review**.
+   - Ensure system behavior aligns with **expected results before finalizing changes**.
+
+---
+
+## **2. Reasoning Models & Their Application**
+
+### **2.1 Deductive Reasoning (Top-Down Logic)**
+- **Best for:** Ensuring correctness, following structured logic, validating assumptions.
+- **Process:**
+  1. Identify general principles or rules.
+  2. Apply those rules to the specific problem.
+  3. Validate conclusions against expected outcomes.
+- **Question Filter:**
+  - What general rule applies here?
+  - Are my premises true?
+  - Does my conclusion logically follow?
+
+### **2.2 Inductive Reasoning (Bottom-Up Logic)**
+- **Best for:** Detecting patterns, predicting behaviors, handling uncertainty.
+- **Process:**
+  1. Gather specific observations or past data.
+  2. Identify common patterns or trends.
+  3. Formulate a general principle based on evidence.
+- **Question Filter:**
+  - What similar cases exist?
+  - What patterns emerge?
+  - Is my conclusion based on sufficient data?
+
+### **2.3 Abductive Reasoning (Best Hypothesis Approach)**
+- **Best for:** Diagnosing failures, troubleshooting unexpected results.
+- **Process:**
+  1. Observe an unexpected outcome.
+  2. Generate hypotheses for possible causes.
+  3. Test the most likely hypotheses first.
+- **Question Filter:**
+  - What's the most likely explanation?
+  - Have I considered all relevant factors?
+  - Can I test this hypothesis efficiently?
+
+### **2.4 Counterfactual Thinking (What-If Analysis)**
+- **Best for:** Evaluating alternative decisions, predicting failures before they occur.
+- **Process:**
+  1. Consider what would happen if a specific change were made.
+  2. Compare alternative actions to identify risks and benefits.
+  3. Select the option with the least risk and most efficiency.
+- **Question Filter:**
+  - What would happen if I did X instead?
+  - Could this create unintended consequences?
+  - What are the second-order and third-order effects?
+
+---
+
+## **3. Root-Cause Analysis (RCA)**
+
+### **3.1 Five Whys Method**
+- **Process:** Ask "Why?" five times to drill down to the root cause.
+- **Example:**
+  1. Why did the application crash? → Memory error.
+  2. Why did memory run out? → Unhandled process consuming excess resources.
+  3. Why was the process unhandled? → No resource limit enforcement.
+  4. Why was no limit enforced? → System monitoring didn't flag it.
+  5. Why didn't monitoring flag it? → Missing alerts for specific resource usage thresholds.
+- **Resolution:** Implement monitoring and alerting mechanisms.
+
+### **3.2 Fishbone Diagram (Ishikawa Analysis)**
+- **Best for:** Identifying multiple contributing factors to an issue.
+- **Categories:**
+  - **Machine (Infrastructure/Hardware):** Are system resources constrained?
+  - **Method (Process/Logic):** Is there a flaw in how the process is designed?
+  - **Material (Dependencies/Code):** Are external libraries or configurations causing issues?
+  - **Man (Human Error/AI Error):** Was there a mistake in setup or execution?
+
+---
+
+## **4. Systematic Problem Resolution Documentation Process**
+
+### **General Activity & Logging**
+- All console activity should be logged here: 
+- **Location:** `\docs\console\logs\[HH:MM:SS][date][console_logs]`
+- Refer to this guide and `\cursor\rules\protocols\documentation` for how logs should be setup in the program
+- From these logs you will find your bugs and errors
+- **Maintain copious logs** with timestamps, actions taken, and outputs
+- Store logs in a structured format for easy review
+- Keep logs until manual confirmation is received
+
+### **Step 1: Document the Error**
+- Search the `docs\bugs\reports` to discover if the bug has already been reported
+- If not, create it. If so, check the remaining bug folders to see if there has been work done on the problem
+- If there has been work, then figure out where to pick it up. If not proceed as usual
+
+**Location:** `.\docs\bugs\reports\[bug_report][date][time]`
+**Contents:**
+- Copy the template bug report from `.\cursor\rules\templates\bug_report.mdc`
+- Complete all relevant details, including error description, stack trace, expected vs actual behavior, reproduction steps, logs, and initial troubleshooting
+- Save the completed report inside `.\docs\bugs\reports\` with a filename formatted as `[bug_report][date][time].md`
+
+### **Step 2: Research Document**
+**Location:** `.\docs\bugs\[problem]\research.md`
+**Contents:**
+- Research the codebase following the error to its root cause
+- Ideas on potential web searches you can perform to get better answers
+- Perform those web searches and store your research. Here are the research doc details:
+  - Summary of codebase exploration related to the issue
+  - `index.md` (root folder), `__ai__.md`, and `_change.logs` (file location folder) have details about the program, files, folders and functions (or should)
+  - External research from the web or industry best practices
+  - Notes on similar issues and their resolutions in open-source or proprietary software
+
+### **Step 3: Solution Proposals**
+**Location:** `.\docs\bugs\[problem]\solutions.md`
+**Contents:**
+- Five potential solutions
+- Ordered by the likelihood of success
+- Justification for each option, including:
+  - Pros and cons
+  - Feasibility and complexity analysis
+
+### **Step 4: Impact Analysis Document**
+**Location:** `.\docs\bugs\[problem]\impact_analysis.md`
+**Contents:**
+- Consideration of cascading effects of the proposed solutions
+- Second-order and third-order consequences
+- Dependencies or potential conflicts within the system
+- Assign Levels of Impact:
+  - **(1) Minimal Impact** – Affects a small, isolated function with no dependencies
+  - **(2) Localized Impact** – Affects a specific module but does not disrupt other core functions
+  - **(3) Moderate Impact** – Affects multiple modules and requires dependency updates but maintains system stability
+  - **(4) High Impact** – Affects critical components, requiring major adjustments and risk assessment
+  - **(5) Severe Impact** – Fundamentally changes system behavior, posing high risk and requiring extensive testing and rollback planning
+
+### **Step 5: Solution Plan**
+**Location:** `.\docs\bugs\[problem]\plan.md`
+**Contents:**
+- Detailed plan for implementing the most likely solution
+- Steps required to resolve the problem
+- Expected outcome and testing strategy
+
+### **Step 6: Backup Files**
+**Location:** `.\docs\bugs\[problem]\backups`
+**Instructions:**
+- Backup all files that will be modified
+- Ensure backups are accessible in case a rollback is needed
+
+### **Step 7: Implementation and Checklist**
+**Process:**
+- Follow the solution plan
+- Update the checklist as tasks are completed
+- Log any deviations from the plan and document changes
+
+### **Step 8: Quality Control and Troubleshooting**
+**Process:**
+- Perform quality control checks to confirm the fix is working
+- Identify and troubleshoot any issues that arise
+- Repeat testing until the problem is fully resolved
+
+### **Step 9: Documentation Updates**
+**Location:** Update relevant files:
+- `__ai__.md`
+- `_change.logs`
+- `index.md` (if applicable)
+- Update all solutions to the `\docs\knowledge_base\[solution_name]`
+
+### **Step 10: Backup Cleanup**
+**Process:**
+- Once the solution is verified and confirmed, delete backup files
+- Ensure all changes are committed to version control
+
+---
+
+## **5. Verification & Self-Validation Methods**
+
+### **5.1 Self-Verification Before Completion**
+- Never assume success without verifying **actual results**.
+- Use AI-assisted monitoring tools or human-readable logs.
+- Cross-check **expected vs. actual behavior**.
+- Always validate results using multiple methods (logs, outputs, screenshots, or test cases).
+
+### **5.2 Logging for Accountability**
+- Maintain **copious logs** with timestamps, actions taken, and outputs.
+- Store logs in a structured format for easy review.
+- Keep logs **until manual confirmation** is received.
+- Log all actions taken for **self-audit and human review**.
+
+### **5.3 Visual Verification for UI/GUI Systems**
+- Take **screenshots** of user interfaces if applicable.
+- Use **OCR (Optical Character Recognition) or Image Processing** to read GUI state.
+- Ensure that the **visual state matches expected behavior**.
+
+### **5.4 Automated & Manual Testing**
+- Run **automated test suites** before finalizing changes.
+- Perform **manual validation** for complex interactions.
+- Use **AI-driven anomaly detection** to detect unintended consequences.
+- Ensure system behavior aligns with **expected results before finalizing changes**.
+
+---
+
+## **6. Final Problem-Solving Guidelines for AI Agents**
+
+### **Pre-Action Requirements**
+- **Confirm intent before proceeding** — never assume instructions are complete.
+- Always clarify the **intent and meaning of instructions** before taking action.
+- Ask clarifying questions when faced with ambiguity.
+- Avoid making assumptions unless backed by verified data.
+
+### **During Problem-Solving**
+- **Choose the correct reasoning model** based on the problem type.
+- **Perform root-cause analysis** instead of treating symptoms.
+- Identify the **real cause** of a problem instead of treating symptoms.
+- Trace dependencies to detect **second-order and third-order effects**.
+- Use structured reasoning models and apply question-based filters to ensure completeness.
+
+### **Post-Solution Verification**
+- **Verify correctness independently** using logs, screenshots, or test cases.
+- **Keep structured records of all actions taken** to ensure transparency.
+- Always **validate results** using multiple methods.
+- Ensure system behavior aligns with **expected results before finalizing changes**.
+
+### **Documentation and Accountability**
+- Log all actions taken for **self-audit and human review**.
+- Maintain comprehensive documentation throughout the process.
+- Update all relevant documentation files upon completion.
+- Ensure all changes are properly tracked and reversible.
+
+---
+
+## **7. Success Criteria & Validation Checklist**
+
+### **Problem Resolution Validation**
+- [ ] Root cause identified and addressed (not just symptoms)
+- [ ] Solution tested and verified through multiple methods
+- [ ] No unintended consequences or side effects introduced
+- [ ] All affected systems functioning as expected
+
+### **Documentation Completeness**
+- [ ] Complete problem documentation created
+- [ ] Research and analysis documented
+- [ ] Solution implementation documented
+- [ ] All relevant files updated (`__ai__.md`, `_change.logs`, `index.md`)
+
+### **Process Compliance**
+- [ ] Appropriate reasoning model applied
+- [ ] Root-cause analysis completed
+- [ ] Independent verification performed
+- [ ] Structured records maintained
+
+### **Quality Assurance**
+- [ ] All backup files created before modifications
+- [ ] Testing completed and validated
+- [ ] Documentation updated and accurate
+- [ ] Knowledge base updated with solution
+
+---
+
+By following these comprehensive troubleshooting guidelines with structured reasoning, verification processes, and systematic documentation workflows, AI agents ensure that their problem-solving is methodical, their solutions are accurate and well-documented, and their actions remain fully verifiable and accountable.
+

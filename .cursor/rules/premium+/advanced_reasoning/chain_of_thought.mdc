@@ -1,0 +1,440 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Advanced Multi-Step Reasoning Model - Chain of Thought Protocol
+
+## Original Requirement
+Create an optional, multi-step advanced reasoning model where the agent has the context and option for 'tool use.' 
+
+so within each iteration, it determines if it needs to leverage deeper reasoning, it queries it's advanced reasoning options, selects the right type of reasoning, constructs the contextual questions to achieve appropriately reasoning about a topic, and then deduce an answer or next step from the reasoning.
+
+This must be dynamic so that the reasoning steps and questions formed happen at the time of inference, since they will need contextual understanding in order to come a relevant answer. This system will need a critic and a confidence score, ensuring a level of confidence before breaking out of the reasoning, remembering and concluding process to provide a response to event and/or inquiry.
+
+---
+
+## COMPREHENSIVE STANDARD OPERATING PROCEDURE (SOP)
+### For Advanced Multi-Step Reasoning Implementation in Agentic Environments
+
+### SECTION 1: EXECUTIVE SUMMARY
+
+This SOP outlines the complete implementation framework for an advanced multi-step reasoning model that enables agentic AI systems to:
+- Dynamically select appropriate reasoning strategies based on context
+- Perform iterative reasoning with self-correction capabilities
+- Maintain confidence scoring and critic feedback loops
+- Integrate seamlessly with existing tool-use capabilities
+- Scale reasoning complexity based on problem difficulty
+
+### SECTION 2: SYSTEM ARCHITECTURE OVERVIEW
+
+**2.1 Core Components:**
+- **Reasoning Controller**: Central orchestrator for reasoning process selection
+- **Strategy Selector**: Determines optimal reasoning approach based on context
+- **Dynamic Question Generator**: Creates contextual reasoning questions during inference
+- **Multi-Step Processor**: Executes iterative reasoning cycles
+- **Critic Module**: Evaluates reasoning quality and provides feedback
+- **Confidence Scorer**: Assesses reliability of reasoning outputs
+- **Memory Manager**: Maintains reasoning context and trajectory
+- **Tool Integration Layer**: Seamlessly incorporates external tool usage
+
+**2.2 Reasoning Types Supported:**
+- Chain-of-Thought (CoT)
+- Tree-of-Thought (ToT) 
+- Meta Chain-of-Thought (Meta-CoT)
+- Environment Augmented Generation (EAG)
+- Pre-Act Planning
+- Think-Critique-Improve cycles
+- Best-of-N sampling with verification
+
+### SECTION 3: IMPLEMENTATION PHASES
+
+**PHASE 1: Research & Planning (Weeks 1-2)**
+**PHASE 2: Core Architecture Design (Weeks 3-4)**
+**PHASE 3: Component Development (Weeks 5-8)**
+**PHASE 4: Integration & Testing (Weeks 9-10)**
+**PHASE 5: Optimization & Refinement (Weeks 11-12)**
+**PHASE 6: Deployment & Documentation (Week 13)**
+
+### SECTION 4: DETAILED WORK BREAKDOWN STRUCTURE (WBS)
+
+## PHASE 1: RESEARCH & PLANNING
+
+### 1.1 Literature Review & Current State Analysis
+- **Plan Review & Alignment**: Research latest advances in reasoning models (CoT, ToT, Meta-CoT, DeepSeek-R1, OpenAI o1/o3)
+- **Comprehensive Research**: Academic papers, implementation studies, benchmark evaluations
+- **Findings**: Document current SOTA approaches, limitations, and opportunities
+- **Actions**: Create comprehensive research document with implementation recommendations
+- **Backups**: N/A (research phase)
+- **Update**: Document research findings in `/docs/plans/advanced_reasoning_implementation/research/literature_review.md`
+
+### 1.2 Existing Codebase Analysis
+- **Plan Review & Alignment**: Analyze current agentic framework capabilities and limitations
+- **Comprehensive Research**: Code review, architecture assessment, dependency analysis
+- **Findings**: Identify integration points, potential conflicts, required modifications
+- **Actions**: Document current system architecture and proposed integration points
+- **Backups**: Create backup of current system state
+- **Update**: Complete codebase analysis in `/docs/plans/advanced_reasoning_implementation/research/codebase_analysis.md`
+
+### 1.3 Requirements Specification
+- **Plan Review & Alignment**: Define functional and non-functional requirements
+- **Comprehensive Research**: Stakeholder interviews, use case analysis, performance targets
+- **Findings**: Detailed requirements matrix with priority levels
+- **Actions**: Create comprehensive requirements document
+- **Backups**: N/A (documentation phase)
+- **Update**: Requirements documented in `/docs/plans/advanced_reasoning_implementation/research/requirements_spec.md`
+
+### 1.4 Technology Stack Selection
+- **Plan Review & Alignment**: Evaluate programming languages, frameworks, and libraries
+- **Comprehensive Research**: Performance benchmarks, compatibility analysis, community support
+- **Findings**: Recommended technology stack with justification
+- **Actions**: Document technology decisions and architectural choices
+- **Backups**: N/A (planning phase)
+- **Update**: Technology stack documented in `/docs/plans/advanced_reasoning_implementation/research/tech_stack.md`
+
+## PHASE 2: CORE ARCHITECTURE DESIGN
+
+### 2.1 System Architecture Design
+- **Plan Review & Alignment**: Create high-level system architecture incorporating all components
+- **Comprehensive Research**: Design patterns, scalability considerations, integration approaches
+- **Findings**: Comprehensive system architecture with component interactions
+- **Actions**: Create detailed architectural diagrams and specifications
+- **Backups**: Backup existing architecture documentation
+- **Update**: Architecture design in `/docs/plans/advanced_reasoning_implementation/research/system_architecture.md`
+
+### 2.2 Component Interface Design
+- **Plan Review & Alignment**: Define APIs and interfaces between system components
+- **Comprehensive Research**: Interface design best practices, data flow optimization
+- **Findings**: Detailed interface specifications for all components
+- **Actions**: Create API documentation and interface contracts
+- **Backups**: N/A (design phase)
+- **Update**: Interface design in `/docs/plans/advanced_reasoning_implementation/research/component_interfaces.md`
+
+### 2.3 Data Flow & State Management Design
+- **Plan Review & Alignment**: Design reasoning state management and data persistence
+- **Comprehensive Research**: State management patterns, memory optimization, persistence strategies
+- **Findings**: Comprehensive data flow design with state management approach
+- **Actions**: Create data flow diagrams and state management specifications
+- **Backups**: N/A (design phase)
+- **Update**: Data flow design in `/docs/plans/advanced_reasoning_implementation/research/data_flow_design.md`
+
+### 2.4 Confidence Scoring & Critic Design
+- **Plan Review & Alignment**: Design confidence scoring algorithms and critic feedback mechanisms
+- **Comprehensive Research**: Confidence estimation techniques, self-evaluation methods, critic architectures
+- **Findings**: Detailed confidence scoring and critic system design
+- **Actions**: Create mathematical models and algorithmic specifications
+- **Backups**: N/A (design phase)
+- **Update**: Confidence and critic design in `/docs/plans/advanced_reasoning_implementation/research/confidence_critic_design.md`
+
+## PHASE 3: COMPONENT DEVELOPMENT
+
+### 3.1 Reasoning Controller Development
+- **Plan Review & Alignment**: Implement central reasoning orchestrator with strategy selection
+- **Comprehensive Research**: Review controller design specifications and implementation approach
+- **Findings**: Implementation strategy for reasoning controller with error handling
+- **Actions**: Develop ReasoningController class with strategy pattern implementation
+- **Backups**: Backup existing controller files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Controller implementation completed with unit tests
+
+### 3.2 Strategy Selector Implementation
+- **Plan Review & Alignment**: Implement reasoning strategy selection based on context analysis
+- **Comprehensive Research**: Review strategy selection algorithms and context analysis methods
+- **Findings**: Context-aware strategy selection with dynamic adaptation
+- **Actions**: Develop StrategySelector class with context analysis capabilities
+- **Backups**: Backup existing strategy files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Strategy selector implemented with comprehensive testing
+
+### 3.3 Dynamic Question Generator Development
+- **Plan Review & Alignment**: Implement contextual question generation for reasoning steps
+- **Comprehensive Research**: Review question generation techniques and contextual awareness methods
+- **Findings**: Dynamic question generation with context-dependent adaptation
+- **Actions**: Develop QuestionGenerator class with contextual understanding
+- **Backups**: Backup existing generation files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Question generator implemented with context integration
+
+### 3.4 Multi-Step Processor Implementation
+- **Plan Review & Alignment**: Implement iterative reasoning execution with step management
+- **Comprehensive Research**: Review multi-step processing patterns and iteration control
+- **Findings**: Robust multi-step processing with error recovery and backtracking
+- **Actions**: Develop MultiStepProcessor class with iteration management
+- **Backups**: Backup existing processor files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Multi-step processor implemented with full iteration control
+
+### 3.5 Critic Module Development
+- **Plan Review & Alignment**: Implement reasoning quality evaluation and feedback generation
+- **Comprehensive Research**: Review critic architectures and evaluation methods
+- **Findings**: Comprehensive critic system with multiple evaluation dimensions
+- **Actions**: Develop CriticModule class with multi-dimensional evaluation
+- **Backups**: Backup existing critic files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Critic module implemented with detailed feedback mechanisms
+
+### 3.6 Confidence Scorer Implementation
+- **Plan Review & Alignment**: Implement confidence assessment for reasoning outputs
+- **Comprehensive Research**: Review confidence estimation algorithms and calibration methods
+- **Findings**: Reliable confidence scoring with calibration mechanisms
+- **Actions**: Develop ConfidenceScorer class with calibrated output
+- **Backups**: Backup existing scoring files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Confidence scorer implemented with calibration testing
+
+### 3.7 Memory Manager Development
+- **Plan Review & Alignment**: Implement reasoning context and trajectory management
+- **Comprehensive Research**: Review memory management patterns and context preservation
+- **Findings**: Efficient memory management with context preservation and retrieval
+- **Actions**: Develop MemoryManager class with context management
+- **Backups**: Backup existing memory files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Memory manager implemented with context preservation
+
+### 3.8 Tool Integration Layer Implementation
+- **Plan Review & Alignment**: Implement seamless tool usage integration with reasoning process
+- **Comprehensive Research**: Review tool integration patterns and API management
+- **Findings**: Flexible tool integration with dynamic capability discovery
+- **Actions**: Develop ToolIntegrationLayer class with dynamic tool management
+- **Backups**: Backup existing tool files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Tool integration layer implemented with dynamic capabilities
+
+## PHASE 4: INTEGRATION & TESTING
+
+### 4.1 Component Integration
+- **Plan Review & Alignment**: Integrate all developed components into cohesive system
+- **Comprehensive Research**: Review integration testing strategies and dependency management
+- **Findings**: Comprehensive integration plan with dependency resolution
+- **Actions**: Integrate components with proper dependency injection and error handling
+- **Backups**: Backup integrated system to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Complete system integration with all components working together
+
+### 4.2 Unit Testing Implementation
+- **Plan Review & Alignment**: Implement comprehensive unit tests for all components
+- **Comprehensive Research**: Review testing frameworks and coverage requirements
+- **Findings**: Testing strategy with 90%+ code coverage target
+- **Actions**: Develop comprehensive unit test suite for all components
+- **Backups**: Backup existing test files to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Complete unit test suite with high coverage implemented
+
+### 4.3 Integration Testing
+- **Plan Review & Alignment**: Implement integration tests for component interactions
+- **Comprehensive Research**: Review integration testing patterns and API testing
+- **Findings**: Integration testing strategy with component interaction validation
+- **Actions**: Develop integration test suite covering all component interactions
+- **Backups**: N/A (testing phase)
+- **Update**: Integration tests implemented and passing
+
+### 4.4 Performance Testing
+- **Plan Review & Alignment**: Implement performance benchmarks and load testing
+- **Comprehensive Research**: Review performance testing tools and benchmarking strategies
+- **Findings**: Performance testing framework with baseline measurements
+- **Actions**: Develop performance test suite with benchmarking capabilities
+- **Backups**: N/A (testing phase)
+- **Update**: Performance tests implemented with baseline benchmarks
+
+### 4.5 Reasoning Quality Evaluation
+- **Plan Review & Alignment**: Implement reasoning quality benchmarks and evaluation metrics
+- **Comprehensive Research**: Review reasoning evaluation frameworks and quality metrics
+- **Findings**: Comprehensive reasoning evaluation with multiple quality dimensions
+- **Actions**: Develop reasoning quality evaluation suite with standard benchmarks
+- **Backups**: N/A (evaluation phase)
+- **Update**: Reasoning quality evaluation implemented with benchmark results
+
+## PHASE 5: OPTIMIZATION & REFINEMENT
+
+### 5.1 Performance Optimization
+- **Plan Review & Alignment**: Optimize system performance based on benchmark results
+- **Comprehensive Research**: Review optimization techniques and performance bottleneck analysis
+- **Findings**: Performance optimization opportunities with implementation priorities
+- **Actions**: Implement performance optimizations for identified bottlenecks
+- **Backups**: Backup pre-optimization code to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Performance optimizations implemented with measurable improvements
+
+### 5.2 Reasoning Quality Improvements
+- **Plan Review & Alignment**: Refine reasoning algorithms based on quality evaluation results
+- **Comprehensive Research**: Review reasoning improvement techniques and quality enhancement methods
+- **Findings**: Reasoning quality improvement opportunities with implementation approach
+- **Actions**: Implement reasoning quality improvements and algorithm refinements
+- **Backups**: Backup pre-refinement code to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Reasoning quality improvements implemented with validation
+
+### 5.3 User Experience Enhancement
+- **Plan Review & Alignment**: Improve user interaction and system usability
+- **Comprehensive Research**: Review UX best practices and agent interaction patterns
+- **Findings**: UX improvement opportunities with user-centered design approach
+- **Actions**: Implement UX enhancements for better user interaction
+- **Backups**: Backup existing UX code to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: UX enhancements implemented with user testing validation
+
+### 5.4 Error Handling & Robustness
+- **Plan Review & Alignment**: Enhance error handling and system robustness
+- **Comprehensive Research**: Review error handling patterns and robustness techniques
+- **Findings**: Error handling improvements with graceful degradation strategies
+- **Actions**: Implement enhanced error handling and robustness measures
+- **Backups**: Backup existing error handling code to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Enhanced error handling implemented with robustness testing
+
+## PHASE 6: DEPLOYMENT & DOCUMENTATION
+
+### 6.1 Production Deployment Preparation
+- **Plan Review & Alignment**: Prepare system for production deployment
+- **Comprehensive Research**: Review deployment strategies and production requirements
+- **Findings**: Deployment plan with production configuration and monitoring
+- **Actions**: Prepare production deployment with monitoring and logging
+- **Backups**: Backup deployment configurations to `/docs/plans/advanced_reasoning_implementation/backups/`
+- **Update**: Production deployment preparation completed with monitoring setup
+
+### 6.2 Documentation Creation
+- **Plan Review & Alignment**: Create comprehensive system documentation
+- **Comprehensive Research**: Review documentation standards and best practices
+- **Findings**: Documentation requirements with user and developer guides
+- **Actions**: Create comprehensive documentation for users and developers
+- **Backups**: N/A (documentation phase)
+- **Update**: Complete documentation created with examples and tutorials
+
+### 6.3 Training Material Development
+- **Plan Review & Alignment**: Develop training materials for system usage
+- **Comprehensive Research**: Review training material formats and educational approaches
+- **Findings**: Training material requirements with hands-on examples
+- **Actions**: Develop training materials and example implementations
+- **Backups**: N/A (training phase)
+- **Update**: Training materials developed with practical examples
+
+### 6.4 System Monitoring & Maintenance Setup
+- **Plan Review & Alignment**: Implement system monitoring and maintenance procedures
+- **Comprehensive Research**: Review monitoring tools and maintenance strategies
+- **Findings**: Monitoring and maintenance plan with automated alerts
+- **Actions**: Implement monitoring dashboard and maintenance procedures
+- **Backups**: N/A (monitoring setup)
+- **Update**: Monitoring and maintenance systems implemented and operational
+
+## PHASE 7: CLEANUP & FINAL VALIDATION
+
+### 7.1 User Acceptance Testing
+- **Plan Review & Alignment**: Conduct final user acceptance testing
+- **Comprehensive Research**: Review acceptance testing criteria and validation methods
+- **Findings**: Acceptance testing plan with success criteria
+- **Actions**: Conduct comprehensive user acceptance testing
+- **Backups**: N/A (testing phase)
+- **Update**: User acceptance testing completed with stakeholder approval
+
+### 7.2 Final System Validation
+- **Plan Review & Alignment**: Validate complete system functionality and performance
+- **Comprehensive Research**: Review validation frameworks and acceptance criteria
+- **Findings**: System validation plan with comprehensive testing
+- **Actions**: Conduct final system validation with all stakeholders
+- **Backups**: N/A (validation phase)
+- **Update**: Final system validation completed successfully
+
+### 7.3 Cleanup & Archive Management
+- **Plan Review & Alignment**: Clean up development artifacts and archive project materials
+- **Comprehensive Research**: Review cleanup procedures and archival standards
+- **Findings**: Cleanup plan with archival strategy
+- **Actions**: Move backups to `/archive/` folder and update documentation
+- **Backups**: Archive all backup materials
+- **Update**: Cleanup completed and project archived
+
+### 7.4 Project Summary & Handover
+- **Plan Review & Alignment**: Create project summary and conduct final handover
+- **Comprehensive Research**: Review handover procedures and success metrics
+- **Findings**: Project summary with achievements and lessons learned
+- **Actions**: Create comprehensive project summary and conduct stakeholder handover
+- **Backups**: N/A (summary phase)
+- **Update**: Project summary completed and handover successful
+
+### SECTION 5: TECHNICAL SPECIFICATIONS
+
+**5.1 Reasoning Strategy Selection Algorithm:**
+```
+function selectReasoningStrategy(context, complexity, tools_available):
+    if complexity < threshold_simple:
+        return "chain_of_thought"
+    elif requires_backtracking(context):
+        return "tree_of_thought"
+    elif has_environment_interaction(tools_available):
+        return "environment_augmented_generation"
+    elif requires_meta_planning(complexity):
+        return "meta_chain_of_thought"
+    else:
+        return "pre_act_planning"
+```
+
+**5.2 Confidence Scoring Framework:**
+- Consistency checks across multiple reasoning paths
+- Factual verification against known information
+- Logical coherence assessment
+- Tool usage appropriateness evaluation
+- Final answer reliability scoring
+
+**5.3 Critic Feedback Dimensions:**
+- Reasoning step validity
+- Logical flow coherence
+- Factual accuracy
+- Tool usage effectiveness
+- Alternative path exploration
+
+### SECTION 6: SUCCESS METRICS & VALIDATION
+
+**6.1 Performance Metrics:**
+- Reasoning accuracy improvement: Target 25%+ over baseline
+- Response latency: <2x baseline reasoning time
+- Confidence calibration: <10% deviation from actual accuracy
+- Tool integration success rate: >95%
+- User satisfaction score: >4.5/5
+
+**6.2 Quality Metrics:**
+- Reasoning coherence score: >90%
+- Factual accuracy rate: >95%
+- Error recovery success: >80%
+- Alternative solution discovery: >70%
+
+### SECTION 7: RISK MITIGATION
+
+**7.1 Technical Risks:**
+- Performance degradation: Implement caching and optimization
+- Integration conflicts: Comprehensive testing and staging
+- Reasoning loops: Implement termination conditions and limits
+- Memory leaks: Proper resource management and monitoring
+
+**7.2 Operational Risks:**
+- User adoption: Comprehensive training and documentation
+- Maintenance complexity: Modular design and clear documentation
+- Scalability issues: Load testing and performance monitoring
+
+### SECTION 8: MAINTENANCE & EVOLUTION
+
+**8.1 Ongoing Maintenance:**
+- Regular performance monitoring and optimization
+- Reasoning quality assessment and improvement
+- User feedback integration and system updates
+- Security updates and compliance maintenance
+
+**8.2 Future Evolution:**
+- Advanced reasoning technique integration
+- Multi-modal reasoning capabilities
+- Distributed reasoning across multiple agents
+- Domain-specific reasoning specialization
+
+---
+
+## IMPLEMENTATION CHECKLIST
+
+- [ ] **PHASE 1 COMPLETE**: Research & Planning (2 weeks)
+- [ ] **PHASE 2 COMPLETE**: Core Architecture Design (2 weeks)
+- [ ] **PHASE 3 COMPLETE**: Component Development (4 weeks)
+- [ ] **PHASE 4 COMPLETE**: Integration & Testing (2 weeks)
+- [ ] **PHASE 5 COMPLETE**: Optimization & Refinement (2 weeks)
+- [ ] **PHASE 6 COMPLETE**: Deployment & Documentation (1 week)
+- [ ] **PHASE 7 COMPLETE**: Cleanup & Final Validation (1 week)
+
+**Total Timeline: 14 weeks**
+
+**Resource Requirements:**
+- Senior AI/ML Engineer (Lead)
+- Software Engineer (Integration)
+- QA Engineer (Testing)
+- Technical Writer (Documentation)
+- DevOps Engineer (Deployment)
+
+**Budget Estimate:**
+- Development: $75,000 - $100,000
+- Testing & QA: $15,000 - $20,000
+- Documentation: $10,000 - $15,000
+- Infrastructure: $5,000 - $10,000
+- **Total: $105,000 - $145,000**
+
+This comprehensive SOP provides a complete roadmap for implementing advanced multi-step reasoning capabilities in any agentic environment, with detailed work breakdown structure, technical specifications, and success metrics.

@@ -1,0 +1,229 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# MCP Developer Guide - Authentication & OAuth
+
+## Handling Third-Party App Authentication
+
+Many MCP servers act as bridges to third-party services (e.g. Gmail, GitHub, Slack). In those cases, the server often needs an access token to act on the user's behalf. MCP includes a standardized way to handle an OAuth2 authorization flow between the client (on behalf of the user), the MCP server, and the external service. This ensures the user explicitly grants permission and tokens are exchanged securely, rather than embedding credentials in prompts.
+
+There are two distinct authentication aspects in MCP:
+
+1. **Client-Server AuthN/Z**: authenticating the user or host to the MCP server (ensuring only authorized hosts connect). This might be handled out-of-band (e.g. ToolHive's JWT middleware) or via a simple token the host passes when connecting. We won't focus on this, as it's often deployment-specific.
+
+2. **Third-Party App OAuth**: authorizing the MCP server to access an external API on behalf of the user. This is our focus, as it involves a defined MCP protocol sequence.
+
+## OAuth 2.0 Server-Side Setup (Acting as OAuth Client)
+
+From the server's perspective, to integrate with a third-party API (say Google Drive), you need to set up an OAuth 2 flow:
+
+1. Register an app with the third-party (e.g. obtain a client ID/secret and allowed redirect URI)
+2. Configure your MCP server with those credentials (securely, e.g. via environment variables)
+3. Implement endpoints to handle OAuth callbacks (the server will receive the redirect with an authorization code)
+
+The MCP spec (as of 2025) moved towards OAuth 2.1 and mandates using PKCE (Proof Key for Code Exchange) for enhanced security. So your server should generate a PKCE code verifier/challenge at the start of the flow.
+
+### Server Workflow
+
+**Authorization Request**: When the client initiates auth (via an MCP method), the server creates an OAuth authorization URL. This includes client_id, requested scopes, redirect_uri (pointing to a server callback endpoint), a generated PKCE challenge, and a state (to guard against CSRF). The server might store the PKCE verifier and state in the session context for later verification.
+
+**Provide URL to Client**: The server needs to get this URL to the user's browser. In MCP, this is done by the server sending either a response or a special notification to the client containing the authorization URL (and perhaps instructions).
+
+**Callback Endpoint**: Meanwhile, the server must have an HTTP endpoint (e.g. /oauth/callback) that the third-party will redirect to after user consent. When hit, this endpoint will receive the code (and the state). The server verifies the state and then performs a token exchange – i.e., makes a POST to the third-party token endpoint with the authorization code, client credentials, and the PKCE verifier.
+
+If successful, the third-party returns an access token (and possibly a refresh token). The server should securely store this token, tied to the user/session.
+
+The server now has the credentials to access the third-party API. But we also need to inform the MCP client that auth is complete.
+
+Optionally, the MCP spec suggests the server then generates its own MCP access token to represent this authorized session. Essentially, the server becomes an OAuth provider for the client: after getting the third-party token, it issues a token (or code) that the client will use for subsequent requests. This prevents the client from ever seeing the third-party token directly, adding an extra security layer. In practice, some implementations skip issuing a separate token and just mark the session as authorized internally.
+
+## JSON-RPC Methods (auth.*)
+
+MCP defines a set of methods for driving this flow:
+
+- `auth/requestAuthorization` – invoked by the client to start the OAuth process for a given service or scope. The server responds (or notifies) with information like an authorization URL.
+- `auth/completeAuthorization` – used to finalize the process. Depending on design, this could be called by the client with an interim code or could be a server->client callback.
+
+### OAuth Flow Steps
+
+Let's align this with the OAuth steps:
+
+1. The client calls `auth/requestAuthorization` (perhaps with params indicating which service or any options)
+2. **Server handling**: It prepares the auth URL (step 1 above). How to return it? There are two patterns:
+   - **a. Immediate response**: Server responds to `auth/requestAuthorization` with a result containing something like `{ "authorizationUrl": "https://accounts.google.com/o/oauth2/auth?...", "codeChallenge": "...", "state": "..." }`. The client then can use this info.
+   - **b. Out-of-band + polling**: Server might respond simply with `{ "status": "pending" }` and separately send a notification or wait for client to poll. But the simpler approach is (a).
+3. Now, the host application receives the URL. Client-side, it should open this URL in the user's browser. This could be done automatically (if the host is a desktop app, open default browser) or by prompting the user to click a link. The user will log in and consent on the third-party site.
+4. Third-party redirects to server's callback endpoint with `?code=XYZ`. The server's web handler for this will capture the code. (This is outside the JSON-RPC channel – it's an HTTP request to the server's web service.)
+5. Server exchanges the code for a token (using stored client_secret, etc.) and gets the access token.
+6. Now server has credentials. It likely also created an MCP session token if using the OAuth2.1 spec for client. Perhaps it generates a random "MCP auth code" or token.
+
+### Completing via MCP
+
+The server can now inform the client that authorization succeeded. If using the spec's full flow, the server would redirect the user's browser one more time, this time back to the MCP client. For example, the server could redirect to a custom URI scheme that the host app registers (like `myapp://auth-complete?code=someMCPcode`). If that's set up, the host application catches that and obtains the MCP auth code. The host then calls `auth/completeAuthorization` via JSON-RPC to the MCP channel, supplying that code.
+
+The server verifies the code and responds with an authComplete result (which might include an MCP access token or just confirmation). At this point, the client knows the server is authorized.
+
+If not implementing the full redirect to client, a simpler approach:
+After the server gets the third-party token, it could directly send a JSON-RPC notification to the client like `auth/authorizationCompleted` (non-standard example) or even a response to the original request if it was held open (though holding a JSON-RPC request open is not typical and might block other messages).
+
+Many implementations simply rely on the user seeing "Authorized, you can close this window" and the host polling the server. But the spec's approach is to use a code exchange so it's robust and more secure.
+
+## Client-Side Setup for User Authorization
+
+On the client (host) side, you need to facilitate the user interaction:
+
+1. When your MCP server indicates it needs authorization (e.g., maybe the server sent an error like "Unauthorized" when you tried a tool, or more directly the server has a capability flag indicating OAuth is needed), you would call `auth/requestAuthorization`. Alternatively, the host UI could have a "Connect [Service]" button that triggers it.
+
+2. Once you receive the authorization URL from the server, open it in the user's browser. In desktop apps, you might use an API call to open a web page. In a web-hosted scenario (if the host is a web app, which is less common for MCP), you might pop up a new window or direct the user.
+
+3. The user will complete the login/consent on that page. The client should be prepared to detect when auth is finished. If using a custom URL scheme or loopback address for redirect, the host app might receive the final callback (for example, some apps start a temporary local HTTP server to catch the redirect). For instance, the host might listen on `http://localhost:<port>/auth-callback` and include that as the redirect URI in the initial URL (this is one approach for device apps).
+
+4. When the host catches the final redirect (with the MCP auth code perhaps), it should extract the code (or token) and then call `auth/completeAuthorization` via JSON-RPC to the server, sending that code. This lets the server finalize and verify.
+
+5. After completion, the host can proceed to use the server's tools normally. The server should now treat the session as authorized – meaning it will not ask again for this user (perhaps storing a session token or cookie). The host might also store an indication that "Service X is connected".
+
+If the server issued an MCP access token for the client to use on future calls, the client should include it in requests. This could be done by an HTTP header or as part of the JSON-RPC params (depending on spec specifics). However, the current spec tends to assume the session is authorized without requiring the client to attach the token to every request (since it's the same session). For multi-session or long-lived credentials, the client might persist the token and reconnect with it next time (to avoid full OAuth each run).
+
+## JSON-RPC Auth Methods and Example Flow
+
+To make this concrete, consider a scenario: an MCP server that provides access to a user's Google Calendar (to list events). The server requires OAuth to Google.
+
+1. The host tries to call `tools/call` for "list_events". Server responds with an error indicating no valid credentials, or perhaps a custom error code like 401 Unauthorized.
+
+2. The host then calls `auth/requestAuthorization` with params `{service: "google_calendar"}`.
+
+3. **Server handling `auth/requestAuthorization`**:
+   - It generates a PKCE verifier & challenge
+   - Constructs the Google auth URL with its client_id, redirect_uri, scopes (e.g. read calendar), state, and PKCE challenge
+   - Stores the PKCE and state in a temp store (session)
+   - Responds to the JSON-RPC request with `{ "authUrl": "<GoogleAuthURL>" }` (and maybe an indication if further action needed)
+
+4. Host receives this result. It launches the user's browser to `<GoogleAuthURL>`.
+
+5. User logs in to Google, approves access to Calendar.
+
+6. Google redirects to the server's callback: e.g. `http://localhost:3000/oauth/callback?code=abcd&state=xyz`.
+
+7. Server's `/oauth/callback` sees `code=abcd`. It verifies `state=xyz` matches what was sent. It finds the PKCE verifier for this session. Then it calls Google's token endpoint: exchanging code + verifier for tokens. Google returns `access_token=TOKEN123` (and maybe `refresh_token=REFRESH123`).
+
+8. Server stores these tokens (preferably encrypted on disk or memory).
+
+9. Now server can mark this session or user as authenticated. Suppose it generates a random authSessionId or token to represent this authenticated link.
+
+10. The server issues an MCP auth code and redirects the user's browser to a URL that reaches the host. For example, server could redirect to `http://localhost:PORT/authorized?code=MCPCODE123`. The host (running at that port) gets this request and extracts `MCPCODE123`. Now the host calls `auth/completeAuthorization` with `{"code": "MCPCODE123"}`.
+
+11. Server receives `auth/completeAuthorization`. It verifies `MCPCODE123` (likely it maps to the stored session where we have `TOKEN123`). It then replies with a result like `{ "status": "authorized" }` (or possibly an MCP access token if the client will need it for future sessions).
+
+12. Now both sides know authorization succeeded. The host can proceed to call `tools/call list_events` again, and this time the server finds a token and succeeds, returning the events.
+
+## Best Practices for Secure Token Handling
+
+Handling OAuth flows introduces security concerns. Here are some best practices:
+
+1. **Never expose third-party tokens** to the LLM or user via MCP messages. The server should keep access tokens secret. If the spec requires an MCP-issued token for the client, ensure that token is scoped only to your service (e.g., a random session ID, not the actual Google token).
+
+2. **Use PKCE** for all authorization code flows (as mandated by MCP spec OAuth 2.1). This protects against interception of the auth code.
+
+3. **Validate all callbacks**: Check the state parameter on the callback to prevent CSRF. Also ensure the host name of the callback is correct (to avoid a malicious OAuth client impersonating).
+
+4. **Store tokens securely**: If your server needs to persist a refresh token (to get new access tokens later), encrypt it at rest. If it's just in memory for the session, at least ensure it's not logged or exposed.
+
+5. **Token scope**: Request the minimal OAuth scopes needed for the tool. This principle of least privilege limits risk.
+
+6. **Expiration and refresh**: Handle token expiration gracefully. Many tokens last an hour. If a token expires, the next tool call might fail with 401 from the API – in that case, use the refresh token to get a new one (if you have it), or require the user to re-auth. It's good to implement refresh logic on the server side.
+
+7. **User feedback**: Provide clear UI cues in the host. For example, show "Not connected" vs "Connected as [User]" for a service. And if not connected, prompt the user to authorize when they try to use it.
+
+8. **Revoke tokens on logout**: If your host has a concept of user logout or session end, consider telling the server to revoke the third-party token (some APIs have a revocation endpoint). At least, discard it.
+
+9. **Use TLS**: If your MCP server is remote, ensure the OAuth callback and token requests are over HTTPS. Also, the initial auth URL should be HTTPS (which it will be for any major IdP).
+
+## Code Example: OAuth Flow Integration
+
+Below is a simplified Python pseudo-code for an MCP server integrating an OAuth flow (using FastAPI for web endpoints and a hypothetical MCP server instance):
+
+```python
+from fastapi import FastAPI, Request
+from authlib.integrations.requests_client import OAuth2Session
+
+app = FastAPI()
+mcp_server = Server("calendar-server", capabilities={ "tools": {}, "auth": {} })
+
+OAUTH_CLIENT_ID = "<client-id>"
+OAUTH_CLIENT_SECRET = "<client-secret>"
+REDIRECT_URI = "http://localhost:8000/oauth/callback"
+AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+# In-memory storage for pending auth (state -> PKCE and session reference)
+pending_auth = {}
+
+@mcp_server.rpc_method("auth/requestAuthorization")
+async def handle_auth_request(params):
+    # Generate state and PKCE challenge
+    state = secrets.token_urlsafe(16)
+    oauth = OAuth2Session(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, scope="https://www.googleapis.com/auth/calendar.readonly", redirect_uri=REDIRECT_URI)
+    code_verifier = OAuth2Session.generate_code_verifier(128)
+    code_challenge = OAuth2Session.generate_code_challenge(code_verifier)
+    # Construct auth URL
+    auth_url = oauth.create_authorization_url(AUTHORIZATION_URL, state=state, code_challenge=code_challenge, code_challenge_method="S256")[0]
+    # Store verifier to exchange later
+    pending_auth[state] = { "verifier": code_verifier, "session": mcp_server.current_session }
+    return { "authorizationUrl": auth_url }
+
+@app.get("/oauth/callback")
+async def oauth_callback(request: Request):
+    # Get code and state from query
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    if not code or state not in pending_auth:
+        return "Invalid state"
+    # Exchange code for token
+    oauth = OAuth2Session(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, redirect_uri=REDIRECT_URI)
+    token = oauth.fetch_token(TOKEN_URL, code=code, code_verifier=pending_auth[state]["verifier"])
+    # Save token to session (in practice, encrypt or securely store if needed)
+    session = pending_auth[state]["session"]
+    session.token = token  # attach token to MCP session context
+    # Optionally, generate an MCP auth code and return it to user agent
+    mcp_code = secrets.token_urlsafe(16)
+    session.auth_code = mcp_code
+    # (You would need to store mcp_code mapped to session to verify later)
+    # Redirect user back to the client (assuming client can catch this)
+    return HTMLResponse(f"<html><body>Authorized. You can close this window.</body></html>")
+
+@mcp_server.rpc_method("auth/completeAuthorization")
+async def handle_auth_complete(params):
+    # Client provides an MCP auth code to complete auth
+    code = params.get("code")
+    session = mcp_server.current_session
+    if code and session.auth_code == code:
+        session.authorized = True
+        return { "status": "authorized" }
+    else:
+        raise MCPError(code=1, message="Invalid authorization code")
+```
+
+In this pseudo-code:
+- We use authlib to manage OAuth details. We generate a PKCE code challenge and the Google auth URL.
+- `pending_auth` holds the PKCE verifier and a reference to the MCP session (so we know where to store the token later) keyed by state.
+- When `/oauth/callback` is hit, we retrieve the token and attach it to the corresponding session.
+- We generate an `mcp_code` and store it in the session (as `auth_code`). Then we instruct the user they can close the window (in a real app, we might redirect to a custom URL or just rely on the user closing it).
+- In `auth/completeAuthorization`, the client sends back that `mcp_code`. We verify it matches and mark the session authorized.
+
+This is a lot of moving parts, but the result is that the server now has `session.token` which it can use whenever the user calls a tool that needs Google Calendar data. For example, when the client calls our `tools/list_events`, the handler can use `session.token` to call Google's Calendar API and return events.
+
+With authentication in place, your MCP server can safely access third-party APIs without the user's credentials ever being directly exposed to the LLM or transmitted in plaintext through the client. The user remains in control of granting and revoking that access.
+
+---
+
+**Related Files in This Guide Series:**
+- `01-overview-introduction.mdc` - Overview & Introduction
+- `02-transport-layer.mdc` - Transport Layer Implementation
+- `03-protocol-layer.mdc` - Protocol Layer & JSON-RPC
+- `04-session-layer.mdc` - Session Management & Handshake
+- `05-application-layer.mdc` - Tools, Resources & Prompts
+- `07-summary-resources.mdc` - Implementation Summary & Sources
+
+

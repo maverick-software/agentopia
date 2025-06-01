@@ -1,0 +1,1224 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Supabase Cloud Services API SOP
+
+## Standard Operating Procedure for Supabase Cloud Implementation
+**Version:** 1.0  
+**Last Updated:** 2024  
+**Author:** Digital Oracle Development Team  
+**Purpose:** Comprehensive guide for implementing Supabase cloud services including Edge Functions, database management, authentication, storage, and real-time features with proper CLI commands and deployment workflows.
+
+---
+
+## 🎯 OVERVIEW
+
+This SOP covers complete Supabase cloud implementation including:
+- **Project Setup & Management:** CLI-based project creation and configuration
+- **Database Management:** PostgreSQL with migrations, seeds, and monitoring
+- **Edge Functions:** Server-side TypeScript functions with Deno runtime
+- **Authentication:** User management and OAuth integration
+- **Storage:** File management with bucket policies
+- **Real-time:** WebSocket subscriptions and live data
+- **Deployment & CI/CD:** Automated workflows and production deployment
+
+---
+
+## 📋 PREREQUISITES
+
+### Required Knowledge
+- [ ] Node.js/TypeScript fundamentals
+- [ ] PostgreSQL database concepts
+- [ ] RESTful API and GraphQL basics
+- [ ] Git version control
+- [ ] Docker containers (for local development)
+- [ ] Environment variable management
+
+### Required Tools
+- [ ] Node.js 18+ installed
+- [ ] Git installed
+- [ ] Docker Desktop installed (for local functions)
+- [ ] Code editor with TypeScript support
+- [ ] Terminal/Command line access
+
+### Required Accounts
+- [ ] Supabase account (free tier available)
+- [ ] GitHub account (for CI/CD and deployments)
+- [ ] Domain provider (for custom domains, optional)
+
+---
+
+## 🚀 INITIAL SETUP
+
+### 1. Install Supabase CLI
+
+#### 1.1 Install via npm (Global)
+```bash
+npm install -g supabase
+```
+
+#### 1.2 Install via npm (Local Project)
+```bash
+npm install --save-dev supabase
+npx supabase --help
+```
+
+#### 1.3 Install via Homebrew (macOS)
+```bash
+brew install supabase/tap/supabase
+```
+
+#### 1.4 Install via Scoop (Windows)
+```powershell
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+```
+
+#### 1.5 Verify Installation
+```bash
+supabase --version
+supabase --help
+```
+
+### 2. Authentication & Account Setup
+
+#### 2.1 Login to Supabase CLI
+```bash
+# Interactive login (opens browser)
+supabase login
+
+# Login with token (CI/CD environments)
+supabase login --token sbp_your_access_token_here
+
+# Skip browser opening
+supabase login --no-browser
+```
+
+#### 2.2 Generate Access Token
+1. Visit: https://supabase.com/dashboard/account/tokens
+2. Click "Generate new token"
+3. Copy and store securely
+4. Use in CI/CD: `SUPABASE_ACCESS_TOKEN=sbp_token_here`
+
+### 3. Project Creation & Management
+
+#### 3.1 List Organizations
+```bash
+supabase orgs list
+```
+
+#### 3.2 Create New Project
+```bash
+# Interactive creation
+supabase projects create "my-project"
+
+# With specific organization
+supabase projects create "my-project" --org-id "your-org-id"
+
+# With custom region and size
+supabase projects create "my-project" \
+  --org-id "your-org-id" \
+  --region "us-west-1" \
+  --size "small" \
+  --db-password "SecurePassword123!"
+```
+
+#### 3.3 List Projects
+```bash
+supabase projects list
+```
+
+#### 3.4 Get Project API Keys
+```bash
+supabase projects api-keys --project-ref your-project-ref
+```
+
+---
+
+## 🏗️ LOCAL DEVELOPMENT SETUP
+
+### 1. Initialize Local Project
+
+#### 1.1 Create Project Directory
+```bash
+mkdir my-supabase-app
+cd my-supabase-app
+```
+
+#### 1.2 Initialize Supabase Configuration
+```bash
+# Basic initialization
+supabase init
+
+# Initialize with VS Code settings
+supabase init --with-vscode-settings
+
+# Initialize with IntelliJ settings
+supabase init --with-intellij-settings
+
+# Force overwrite existing config
+supabase init --force
+```
+
+#### 1.3 Link to Remote Project
+```bash
+# Link to existing project
+supabase link --project-ref your-project-ref
+
+# Link with database password prompt
+supabase link --project-ref your-project-ref --password
+
+# Link without database password
+supabase link --project-ref your-project-ref --password ""
+```
+
+### 2. Local Development Stack
+
+#### 2.1 Start Local Supabase
+```bash
+# Start all services
+supabase start
+
+# Start excluding specific services
+supabase start --exclude gotrue,imgproxy,studio
+
+# Start ignoring health checks
+supabase start --ignore-health-check
+```
+
+#### 2.2 Check Status
+```bash
+# Show service status
+supabase status
+
+# Export as environment variables
+supabase status -o env
+
+# Custom variable names
+supabase status --override-name SUPABASE_URL=LOCAL_URL
+```
+
+#### 2.3 Stop Local Services
+```bash
+# Stop with data backup
+supabase stop
+
+# Stop and delete all data
+supabase stop --no-backup
+
+# Stop all projects on machine
+supabase stop --all
+```
+
+### 3. Configuration Management
+
+#### 3.1 Update supabase/config.toml
+```toml
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1:54321"
+
+[auth]
+enabled = true
+port = 54324
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_signup = true
+enable_confirmations = false
+
+[edge_functions]
+enabled = true
+port = 54321
+inspector_port = 8083
+```
+
+#### 3.2 Push Configuration to Remote
+```bash
+supabase config push --project-ref your-project-ref
+```
+
+---
+
+## 🗃️ DATABASE MANAGEMENT
+
+### 1. Migrations
+
+#### 1.1 Create Migration
+```bash
+# Create new migration file
+supabase migration new create_users_table
+
+# Create with SQL from stdin
+echo "CREATE TABLE posts (id SERIAL PRIMARY KEY);" | supabase migration new create_posts_table
+```
+
+#### 1.2 List Migrations
+```bash
+# Show local and remote migration status
+supabase migration list
+
+# Show local migrations only
+supabase migration list --local
+
+# Show remote migrations only
+supabase migration list --linked
+```
+
+#### 1.3 Apply Migrations
+```bash
+# Apply to local database
+supabase migration up --local
+
+# Apply to remote database
+supabase migration up --linked
+
+# Apply all pending migrations
+supabase migration up --include-all
+```
+
+#### 1.4 Migration Repair
+```bash
+# Mark migration as applied
+supabase migration repair 20231201000000 --status applied --linked
+
+# Mark migration as reverted
+supabase migration repair 20231201000000 --status reverted --linked
+```
+
+#### 1.5 Squash Migrations
+```bash
+# Squash all local migrations
+supabase migration squash --local
+
+# Squash up to specific version
+supabase migration squash --version 20231201000000 --local
+```
+
+### 2. Database Operations
+
+#### 2.1 Pull Schema from Remote
+```bash
+# Pull complete schema
+supabase db pull
+
+# Pull specific schemas
+supabase db pull --schema public,auth
+
+# Pull with custom migration name
+supabase db pull initial_schema
+```
+
+#### 2.2 Push to Remote Database
+```bash
+# Push all local migrations
+supabase db push --linked
+
+# Dry run (show what would be applied)
+supabase db push --dry-run --linked
+
+# Include roles and seed data
+supabase db push --include-roles --include-seed --linked
+```
+
+#### 2.3 Reset Database
+```bash
+# Reset local database
+supabase db reset --local
+
+# Reset to specific version
+supabase db reset --version 20231201000000 --local
+
+# Reset without seed data
+supabase db reset --no-seed --local
+```
+
+#### 2.4 Database Dump
+```bash
+# Dump schema only
+supabase db dump -f backup.sql --linked
+
+# Dump data only
+supabase db dump --data-only -f data.sql --linked
+
+# Dump roles only
+supabase db dump --role-only -f roles.sql --linked
+
+# Dump specific schemas
+supabase db dump --schema public,auth -f schema.sql --linked
+```
+
+#### 2.5 Database Diff
+```bash
+# Diff against linked project
+supabase db diff --linked
+
+# Save diff as migration
+supabase db diff --linked -f new_changes
+
+# Diff specific schemas
+supabase db diff --schema public --linked
+```
+
+### 3. Database Monitoring
+
+#### 3.1 Inspect Database Performance
+```bash
+# Check query outliers
+supabase inspect db outliers --linked
+
+# Check slow queries
+supabase inspect db long-running-queries --linked
+
+# Check database locks
+supabase inspect db locks --linked
+
+# Check index usage
+supabase inspect db index-usage --linked
+
+# Check table sizes
+supabase inspect db table-sizes --linked
+
+# Generate comprehensive report
+supabase inspect report --output-dir ./db-report --linked
+```
+
+#### 3.2 Database Linting
+```bash
+# Lint database schema
+supabase db lint --linked
+
+# Lint with specific level
+supabase db lint --level error --linked
+
+# Lint specific schemas
+supabase db lint --schema public --linked
+```
+
+### 4. Seed Data
+
+#### 4.1 Create Seed File
+```sql
+-- supabase/seed.sql
+INSERT INTO users (email, name) VALUES 
+  ('user1@example.com', 'User One'),
+  ('user2@example.com', 'User Two');
+
+INSERT INTO posts (title, content, user_id) VALUES 
+  ('First Post', 'Hello world!', 1),
+  ('Second Post', 'Another post', 2);
+```
+
+#### 4.2 Apply Seed Data
+```bash
+# Seed is automatically applied during db reset
+supabase db reset --local
+
+# Manual seeding can be done via SQL execution
+```
+
+---
+
+## ⚡ EDGE FUNCTIONS
+
+### 1. Function Development
+
+#### 1.1 Create Edge Function
+```bash
+# Create new function
+supabase functions new hello-world
+
+# Create function with template
+supabase functions new my-api
+```
+
+#### 1.2 Function Structure
+```typescript
+// supabase/functions/hello-world/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+interface RequestBody {
+  name: string;
+}
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Parse request body
+    const { name }: RequestBody = await req.json()
+
+    // Your function logic here
+    const response = {
+      message: `Hello ${name}!`,
+      timestamp: new Date().toISOString()
+    }
+
+    return new Response(JSON.stringify(response), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
+
+  } catch (error) {
+    return new Response(JSON.stringify({ 
+      error: error.message 
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
+  }
+})
+```
+
+#### 1.3 Local Function Development
+```bash
+# Serve all functions locally
+supabase functions serve
+
+# Serve specific function
+supabase functions serve hello-world
+
+# Serve with environment file
+supabase functions serve --env-file .env.local
+
+# Serve with import map
+supabase functions serve --import-map import_map.json
+
+# Serve with debugging
+supabase functions serve --inspect
+```
+
+#### 1.4 Function Testing
+```bash
+# Test function via curl
+curl -X POST http://127.0.0.1:54321/functions/v1/hello-world \
+  -H "Authorization: Bearer eyJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "World"}'
+
+# Test with no JWT verification (for webhooks)
+curl -X POST http://127.0.0.1:54321/functions/v1/hello-world \
+  -H "Content-Type: application/json" \
+  -d '{"name": "World"}'
+```
+
+### 2. Function Deployment
+
+#### 2.1 Deploy Functions
+```bash
+# Deploy all functions
+supabase functions deploy
+
+# Deploy specific function
+supabase functions deploy hello-world
+
+# Deploy without JWT verification (for webhooks)
+supabase functions deploy hello-world --no-verify-jwt
+
+# Deploy with import map
+supabase functions deploy --import-map import_map.json
+
+# Deploy multiple functions in parallel
+supabase functions deploy --jobs 4
+```
+
+#### 2.2 Function Management
+```bash
+# List deployed functions
+supabase functions list
+
+# Download function source
+supabase functions download hello-world
+
+# Delete function
+supabase functions delete hello-world
+```
+
+### 3. Environment Variables & Secrets
+
+#### 3.1 Set Secrets
+```bash
+# Set individual secret
+supabase secrets set OPENAI_API_KEY=sk-your-key-here
+
+# Set multiple secrets
+supabase secrets set API_KEY=abc123 DB_PASSWORD=secret
+
+# Set from .env file
+supabase secrets set --env-file .env.production
+```
+
+#### 3.2 Manage Secrets
+```bash
+# List all secrets (names only)
+supabase secrets list
+
+# Unset secrets
+supabase secrets unset API_KEY DB_PASSWORD
+```
+
+---
+
+## 🔐 AUTHENTICATION
+
+### 1. Auth Configuration
+
+#### 1.1 Configure Auth Settings
+```bash
+# Settings managed in dashboard or config.toml
+# Update supabase/config.toml [auth] section
+```
+
+#### 1.2 SSO Integration
+```bash
+# Add SAML SSO provider
+supabase sso add \
+  --type saml \
+  --metadata-url 'https://provider.com/metadata' \
+  --domains company.com
+
+# List SSO providers
+supabase sso list
+
+# Update SSO provider
+supabase sso update provider-id --add-domains newdomain.com
+
+# Remove SSO provider
+supabase sso remove provider-id
+```
+
+### 2. Auth Policies & RLS
+
+#### 2.1 Enable Row Level Security
+```sql
+-- In migration file
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY "Users can view own profile" ON users
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON users
+  FOR UPDATE USING (auth.uid() = id);
+```
+
+#### 2.2 Auth Helpers in Edge Functions
+```typescript
+// In Edge Function
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+serve(async (req) => {
+  const authHeader = req.headers.get('Authorization')!
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: authHeader } } }
+  )
+
+  // Get authenticated user
+  const { data: { user }, error } = await supabase.auth.getUser()
+  
+  if (error || !user) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  // Use user.id in your logic
+  return new Response(JSON.stringify({ userId: user.id }))
+})
+```
+
+---
+
+## 📁 STORAGE MANAGEMENT
+
+### 1. Storage Operations
+
+#### 1.1 Storage CLI Commands
+```bash
+# List storage objects
+supabase storage ls --local
+
+# List objects recursively
+supabase storage ls bucket-name --recursive --local
+
+# Copy files to storage
+supabase storage cp local-file.jpg storage://bucket/remote-file.jpg --local
+
+# Copy with custom headers
+supabase storage cp file.pdf storage://docs/file.pdf \
+  --content-type "application/pdf" \
+  --cache-control "max-age=3600" \
+  --local
+
+# Move storage objects
+supabase storage mv storage://bucket/old.jpg storage://bucket/new.jpg --local
+
+# Remove storage objects
+supabase storage rm storage://bucket/file.jpg --local
+
+# Remove recursively
+supabase storage rm storage://bucket/folder/ --recursive --local
+```
+
+#### 1.2 Storage Buckets
+```sql
+-- Create storage bucket in migration
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('avatars', 'avatars', true);
+
+-- Set bucket policies
+CREATE POLICY "Avatar images are publicly accessible" ON storage.objects
+  FOR SELECT USING (bucket_id = 'avatars');
+
+CREATE POLICY "Anyone can upload an avatar" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'avatars');
+```
+
+---
+
+## 🔍 TYPE GENERATION
+
+### 1. Generate TypeScript Types
+
+#### 1.1 Generate Types from Database
+```bash
+# Generate TypeScript types
+supabase gen types typescript --local > src/types/database.types.ts
+
+# Generate from linked project
+supabase gen types typescript --linked > src/types/database.types.ts
+
+# Generate specific schemas
+supabase gen types typescript --schema public,auth --linked > types.ts
+
+# Generate Go types
+supabase gen types go --linked > types.go
+
+# Generate Swift types
+supabase gen types swift --linked > Types.swift
+```
+
+#### 1.2 Use Generated Types
+```typescript
+// src/types/database.types.ts (generated)
+export interface Database {
+  public: {
+    Tables: {
+      users: {
+        Row: {
+          id: string
+          email: string
+          name: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          name?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          name?: string | null
+          created_at?: string
+        }
+      }
+    }
+  }
+}
+
+// Usage in your app
+import { createClient } from '@supabase/supabase-js'
+import { Database } from './types/database.types'
+
+const supabase = createClient<Database>(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_ANON_KEY!
+)
+
+// Fully typed database operations
+const { data: users } = await supabase
+  .from('users')
+  .select('*')
+  .eq('email', 'user@example.com')
+```
+
+---
+
+## 🌐 DOMAINS & NETWORKING
+
+### 1. Custom Domains
+
+#### 1.1 Create Custom Domain
+```bash
+# Create custom hostname
+supabase domains create --custom-hostname api.yourcompany.com
+
+# Get domain configuration
+supabase domains get
+
+# Activate custom domain
+supabase domains activate
+
+# Verify domain configuration
+supabase domains reverify
+
+# Delete custom domain
+supabase domains delete
+```
+
+#### 1.2 Vanity Subdomains
+```bash
+# Check subdomain availability
+supabase vanity-subdomains check-availability --desired-subdomain mycompany
+
+# Activate vanity subdomain
+supabase vanity-subdomains activate --desired-subdomain mycompany
+
+# Get current subdomain
+supabase vanity-subdomains get
+
+# Delete vanity subdomain
+supabase vanity-subdomains delete
+```
+
+### 2. Network Security
+
+#### 2.1 Network Restrictions
+```bash
+# Get current restrictions
+supabase network-restrictions get
+
+# Update network restrictions
+supabase network-restrictions update --db-allow-cidr "10.0.0.0/8,192.168.1.0/24"
+```
+
+#### 2.2 SSL Enforcement
+```bash
+# Check SSL enforcement
+supabase ssl-enforcement get
+
+# Enable SSL enforcement
+supabase ssl-enforcement update --enable-db-ssl-enforcement
+
+# Disable SSL enforcement
+supabase ssl-enforcement update --disable-db-ssl-enforcement
+```
+
+---
+
+## 🚀 DEPLOYMENT & CI/CD
+
+### 1. GitHub Actions Workflow
+
+#### 1.1 Setup GitHub Secrets
+```bash
+# Add these secrets to your GitHub repository:
+SUPABASE_ACCESS_TOKEN=sbp_your_token
+SUPABASE_PROJECT_ID=your_project_ref
+SUPABASE_DB_PASSWORD=your_db_password
+```
+
+#### 1.2 Deployment Workflow
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy to Supabase
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+          
+      - name: Verify generated types are up to date
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase gen types typescript --project-id "${{ secrets.SUPABASE_PROJECT_ID }}" --schema public > schema.sql
+          if ! git diff --ignore-space-at-eol --exit-code --quiet schema.sql; then
+            echo "Detected uncommitted changes after build. See status below:"
+            git diff
+            exit 1
+          fi
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+          
+      - name: Link Supabase Project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          
+      - name: Deploy database migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase db push
+          
+      - name: Deploy Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy --no-verify-jwt
+```
+
+### 2. Environment-Specific Deployments
+
+#### 2.1 Multi-Environment Setup
+```bash
+# Create different projects for environments
+supabase projects create "myapp-development" --org-id "org-id"
+supabase projects create "myapp-staging" --org-id "org-id" 
+supabase projects create "myapp-production" --org-id "org-id"
+
+# Link to specific environment
+supabase link --project-ref dev-project-ref
+supabase link --project-ref staging-project-ref
+supabase link --project-ref prod-project-ref
+```
+
+#### 2.2 Environment-Specific Secrets
+```bash
+# Development secrets
+supabase secrets set --project-ref dev-ref \
+  OPENAI_API_KEY=dev-key \
+  STRIPE_SECRET_KEY=sk_test_...
+
+# Production secrets  
+supabase secrets set --project-ref prod-ref \
+  OPENAI_API_KEY=prod-key \
+  STRIPE_SECRET_KEY=sk_live_...
+```
+
+---
+
+## 📊 MONITORING & LOGGING
+
+### 1. Database Monitoring
+
+#### 1.1 Performance Monitoring
+```bash
+# Monitor query performance
+supabase inspect db outliers --linked
+
+# Check cache hit rates
+supabase inspect db cache-hit --linked
+
+# Monitor connections
+supabase inspect db role-connections --linked
+
+# Check replication lag
+supabase inspect db replication-slots --linked
+
+# Full database report
+supabase inspect report --output-dir ./monitoring --linked
+```
+
+#### 1.2 Automated Monitoring Script
+```bash
+#!/bin/bash
+# monitoring/db-health-check.sh
+DATE=$(date +%Y%m%d_%H%M%S)
+REPORT_DIR="./reports/$DATE"
+
+mkdir -p "$REPORT_DIR"
+
+echo "🔍 Generating database health report..."
+
+# Generate comprehensive report
+supabase inspect report --output-dir "$REPORT_DIR" --linked
+
+# Check for critical issues
+echo "⚠️ Checking for critical issues..."
+
+# Check for long-running queries
+supabase inspect db long-running-queries --linked > "$REPORT_DIR/long_queries.txt"
+
+# Check for database locks
+supabase inspect db locks --linked > "$REPORT_DIR/locks.txt"
+
+# Check for unused indexes
+supabase inspect db unused-indexes --linked > "$REPORT_DIR/unused_indexes.txt"
+
+echo "✅ Health check complete. Reports saved to $REPORT_DIR"
+```
+
+### 2. Function Logging
+
+#### 2.1 Edge Function Logging
+```typescript
+// Enhanced logging in Edge Functions
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+
+serve(async (req) => {
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
+  
+  console.log(`🔵 [${requestId}] ${req.method} ${req.url} - START`)
+  
+  try {
+    // Your function logic
+    const result = await processRequest(req)
+    
+    const duration = Date.now() - startTime
+    console.log(`🟢 [${requestId}] SUCCESS - ${duration}ms`)
+    
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+    
+  } catch (error) {
+    const duration = Date.now() - startTime
+    console.error(`🔴 [${requestId}] ERROR - ${duration}ms:`, error)
+    
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      requestId 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+})
+```
+
+---
+
+## 🔒 SECURITY BEST PRACTICES
+
+### 1. API Key Management
+- [ ] Never expose `service_role` key in client-side code
+- [ ] Use `anon` key for client-side applications
+- [ ] Rotate API keys regularly
+- [ ] Use environment variables for all keys
+- [ ] Implement proper CORS policies
+
+### 2. Database Security
+- [ ] Enable Row Level Security (RLS) on all tables
+- [ ] Create specific policies for each operation
+- [ ] Use authenticated user context in policies
+- [ ] Regularly audit and test security policies
+- [ ] Encrypt sensitive data at rest
+
+### 3. Edge Function Security
+- [ ] Validate all input parameters
+- [ ] Implement rate limiting
+- [ ] Use JWT verification when appropriate
+- [ ] Sanitize user inputs
+- [ ] Handle errors gracefully without exposing internals
+
+### 4. Network Security
+```sql
+-- Example RLS policies
+CREATE POLICY "Users can only see own data" ON user_profiles
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Public posts are viewable by everyone" ON posts
+  FOR SELECT USING (is_public = true);
+
+CREATE POLICY "Authors can edit own posts" ON posts
+  FOR UPDATE USING (auth.uid() = author_id);
+```
+
+---
+
+## 🛠️ TROUBLESHOOTING
+
+### Common Issues
+
+#### 1. CLI Authentication Problems
+```bash
+❌ Error: Invalid login credentials
+✅ Solution:
+   - Check access token: supabase login --token your-token
+   - Regenerate token in dashboard
+   - Clear credentials: rm ~/.supabase/access-token
+```
+
+#### 2. Local Development Issues
+```bash
+❌ Error: Docker not found
+✅ Solution:
+   - Install Docker Desktop
+   - Start Docker service
+   - Verify: docker --version
+```
+
+#### 3. Migration Conflicts
+```bash
+❌ Error: Migration history mismatch
+✅ Solution:
+   - Check status: supabase migration list
+   - Repair history: supabase migration repair [version] --status applied
+   - Pull latest: supabase db pull
+```
+
+#### 4. Edge Function Deployment Fails
+```bash
+❌ Error: Function deployment timeout
+✅ Solution:
+   - Check function size and dependencies
+   - Optimize imports and reduce bundle size
+   - Use --use-docker flag: supabase functions deploy --use-docker
+```
+
+#### 5. Type Generation Issues
+```bash
+❌ Error: Permission denied accessing schema
+✅ Solution:
+   - Check database connection
+   - Verify user permissions
+   - Use service role for type generation
+```
+
+---
+
+## 📚 REFERENCE COMMANDS CHEAT SHEET
+
+### Project Management
+```bash
+supabase login                                    # Login to CLI
+supabase projects list                           # List all projects
+supabase projects create "name"                  # Create new project
+supabase link --project-ref REF                  # Link to project
+supabase status                                  # Check local status
+```
+
+### Local Development
+```bash
+supabase init                                    # Initialize project
+supabase start                                   # Start local services
+supabase stop                                    # Stop local services
+supabase db reset                                # Reset local database
+```
+
+### Database Operations
+```bash
+supabase migration new "name"                    # Create migration
+supabase db push                                 # Push to remote
+supabase db pull                                 # Pull from remote
+supabase db diff --linked                       # Show differences
+supabase migration list                          # List migrations
+```
+
+### Edge Functions
+```bash
+supabase functions new "name"                    # Create function
+supabase functions serve                         # Serve locally
+supabase functions deploy "name"                 # Deploy function
+supabase functions list                          # List functions
+```
+
+### Type Generation
+```bash
+supabase gen types typescript --linked > types.ts    # Generate TS types
+supabase gen types go --linked > types.go           # Generate Go types
+```
+
+### Secrets Management
+```bash
+supabase secrets set KEY=value                   # Set secret
+supabase secrets list                            # List secrets
+supabase secrets unset KEY                       # Remove secret
+```
+
+### Monitoring
+```bash
+supabase inspect db outliers                     # Query performance
+supabase inspect db locks                        # Database locks
+supabase inspect report --output-dir ./reports   # Full report
+```
+
+---
+
+## 📖 ADDITIONAL RESOURCES
+
+### Documentation Links
+- [Supabase Documentation](mdc:https:/supabase.com/docs)
+- [Edge Functions Guide](mdc:https:/supabase.com/docs/guides/functions)
+- [Database Migrations](mdc:https:/supabase.com/docs/guides/cli/local-development)
+- [CLI Reference](mdc:https:/supabase.com/docs/reference/cli)
+
+### Community Resources
+- [Supabase GitHub](mdc:https:/github.com/supabase/supabase)
+- [Community Discord](mdc:https:/discord.supabase.com)
+- [YouTube Channel](mdc:https:/www.youtube.com/c/supabase)
+- [Blog](mdc:https:/supabase.com/blog)
+
+### Templates & Examples
+- [Supabase Examples](mdc:https:/github.com/supabase/supabase/tree/master/examples)
+- [Edge Function Templates](mdc:https:/supabase.com/docs/guides/functions/examples)
+- [Auth Examples](mdc:https:/github.com/supabase/auth-helpers)
+
+---
+
+**Document Control:**
+- Review Schedule: Quarterly
+- Approval Authority: Technical Lead
+- Distribution: All Development Team Members
+- Version Control: Git repository with tagged releases
+- Last CLI Version Verified: v1.123.4+
+
+

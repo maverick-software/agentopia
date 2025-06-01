@@ -1,0 +1,1203 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Unified State Management Library Plan
+
+## Project Overview
+
+This project aims to create a comprehensive, centrally managed but modular architecture that handles state management, caching, and debugging in a library-style form for the CatalystHQ application. The solution will be designed to easily apply or remove state management components, implement intelligent caching mechanisms, and provide an internal debugging system with comprehensive logging.
+# Unified State Management Library Plan
+
+## Project Overview
+
+This project aims to create a comprehensive, centrally managed but modular architecture that handles state management, caching, and debugging in a library-style form for the CatalystHQ application. The solution will be designed to easily apply or remove state management components, implement intelligent caching mechanisms, and provide an internal debugging system with comprehensive logging.
+
+## Problem Statement
+
+Based on the comprehensive analysis of the current workflow page builder, we've identified several critical issues:
+
+1. **Excessive Re-rendering**: Components re-render unnecessarily when tabbing away or during state changes
+2. **Poor State Management Architecture**: Lack of centralized, modular state management
+3. **No Centralized Caching**: Each hook manages its own cache leading to inconsistencies
+4. **Limited Debugging Capabilities**: No systematic logging or debugging infrastructure
+5. **Performance Issues**: Database timeouts, infinite loops, and memory leaks
+6. **Tight Coupling**: State logic tightly coupled with UI components
+
+## Solution Architecture
+
+### Core Principles
+
+1. **Modular Design**: Each state management component can be independently added or removed
+2. **Library-Style Implementation**: Reusable across different parts of the application
+3. **Performance First**: Minimize re-renders and optimize memory usage
+4. **Developer Experience**: Rich debugging tools and clear APIs
+5. **Scalability**: Architecture that grows with the application
+
+### Technology Stack Research
+
+Based on web research and current trends in 2024-2025:
+
+- **Primary State Management**: Zustand (chosen for its simplicity, performance, and modular nature)
+- **Caching Layer**: Custom implementation with TTL, LRU eviction, and persistence
+- **Debugging System**: Custom logging infrastructure with structured logging
+- **Performance Monitoring**: Built-in performance metrics and monitoring
+- **Immutability**: Immer integration for safe state mutations
+
+## Proposed File Structure
+
+```
+src/
+├── lib/
+│   └── state-management/
+│       ├── core/
+│       │   ├── store-factory.ts          # Factory for creating stores
+│       │   ├── middleware/               # Store middleware
+│       │   │   ├── logger.ts            # Logging middleware
+│       │   │   ├── cache.ts             # Caching middleware
+│       │   │   ├── performance.ts       # Performance monitoring
+│       │   │   └── persistence.ts       # State persistence
+│       │   ├── types.ts                 # Core type definitions
+│       │   └── utils.ts                 # Utility functions
+│       ├── stores/
+│       │   ├── workflow-store.ts        # Workflow-specific state
+│       │   ├── template-store.ts        # Template management state
+│       │   ├── ui-store.ts              # UI state management
+│       │   └── cache-store.ts           # Cache management state
+│       ├── hooks/
+│       │   ├── use-store.ts             # Generic store hook
+│       │   ├── use-cache.ts             # Cache management hook
+│       │   ├── use-performance.ts       # Performance monitoring hook
+│       │   └── use-debug.ts             # Debug utilities hook
+│       ├── cache/
+│       │   ├── cache-manager.ts         # Main cache management
+│       │   ├── strategies/              # Cache strategies
+│       │   │   ├── lru.ts              # LRU eviction
+│       │   │   ├── ttl.ts              # Time-based expiration
+│       │   │   └── memory.ts           # Memory-based limits
+│       │   ├── persistence/             # Cache persistence
+│       │   │   ├── session-storage.ts  # Session storage adapter
+│       │   │   ├── local-storage.ts    # Local storage adapter
+│       │   │   └── indexed-db.ts       # IndexedDB adapter
+│       │   └── types.ts                # Cache type definitions
+│       ├── debug/
+│       │   ├── logger.ts               # Main logging system
+│       │   ├── performance-monitor.ts   # Performance tracking
+│       │   ├── state-inspector.ts      # State inspection tools
+│       │   └── error-boundary.ts       # Error handling
+│       └── index.ts                    # Main exports
+├── logs/
+│   ├── state-management/               # State management logs
+│   ├── performance/                    # Performance logs
+│   ├── cache/                          # Cache operation logs
+│   └── debug/                          # Debug logs
+└── docs/
+    └── state-management/
+        ├── api-reference.md            # API documentation
+        ├── migration-guide.md          # Migration from current system
+        ├── performance-guide.md        # Performance optimization guide
+        └── troubleshooting.md          # Common issues and solutions
+```
+
+## Key Features
+
+### 1. Modular Store Architecture
+- **Domain-specific stores**: Separate stores for different application domains
+- **Composable middleware**: Mix and match middleware based on needs
+- **Hot-swappable**: Add or remove stores without affecting others
+
+### 2. Intelligent Caching System
+- **Multi-level caching**: Memory, session storage, local storage, IndexedDB
+- **Smart eviction**: LRU, TTL, and memory-based eviction strategies
+- **Cache invalidation**: Automatic and manual cache invalidation
+- **Persistence**: Configurable cache persistence across sessions
+
+### 3. Comprehensive Debugging System
+- **Structured logging**: JSON-based logs with metadata
+- **Performance monitoring**: Real-time performance metrics
+- **State inspection**: Tools to inspect and debug state changes
+- **Error tracking**: Comprehensive error handling and reporting
+
+### 4. Performance Optimization
+- **Selective subscriptions**: Components only re-render when relevant state changes
+- **Memoization**: Automatic memoization of computed values
+- **Lazy loading**: Stores and middleware loaded on demand
+- **Memory management**: Automatic cleanup and garbage collection
+
+## Implementation Strategy
+
+### Phase 1: Core Infrastructure (Week 1-2)
+1. Set up the basic store factory and type system
+2. Implement core middleware architecture
+3. Create basic logging and debugging infrastructure
+4. Establish testing framework
+
+### Phase 2: State Management (Week 3-4)
+1. Implement domain-specific stores
+2. Create store composition utilities
+3. Add performance monitoring middleware
+4. Implement state persistence
+
+### Phase 3: Caching System (Week 5-6)
+1. Build cache manager with multiple strategies
+2. Implement cache persistence adapters
+3. Add cache invalidation mechanisms
+4. Create cache debugging tools
+
+### Phase 4: Integration & Migration (Week 7-8)
+1. Migrate existing state management to new system
+2. Update components to use new hooks
+3. Implement comprehensive testing
+4. Performance optimization and tuning
+
+### Phase 5: Documentation & Refinement (Week 9-10)
+1. Create comprehensive documentation
+2. Build migration guides
+3. Performance testing and optimization
+4. Final testing and bug fixes
+
+## Success Criteria
+
+1. **Performance**: 50% reduction in unnecessary re-renders
+2. **Memory Usage**: 30% reduction in memory footprint
+3. **Developer Experience**: Clear APIs and debugging tools
+4. **Maintainability**: Modular architecture that's easy to extend
+5. **Reliability**: Comprehensive error handling and recovery
+
+## Risk Mitigation
+
+1. **Migration Risk**: Gradual migration with fallback mechanisms
+2. **Performance Risk**: Extensive benchmarking and monitoring
+3. **Complexity Risk**: Clear documentation and simple APIs
+4. **Adoption Risk**: Training and gradual rollout
+
+## Dependencies
+
+- Zustand: Modern state management library
+- Immer: Immutable state updates
+- TypeScript: Type safety and developer experience
+- Jest: Testing framework
+- React DevTools: Integration for debugging
+
+## Timeline
+
+- **Total Duration**: 10 weeks
+- **Milestone 1**: Core infrastructure (Week 2)
+- **Milestone 2**: State management (Week 4)
+- **Milestone 3**: Caching system (Week 6)
+- **Milestone 4**: Integration complete (Week 8)
+- **Milestone 5**: Production ready (Week 10)
+
+## Next Steps
+
+1. Review and approve this plan
+2. Set up development environment
+3. Begin Phase 1 implementation
+4. Establish regular review checkpoints
+5. Create detailed work breakdown structure (WBS)
+
+---
+
+*This plan follows the big picture protocol for systematic problem-solving and the plan_and_execute methodology for structured implementation.* 
+
+# Work Breakdown Structure (WBS) Checklist
+## Unified State Management Library Implementation
+
+---
+
+## Phase 1: Research & Planning (Week 1)
+
+### 1.1 Comprehensive Codebase Analysis
+- [ ] **Plan Review & Alignment**: Analyze current state management patterns and identify pain points
+- [ ] **Comprehensive Research**: 
+  - [ ] Audit all existing hooks in `src/hooks/` directory
+  - [ ] Analyze current context providers in `src/contexts/`
+  - [ ] Review workflow builder performance issues
+  - [ ] Document current state management anti-patterns
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/current_state_analysis.md`
+- [ ] **Actions**: Create migration strategy from current patterns to new architecture
+- [ ] **Backups**: Backup all current state management files to `docs/plans/unified_state_management_library/backups/`
+- [ ] **Update**: Update this checklist with specific findings and migration requirements
+
+### 1.2 Technology Stack Research & Validation
+- [ ] **Plan Review & Alignment**: Validate technology choices against project requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research Zustand best practices and performance characteristics
+  - [ ] Investigate Immer integration patterns for immutable updates
+  - [ ] Study modern caching strategies (LRU, TTL, memory-based)
+  - [ ] Research React performance optimization techniques
+  - [ ] Analyze logging and debugging best practices
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/technology_research.md`
+- [ ] **Actions**: Finalize technology stack and create proof-of-concept implementations
+- [ ] **Backups**: N/A (research phase)
+- [ ] **Update**: Update plan with any technology stack modifications
+
+### 1.3 Database Schema Analysis
+- [ ] **Plan Review & Alignment**: Understand data flow and caching requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Review `docs/database/schema_dump.sql` for current data structures
+  - [ ] Analyze data relationships affecting state management
+  - [ ] Identify frequently accessed data patterns
+  - [ ] Document data flow through current application
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/data_flow_analysis.md`
+- [ ] **Actions**: Design caching strategies based on data access patterns
+- [ ] **Backups**: N/A (analysis phase)
+- [ ] **Update**: Update caching strategy based on data analysis findings
+
+---
+
+## Phase 2: Core Infrastructure Design (Week 1-2)
+
+### 2.1 Type System & Core Interfaces Design
+- [ ] **Plan Review & Alignment**: Ensure type system supports all planned features
+- [ ] **Comprehensive Research**:
+  - [ ] Study TypeScript advanced patterns for state management
+  - [ ] Research generic type patterns for store factories
+  - [ ] Analyze middleware type composition patterns
+  - [ ] Review React hook typing best practices
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/type_system_design.md`
+- [ ] **Actions**: Create comprehensive type definitions in `src/lib/state-management/core/types.ts`
+- [ ] **Backups**: N/A (new file creation)
+- [ ] **Update**: Update checklist with any additional type requirements discovered
+
+### 2.2 Store Factory Architecture
+- [ ] **Plan Review & Alignment**: Verify store factory meets modularity requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research factory pattern implementations in TypeScript
+  - [ ] Study Zustand store composition patterns
+  - [ ] Analyze middleware integration approaches
+  - [ ] Review store lifecycle management patterns
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/store_factory_patterns.md`
+- [ ] **Actions**: Implement store factory in `src/lib/state-management/core/store-factory.ts`
+- [ ] **Backups**: N/A (new file creation)
+- [ ] **Update**: Update checklist with any factory pattern modifications
+
+### 2.3 Middleware Architecture Foundation
+- [ ] **Plan Review & Alignment**: Ensure middleware system supports all planned features
+- [ ] **Comprehensive Research**:
+  - [ ] Study middleware composition patterns
+  - [ ] Research async middleware handling
+  - [ ] Analyze error handling in middleware chains
+  - [ ] Review performance implications of middleware
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/middleware_architecture.md`
+- [ ] **Actions**: Create middleware base classes and composition utilities
+- [ ] **Backups**: N/A (new file creation)
+- [ ] **Update**: Update checklist with middleware requirements
+
+---
+
+## Phase 3: Logging & Debugging Infrastructure (Week 2)
+
+### 3.1 Structured Logging System
+- [ ] **Plan Review & Alignment**: Verify logging system meets debugging requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research structured logging best practices
+  - [ ] Study log level management strategies
+  - [ ] Analyze log rotation and cleanup patterns
+  - [ ] Review performance impact of logging systems
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/logging_system_design.md`
+- [ ] **Actions**: Implement logging system in `src/lib/state-management/debug/logger.ts`
+- [ ] **Backups**: N/A (new file creation)
+- [ ] **Update**: Update checklist with logging configuration requirements
+
+### 3.2 Performance Monitoring Infrastructure
+- [ ] **Plan Review & Alignment**: Ensure performance monitoring captures all relevant metrics
+- [ ] **Comprehensive Research**:
+  - [ ] Research React performance monitoring techniques
+  - [ ] Study memory usage tracking patterns
+  - [ ] Analyze render performance measurement approaches
+  - [ ] Review performance data visualization options
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/performance_monitoring.md`
+- [ ] **Actions**: Implement performance monitor in `src/lib/state-management/debug/performance-monitor.ts`
+- [ ] **Backups**: N/A (new file creation)
+- [ ] **Update**: Update checklist with performance monitoring requirements
+
+### 3.3 State Inspector & Debug Tools
+- [ ] **Plan Review & Alignment**: Verify debug tools support development workflow
+- [ ] **Comprehensive Research**:
+  - [ ] Research React DevTools integration patterns
+  - [ ] Study state inspection visualization techniques
+  - [ ] Analyze debug tool user experience patterns
+  - [ ] Review state history tracking approaches
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/debug_tools_design.md`
+- [ ] **Actions**: Implement state inspector in `src/lib/state-management/debug/state-inspector.ts`
+- [ ] **Backups**: N/A (new file creation)
+- [ ] **Update**: Update checklist with debug tool requirements
+
+---
+
+## Phase 4: State Management Implementation (Week 3)
+
+### 4.1 Domain-Specific Store Implementation
+- [ ] **Plan Review & Alignment**: Ensure stores align with application domain boundaries
+- [ ] **Comprehensive Research**:
+  - [ ] Analyze current workflow state requirements
+  - [ ] Study template management state patterns
+  - [ ] Review UI state management best practices
+  - [ ] Research store composition and communication patterns
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/domain_stores_analysis.md`
+- [ ] **Actions**: 
+  - [ ] Implement workflow store in `src/lib/state-management/stores/workflow-store.ts`
+  - [ ] Implement template store in `src/lib/state-management/stores/template-store.ts`
+  - [ ] Implement UI store in `src/lib/state-management/stores/ui-store.ts`
+- [ ] **Backups**: Backup existing workflow hooks before migration
+- [ ] **Update**: Update checklist with store-specific requirements
+
+### 4.2 Store Composition & Communication
+- [ ] **Plan Review & Alignment**: Verify store communication patterns support application needs
+- [ ] **Comprehensive Research**:
+  - [ ] Research inter-store communication patterns
+  - [ ] Study event-driven architecture in state management
+  - [ ] Analyze store dependency management
+  - [ ] Review store lifecycle coordination
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/store_communication.md`
+- [ ] **Actions**: Implement store composition utilities and communication patterns
+- [ ] **Backups**: N/A (new utilities)
+- [ ] **Update**: Update checklist with communication pattern requirements
+
+### 4.3 State Persistence Implementation
+- [ ] **Plan Review & Alignment**: Ensure persistence strategy supports application requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research state persistence strategies
+  - [ ] Study serialization and deserialization patterns
+  - [ ] Analyze storage quota management
+  - [ ] Review state migration patterns for schema changes
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/state_persistence.md`
+- [ ] **Actions**: Implement persistence middleware in `src/lib/state-management/core/middleware/persistence.ts`
+- [ ] **Backups**: N/A (new middleware)
+- [ ] **Update**: Update checklist with persistence requirements
+
+---
+
+## Phase 5: Caching System Implementation (Week 4-5)
+
+### 5.1 Cache Manager Core Implementation
+- [ ] **Plan Review & Alignment**: Verify cache manager supports all planned caching strategies
+- [ ] **Comprehensive Research**:
+  - [ ] Research cache management algorithms
+  - [ ] Study cache key generation strategies
+  - [ ] Analyze cache invalidation patterns
+  - [ ] Review cache performance optimization techniques
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/cache_manager_design.md`
+- [ ] **Actions**: Implement cache manager in `src/lib/state-management/cache/cache-manager.ts`
+- [ ] **Backups**: N/A (new implementation)
+- [ ] **Update**: Update checklist with cache manager requirements
+
+### 5.2 Cache Strategies Implementation
+- [ ] **Plan Review & Alignment**: Ensure cache strategies meet performance requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research LRU cache implementation patterns
+  - [ ] Study TTL cache management strategies
+  - [ ] Analyze memory-based cache limits
+  - [ ] Review cache strategy selection algorithms
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/cache_strategies.md`
+- [ ] **Actions**: 
+  - [ ] Implement LRU strategy in `src/lib/state-management/cache/strategies/lru.ts`
+  - [ ] Implement TTL strategy in `src/lib/state-management/cache/strategies/ttl.ts`
+  - [ ] Implement memory strategy in `src/lib/state-management/cache/strategies/memory.ts`
+- [ ] **Backups**: N/A (new implementations)
+- [ ] **Update**: Update checklist with strategy-specific requirements
+
+### 5.3 Cache Persistence Adapters
+- [ ] **Plan Review & Alignment**: Verify persistence adapters support all storage requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research browser storage API best practices
+  - [ ] Study IndexedDB implementation patterns
+  - [ ] Analyze storage quota management strategies
+  - [ ] Review cross-tab synchronization approaches
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/cache_persistence.md`
+- [ ] **Actions**: 
+  - [ ] Implement session storage adapter in `src/lib/state-management/cache/persistence/session-storage.ts`
+  - [ ] Implement local storage adapter in `src/lib/state-management/cache/persistence/local-storage.ts`
+  - [ ] Implement IndexedDB adapter in `src/lib/state-management/cache/persistence/indexed-db.ts`
+- [ ] **Backups**: N/A (new implementations)
+- [ ] **Update**: Update checklist with persistence adapter requirements
+
+---
+
+## Phase 6: Hook System Implementation (Week 5-6)
+
+### 6.1 Generic Store Hook Implementation
+- [ ] **Plan Review & Alignment**: Ensure generic hook supports all store types
+- [ ] **Comprehensive Research**:
+  - [ ] Research React hook optimization patterns
+  - [ ] Study selector-based subscription patterns
+  - [ ] Analyze hook composition strategies
+  - [ ] Review hook performance optimization techniques
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/hook_patterns.md`
+- [ ] **Actions**: Implement generic store hook in `src/lib/state-management/hooks/use-store.ts`
+- [ ] **Backups**: N/A (new implementation)
+- [ ] **Update**: Update checklist with hook requirements
+
+### 6.2 Specialized Hook Implementations
+- [ ] **Plan Review & Alignment**: Verify specialized hooks meet specific use case requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research cache management hook patterns
+  - [ ] Study performance monitoring hook implementations
+  - [ ] Analyze debug utility hook designs
+  - [ ] Review hook testing strategies
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/specialized_hooks.md`
+- [ ] **Actions**: 
+  - [ ] Implement cache hook in `src/lib/state-management/hooks/use-cache.ts`
+  - [ ] Implement performance hook in `src/lib/state-management/hooks/use-performance.ts`
+  - [ ] Implement debug hook in `src/lib/state-management/hooks/use-debug.ts`
+- [ ] **Backups**: N/A (new implementations)
+- [ ] **Update**: Update checklist with specialized hook requirements
+
+### 6.3 Hook Integration & Testing
+- [ ] **Plan Review & Alignment**: Ensure hook integration supports all use cases
+- [ ] **Comprehensive Research**:
+  - [ ] Research React hook testing best practices
+  - [ ] Study hook integration testing patterns
+  - [ ] Analyze hook performance testing approaches
+  - [ ] Review hook documentation patterns
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/hook_testing.md`
+- [ ] **Actions**: Create comprehensive hook tests and integration examples
+- [ ] **Backups**: N/A (testing phase)
+- [ ] **Update**: Update checklist with testing requirements
+
+---
+
+## Phase 7: Migration & Integration (Week 7)
+
+### 7.1 Current System Analysis & Migration Planning
+- [ ] **Plan Review & Alignment**: Ensure migration plan minimizes disruption
+- [ ] **Comprehensive Research**:
+  - [ ] Analyze current workflow builder implementation
+  - [ ] Study existing hook dependencies and usage patterns
+  - [ ] Research gradual migration strategies
+  - [ ] Review rollback and fallback mechanisms
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/migration_strategy.md`
+- [ ] **Actions**: Create detailed migration plan with rollback procedures
+- [ ] **Backups**: Backup all files to be modified during migration
+- [ ] **Update**: Update checklist with migration-specific requirements
+
+### 7.2 Workflow Builder Migration
+- [ ] **Plan Review & Alignment**: Verify workflow builder migration maintains functionality
+- [ ] **Comprehensive Research**:
+  - [ ] Analyze current workflow builder state management
+  - [ ] Study component re-render patterns
+  - [ ] Research state synchronization requirements
+  - [ ] Review performance optimization opportunities
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/workflow_migration.md`
+- [ ] **Actions**: 
+  - [ ] Migrate workflow state to new store system
+  - [ ] Update workflow components to use new hooks
+  - [ ] Implement performance optimizations
+- [ ] **Backups**: Backup `src/pages/admin/flow-builder/` directory
+- [ ] **Update**: Update checklist with workflow-specific migration steps
+
+### 7.3 Template Management Migration
+- [ ] **Plan Review & Alignment**: Ensure template management migration preserves data integrity
+- [ ] **Comprehensive Research**:
+  - [ ] Analyze current template loading patterns
+  - [ ] Study template caching requirements
+  - [ ] Research template state synchronization needs
+  - [ ] Review template performance optimization opportunities
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/template_migration.md`
+- [ ] **Actions**: 
+  - [ ] Migrate template state to new store system
+  - [ ] Implement template caching with new cache system
+  - [ ] Update template components to use new hooks
+- [ ] **Backups**: Backup template-related hooks and components
+- [ ] **Update**: Update checklist with template-specific migration steps
+
+---
+
+## Phase 8: Performance Optimization & Testing (Week 8)
+
+### 8.1 Performance Benchmarking & Optimization
+- [ ] **Plan Review & Alignment**: Verify performance meets success criteria
+- [ ] **Comprehensive Research**:
+  - [ ] Research React performance profiling techniques
+  - [ ] Study memory leak detection methods
+  - [ ] Analyze render optimization strategies
+  - [ ] Review performance testing frameworks
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/performance_optimization.md`
+- [ ] **Actions**: 
+  - [ ] Conduct comprehensive performance testing
+  - [ ] Optimize identified performance bottlenecks
+  - [ ] Implement performance monitoring dashboards
+- [ ] **Backups**: N/A (optimization phase)
+- [ ] **Update**: Update checklist with optimization results
+
+### 8.2 Comprehensive Testing Implementation
+- [ ] **Plan Review & Alignment**: Ensure testing covers all functionality and edge cases
+- [ ] **Comprehensive Research**:
+  - [ ] Research state management testing patterns
+  - [ ] Study integration testing strategies
+  - [ ] Analyze performance testing approaches
+  - [ ] Review test automation frameworks
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/testing_strategy.md`
+- [ ] **Actions**: 
+  - [ ] Implement unit tests for all components
+  - [ ] Create integration tests for store interactions
+  - [ ] Develop performance regression tests
+- [ ] **Backups**: N/A (testing phase)
+- [ ] **Update**: Update checklist with testing coverage results
+
+### 8.3 Error Handling & Recovery Implementation
+- [ ] **Plan Review & Alignment**: Verify error handling supports production requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research error boundary implementation patterns
+  - [ ] Study error recovery strategies
+  - [ ] Analyze error reporting and logging approaches
+  - [ ] Review graceful degradation techniques
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/error_handling.md`
+- [ ] **Actions**: 
+  - [ ] Implement comprehensive error boundaries
+  - [ ] Create error recovery mechanisms
+  - [ ] Develop error reporting system
+- [ ] **Backups**: N/A (new implementation)
+- [ ] **Update**: Update checklist with error handling requirements
+
+---
+
+## Phase 9: Documentation & Developer Experience (Week 9)
+
+### 9.1 API Documentation Creation
+- [ ] **Plan Review & Alignment**: Ensure documentation supports developer adoption
+- [ ] **Comprehensive Research**:
+  - [ ] Research technical documentation best practices
+  - [ ] Study API documentation formats and tools
+  - [ ] Analyze developer onboarding strategies
+  - [ ] Review documentation maintenance approaches
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/documentation_strategy.md`
+- [ ] **Actions**: 
+  - [ ] Create comprehensive API reference in `docs/state-management/api-reference.md`
+  - [ ] Develop usage examples and tutorials
+  - [ ] Create troubleshooting guides
+- [ ] **Backups**: N/A (documentation phase)
+- [ ] **Update**: Update checklist with documentation requirements
+
+### 9.2 Migration Guide & Training Materials
+- [ ] **Plan Review & Alignment**: Verify migration guide supports smooth transition
+- [ ] **Comprehensive Research**:
+  - [ ] Research migration documentation patterns
+  - [ ] Study training material development approaches
+  - [ ] Analyze developer education strategies
+  - [ ] Review change management techniques
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/training_strategy.md`
+- [ ] **Actions**: 
+  - [ ] Create detailed migration guide in `docs/state-management/migration-guide.md`
+  - [ ] Develop training materials and workshops
+  - [ ] Create video tutorials and examples
+- [ ] **Backups**: N/A (documentation phase)
+- [ ] **Update**: Update checklist with training material requirements
+
+### 9.3 Performance Guide & Best Practices
+- [ ] **Plan Review & Alignment**: Ensure performance guide supports optimization goals
+- [ ] **Comprehensive Research**:
+  - [ ] Research performance documentation patterns
+  - [ ] Study best practice documentation approaches
+  - [ ] Analyze performance optimization guides
+  - [ ] Review monitoring and debugging documentation
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/performance_guide.md`
+- [ ] **Actions**: 
+  - [ ] Create performance optimization guide in `docs/state-management/performance-guide.md`
+  - [ ] Document best practices and anti-patterns
+  - [ ] Create performance monitoring tutorials
+- [ ] **Backups**: N/A (documentation phase)
+- [ ] **Update**: Update checklist with performance guide requirements
+
+---
+
+## Phase 10: Production Deployment & Monitoring (Week 10)
+
+### 10.1 Production Deployment Preparation
+- [ ] **Plan Review & Alignment**: Verify deployment plan supports production requirements
+- [ ] **Comprehensive Research**:
+  - [ ] Research production deployment strategies
+  - [ ] Study rollback and recovery procedures
+  - [ ] Analyze monitoring and alerting requirements
+  - [ ] Review production testing approaches
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/deployment_strategy.md`
+- [ ] **Actions**: 
+  - [ ] Prepare production deployment checklist
+  - [ ] Implement monitoring and alerting
+  - [ ] Create rollback procedures
+- [ ] **Backups**: Create final backup of all modified files
+- [ ] **Update**: Update checklist with deployment requirements
+
+### 10.2 Production Monitoring & Alerting Setup
+- [ ] **Plan Review & Alignment**: Ensure monitoring supports production operations
+- [ ] **Comprehensive Research**:
+  - [ ] Research production monitoring best practices
+  - [ ] Study alerting and notification strategies
+  - [ ] Analyze performance monitoring in production
+  - [ ] Review incident response procedures
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/production_monitoring.md`
+- [ ] **Actions**: 
+  - [ ] Implement production monitoring dashboards
+  - [ ] Set up alerting and notification systems
+  - [ ] Create incident response procedures
+- [ ] **Backups**: N/A (monitoring setup)
+- [ ] **Update**: Update checklist with monitoring requirements
+
+### 10.3 Final Testing & Validation
+- [ ] **Plan Review & Alignment**: Verify final testing meets all success criteria
+- [ ] **Comprehensive Research**:
+  - [ ] Research production testing strategies
+  - [ ] Study user acceptance testing approaches
+  - [ ] Analyze performance validation techniques
+  - [ ] Review success criteria measurement methods
+- [ ] **Findings**: Document in `docs/plans/unified_state_management_library/research/final_validation.md`
+- [ ] **Actions**: 
+  - [ ] Conduct final performance testing
+  - [ ] Validate all success criteria
+  - [ ] Perform user acceptance testing
+- [ ] **Backups**: N/A (testing phase)
+- [ ] **Update**: Update checklist with final validation results
+
+---
+
+## Phase 11: Cleanup & Project Completion (Week 10)
+
+### 11.1 Backup Management & Archive
+- [ ] **Plan Review & Alignment**: Ensure backup management follows project protocols
+- [ ] **Comprehensive Research**: N/A (cleanup phase)
+- [ ] **Findings**: N/A (cleanup phase)
+- [ ] **Actions**: 
+  - [ ] Move all backups to `/archive/unified_state_management_library/`
+  - [ ] Ensure archive folder is in `.gitignore`
+  - [ ] Create archive index document
+- [ ] **Backups**: N/A (cleanup phase)
+- [ ] **Update**: Mark backup management as complete
+
+### 11.2 Documentation Finalization
+- [ ] **Plan Review & Alignment**: Verify all documentation is complete and accurate
+- [ ] **Comprehensive Research**: N/A (cleanup phase)
+- [ ] **Findings**: N/A (cleanup phase)
+- [ ] **Actions**: 
+  - [ ] Review and finalize all documentation
+  - [ ] Update README.md with new state management information
+  - [ ] Create project completion summary
+- [ ] **Backups**: N/A (cleanup phase)
+- [ ] **Update**: Mark documentation finalization as complete
+
+### 11.3 Project Summary & Handoff
+- [ ] **Plan Review & Alignment**: Ensure project summary captures all achievements
+- [ ] **Comprehensive Research**: N/A (cleanup phase)
+- [ ] **Findings**: N/A (cleanup phase)
+- [ ] **Actions**: 
+  - [ ] Create comprehensive project summary
+  - [ ] Document lessons learned and recommendations
+  - [ ] Prepare handoff materials for ongoing maintenance
+- [ ] **Backups**: N/A (cleanup phase)
+- [ ] **Update**: Mark project completion as final
+
+---
+
+## Success Metrics Tracking
+
+### Performance Metrics
+- [ ] **Baseline Measurements**: Record current performance metrics before implementation
+- [ ] **Re-render Reduction**: Target 50% reduction in unnecessary re-renders
+- [ ] **Memory Usage**: Target 30% reduction in memory footprint
+- [ ] **Load Time**: Measure and optimize initial load performance
+- [ ] **Update Performance**: Measure state update performance improvements
+
+### Quality Metrics
+- [ ] **Test Coverage**: Achieve 90%+ test coverage for new state management code
+- [ ] **Documentation Coverage**: Complete documentation for all public APIs
+- [ ] **Error Handling**: Comprehensive error handling and recovery mechanisms
+- [ ] **Type Safety**: Full TypeScript coverage with strict type checking
+
+### Developer Experience Metrics
+- [ ] **API Simplicity**: Measure API complexity and ease of use
+- [ ] **Migration Effort**: Track time and effort required for migration
+- [ ] **Debugging Capability**: Evaluate debugging tool effectiveness
+- [ ] **Learning Curve**: Assess developer onboarding time
+
+---
+
+*This WBS follows the plan_and_execute protocol with comprehensive research, planning, design, development, testing, and refinement phases. Each task includes detailed research requirements, findings documentation, action items, backup procedures, and update requirements.* 
+
+## Operational Management Interface
+
+### Administrative Health & Testing Interface
+
+The unified state management system now includes a comprehensive operational interface accessible through the Settings page for administrators. This interface provides production-ready tools for system monitoring, testing, and cache management.
+
+#### Access Control
+- **Role-Based Access**: Limited to users with `SUPER_ADMIN` or `DEVELOPER` global roles
+- **Graceful Fallback**: Non-admin users see informational message about advanced features
+- **Security**: No sensitive system operations exposed to unauthorized users
+
+#### Core Features
+
+##### 1. Integration Testing Tab
+**Purpose**: Manual execution of comprehensive integration tests for validation of system functionality
+
+**Capabilities**:
+- **Cache Integration Test**: Validates cache-first patterns, hit/miss tracking, and data persistence
+- **Event Coordination Test**: Verifies event-driven communication between stores
+- **Performance Validation**: Measures function execution times and system responsiveness
+- **Multi-Store Coordination**: Tests coordination between workflow, auth, UI, and cache stores
+- **Cache Performance Test**: Validates cache hit rates and performance under load
+
+**Real-Time Features**:
+- Live test progress tracking with status indicators (running, pass, fail)
+- Execution time measurement for each test
+- Error details and diagnostic information
+- Success/failure summary with toast notifications
+
+##### 2. System Health Tab
+**Purpose**: Real-time monitoring of state management system health and performance
+
+**Health Metrics**:
+- **Overall System Health**: Aggregated health status (healthy, warning, critical)
+- **Cache Performance**: Hit rate monitoring with progress visualization
+- **Response Time Tracking**: Average response time monitoring with threshold alerts
+- **Event System Health**: Event processing statistics and error rate tracking
+
+**Monitoring Features**:
+- **Live Monitoring**: Real-time health updates every 5 seconds when enabled
+- **Health Thresholds**: Automatic status classification based on performance metrics
+- **Visual Indicators**: Color-coded health status with appropriate icons
+- **Performance Dashboards**: Grid layout showing key system metrics
+
+**Alert Conditions**:
+- **Warning**: Cache hit rate < 60% OR response time > 1000ms
+- **Critical**: Cache hit rate < 40% OR response time > 2000ms
+
+##### 3. Cache Management Tab
+**Purpose**: Operational cache management for performance optimization and troubleshooting
+
+**Cache Operations**:
+- **View Cache Entries**: Detailed listing of all cached data with metadata
+- **Clear All Caches**: Complete cache reset for troubleshooting
+- **Clear by Type**: Selective cache clearing by data type (template, instance, permissions, ui)
+- **Refresh Cache State**: Reload current cache information
+
+**Cache Visualization**:
+- **Entry Details**: Cache key, type, size, hit count, last accessed time
+- **Size Formatting**: Human-readable size display (Bytes, KB, MB, GB)
+- **Type Categorization**: Badge-based visual categorization of cache types
+- **Timestamps**: Formatted timestamps for cache access tracking
+
+**Performance Insights**:
+- **Hit Count Tracking**: Frequency of cache access for optimization
+- **Size Monitoring**: Memory usage per cache entry
+- **Access Patterns**: Last accessed timestamps for usage analysis
+
+#### Technical Implementation
+
+##### Component Architecture
+```typescript
+StateManagementTestPanel Component (647 lines)
+├── Integration Test Execution Engine
+├── Real-Time Health Monitoring System
+├── Cache Management Interface
+├── Performance Measurement Utilities
+└── Admin Role Validation
+```
+
+##### Integration Points
+- **Settings Page Integration**: Seamlessly integrated into existing admin settings
+- **Authentication Integration**: Uses existing AuthContext for role validation
+- **Test Infrastructure**: Leverages complete testing utilities from Phase 5.5
+- **UI Components**: Consistent with existing design system and patterns
+
+##### Error Handling
+- **Graceful Degradation**: Tests continue even if individual components fail
+- **User Feedback**: Clear error messages and diagnostic information
+- **System Resilience**: Interface remains functional during system stress
+
+#### Usage Guidelines
+
+##### For System Administrators
+1. **Daily Health Checks**: Use System Health tab for routine monitoring
+2. **Performance Issues**: Run Integration Tests when performance issues are reported
+3. **Cache Management**: Clear caches when data inconsistencies are suspected
+4. **Troubleshooting**: Use combination of health monitoring and cache inspection
+
+##### For Developers
+1. **Development Testing**: Run integration tests after major changes
+2. **Performance Optimization**: Monitor cache hit rates and response times
+3. **Debugging**: Use cache inspection for state-related debugging
+4. **System Validation**: Verify system health before deployments
+
+##### For Production Operations
+1. **Monitoring**: Enable health monitoring during peak usage periods
+2. **Incident Response**: Use interface for rapid diagnosis of state management issues
+3. **Maintenance**: Schedule cache clearing during maintenance windows
+4. **Performance Tracking**: Regular performance validation using integrated tests
+
+#### Operational Procedures
+
+##### Routine Health Monitoring
+1. Access Settings page with admin credentials
+2. Navigate to State Management System section
+3. Click "System Health" tab
+4. Enable "Start Monitoring" for real-time tracking
+5. Monitor key metrics: cache hit rate, response times, event processing
+6. Take action if metrics show warning or critical status
+
+##### Performance Troubleshooting
+1. Navigate to "Integration Testing" tab
+2. Click "Run Tests" to execute full test suite
+3. Review test results for failures or performance issues
+4. Use "Cache Management" tab to inspect cache state
+5. Clear relevant caches if data inconsistencies detected
+6. Re-run tests to validate fixes
+
+##### Cache Maintenance
+1. Access "Cache Management" tab
+2. Review cache entries for size and access patterns
+3. Clear specific cache types showing poor performance
+4. Use "Refresh" to reload current cache state
+5. Monitor cache hit rates after clearing
+6. Document any recurring cache issues
+
+#### Integration with Existing Systems
+
+##### Settings Page Enhancement
+- **Role-Based Display**: Admin features only shown to authorized users
+- **Consistent UI**: Follows existing settings page design patterns
+- **Progressive Enhancement**: Non-admin users receive informative message
+- **Performance**: Lazy loading of testing utilities for optimal performance
+
+##### Authentication Integration
+- **Global Role Validation**: Uses existing `globalRoleNames` from AuthContext
+- **Security Compliance**: No sensitive operations exposed to unauthorized users
+- **Audit Trail**: Admin actions can be logged through existing logging infrastructure
+
+##### Monitoring Integration
+- **Performance Metrics**: Compatible with existing performance monitoring
+- **Event System**: Integrates with existing event-driven architecture
+- **Cache Coordination**: Works with unified cache management system
+- **Error Handling**: Follows established error handling patterns
+
+#### Success Metrics
+
+##### Operational Efficiency
+- **Faster Diagnosis**: Reduce time to diagnose state management issues by 70%
+- **Proactive Monitoring**: Identify performance issues before user impact
+- **Cache Optimization**: Maintain >80% cache hit rates through active management
+- **System Reliability**: Reduce state-related incidents through better visibility
+
+##### Administrator Experience
+- **Self-Service**: Enable non-technical admins to perform basic diagnostics
+- **Real-Time Insights**: Immediate visibility into system health and performance
+- **Actionable Information**: Clear guidance on when and how to take corrective action
+- **Confidence**: Reliable tools for validating system functionality
+
+#### Future Enhancements
+
+##### Planned Improvements
+- **Historical Metrics**: Trend analysis and historical performance tracking
+- **Automated Alerts**: Email/SMS notifications for critical health issues
+- **Advanced Diagnostics**: More detailed performance profiling and analysis
+- **Custom Dashboards**: Configurable monitoring dashboards for different roles
+
+##### Integration Opportunities
+- **CI/CD Integration**: Automated testing during deployment pipelines
+- **External Monitoring**: Integration with existing monitoring platforms
+- **Reporting**: Automated health and performance reports
+- **Machine Learning**: Predictive analytics for performance optimization
+
+---
+
+*This operational interface represents the completion of Phase 5.5 (Integration Testing & Validation) and provides production-ready tools for ongoing state management system administration, monitoring, and optimization.* 
+
+## Cache Size Management & Restrictions
+
+### Overview
+
+The unified state management system implements strict cache size management to prevent memory overflow, ensure optimal performance, and maintain system stability. These restrictions are **MANDATORY** and must be implemented in all cache-related functionality.
+
+### Critical Implementation Requirements
+
+#### Data Type Specific Limits (MANDATORY)
+
+**Memory Limits per Data Type:**
+```typescript
+const CACHE_SIZE_LIMITS = {
+  'template': 10 * 1024 * 1024,        // 10MB - templates with hierarchies
+  'permissions': 2 * 1024 * 1024,      // 2MB - permission sets
+  'instance': 5 * 1024 * 1024,         // 5MB - workflow instances
+  'ui:state': 1 * 1024 * 1024,         // 1MB - UI state data
+  'user:prefs': 512 * 1024,            // 512KB - user preferences
+  'metadata': 3 * 1024 * 1024,         // 3MB - metadata objects
+  'hierarchy': 8 * 1024 * 1024,        // 8MB - complex hierarchies
+  'default': 2 * 1024 * 1024           // 2MB - unspecified types
+};
+```
+
+**Entry Count Limits per Data Type:**
+```typescript
+const CACHE_ENTRY_LIMITS = {
+  'template': 200,        // 200 templates maximum
+  'permissions': 100,     // 100 permission sets
+  'instance': 500,        // 500 workflow instances
+  'ui:state': 50,         // 50 UI state entries
+  'user:prefs': 100,      // 100 user preference sets
+  'metadata': 300,        // 300 metadata entries
+  'hierarchy': 150,       // 150 hierarchies
+  'default': 100          // 100 default entries
+};
+```
+
+#### Global System Limits (MANDATORY)
+
+**Absolute Maximum Limits:**
+- **Total Memory Limit**: 50MB across all caches
+- **Warning Threshold**: 40MB (80% of total limit)
+- **Critical Threshold**: 45MB (90% of total limit)
+- **Maximum Total Entries**: 2,000 entries across all caches
+- **Cleanup Batch Size**: 50 entries per cleanup operation
+
+**Monitoring Intervals:**
+- **Memory Check Interval**: 30 seconds (continuous monitoring)
+- **Emergency Cleanup Trigger**: Immediate when critical threshold reached
+- **Preventive Cleanup Trigger**: When warning threshold reached
+
+### Required Implementation Functions
+
+#### Size Validation Functions (MUST IMPLEMENT)
+
+```typescript
+// MANDATORY: Check cache size limits before operations
+export const getCacheMaxSize = (dataType: string): number => {
+  // Implementation required in cache-integration.ts
+};
+
+export const getCacheMaxEntries = (dataType: string): number => {
+  // Implementation required in cache-integration.ts
+};
+
+// MANDATORY: Validate cache operations against limits
+export const setCachedWithSizeValidation = <T>(
+  key: string,
+  data: T,
+  options?: CacheOptions
+): boolean => {
+  // Implementation required - returns false if limits exceeded
+};
+```
+
+#### Monitoring Functions (MUST IMPLEMENT)
+
+```typescript
+// MANDATORY: Real-time size limit monitoring
+export const checkCacheSizeLimits = (): {
+  status: 'healthy' | 'warning' | 'critical';
+  totalMemory: number;
+  totalEntries: number;
+  recommendations: string[];
+} => {
+  // Implementation required in cache-integration.ts
+};
+
+// MANDATORY: Continuous monitoring setup
+export const setupCacheSizeMonitoring = (): (() => void) => {
+  // Implementation required - returns cleanup function
+};
+```
+
+#### Cleanup Functions (MUST IMPLEMENT)
+
+```typescript
+// MANDATORY: Intelligent cache cleanup
+export const performIntelligentCleanup = (targetReduction: number): {
+  cleanedEntries: number;
+  memoryFreed: number;
+  actions: string[];
+} => {
+  // Implementation required - multi-stage cleanup process
+};
+```
+
+### Cleanup Strategy Implementation (MANDATORY)
+
+#### Three-Stage Cleanup Process
+
+**Stage 1: Expired Entry Removal**
+- **Priority**: Highest
+- **Action**: Remove all expired cache entries first
+- **Logic**: Check TTL expiration for all entries
+- **Performance**: Most efficient memory recovery
+
+**Stage 2: Low-Priority Entry Removal**
+- **Priority**: Medium
+- **Action**: Remove entries marked as 'low' priority
+- **Trigger**: When Stage 1 insufficient for memory requirements
+- **Batch Size**: Maximum 50 entries per operation
+
+**Stage 3: LRU (Least Recently Used) Removal**
+- **Priority**: Lowest (Emergency)
+- **Action**: Remove least recently accessed entries
+- **Trigger**: When critical memory threshold reached
+- **Logic**: Sort by last access time, remove oldest first
+
+#### Cleanup Triggering Conditions
+
+**Automatic Cleanup Triggers:**
+- Memory usage ≥ 40MB (Warning): Perform preventive cleanup (15% reduction)
+- Memory usage ≥ 45MB (Critical): Perform emergency cleanup (30% reduction)
+- Entry count ≥ 1,800: Perform entry count cleanup
+- Individual data type ≥ 90% of limit: Perform type-specific cleanup
+
+### Required Admin Interface Integration
+
+#### Cache Management Controls (MANDATORY)
+
+**Admin Panel Must Include:**
+- Real-time memory usage display with visual indicators
+- Cache size status: healthy/warning/critical
+- Manual cleanup triggers for each data type
+- Emergency cleanup button for critical situations
+- Memory usage breakdown by data type
+- Entry count monitoring with limits display
+
+**Visual Requirements:**
+- Color-coded status indicators (green/yellow/red)
+- Progress bars for memory usage vs. limits
+- Size formatting in human-readable units (MB, KB, GB)
+- Real-time updates during cleanup operations
+
+### Error Handling Requirements (MANDATORY)
+
+#### Cache Operation Failures
+
+**Size Limit Exceeded:**
+```typescript
+// REQUIRED: Handle cache set failures due to size limits
+if (!setCachedWithSizeValidation(key, data, options)) {
+  // Log the failure
+  logger.warn('Cache set rejected - size limit exceeded', {
+    key,
+    dataType: options?.dataType,
+    currentSize: getCurrentCacheSize(),
+    attemptedSize: getDataSize(data)
+  });
+  
+  // Attempt automatic cleanup and retry
+  const cleanup = performIntelligentCleanup(0.2);
+  if (cleanup.memoryFreed >= getDataSize(data)) {
+    return setCachedWithSizeValidation(key, data, { ...options, force: true });
+  }
+  
+  // Final failure - return false
+  return false;
+}
+```
+
+#### Emergency Procedures
+
+**Critical Memory Usage:**
+- **Immediate Action**: Stop all new cache operations
+- **Emergency Cleanup**: Remove 30% of cache content
+- **System Alert**: Log critical memory situation
+- **User Notification**: Display admin warning if applicable
+- **Recovery**: Resume normal operations after cleanup
+
+### Performance Impact Guidelines
+
+#### Memory Monitoring Overhead
+
+**Acceptable Performance Impact:**
+- Memory checks: <5ms execution time
+- Size calculations: <2ms per operation
+- Cleanup operations: <50ms for batch operations
+- Monitoring intervals: Must not impact user experience
+
+**Optimization Requirements:**
+- Use efficient size calculation methods
+- Implement lazy loading for large cache inspections
+- Batch multiple operations for performance
+- Cache size calculations where possible
+
+### Implementation Validation Checklist
+
+#### Required Validations (MUST COMPLETE)
+
+- [ ] **Size Limits**: All data type size limits implemented and enforced
+- [ ] **Entry Limits**: All data type entry count limits implemented
+- [ ] **Global Limits**: Total memory and entry limits enforced
+- [ ] **Monitoring**: Continuous monitoring every 30 seconds implemented
+- [ ] **Cleanup**: Three-stage cleanup process implemented
+- [ ] **Validation**: Size validation on all cache set operations
+- [ ] **Admin Interface**: Cache management controls in admin panel
+- [ ] **Error Handling**: Graceful failure handling for size exceeded
+- [ ] **Performance**: Monitoring overhead within acceptable limits
+- [ ] **Logging**: Comprehensive logging of size-related operations
+
+#### Testing Requirements (MANDATORY)
+
+- [ ] **Limit Testing**: Test each data type limit enforcement
+- [ ] **Overflow Testing**: Test behavior when limits exceeded
+- [ ] **Cleanup Testing**: Validate cleanup effectiveness
+- [ ] **Performance Testing**: Verify monitoring performance impact
+- [ ] **Admin Testing**: Test admin interface cache management
+- [ ] **Recovery Testing**: Test system recovery after critical situations
+- [ ] **Integration Testing**: Test with existing state management system
+
+### Developer Guidelines
+
+#### Cache Operations Best Practices
+
+**Always Use Size Validation:**
+```typescript
+// CORRECT: Use size validation
+const success = setCachedWithSizeValidation(key, data, { dataType: 'template' });
+if (!success) {
+  // Handle failure appropriately
+  handleCacheFailure(key, data);
+}
+
+// INCORRECT: Direct cache operations without validation
+setCached(key, data); // May cause memory overflow
+```
+
+**Implement Proper Error Handling:**
+```typescript
+// REQUIRED: Handle cache operation failures
+try {
+  const cached = await getCached(key, fallbackFn, { dataType: 'instance' });
+  return cached;
+} catch (error) {
+  // Log cache failure but continue operation
+  logger.warn('Cache operation failed', { key, error });
+  return fallbackFn(); // Always provide fallback
+}
+```
+
+#### Data Type Classification
+
+**Correctly Classify Cache Data:**
+- Use specific data types ('template', 'instance', 'permissions')
+- Avoid 'default' type except for truly unclassified data
+- Consider data size and frequency when choosing types
+- Document data type rationale in code comments
+
+#### Memory-Conscious Development
+
+**Optimize Data Before Caching:**
+- Serialize large objects efficiently
+- Remove unnecessary properties before caching
+- Use compression for large text data
+- Implement data transformation for cache storage
+
+### Compliance and Auditing
+
+#### Mandatory Compliance Checks
+
+**Regular Audits Must Verify:**
+- All cache operations use size validation
+- Monitoring systems are functioning correctly
+- Cleanup procedures execute within time limits
+- Admin interfaces display accurate information
+- Error handling follows established patterns
+
+**Documentation Requirements:**
+- Document all custom data types and their limits
+- Maintain change log for limit modifications
+- Record rationale for cache size decisions
+- Update this document when limits change
+
+---
+
+*Cache size management is critical for system stability and performance. These restrictions are not optional - they must be implemented in all cache-related functionality to prevent memory overflow and ensure optimal system operation.* 

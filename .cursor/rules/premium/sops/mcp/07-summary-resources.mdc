@@ -1,0 +1,182 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP Developer Guide - Summary & Resources
+
+## Visual Diagrams and Workflow Summary
+
+To wrap up, here's a summary of the major flows with diagrams for clarity:
+
+### General MCP Data Flow
+An MCP Host (LLM application) contains MCP Clients that each connect to an external Server via the MCP protocol. The transport (stdio or SSE) carries JSON-RPC messages. The client and server perform an init handshake, then the host can request Resources or call Tools on the server. The server fetches data or performs actions (possibly calling external APIs or local resources) and returns results, which the host integrates into the LLM's context or output.
+
+### Session Initialization Flow
+(See the handshake steps above.) The client and server exchange an initialize request/response and an initialized notification. After this, both know each other's capabilities and the session is ready for use. This ensures, for example, that if the server can send certain notifications (like streaming partial results or auth requests), the client has indicated it can handle them. If not, the server would refrain from using those features or might have failed the handshake due to incompatibility.
+
+### Third-Party Authentication Flow
+(Refer to the OAuth flow diagram above.) The client initiates an OAuth authorization, the server redirects the user to the third-party service, the user approves access, and the server obtains a token. The server then finalizes the process with the client so both know the server is now authorized. All sensitive tokens stay on the server, and the client just gets a success confirmation.
+
+## Implementation Summary
+
+By following this guide, developers can implement MCP servers that are robust and integrate seamlessly with AI applications. MCP's layered approach (Transport, Protocol, Session, Application) helps structure your implementation:
+
+### Layer-by-Layer Implementation Guide
+
+1. **Use the Transport layer appropriate for your deployment**
+   - Choose stdio for local plugins (fast, no network needed)
+   - Choose HTTP+SSE for services (works across network boundaries and allows streaming)
+
+2. **Leverage the Protocol layer's JSON-RPC messages to define clear interfaces**
+   - Implement proper request/response handling
+   - Use standard error codes and proper message correlation
+   - Handle both requests and notifications appropriately
+
+3. **Don't skip the Session handshake – it's there to future-proof and negotiate features**
+   - Implement proper capabilities negotiation
+   - Handle session lifecycle management
+   - Maintain session state as needed
+
+4. **Build out the Application layer (tools/resources) to actually do the job your server is meant for**
+   - Define clear tool interfaces with proper schemas
+   - Implement resource discovery and retrieval
+   - Handle prompts if your use case requires them
+
+5. **If external auth is needed, follow the OAuth patterns to keep it secure and user-consented**
+   - Implement proper PKCE flows
+   - Secure token storage and handling
+   - Provide clear user feedback and control
+
+## Key Benefits of MCP
+
+With MCP, an AI assistant could one moment read files from a local drive, the next call an API to get live data, all through a unified protocol. This guide should equip you to create both servers and clients to take advantage of that power.
+
+### For Developers
+- **Standardized Integration**: No need to build custom integrations for each AI application
+- **Composable Architecture**: Mix and match different MCP servers for different capabilities
+- **Security by Design**: Built-in patterns for secure authentication and authorization
+- **Future-Proof**: Capability negotiation allows for progressive enhancement
+
+### For AI Applications
+- **Rich Context**: Access to real-time data and external services
+- **Action Capabilities**: Ability to perform operations in external systems
+- **Secure Operations**: User-controlled access to sensitive resources
+- **Scalable Architecture**: Easy to add new capabilities without changing core application
+
+## Best Practices Summary
+
+### Security
+- Always validate inputs and sanitize outputs
+- Use HTTPS for remote connections
+- Implement proper authentication and authorization
+- Never expose sensitive tokens to the LLM
+- Follow OAuth 2.1 standards with PKCE
+
+### Performance
+- Use appropriate transport for your use case
+- Implement proper error handling and retries
+- Consider caching for frequently accessed resources
+- Handle concurrent requests appropriately
+
+### Development
+- Use official SDKs when available
+- Implement comprehensive logging
+- Write tests for your MCP implementations
+- Document your server's capabilities clearly
+- Follow semantic versioning for your servers
+
+### User Experience
+- Provide clear feedback during authentication flows
+- Implement graceful degradation when services are unavailable
+- Give users control over permissions and access
+- Provide helpful error messages
+
+## Troubleshooting Common Issues
+
+### Connection Problems
+- Verify transport configuration (stdio vs SSE)
+- Check network connectivity for remote servers
+- Validate authentication credentials
+- Ensure proper port binding and firewall settings
+
+### Protocol Issues
+- Verify JSON-RPC message format
+- Check method name spelling and namespacing
+- Ensure proper request/response correlation
+- Validate parameter schemas
+
+### Session Problems
+- Verify capability negotiation
+- Check session state management
+- Ensure proper handshake completion
+- Handle session termination gracefully
+
+### Authentication Issues
+- Verify OAuth configuration
+- Check PKCE implementation
+- Validate redirect URIs
+- Ensure proper token storage and retrieval
+
+## Next Steps
+
+1. **Choose Your Implementation Path**
+   - Server development: Pick your language and framework
+   - Client integration: Identify your host application needs
+   - Hybrid: Consider both server and client components
+
+2. **Start with a Simple Example**
+   - Implement a basic resource server (e.g., file system)
+   - Add a simple tool (e.g., calculator)
+   - Test with existing MCP clients
+
+3. **Add Complexity Gradually**
+   - Implement authentication if needed
+   - Add more sophisticated tools and resources
+   - Optimize for performance and reliability
+
+4. **Join the Community**
+   - Contribute to open-source MCP projects
+   - Share your implementations
+   - Help improve the specification
+
+Happy building!
+
+## Sources
+
+### MCP Official Specification and Guides
+- [Model Context Protocol Official Site](https://modelcontextprotocol.io)
+- [MCP GitHub Repository](https://github.com/modelcontextprotocol)
+- [MCP Specification](https://github.com/modelcontextprotocol/specification)
+- [Claude Code Documentation](https://claudecode.app)
+
+### Authentication & OAuth Resources
+- [Auth0 – Intro to MCP and Authorization](https://auth0.com)
+- [OAuth 2.1 Specification](https://auth0.com)
+- [PKCE Implementation Guide](https://auth0.com)
+
+### Technical Implementation Guides
+- [Medium – MCP Authentication (Andrei T.) and others](https://medium.com)
+- [Dev.to MCP Tutorials](https://dev.to)
+- ["MCP in AI" (Stackademic) – overview of components and examples](https://medium.com)
+
+### Transport Layer Documentation
+- [Model Context Protocol – Transports](https://github.com/modelcontextprotocol/transports)
+- [MCP Architecture Documentation](https://modelcontextprotocol.io/architecture)
+- [Claude Code Design Principles](https://claudecode.app/design)
+
+### SDK and Library Documentation
+- [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
+- [Python SDK](https://github.com/modelcontextprotocol/python-sdk)
+- [Node.js Examples](https://github.com/modelcontextprotocol/examples)
+
+---
+
+**Complete Guide Series:**
+- `01-overview-introduction.mdc` - Overview & Introduction
+- `02-transport-layer.mdc` - Transport Layer Implementation
+- `03-protocol-layer.mdc` - Protocol Layer & JSON-RPC
+- `04-session-layer.mdc` - Session Management & Handshake
+- `05-application-layer.mdc` - Tools, Resources & Prompts
+- `06-authentication-oauth.mdc` - OAuth & Security
+- `07-summary-resources.mdc` - Implementation Summary & Sources (this file)

@@ -1,0 +1,1283 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Claude API - Comprehensive Standard Operating Procedure (SOP)
+
+## Executive Summary
+
+Anthropic's Claude API provides developers with access to state-of-the-art large language models including Claude Opus 4, Claude Sonnet 4, Claude 3.7 Sonnet, Claude 3.5 Sonnet, and Claude 3.5 Haiku. These models excel in reasoning, coding, analysis, creative writing, and computer use capabilities, offering developers flexible solutions from fast, cost-effective processing to advanced reasoning and agentic workflows.
+
+**Official Documentation**: [https://docs.anthropic.com](https://docs.anthropic.com)  
+**API Base URL**: `https://api.anthropic.com/v1/messages`  
+**Console**: [https://console.anthropic.com](https://console.anthropic.com)  
+**Discord Community**: [https://discord.gg/anthropic](https://discord.gg/anthropic)
+
+## Platform Architecture
+
+### Messages API
+
+Claude uses a Messages API that enables conversational interactions with models:
+
+```bash
+POST https://api.anthropic.com/v1/messages
+```
+
+**Request Structure**:
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello, Claude!"
+    }
+  ],
+  "temperature": 0.7,
+  "system": "You are a helpful AI assistant."
+}
+```
+
+**Response Structure**:
+```json
+{
+  "id": "msg_01EqwhE4HQYZhw6xKoiNy5sZ",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-20250514",
+  "content": [
+    {
+      "type": "text",
+      "text": "Hello! I'm Claude, an AI assistant created by Anthropic. How can I help you today?"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 25
+  }
+}
+```
+
+## Available Models
+
+### Latest Generation - Claude 4 (May 2025)
+
+| Model | Context | Max Output | Strengths | Pricing (Input/Output per MTok) |
+|-------|---------|------------|-----------|--------------------------------|
+| **Claude Opus 4** | 200K | 32K tokens | Most capable, best coding model, sustained performance | $15 / $75 |
+| **Claude Sonnet 4** | 200K | 64K tokens | High performance, exceptional reasoning, fast | $3 / $15 |
+
+### Previous Generation Models
+
+| Model | Context | Max Output | Strengths | Pricing (Input/Output per MTok) |
+|-------|---------|------------|-----------|--------------------------------|
+| **Claude 3.7 Sonnet** | 200K | 64K tokens | Extended thinking, advanced reasoning | $3 / $15 |
+| **Claude 3.5 Sonnet** | 200K | 8192 tokens | Balanced performance and speed | $3 / $15 |
+| **Claude 3.5 Haiku** | 200K | 8192 tokens | Fastest, most cost-effective | $0.80 / $4 |
+| **Claude 3 Opus** | 200K | 4096 tokens | High-end performance (legacy) | $15 / $75 |
+| **Claude 3 Haiku** | 200K | 4096 tokens | Ultra-fast responses (legacy) | $0.25 / $1.25 |
+
+### Model Selection Guide
+
+```javascript
+function selectClaudeModel(requirements) {
+  if (requirements.task === 'complex_coding' || requirements.sustained_performance) {
+    return 'claude-opus-4-20250514';
+  }
+  
+  if (requirements.extended_thinking && requirements.reasoning) {
+    return 'claude-3-7-sonnet-20250219';
+  }
+  
+  if (requirements.balanced_performance) {
+    return 'claude-sonnet-4-20250514';
+  }
+  
+  if (requirements.fast_responses && requirements.cost_sensitive) {
+    return 'claude-3-5-haiku-20241022';
+  }
+  
+  // Default recommendation
+  return 'claude-sonnet-4-20250514';
+}
+```
+
+## Authentication
+
+All API requests require authentication via API key in the header:
+
+```bash
+curl https://api.anthropic.com/v1/messages \
+  -H "content-type: application/json" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{...}'
+```
+
+**Security Best Practices**:
+- Store API keys as environment variables, never in code
+- Use different keys for development, staging, and production
+- Rotate keys regularly and monitor usage
+- Implement proper error handling for authentication failures
+
+## Advanced Features
+
+### Extended Thinking (Claude 4 & 3.7)
+Enable models to show their reasoning process:
+
+```json
+{
+  "model": "claude-opus-4-20250514",
+  "max_tokens": 2000,
+  "thinking": {
+    "type": "enabled",
+    "budget_tokens": 1024
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "Solve this complex math problem step by step: ..."
+    }
+  ]
+}
+```
+
+### Vision Processing
+Analyze images with multimodal models:
+
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 1000,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What's in this image?"
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Function/Tool Calling
+Enable Claude to use external tools:
+
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 1000,
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get current weather for a location",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City name"
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "What's the weather like in San Francisco?"
+    }
+  ]
+}
+```
+
+### Computer Use (Beta)
+Enable Claude to interact with computers:
+
+```json
+{
+  "model": "claude-opus-4-20250514",
+  "max_tokens": 2000,
+  "tools": [
+    {
+      "type": "computer_20250124",
+      "name": "computer",
+      "display_width_px": 1024,
+      "display_height_px": 768
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Take a screenshot and help me navigate to a website"
+    }
+  ]
+}
+```
+
+### Streaming Responses
+Get real-time response generation:
+
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 1000,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Write a detailed explanation..."
+    }
+  ]
+}
+```
+
+### Prompt Caching
+Cache frequently used prompts for cost efficiency:
+
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 1000,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Here is a large document...",
+          "cache_control": {"type": "ephemeral"}
+        },
+        {
+          "type": "text",
+          "text": "Analyze this document"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Parameter Reference
+
+### Core Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | string | Model identifier (required) |
+| `messages` | array | Conversation messages (required) |
+| `max_tokens` | integer | Maximum response length |
+| `temperature` | float | Randomness (0.0-1.0, default: 1.0) |
+| `top_p` | float | Nucleus sampling (0.0-1.0) |
+| `stop_sequences` | array | Stop generation at sequences |
+| `stream` | boolean | Enable streaming responses |
+| `system` | string | System prompt for behavior control |
+
+### Advanced Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `thinking` | object | Enable extended thinking mode |
+| `tools` | array | Available tools for function calling |
+| `tool_choice` | object | Control tool selection behavior |
+| `metadata` | object | Request metadata and tracking |
+
+## Pricing Structure
+
+### Token-Based Pricing (Per Million Tokens)
+
+| Model | Input Tokens | Output Tokens | Cache Writes | Cache Hits |
+|-------|--------------|---------------|--------------|------------|
+| **Claude Opus 4** | $15.00 | $75.00 | $18.75 | $1.50 |
+| **Claude Sonnet 4** | $3.00 | $15.00 | $3.75 | $0.30 |
+| **Claude 3.7 Sonnet** | $3.00 | $15.00 | $3.75 | $0.30 |
+| **Claude 3.5 Sonnet** | $3.00 | $15.00 | $3.75 | $0.30 |
+| **Claude 3.5 Haiku** | $0.80 | $4.00 | $1.00 | $0.08 |
+
+### Additional Features Pricing
+
+| Feature | Cost |
+|---------|------|
+| **Extended Thinking** | Included (uses token budget) |
+| **Computer Use** | Standard token pricing + additional tool tokens |
+| **Vision Processing** | Standard token pricing |
+| **Batch Processing** | 50% discount on standard pricing |
+
+### Cost Optimization
+
+```javascript
+class ClaudeCostOptimizer {
+  static estimateTokens(text) {
+    // Rough estimation: 1 token ≈ 4 characters
+    return Math.ceil(text.length / 4);
+  }
+  
+  static calculateCost(inputTokens, outputTokens, model) {
+    const pricing = {
+      'claude-opus-4-20250514': { input: 15, output: 75 },
+      'claude-sonnet-4-20250514': { input: 3, output: 15 },
+      'claude-3-7-sonnet-20250219': { input: 3, output: 15 },
+      'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
+      'claude-3-5-haiku-20241022': { input: 0.8, output: 4 }
+    };
+    
+    const modelPricing = pricing[model];
+    if (!modelPricing) return null;
+    
+    const inputCost = (inputTokens / 1000000) * modelPricing.input;
+    const outputCost = (outputTokens / 1000000) * modelPricing.output;
+    
+    return {
+      inputCost,
+      outputCost,
+      totalCost: inputCost + outputCost
+    };
+  }
+  
+  static selectCostEffectiveModel(requirements) {
+    if (requirements.simple && requirements.fast) {
+      return 'claude-3-5-haiku-20241022';
+    }
+    
+    if (requirements.complex && requirements.quality === 'highest') {
+      return 'claude-opus-4-20250514';
+    }
+    
+    return 'claude-sonnet-4-20250514'; // Best balance
+  }
+}
+```
+
+## Rate Limits & Performance
+
+### Rate Limits by Usage Tier
+
+| Tier | Requests/Min | Tokens/Min | Concurrent Requests |
+|------|--------------|------------|-------------------|
+| **Tier 1** | 5 | 20K | 2 |
+| **Tier 2** | 50 | 40K | 5 |
+| **Tier 3** | 200 | 100K | 10 |
+| **Tier 4** | 1000 | 300K | 20 |
+
+### Performance Characteristics
+
+| Model | Typical Response Time | Best Use Cases |
+|-------|----------------------|----------------|
+| **Claude Opus 4** | 15-45 seconds | Complex coding, sustained reasoning |
+| **Claude Sonnet 4** | 8-25 seconds | Balanced tasks, general purpose |
+| **Claude 3.7 Sonnet** | 10-30 seconds | Extended thinking, analysis |
+| **Claude 3.5 Sonnet** | 5-20 seconds | Fast, high-quality responses |
+| **Claude 3.5 Haiku** | 2-10 seconds | Quick tasks, simple queries |
+
+## Error Handling
+
+### Common Error Codes
+
+| Code | Description | Resolution |
+|------|-------------|------------|
+| 400 | Bad Request | Check request format and parameters |
+| 401 | Authentication Error | Verify API key validity |
+| 403 | Permission Denied | Check account access levels |
+| 429 | Rate Limit Exceeded | Implement exponential backoff |
+| 500 | Internal Server Error | Retry with backoff |
+| 529 | Overloaded | Wait and retry |
+
+### Error Response Format
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "rate_limit_error",
+    "message": "Rate limit exceeded. Please slow down your requests."
+  }
+}
+```
+
+### Robust Error Handling
+```javascript
+class ClaudeAPIClient {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseURL = 'https://api.anthropic.com/v1';
+  }
+  
+  async makeRequest(endpoint, payload, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          
+          if (response.status === 429) {
+            // Rate limit - exponential backoff
+            const delay = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          
+          throw new Error(`API Error ${response.status}: ${error.error.message}`);
+        }
+        
+        return response.json();
+      } catch (error) {
+        if (attempt === retries) throw error;
+        
+        // General retry with delay
+        const delay = attempt * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  async sendMessage(messages, options = {}) {
+    const payload = {
+      model: options.model || 'claude-sonnet-4-20250514',
+      max_tokens: options.maxTokens || 1024,
+      messages,
+      temperature: options.temperature || 0.7,
+      ...options
+    };
+    
+    return this.makeRequest('/messages', payload);
+  }
+}
+```
+
+## Integration Examples
+
+### Node.js Implementation
+```javascript
+class ClaudeAPI {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseURL = 'https://api.anthropic.com/v1';
+  }
+  
+  async chatCompletion(messages, options = {}) {
+    const payload = {
+      model: options.model || 'claude-sonnet-4-20250514',
+      max_tokens: options.maxTokens || 1024,
+      messages,
+      temperature: options.temperature || 0.7,
+      stream: options.stream || false
+    };
+    
+    // Add system prompt if provided
+    if (options.system) {
+      payload.system = options.system;
+    }
+    
+    // Add tools if provided
+    if (options.tools) {
+      payload.tools = options.tools;
+    }
+    
+    // Add thinking if requested
+    if (options.thinking) {
+      payload.thinking = options.thinking;
+    }
+    
+    const response = await fetch(`${this.baseURL}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    if (options.stream) {
+      return this.handleStreamingResponse(response);
+    }
+    
+    return response.json();
+  }
+  
+  async analyzeImage(prompt, imageData, options = {}) {
+    const messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/jpeg',
+              data: imageData
+            }
+          }
+        ]
+      }
+    ];
+    
+    return this.chatCompletion(messages, {
+      model: 'claude-sonnet-4-20250514',
+      ...options
+    });
+  }
+  
+  async extendedThinking(prompt, options = {}) {
+    return this.chatCompletion([
+      { role: 'user', content: prompt }
+    ], {
+      model: 'claude-opus-4-20250514',
+      thinking: {
+        type: 'enabled',
+        budget_tokens: options.thinkingBudget || 2048
+      },
+      ...options
+    });
+  }
+  
+  async handleStreamingResponse(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    return {
+      async* stream() {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n').filter(line => line.trim());
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') return;
+              
+              try {
+                yield JSON.parse(data);
+              } catch (e) {
+                console.warn('Failed to parse chunk:', data);
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+}
+
+// Usage Examples
+const claude = new ClaudeAPI(process.env.ANTHROPIC_API_KEY);
+
+async function basicExample() {
+  try {
+    const response = await claude.chatCompletion([
+      {
+        role: 'user',
+        content: 'Explain quantum computing in simple terms.'
+      }
+    ], {
+      model: 'claude-sonnet-4-20250514',
+      maxTokens: 1000,
+      temperature: 0.3
+    });
+    
+    console.log(response.content[0].text);
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+
+async function extendedReasoningExample() {
+  try {
+    const response = await claude.extendedThinking(
+      'Analyze the potential economic impacts of widespread AI adoption over the next decade.',
+      {
+        maxTokens: 3000,
+        thinkingBudget: 1024
+      }
+    );
+    
+    console.log('Thinking process:', response.thinking);
+    console.log('Final answer:', response.content[0].text);
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+
+async function visionExample() {
+  const base64Image = '...'; // Your base64 encoded image
+  
+  try {
+    const response = await claude.analyzeImage(
+      'Describe what you see in this image and identify any potential issues.',
+      base64Image,
+      { maxTokens: 1000 }
+    );
+    
+    console.log(response.content[0].text);
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+```
+
+### Python Implementation
+```python
+import requests
+import json
+import base64
+from typing import List, Dict, Any, Optional, Generator
+
+class ClaudeAPI:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.anthropic.com/v1"
+        
+    def chat_completion(self, messages: List[Dict], **options) -> Dict[str, Any]:
+        """Send a chat completion request to Claude"""
+        payload = {
+            "model": options.get("model", "claude-sonnet-4-20250514"),
+            "max_tokens": options.get("max_tokens", 1024),
+            "messages": messages,
+            "temperature": options.get("temperature", 0.7),
+            "stream": options.get("stream", False)
+        }
+        
+        # Add optional parameters
+        if "system" in options:
+            payload["system"] = options["system"]
+        if "tools" in options:
+            payload["tools"] = options["tools"]
+        if "thinking" in options:
+            payload["thinking"] = options["thinking"]
+        if "stop_sequences" in options:
+            payload["stop_sequences"] = options["stop_sequences"]
+            
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01"
+        }
+        
+        response = requests.post(
+            f"{self.base_url}/messages",
+            headers=headers,
+            json=payload,
+            stream=payload.get("stream", False)
+        )
+        response.raise_for_status()
+        
+        if payload.get("stream"):
+            return self._handle_streaming_response(response)
+        
+        return response.json()
+    
+    def analyze_image(self, prompt: str, image_path: str, **options) -> Dict[str, Any]:
+        """Analyze an image with Claude"""
+        with open(image_path, "rb") as image_file:
+            image_data = base64.b64encode(image_file.read()).decode()
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": image_data
+                        }
+                    }
+                ]
+            }
+        ]
+        
+        return self.chat_completion(messages, model="claude-sonnet-4-20250514", **options)
+    
+    def extended_thinking(self, prompt: str, **options) -> Dict[str, Any]:
+        """Use Claude with extended thinking capabilities"""
+        thinking_budget = options.pop("thinking_budget", 2048)
+        
+        return self.chat_completion(
+            [{"role": "user", "content": prompt}],
+            model="claude-opus-4-20250514",
+            thinking={
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            },
+            **options
+        )
+    
+    def function_calling(self, prompt: str, tools: List[Dict], **options) -> Dict[str, Any]:
+        """Use Claude with function calling"""
+        return self.chat_completion(
+            [{"role": "user", "content": prompt}],
+            tools=tools,
+            **options
+        )
+    
+    def _handle_streaming_response(self, response) -> Generator[Dict, None, None]:
+        """Handle streaming response from Claude"""
+        for line in response.iter_lines():
+            if line:
+                line_str = line.decode('utf-8')
+                if line_str.startswith('data: '):
+                    data = line_str[6:]
+                    if data == '[DONE]':
+                        break
+                    try:
+                        yield json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+
+# Usage Examples
+def main():
+    claude = ClaudeAPI("your_api_key_here")
+    
+    # Basic conversation
+    try:
+        response = claude.chat_completion([
+            {
+                "role": "user",
+                "content": "Explain the concept of machine learning in simple terms."
+            }
+        ], max_tokens=1000, temperature=0.3)
+        
+        print("Response:", response["content"][0]["text"])
+        print("Usage:", response["usage"])
+        
+    except Exception as e:
+        print(f"Error: {e}")
+    
+    # Extended thinking example
+    try:
+        response = claude.extended_thinking(
+            "What are the ethical implications of AI in healthcare?",
+            max_tokens=2000,
+            thinking_budget=1024
+        )
+        
+        if "thinking" in response:
+            print("Thinking process:", response["thinking"])
+        print("Final response:", response["content"][0]["text"])
+        
+    except Exception as e:
+        print(f"Error: {e}")
+    
+    # Function calling example
+    weather_tool = {
+        "name": "get_weather",
+        "description": "Get current weather for a location",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "description": "City name"}
+            },
+            "required": ["location"]
+        }
+    }
+    
+    try:
+        response = claude.function_calling(
+            "What's the weather like in Tokyo?",
+            [weather_tool],
+            model="claude-sonnet-4-20250514"
+        )
+        
+        print("Function call response:", response)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
+```
+
+## Workflow Examples
+
+### Multi-Step Analysis Pipeline
+```javascript
+async function comprehensiveAnalysis(topic, claude) {
+  // Step 1: Research outline with extended thinking
+  const outline = await claude.extendedThinking(
+    `Create a comprehensive research outline for: "${topic}". Include main sections, subsections, and key questions to explore.`,
+    { maxTokens: 2000, thinkingBudget: 1024 }
+  );
+  
+  // Step 2: Detailed analysis of each section
+  const sections = extractSections(outline.content[0].text);
+  const analyses = [];
+  
+  for (const section of sections) {
+    const analysis = await claude.chatCompletion([
+      {
+        role: 'system',
+        content: 'You are an expert researcher. Provide detailed, well-sourced analysis.'
+      },
+      {
+        role: 'user',
+        content: `Analyze this section in detail: "${section}". Include current trends, challenges, and future implications.`
+      }
+    ], {
+      model: 'claude-sonnet-4-20250514',
+      maxTokens: 1500
+    });
+    
+    analyses.push(analysis.content[0].text);
+  }
+  
+  // Step 3: Synthesize final report
+  const finalReport = await claude.chatCompletion([
+    {
+      role: 'system',
+      content: 'Synthesize the following analyses into a cohesive final report.'
+    },
+    {
+      role: 'user',
+      content: `Original outline:\n${outline.content[0].text}\n\nAnalyses:\n${analyses.join('\n\n')}`
+    }
+  ], {
+    model: 'claude-opus-4-20250514',
+    maxTokens: 3000
+  });
+  
+  return {
+    outline: outline.content[0].text,
+    sections: analyses,
+    finalReport: finalReport.content[0].text
+  };
+}
+```
+
+### Code Review Assistant
+```javascript
+async function codeReviewWorkflow(codeSnippet, language, claude) {
+  // Parallel analysis for different aspects
+  const [security, performance, style] = await Promise.all([
+    // Security analysis
+    claude.chatCompletion([
+      {
+        role: 'system',
+        content: 'You are a cybersecurity expert. Focus on security vulnerabilities and threats.'
+      },
+      {
+        role: 'user',
+        content: `Review this ${language} code for security issues:\n\`\`\`${language}\n${codeSnippet}\n\`\`\``
+      }
+    ], { model: 'claude-sonnet-4-20250514', maxTokens: 1000 }),
+    
+    // Performance analysis
+    claude.chatCompletion([
+      {
+        role: 'system',
+        content: 'You are a performance optimization expert. Focus on efficiency and scalability.'
+      },
+      {
+        role: 'user',
+        content: `Analyze this ${language} code for performance improvements:\n\`\`\`${language}\n${codeSnippet}\n\`\`\``
+      }
+    ], { model: 'claude-opus-4-20250514', maxTokens: 1000 }),
+    
+    // Style and best practices
+    claude.chatCompletion([
+      {
+        role: 'system',
+        content: 'You are a senior developer focused on code quality and best practices.'
+      },
+      {
+        role: 'user',
+        content: `Review this ${language} code for style and best practices:\n\`\`\`${language}\n${codeSnippet}\n\`\`\``
+      }
+    ], { model: 'claude-3-7-sonnet-20250219', maxTokens: 1000 })
+  ]);
+  
+  // Synthesize comprehensive review
+  const finalReview = await claude.chatCompletion([
+    {
+      role: 'system',
+      content: 'Synthesize multiple code reviews into a prioritized action plan.'
+    },
+    {
+      role: 'user',
+      content: `Combine these reviews into an actionable report:\n\nSecurity:\n${security.content[0].text}\n\nPerformance:\n${performance.content[0].text}\n\nStyle:\n${style.content[0].text}`
+    }
+  ], { 
+    model: 'claude-sonnet-4-20250514',
+    maxTokens: 1500
+  });
+  
+  return {
+    security: security.content[0].text,
+    performance: performance.content[0].text,
+    style: style.content[0].text,
+    synthesis: finalReview.content[0].text
+  };
+}
+```
+
+## Best Practices
+
+### 1. Model Selection Strategy
+```javascript
+const modelStrategy = {
+  // Cost-effective for simple tasks
+  simple: 'claude-3-5-haiku-20241022',
+  
+  // Balanced performance for most use cases
+  general: 'claude-sonnet-4-20250514',
+  
+  // Complex reasoning and extended thinking
+  complex: 'claude-3-7-sonnet-20250219',
+  
+  // Most capable for challenging tasks
+  advanced: 'claude-opus-4-20250514',
+  
+  // Fast responses for real-time applications
+  realtime: 'claude-3-5-haiku-20241022'
+};
+```
+
+### 2. Prompt Engineering
+```javascript
+const promptTemplates = {
+  systemPrompts: {
+    analyst: "You are a data analyst. Provide clear, evidence-based insights with supporting data.",
+    coder: "You are an expert programmer. Write clean, efficient, well-documented code.",
+    writer: "You are a professional writer. Create engaging, well-structured content.",
+    reviewer: "You are a thorough reviewer. Provide constructive feedback with specific suggestions."
+  },
+  
+  structuredPrompts: {
+    analysis: `Analyze the following:
+    
+Context: {context}
+Question: {question}
+Requirements: {requirements}
+
+Please provide:
+1. Executive summary
+2. Detailed analysis
+3. Key findings
+4. Recommendations
+5. Next steps`,
+
+    coding: `Programming Task:
+    
+Language: {language}
+Objective: {objective}
+Constraints: {constraints}
+Requirements: {requirements}
+
+Please provide:
+1. Code implementation
+2. Explanation of approach
+3. Test cases
+4. Documentation`
+  }
+};
+```
+
+### 3. Response Processing
+```javascript
+class ResponseProcessor {
+  static extractContent(response) {
+    if (!response.content) return '';
+    
+    return response.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('\n');
+  }
+  
+  static extractThinking(response) {
+    return response.thinking || null;
+  }
+  
+  static extractToolUses(response) {
+    if (!response.content) return [];
+    
+    return response.content
+      .filter(block => block.type === 'tool_use')
+      .map(block => ({
+        id: block.id,
+        name: block.name,
+        input: block.input
+      }));
+  }
+  
+  static getUsageStats(response) {
+    return {
+      inputTokens: response.usage?.input_tokens || 0,
+      outputTokens: response.usage?.output_tokens || 0,
+      totalTokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
+    };
+  }
+}
+```
+
+### 4. Performance Optimization
+```javascript
+class PerformanceOptimizer {
+  constructor() {
+    this.cache = new Map();
+    this.requestQueue = [];
+    this.processing = false;
+  }
+  
+  async getCachedResponse(key, requestFn) {
+    if (this.cache.has(key)) {
+      return this.cache.get(key);
+    }
+    
+    const response = await requestFn();
+    this.cache.set(key, response);
+    
+    // Auto-expire cache after 1 hour
+    setTimeout(() => this.cache.delete(key), 3600000);
+    
+    return response;
+  }
+  
+  async batchRequests(requests, batchSize = 5) {
+    const results = [];
+    
+    for (let i = 0; i < requests.length; i += batchSize) {
+      const batch = requests.slice(i, i + batchSize);
+      const batchResults = await Promise.all(batch);
+      results.push(...batchResults);
+      
+      // Rate limiting delay between batches
+      if (i + batchSize < requests.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    return results;
+  }
+  
+  createCacheKey(model, messages, options) {
+    const key = JSON.stringify({ model, messages, options });
+    return require('crypto').createHash('md5').update(key).digest('hex');
+  }
+}
+```
+
+## Security & Compliance
+
+### 1. Data Privacy
+```javascript
+class DataPrivacyHandler {
+  static sanitizeInput(text) {
+    // Remove potential PII patterns
+    const patterns = [
+      /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
+      /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, // Credit card
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g // Email
+    ];
+    
+    let sanitized = text;
+    patterns.forEach(pattern => {
+      sanitized = sanitized.replace(pattern, '[REDACTED]');
+    });
+    
+    return sanitized;
+  }
+  
+  static maskSensitiveOutput(response) {
+    // Mask any sensitive information in response
+    let content = ResponseProcessor.extractContent(response);
+    content = this.sanitizeInput(content);
+    
+    return {
+      ...response,
+      content: [{ type: 'text', text: content }]
+    };
+  }
+}
+```
+
+### 2. Access Control
+```javascript
+class AccessController {
+  constructor(permissions) {
+    this.permissions = permissions;
+  }
+  
+  validateRequest(userId, model, features) {
+    const userPerms = this.permissions[userId];
+    if (!userPerms) throw new Error('Access denied');
+    
+    if (!userPerms.models.includes(model)) {
+      throw new Error(`Access denied for model: ${model}`);
+    }
+    
+    const restrictedFeatures = features.filter(f => 
+      userPerms.restrictedFeatures?.includes(f)
+    );
+    
+    if (restrictedFeatures.length > 0) {
+      throw new Error(`Access denied for features: ${restrictedFeatures.join(', ')}`);
+    }
+    
+    return true;
+  }
+}
+```
+
+## Monitoring & Analytics
+
+### Usage Tracking
+```javascript
+class UsageTracker {
+  constructor() {
+    this.usage = {
+      requests: 0,
+      tokens: { input: 0, output: 0 },
+      costs: 0,
+      errors: 0,
+      models: {}
+    };
+  }
+  
+  trackRequest(model, inputTokens, outputTokens, cost, success = true) {
+    this.usage.requests++;
+    this.usage.tokens.input += inputTokens;
+    this.usage.tokens.output += outputTokens;
+    this.usage.costs += cost;
+    
+    if (!success) this.usage.errors++;
+    
+    if (!this.usage.models[model]) {
+      this.usage.models[model] = { requests: 0, tokens: 0, cost: 0 };
+    }
+    
+    this.usage.models[model].requests++;
+    this.usage.models[model].tokens += inputTokens + outputTokens;
+    this.usage.models[model].cost += cost;
+  }
+  
+  getReport(period = 'day') {
+    return {
+      period,
+      timestamp: new Date().toISOString(),
+      totalRequests: this.usage.requests,
+      totalTokens: this.usage.tokens.input + this.usage.tokens.output,
+      totalCost: this.usage.costs,
+      errorRate: this.usage.errors / this.usage.requests,
+      averageCostPerRequest: this.usage.costs / this.usage.requests,
+      modelBreakdown: this.usage.models
+    };
+  }
+}
+```
+
+## Troubleshooting
+
+### Common Issues & Solutions
+
+1. **Rate Limit Errors**
+   ```javascript
+   // Implement exponential backoff
+   async function withExponentialBackoff(fn, maxRetries = 5) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await fn();
+       } catch (error) {
+         if (error.status === 429 && i < maxRetries - 1) {
+           const delay = Math.pow(2, i) * 1000;
+           await new Promise(resolve => setTimeout(resolve, delay));
+           continue;
+         }
+         throw error;
+       }
+     }
+   }
+   ```
+
+2. **Token Limit Management**
+   ```javascript
+   function truncateToTokenLimit(text, maxTokens) {
+     // Rough estimation: 1 token ≈ 4 characters
+     const maxChars = maxTokens * 4;
+     if (text.length <= maxChars) return text;
+     
+     return text.substring(0, maxChars - 100) + '...';
+   }
+   ```
+
+3. **Response Validation**
+   ```javascript
+   function validateResponse(response) {
+     if (!response || !response.content) {
+       throw new Error('Invalid response format');
+     }
+     
+     if (response.content.length === 0) {
+       throw new Error('Empty response content');
+     }
+     
+     return true;
+   }
+   ```
+
+## Support Resources
+
+- **Documentation**: [https://docs.anthropic.com](https://docs.anthropic.com)
+- **Console**: [https://console.anthropic.com](https://console.anthropic.com)
+- **Community Discord**: [https://discord.gg/anthropic](https://discord.gg/anthropic)
+- **Status Page**: [https://status.anthropic.com](https://status.anthropic.com)
+- **Support Email**: support@anthropic.com
+- **API Reference**: [https://docs.anthropic.com/en/api](https://docs.anthropic.com/en/api)
+
+## Changelog & Updates
+
+### Latest Updates (2025)
+- **Claude 4 Release**: Opus 4 and Sonnet 4 with enhanced coding capabilities
+- **Extended Thinking**: New reasoning mode for complex problems
+- **Computer Use**: Beta feature for desktop automation
+- **Improved Vision**: Enhanced image analysis capabilities
+- **Tool Use Enhancements**: Parallel tool execution and better integration
+
+### Migration Guide
+When upgrading to newer models:
+
+1. **Update model names** in your API calls
+2. **Test functionality** with new capabilities
+3. **Monitor token usage** as context windows may differ
+4. **Review pricing** for cost optimization
+5. **Update error handling** for new response formats
+
+---
+
+*This SOP provides comprehensive coverage of Claude API capabilities, best practices, and implementation patterns. For the most current information, always refer to the official Anthropic documentation.*
+
+*Last Updated: January 2025*
+*Version: 3.0*

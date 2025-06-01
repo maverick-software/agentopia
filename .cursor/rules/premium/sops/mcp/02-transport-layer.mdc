@@ -1,0 +1,153 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP Developer Guide - Transport Layer
+
+## MCP Transport Layer
+
+The Transport layer is responsible for carrying JSON-RPC messages between client and server, abstracting the underlying communication channel. MCP supports multiple transport mechanisms, chiefly:
+
+**Standard I/O (Stdio)**: The server reads/writes JSON-RPC over its stdin/stdout streams. This is ideal for local servers launched as subprocesses by the host. It avoids network overhead and is simple to set up (no networking needed).
+
+**HTTP + Server-Sent Events (SSE)**: The server runs as an HTTP service; client requests are sent via HTTP POST, and server-to-client messages (including streaming responses) are sent over an SSE connection. This suits remote or separate processes, allowing communication over HTTP.
+
+MCP may also be extended to custom transports (e.g. WebSockets) by implementing the required interface, but stdio and SSE are the primary built-ins.
+
+## Server-Side Setup (Transport Layer)
+
+On the server side, setting up the transport involves initializing a listener for client connections. For an HTTP+SSE transport, the server typically provides two endpoints: one for the SSE stream and one for receiving JSON-RPC POSTs.
+
+### Node.js Example (Express + SSE)
+
+```javascript
+const express = require("express");
+const { Server, SSEServerTransport } = require("@modelcontextprotocol/server");
+const app = express();
+
+// Initialize MCP server with basic info and declared capabilities
+const server = new Server({ name: "my-server", version: "1.0.0" }, { capabilities: {} });
+
+// Prepare transport (will be created when SSE client connects)
+let transport = null;
+
+// SSE endpoint: client opens an EventSource to this URL
+app.get("/sse", (req, res) => {
+  transport = new SSEServerTransport("/messages", res);
+  server.connect(transport);  // attach the transport to MCP server
+});
+
+// JSON-RPC endpoint: client POSTS requests here
+app.post("/messages", (req, res) => {
+  if (transport) {
+    transport.handlePostMessage(req, res);  // process incoming JSON-RPC message
+  }
+});
+
+app.listen(3000);
+```
+
+In this Node example, when a client connects to `/sse`, we create an SSEServerTransport that knows to use the `/messages` route for receiving posts. We then call `server.connect(transport)`, which begins the MCP session on that transport. The POST handler simply delegates incoming messages to the transport's handler, which parses the JSON and passes it to the MCP server logic. This aligns with the specification that SSE uses an HTTP POST for client-to-server communication and a continuous SSE stream for server-to-client.
+
+### Python Example (FastAPI/Starlette + SSE)
+
+For Python implementations (e.g. using FastAPI or Starlette), the pattern is similar. You would set up a GET route that upgrades to an event stream and a POST route for messages. For instance, using Starlette (FastAPI's core) with the official Python SDK:
+
+```python
+from mcp.server.sse import SseServerTransport
+from mcp import Server
+
+app = Server("example-server")
+sse_transport = SseServerTransport("/messages")
+
+async def sse_endpoint(scope, receive, send):
+    # Upgrade to SSE and get stream handles
+    async with sse_transport.connect_sse(scope, receive, send) as streams:
+        # Run the MCP server on the established streams (in/out)
+        await app.run(streams[0], streams[1], app.create_initialization_options())
+
+async def messages_endpoint(scope, receive, send):
+    # Handle JSON-RPC POST message
+    await sse_transport.handle_post_message(scope, receive, send)
+
+# In FastAPI or Starlette, include routes:
+routes = [
+    Route("/sse", endpoint=sse_endpoint),
+    Route("/messages", endpoint=messages_endpoint, methods=["POST"])
+]
+```
+
+In this Python example, the SseServerTransport manages SSE specifics. The server calls `app.run()` with the connected streams to start processing MCP messages. Both Node and Python examples illustrate the typical transport wiring: one long-lived SSE channel for events, and a POST handler for requests.
+
+### Stdio Transport Setup
+
+For stdio transport, server setup is even simpler: instantiate an StdioServerTransport and call `server.connect()` on it (the process's std streams are used automatically). This is usually done when the server is started as a child process by the host.
+
+### Technologies & Libraries
+
+- Use web frameworks (Express, FastAPI) to handle HTTP endpoints
+- The official MCP SDKs (TypeScript, Python, etc.) provide Server and transport classes that abstract JSON-RPC handling
+- Under the hood, JSON messages are framed per JSON-RPC 2.0 spec and sent over the chosen channel
+- If not using an SDK, you can implement this manually by reading/writing JSON lines for stdio or using libraries for SSE (e.g. eventsource in browser or sse-starlette in Python)
+
+### Security Considerations
+
+Always secure the transport layer:
+- If using SSE over a network, implement authentication (e.g. require a token or session cookie for the SSE connection)
+- Validate the Origin of incoming connections to prevent unauthorized websites from connecting (DNS rebinding attack mitigation)
+- Bind local servers to localhost if only meant for local use
+- Use HTTPS for remote servers to encrypt traffic
+
+## Client-Side Setup (Transport Layer)
+
+On the client (host application) side, setting up the transport means initiating the connection to the server's endpoints or stdio:
+
+- For stdio servers, the host simply spawns the server process and connects the process's stdin/stdout to the MCP client library
+- For HTTP+SSE servers, the client must open an SSE stream and coordinate HTTP requests
+
+### TypeScript Client Example
+
+In practice, an MCP client library will handle much of this. For example, using the TypeScript SDK on the client side:
+
+```javascript
+const client = new Client({ name: "my-client", version: "1.0.0" }, { capabilities: {} });
+const transport = new SSEClientTransport(new URL("http://localhost:3000/sse"));
+await client.connect(transport);
+```
+
+Here the client creates an SSEClientTransport pointing to the server's SSE URL, and then connects. The SDK will internally manage the SSE subscription and send any outgoing requests as POSTs to the `/messages` endpoint (as specified when the server set up the SSE transport).
+
+If implementing manually, the client would use an EventSource (in a browser or similar SSE client) to receive events, and perform HTTP POST for requests. The JSON-RPC messages themselves are the same regardless of transport.
+
+## Communication Flow
+
+Once connected, the transport layer simply shuttles JSON-RPC messages back and forth:
+
+- **Client->Server**: JSON-RPC request or notification (sent via HTTP POST or stdio write)
+- **Server->Client**: JSON-RPC response or notification (sent via SSE event or stdio write)
+
+The transport does not interpret these messages; it only ensures they get delivered reliably and in order.
+
+### Example Communication
+
+Over SSE, if the client invokes a tool, it will POST a JSON like `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{...}}` to `/messages`. The server's SSE endpoint will emit an event with the result or error, formatted as a JSON-RPC response. The client's SSE listener picks that up and routes it to the appropriate handler.
+
+## Transport Layer Summary
+
+In summary, the Transport layer choices boil down to local vs remote communication:
+
+- **Use stdio for local plugins** (fast, no network needed)
+- **Use HTTP+SSE for services** (works across network boundaries and allows streaming)
+
+Either way, JSON-RPC 2.0 is the payload format on the wire.
+
+---
+
+**Related Files in This Guide Series:**
+- `01-overview-introduction.mdc` - Overview & Introduction
+- `03-protocol-layer.mdc` - Protocol Layer & JSON-RPC
+- `04-session-layer.mdc` - Session Management & Handshake
+- `05-application-layer.mdc` - Tools, Resources & Prompts
+- `06-authentication-oauth.mdc` - OAuth & Security
+- `07-summary-resources.mdc` - Implementation Summary & Sources

@@ -1,0 +1,294 @@
+---
+description: Protocol for implementing comprehensive security compliance framework supporting HIPAA, SOC 2, and ISO 27001/27002 standards with automated monitoring and audit trails
+globs: 
+alwaysApply: false
+---
+
+When this protocol is tagged, you are to:
+
+**STEP 1** Create the following directories:
+
+    a) `\docs\plans\security_compliance\`
+    b) `\docs\plans\security_compliance\research\`
+    c) `\docs\plans\security_compliance\backups\`
+    d) `\docs\compliance\hipaa\`
+    e) `\docs\compliance\soc2\`
+    f) `\docs\compliance\iso\`
+
+**STEP 2** Research the topic, create a plan for implementation.
+
+   a) Research existing security measures, authentication systems, data handling, and audit logging in codebase
+   b) Analyze current SQL schema for sensitive data identification, access controls, and audit trail capabilities
+   c) Research HIPAA requirements for PHI (Protected Health Information) handling, access controls, and breach notification
+   d) Research SOC 2 Type II requirements across all five trust service categories (Security, Availability, Processing Integrity, Confidentiality, Privacy)
+   e) Research ISO 27001/27002 requirements for information security management systems (ISMS)
+   f) Study compliance monitoring tools, automated security scanning, and continuous compliance frameworks
+   g) Create proposed modular file structure including:
+      - Compliance management dashboard and monitoring system
+      - Data classification and handling system
+      - Access control and identity management enhancements
+      - Audit logging and compliance reporting
+      - Security policy enforcement engine
+      - Incident response and breach notification system
+      - Compliance training and awareness modules
+      - Admin compliance management interface
+      - User privacy controls and consent management
+   h) Document findings in `\docs\plans\security_compliance\plan.md`
+
+**STEP 3** Create a Work Breakdown Structure (WBS) checklist following standard project phases: Research, Planning, Design, Development, Testing, and Refinement.
+
+**STEP 4** Research each WBS task individually, documenting compliance requirements and creating mini-plans:
+
+   a) Reference README, SQL Database Dump, existing authentication and security code
+   b) Create research files in `\docs\plans\security_compliance\research\[compliance_area]_requirements.md`
+   c) Include compliance checklists, security control mappings, and implementation examples
+   d) Research integration requirements with existing systems and third-party compliance tools
+   e) Document comprehensive implementation notes with specific compliance citations
+
+**PHASE 4** Update WBS checklist items with detailed compliance implementation notes:
+
+   a) Structure bullet points as: **Plan Review & Alignment: [notes]**, **Comprehensive Research: [compliance_standards_and_requirements]**, **Findings: [gaps_and_requirements]**, **Actions: [implementation_and_controls]**, **Backups: [file_locations]**, **Update: [compliance_verification_notes]**
+   b) Include backup instructions for all modified files in `\docs\plans\security_compliance\backups`
+
+**PHASE 5** Add comprehensive compliance implementation details to each checklist item:
+
+   a) Design modular compliance framework supporting multiple standards simultaneously
+   b) Plan database schema enhancements for compliance data handling and audit requirements
+   c) Create automated compliance monitoring and alerting system
+   d) Design admin interface for compliance management and reporting
+   e) Plan user-facing privacy controls and consent management
+   f) Include continuous compliance monitoring and automated remediation
+   g) End each item with: "a. refer to compliance research document, b. implement controls, c. verify compliance requirements met, d. update checklist with compliance verification"
+
+**PHASE 6** HIPAA Implementation Requirements:
+
+   a) **PHI Data Handling:**
+      - Data classification system for PHI identification
+      - Encryption at rest and in transit for all PHI
+      - Secure data backup and recovery procedures
+      - Data retention and secure disposal policies
+      - Minimum necessary access controls
+   
+   b) **Access Controls (164.312):**
+      - Unique user identification and authentication
+      - Role-based access control (RBAC) with principle of least privilege
+      - Multi-factor authentication for PHI access
+      - Automatic session timeouts and lockout procedures
+      - Access review and recertification processes
+   
+   c) **Audit Controls (164.312):**
+      - Comprehensive audit logging for all PHI access
+      - Tamper-evident audit log storage
+      - Regular audit log review and analysis
+      - Automated anomaly detection and alerting
+      - Audit trail retention for required periods
+   
+   d) **Administrative Safeguards:**
+      - Security officer designation and responsibilities
+      - Workforce training and access management
+      - Incident response procedures
+      - Business associate agreements (BAA) management
+      - Risk assessment and management processes
+
+**PHASE 7** SOC 2 Implementation Requirements:
+
+   a) **Security (CC6.0):**
+      - Logical and physical access controls
+      - Network security and boundary protection
+      - Vulnerability management and patch procedures
+      - Security incident monitoring and response
+      - Encryption and key management
+   
+   b) **Availability (CC7.0):**
+      - System monitoring and performance management
+      - Capacity planning and resource management
+      - Backup and recovery procedures
+      - Business continuity and disaster recovery
+      - Change management and deployment procedures
+   
+   c) **Processing Integrity (CC8.0):**
+      - Data validation and input controls
+      - Error handling and correction procedures
+      - System processing completeness and accuracy
+      - Data quality monitoring and reporting
+      - Automated processing controls
+   
+   d) **Confidentiality (CC9.0):**
+      - Information classification and handling
+      - Data loss prevention (DLP) systems
+      - Confidentiality agreements and policies
+      - Secure data sharing and transmission
+      - Data retention and disposal procedures
+   
+   e) **Privacy (CC10.0):**
+      - Privacy policy implementation and communication
+      - Data subject rights management
+      - Consent management and preferences
+      - Data breach notification procedures
+      - Third-party privacy compliance
+
+**PHASE 8** ISO 27001/27002 Implementation Requirements:
+
+   a) **Information Security Management System (ISMS):**
+      - Security policy framework and governance
+      - Risk assessment and treatment procedures
+      - Security control implementation matrix
+      - Continuous improvement and monitoring
+      - Management review and audit processes
+   
+   b) **Asset Management (A.8):**
+      - Asset inventory and classification
+      - Information handling procedures
+      - Media disposal and sanitization
+      - Equipment maintenance and disposal
+      - Remote working security guidelines
+   
+   c) **Human Resource Security (A.7):**
+      - Background verification procedures
+      - Terms and conditions of employment
+      - Security awareness and training
+      - Disciplinary process for security violations
+      - Access rights removal procedures
+   
+   d) **Physical and Environmental Security (A.11):**
+      - Secure areas and physical access controls
+      - Equipment protection and maintenance
+      - Clear desk and clear screen policies
+      - Secure disposal and reuse of equipment
+      - Environmental monitoring and protection
+
+**PHASE 9** Technical Implementation Components:
+
+   a) **Compliance Management Dashboard:**
+      - Real-time compliance status monitoring
+      - Control effectiveness tracking
+      - Risk assessment and mitigation tracking
+      - Audit findings and remediation management
+      - Compliance reporting and analytics
+   
+   b) **Data Classification and Protection:**
+      - Automated data discovery and classification
+      - Dynamic data masking and tokenization
+      - Data loss prevention (DLP) implementation
+      - Encryption key management system
+      - Secure data sharing and collaboration tools
+   
+   c) **Access Control Enhancements:**
+      - Identity and access management (IAM) system
+      - Privileged access management (PAM)
+      - Just-in-time (JIT) access provisioning
+      - Access certification and recertification
+      - Segregation of duties (SoD) controls
+   
+   d) **Audit and Monitoring Systems:**
+      - Security information and event management (SIEM)
+      - User behavior analytics (UBA)
+      - File integrity monitoring (FIM)
+      - Database activity monitoring (DAM)
+      - Network traffic analysis and monitoring
+   
+   e) **Incident Response System:**
+      - Automated incident detection and alerting
+      - Incident classification and prioritization
+      - Breach notification workflow automation
+      - Forensic evidence collection and preservation
+      - Incident response dashboard and reporting
+
+**PHASE 10** Database Schema Compliance Enhancements:
+
+   a) **Data Classification Tables:**
+      - Data sensitivity levels and handling requirements
+      - Data subject rights and consent tracking
+      - Data lineage and processing purpose tracking
+      - Retention schedule and disposal tracking
+   
+   b) **Audit and Compliance Tables:**
+      - Comprehensive audit log tables with tamper protection
+      - Access control decisions and justifications
+      - Security control effectiveness measurements
+      - Compliance assessment results and evidence
+      - Risk assessment and treatment tracking
+   
+   c) **User and Access Management:**
+      - Enhanced user profiles with security attributes
+      - Role and permission matrix with approval workflows
+      - Access review and certification tracking
+      - Security training completion and awareness tracking
+
+**PHASE 11** User Interface Components:
+
+   a) **Admin Compliance Interface:**
+      - Compliance dashboard with real-time status
+      - Risk assessment and management tools
+      - Audit finding tracking and remediation
+      - Policy management and distribution
+      - Training management and tracking
+      - Incident response coordination tools
+   
+   b) **User Privacy Controls:**
+      - Personal data management dashboard
+      - Consent management and preference center
+      - Data subject rights request portal
+      - Privacy settings and controls
+      - Data usage transparency and reporting
+
+**PHASE 12** Automated Compliance Monitoring:
+
+   a) **Continuous Monitoring:**
+      - Real-time security control assessment
+      - Automated vulnerability scanning and assessment
+      - Configuration compliance monitoring
+      - Policy violation detection and alerting
+      - Performance metrics and SLA monitoring
+   
+   b) **Compliance Reporting:**
+      - Automated compliance report generation
+      - Evidence collection and documentation
+      - Management dashboard and executive reporting
+      - Third-party audit preparation and coordination
+      - Compliance gap analysis and remediation planning
+
+**PHASE 13** Testing and Validation:
+
+   a) Test all compliance controls across HIPAA, SOC 2, and ISO requirements
+   b) Validate audit logging and monitoring systems
+   c) Test incident response and breach notification procedures
+   d) Verify access controls and authentication mechanisms
+   e) Test data protection and encryption systems
+   f) Validate compliance reporting and dashboard functionality
+   g) Perform penetration testing and vulnerability assessments
+   h) Test business continuity and disaster recovery procedures
+
+**PHASE 14** Cleanup Phase:
+
+   a) Prompt user to test compliance monitoring dashboard and alert systems
+   b) Verify all security controls are functioning and properly documented
+   c) Confirm audit logging captures all required compliance events
+   d) Test incident response procedures and breach notification workflows
+   e) Validate user privacy controls and consent management
+   f) Move backups to `/archive/security_compliance_[timestamp]`
+   g) Update root README.md with security compliance documentation
+   h) Create cleanup log in `/docs/logs/cleanup/security_compliance_implementation.md`
+   i) Update `/docs/logs/README.md` cleanup table
+   j) Generate compliance assessment report and control matrix
+
+**CONSTRAINTS:**
+
+1) All compliance controls must be implemented without degrading system performance
+2) Maintain backward compatibility while adding compliance enhancements
+3) Include comprehensive documentation for all compliance controls and procedures
+4) Implement defense-in-depth security architecture
+5) Ensure compliance controls are testable and measurable
+6) Include automated compliance monitoring and continuous assessment
+7) Maintain separation of duties and least privilege access principles
+8) Implement tamper-evident audit logging and secure log storage
+9) Include data retention and secure disposal procedures
+10) Support multiple compliance frameworks simultaneously without conflicts
+11) Include regular compliance training and awareness requirements
+12) Implement robust incident response and breach notification procedures
+13) Maintain up-to-date risk assessments and treatment plans
+14) Include third-party vendor compliance assessment and monitoring
+15) Implement continuous improvement processes for compliance program
+16) Ensure all compliance controls are properly documented and evidenced
+17) Include management oversight and accountability measures
+18) Support compliance reporting for multiple stakeholders and regulators

@@ -1,0 +1,494 @@
+---
+description: Use big picture protocol when facing a recurrent, difficult problem or bug.
+globs: 
+alwaysApply: false
+---
+# 🔍 Big Picture Protocol: Systematic Problem-Solving Framework
+
+## 📋 Overview
+
+The Big Picture Protocol is a comprehensive methodology for approaching complex problems, recurring issues, and system-wide challenges. This protocol emphasizes **isolation-first debugging** combined with **holistic system analysis** to ensure both precise problem resolution and prevention of cascading failures.
+
+## 🎯 When to Use This Protocol
+
+### ⚠️ **Trigger Conditions**
+- [ ] **Recurring Issues**: Same problem appears multiple times
+- [ ] **Complex System Failures**: Multiple components affected
+- [ ] **Mysterious Bugs**: Root cause is unclear or elusive
+- [ ] **Performance Degradation**: System-wide performance issues
+- [ ] **Integration Problems**: Issues spanning multiple services/layers
+- [ ] **Post-Deployment Issues**: Problems after major changes
+- [ ] **Cascading Failures**: One fix breaks something else
+
+### 🚨 **Emergency Situations**
+- [ ] **Production Outages**: Critical system failures
+- [ ] **Data Integrity Issues**: Potential data corruption or loss
+- [ ] **Security Incidents**: Suspected security breaches
+- [ ] **Performance Crises**: Severe performance degradation
+
+---
+
+## 🔄 Phase 1: Historical Analysis & Pattern Recognition
+
+### 📊 **1.1 Log Analysis Deep Dive**
+
+#### **Primary Actions**
+- [ ] **📁 Examine Historical Logs**
+  - Review `/logs/` directory for similar error patterns
+  - Analyze timestamps and frequency of occurrences
+  - Cross-reference with deployment and change logs
+  - Document patterns in error occurrence
+
+- [ ] **📈 Pattern Detection**
+  - Identify recurring error signatures
+  - Map error frequency to system events
+  - Correlate with user activity patterns
+  - Note environmental factors (time, load, etc.)
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/historical_analysis.md`
+- [ ] Error pattern timeline
+- [ ] Frequency analysis charts
+- [ ] Correlation with system events
+- [ ] Previous resolution attempts
+
+### 📋 **1.2 Change Log Correlation**
+
+#### **Primary Actions**
+- [ ] **🔍 Recent Changes Review**
+  - Examine git commit history for relevant timeframe
+  - Review deployment logs and configuration changes
+  - Analyze database migration history
+  - Check third-party service updates
+
+- [ ] **🔗 Impact Mapping**
+  - Map changes to affected system components
+  - Identify potential cascade effects
+  - Document change-to-error correlation
+  - Assess change complexity and risk level
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/change_correlation.md`
+- [ ] Chronological change timeline
+- [ ] Change impact assessment
+- [ ] Risk correlation matrix
+- [ ] Rollback feasibility analysis
+
+---
+
+## 🔬 Phase 2: Issue Isolation & Root Cause Analysis
+
+### 🎯 **2.1 Controlled Environment Reproduction**
+
+#### **Primary Actions**
+- [ ] **🧪 Environment Setup**
+  - Create isolated test environment
+  - Replicate production conditions
+  - Minimize external variables
+  - Document environment configuration
+
+- [ ] **🔄 Systematic Reproduction**
+  - Follow exact steps to reproduce issue
+  - Vary conditions to understand triggers
+  - Document reproduction success rate
+  - Identify minimum conditions for failure
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/reproduction_steps.md`
+- [ ] Step-by-step reproduction guide
+- [ ] Environment requirements
+- [ ] Success/failure conditions
+- [ ] Variable impact analysis
+
+### 🎛️ **2.2 Component Isolation Testing**
+
+#### **Primary Actions**
+- [ ] **🔧 Feature Disabling**
+  - Systematically disable related features
+  - Test core functionality in isolation
+  - Identify minimum failing configuration
+  - Document component dependencies
+
+- [ ] **📊 Targeted Testing**
+  - Run unit tests for affected components
+  - Execute integration tests for related systems
+  - Perform load testing on isolated components
+  - Validate data flow through isolated paths
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/isolation_results.md`
+- [ ] Component isolation matrix
+- [ ] Test results summary
+- [ ] Dependency mapping
+- [ ] Failure point identification
+
+---
+
+## 🌐 Phase 3: Dependency Mapping & System Analysis
+
+### 🔗 **3.1 Upstream Dependency Analysis**
+
+#### **Primary Actions**
+- [ ] **⬆️ Input Dependencies**
+  - Map all data sources and inputs
+  - Identify external service dependencies
+  - Analyze configuration dependencies
+  - Document authentication/authorization chains
+
+- [ ] **🔍 Dependency Health Check**
+  - Validate all upstream services
+  - Check data quality and consistency
+  - Verify configuration integrity
+  - Test authentication flows
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/upstream_dependencies.md`
+- [ ] Dependency diagram
+- [ ] Health status matrix
+- [ ] Data flow analysis
+- [ ] Critical path identification
+
+### 🔗 **3.2 Downstream Impact Assessment**
+
+#### **Primary Actions**
+- [ ] **⬇️ Output Dependencies**
+  - Map all dependent systems and features
+  - Identify affected user workflows
+  - Analyze data propagation paths
+  - Document integration points
+
+- [ ] **📊 Impact Severity Analysis**
+  - Assess user impact severity
+  - Evaluate business process disruption
+  - Calculate potential data integrity risks
+  - Estimate performance degradation scope
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/downstream_impact.md`
+- [ ] Impact severity matrix
+- [ ] Affected user workflows
+- [ ] Business process disruption analysis
+- [ ] Risk assessment summary
+
+---
+
+## 🎯 Phase 4: System-Wide Impact Evaluation
+
+### 🔄 **4.1 Cascading Effect Analysis**
+
+#### **Primary Actions**
+- [ ] **🌊 Chain Reaction Mapping**
+  - Identify potential cascade failure points
+  - Map interconnected system dependencies
+  - Analyze feedback loops and circular dependencies
+  - Document system resilience points
+
+- [ ] **⚖️ Fix Impact Simulation**
+  - Model potential fix implementations
+  - Simulate system behavior with proposed changes
+  - Identify potential new failure points
+  - Assess resource utilization changes
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/cascade_analysis.md`
+- [ ] Cascade failure scenarios
+- [ ] System resilience assessment
+- [ ] Fix impact simulation results
+- [ ] Risk mitigation strategies
+
+### 🛡️ **4.2 System Stability Assessment**
+
+#### **Primary Actions**
+- [ ] **📊 Performance Baseline**
+  - Establish current system performance metrics
+  - Document resource utilization patterns
+  - Analyze system load distribution
+  - Identify performance bottlenecks
+
+- [ ] **🔒 Stability Risk Evaluation**
+  - Assess system stability under various loads
+  - Evaluate error handling robustness
+  - Test failover and recovery mechanisms
+  - Document system breaking points
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/stability_assessment.md`
+- [ ] Performance baseline metrics
+- [ ] Load testing results
+- [ ] Stability risk matrix
+- [ ] Recovery capability analysis
+
+---
+
+## 🤖 Phase 5: AI-Assisted Analysis & Pattern Recognition
+
+### 📊 **5.1 Intelligent Log Analysis**
+
+#### **Primary Actions**
+- [ ] **🔍 Anomaly Detection**
+  - Use AI tools to identify log anomalies
+  - Detect unusual patterns in system behavior
+  - Correlate multiple data sources
+  - Identify hidden relationships
+
+- [ ] **📈 Trend Analysis**
+  - Analyze long-term system trends
+  - Identify gradual degradation patterns
+  - Predict potential future failures
+  - Correlate with external factors
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/ai_analysis.md`
+- [ ] Anomaly detection results
+- [ ] Trend analysis findings
+- [ ] Correlation discoveries
+- [ ] Predictive insights
+
+### 🧠 **5.2 Historical Pattern Matching**
+
+#### **Primary Actions**
+- [ ] **🔄 Similar Issue Analysis**
+  - Query historical data for similar patterns
+  - Compare resolution strategies and outcomes
+  - Identify recurring root causes
+  - Analyze fix effectiveness over time
+
+- [ ] **📚 Knowledge Base Integration**
+  - Cross-reference with known issue database
+  - Identify applicable best practices
+  - Leverage previous solution strategies
+  - Document pattern evolution
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/pattern_matching.md`
+- [ ] Historical pattern analysis
+- [ ] Similar issue comparison
+- [ ] Best practice recommendations
+- [ ] Solution strategy evaluation
+
+---
+
+## 🧪 Phase 6: Preemptive Testing & Validation
+
+### 🔬 **6.1 Sandbox Environment Testing**
+
+#### **Primary Actions**
+- [ ] **🏗️ Test Environment Setup**
+  - Create production-like test environment
+  - Implement comprehensive monitoring
+  - Set up automated testing pipelines
+  - Configure rollback mechanisms
+
+- [ ] **🧪 Solution Validation**
+  - Test proposed solutions in isolation
+  - Validate fix effectiveness
+  - Assess performance impact
+  - Verify no new issues introduced
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/sandbox_testing.md`
+- [ ] Test environment specifications
+- [ ] Solution validation results
+- [ ] Performance impact analysis
+- [ ] Regression testing outcomes
+
+### 📊 **6.2 Monitoring & Alert Setup**
+
+#### **Primary Actions**
+- [ ] **📈 Enhanced Monitoring**
+  - Implement targeted monitoring for affected areas
+  - Set up real-time alerting systems
+  - Create performance dashboards
+  - Configure automated health checks
+
+- [ ] **🚨 Early Warning Systems**
+  - Establish threshold-based alerts
+  - Implement predictive monitoring
+  - Create escalation procedures
+  - Document response protocols
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/monitoring_setup.md`
+- [ ] Monitoring configuration details
+- [ ] Alert threshold definitions
+- [ ] Dashboard specifications
+- [ ] Response protocol documentation
+
+---
+
+## 📚 Phase 7: Documentation & Knowledge Management
+
+### 📝 **7.1 Comprehensive Documentation**
+
+#### **Primary Actions**
+- [ ] **📖 Solution Documentation**
+  - Document complete problem analysis
+  - Record solution implementation steps
+  - Create troubleshooting guides
+  - Update system architecture documentation
+
+- [ ] **🔄 Process Improvement**
+  - Update troubleshooting procedures
+  - Enhance monitoring and alerting
+  - Improve system resilience
+  - Document lessons learned
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/solution_documentation.md`
+- [ ] Complete problem analysis
+- [ ] Solution implementation guide
+- [ ] Troubleshooting procedures
+- [ ] Process improvement recommendations
+
+### 🎓 **7.2 Knowledge Base Enhancement**
+
+#### **Primary Actions**
+- [ ] **📚 Knowledge Base Updates**
+  - Add new troubleshooting patterns
+  - Update best practice guidelines
+  - Enhance error code documentation
+  - Create preventive maintenance guides
+
+- [ ] **🔄 Continuous Improvement**
+  - Schedule regular system health reviews
+  - Implement proactive monitoring
+  - Establish preventive maintenance schedules
+  - Create training materials for team
+
+#### **Research Documentation**
+Create: `/docs/troubleshooting/[issue_name]/knowledge_base_updates.md`
+- [ ] New pattern documentation
+- [ ] Best practice updates
+- [ ] Preventive maintenance procedures
+- [ ] Training material specifications
+
+---
+
+## ✅ Success Criteria & Validation
+
+### 🎯 **Problem Resolution Validation**
+- [ ] **✅ Issue Completely Resolved**: Original problem no longer occurs
+- [ ] **✅ No Regression Issues**: No new problems introduced
+- [ ] **✅ Performance Maintained**: System performance not degraded
+- [ ] **✅ Stability Improved**: System stability enhanced or maintained
+
+### 📊 **System Health Validation**
+- [ ] **✅ All Tests Passing**: Comprehensive test suite passes
+- [ ] **✅ Monitoring Green**: All monitoring systems show healthy status
+- [ ] **✅ Performance Metrics**: Performance within acceptable ranges
+- [ ] **✅ User Experience**: User workflows function correctly
+
+### 📚 **Documentation Validation**
+- [ ] **✅ Complete Documentation**: All phases documented thoroughly
+- [ ] **✅ Knowledge Base Updated**: Troubleshooting knowledge enhanced
+- [ ] **✅ Procedures Updated**: System procedures reflect changes
+- [ ] **✅ Team Training**: Team understands new procedures
+
+---
+
+## 🚨 Emergency Procedures & Rollback
+
+### ⚡ **Immediate Response Protocol**
+
+#### **Critical System Failure**
+1. **🚨 Immediate Assessment** (0-5 minutes)
+   - Assess system impact and user effect
+   - Determine if rollback is necessary
+   - Activate incident response team
+   - Implement temporary workarounds if possible
+
+2. **🔄 Rapid Rollback** (5-15 minutes)
+   - Execute pre-planned rollback procedures
+   - Restore from known good state
+   - Verify system functionality
+   - Communicate status to stakeholders
+
+3. **📊 Post-Incident Analysis** (After resolution)
+   - Conduct thorough post-mortem
+   - Document incident timeline
+   - Identify prevention measures
+   - Update emergency procedures
+
+### 🛡️ **Rollback Procedures**
+
+#### **Automated Rollback**
+- [ ] **Database Rollback**: Restore from backup or revert migrations
+- [ ] **Code Rollback**: Revert to previous stable version
+- [ ] **Configuration Rollback**: Restore previous configuration
+- [ ] **Service Rollback**: Restart services with previous settings
+
+#### **Manual Rollback**
+- [ ] **Step-by-Step Reversal**: Manually reverse each change
+- [ ] **Component-by-Component**: Rollback individual components
+- [ ] **Gradual Restoration**: Incrementally restore functionality
+- [ ] **Validation at Each Step**: Verify system health after each rollback step
+
+---
+
+## 🔄 Continuous Improvement Framework
+
+### 📊 **Regular Review Schedule**
+- [ ] **Weekly**: Review recent issues and patterns
+- [ ] **Monthly**: Analyze system health trends
+- [ ] **Quarterly**: Comprehensive system assessment
+- [ ] **Annually**: Complete protocol review and update
+
+### 🎯 **Improvement Metrics**
+- [ ] **Resolution Time**: Average time to resolve issues
+- [ ] **Recurrence Rate**: Frequency of recurring problems
+- [ ] **System Stability**: Uptime and reliability metrics
+- [ ] **Team Efficiency**: Troubleshooting effectiveness
+
+### 📚 **Knowledge Evolution**
+- [ ] **Pattern Recognition**: Continuously improve pattern detection
+- [ ] **Tool Enhancement**: Upgrade analysis and monitoring tools
+- [ ] **Process Optimization**: Streamline troubleshooting procedures
+- [ ] **Team Development**: Enhance team troubleshooting skills
+
+---
+
+## 🎯 Why Isolation Matters in Big Picture Thinking
+
+### 🔍 **Precision Benefits**
+- **🎯 Root Cause Focus**: Prevents fixing symptoms instead of causes
+- **🧪 Controlled Environment**: Ensures reliable debugging conditions
+- **🛡️ Risk Mitigation**: Reduces risk of breaking other components
+- **📊 Clear Attribution**: Determines if issues are independent or systemic
+
+### 🌐 **Holistic Benefits**
+- **🔗 System Understanding**: Reveals interconnected dependencies
+- **⚡ Cascade Prevention**: Prevents one fix from causing multiple failures
+- **📈 Performance Optimization**: Identifies system-wide optimization opportunities
+- **🛠️ Architecture Improvement**: Guides system architecture enhancements
+
+### 🎓 **Long-term Benefits**
+- **📚 Knowledge Building**: Creates comprehensive troubleshooting knowledge base
+- **🔄 Process Improvement**: Continuously enhances debugging methodologies
+- **🎯 Proactive Prevention**: Enables proactive issue prevention
+- **👥 Team Development**: Builds team expertise in systematic problem-solving
+
+---
+
+## 📋 Quick Reference Checklist
+
+### 🚀 **Phase Completion Checklist**
+- [ ] **Phase 1**: Historical analysis and pattern recognition complete
+- [ ] **Phase 2**: Issue isolation and root cause analysis complete
+- [ ] **Phase 3**: Dependency mapping and system analysis complete
+- [ ] **Phase 4**: System-wide impact evaluation complete
+- [ ] **Phase 5**: AI-assisted analysis complete
+- [ ] **Phase 6**: Preemptive testing and validation complete
+- [ ] **Phase 7**: Documentation and knowledge management complete
+
+### ✅ **Final Validation Checklist**
+- [ ] **Problem Resolved**: Original issue completely addressed
+- [ ] **No Regressions**: No new issues introduced
+- [ ] **Documentation Complete**: All phases thoroughly documented
+- [ ] **Knowledge Updated**: Troubleshooting knowledge base enhanced
+- [ ] **Team Informed**: Team understands resolution and prevention
+- [ ] **Monitoring Active**: Enhanced monitoring in place
+- [ ] **Procedures Updated**: System procedures reflect improvements
+
+---
+
+> **💡 Remember**: By incorporating isolation within a big-picture framework, debugging becomes both **precise and comprehensive**, leading to smarter, system-wide solutions instead of short-term patches. This protocol ensures that every problem becomes an opportunity to strengthen the entire system.

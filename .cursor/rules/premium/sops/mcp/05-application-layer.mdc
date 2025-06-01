@@ -1,0 +1,129 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP Developer Guide - Application Layer
+
+## MCP Application Layer
+
+The Application layer encompasses the functional capabilities provided through MCP. This is where the real work happens – using the protocol to do things like reading data or executing an action. MCP defines three primary categories of application-layer features (often called "capabilities" or "primitives"):
+
+**Resources**: Read-only data that the server can provide (like files, database entries, documents). Resources are identified by URIs and can be listed or fetched. They supply context to the LLM (e.g. the text of a file to answer a question).
+
+**Tools**: Operations or functions the server can perform on request. Tools often have side effects or perform computations (e.g. send a message, run a calculation). They enable the LLM to act as an agent that can affect external systems.
+
+**Prompts**: Predefined prompt templates or guidance that the server offers to help shape the conversation or tool usage. For instance, a server might have a prompt template for a complex SQL query, or a step-by-step workflow guide.
+
+Most servers implement a subset of these. For example, a GitHub server might expose tools (to create an issue, comment, etc.) and resources (to read repository data), while a local filesystem server might primarily expose resources (file contents).
+
+## Server-Side (Implementing Application Logic)
+
+On the server side, implementing the application layer means writing the logic behind the JSON-RPC methods for resources, tools, and prompts. Using the MCP server SDK (if available) simplifies this:
+
+### Resources Implementation
+
+Typically, a server will implement handlers for methods like:
+- `resources/list` (return a list of available resources, perhaps as URIs with names)
+- `resources/read` or `resources/get` (return the content of a specified resource URI)
+
+You map these to your data source. For example, a filesystem server's `resources/get` would open the file and return its text content.
+
+### Tools Implementation
+
+You define each tool with an interface (name, input schema, description) and implement the execution. In code, this could be as simple as writing a function and registering it. When the server receives a `tools/call` request with that tool's name, it calls your function. For instance, a "sendEmail" tool might correspond to a Python function that sends an email via SMTP and returns a status.
+
+### Prompts Implementation
+
+If supported, you might have predefined prompt texts or formats. A prompt could be returned when the client calls something like `prompts/list` or `prompts/get`. This might be less code-centric and more about storing prompt strings.
+
+## Common Server Methods
+
+If not using an official SDK, you'll need to establish a convention for methods and implement a dispatcher. The spec defines method naming: for example, tool-related methods are often under a `tools/` namespace. Common methods include:
+
+### tools/list
+Client asks server for all available tools and their schemas. This allows the client (and ultimately the LLM) to know what it can do. The server might hardcode this list or generate it if tools are dynamic.
+
+### tools/call
+Execute the requested tool. The params typically include the tool name and an arguments object. The server should validate the name and input, perform the action, and then return results or an error.
+
+### Example: Weather Server
+
+Consider a Weather server. It could define a tool `get_weather(lat, lon)`:
+
+- `tools/list` returns something like: `[ { "name": "get_weather", "description": "Get weather for coordinates", "parameters": { "lat": "number", "lon": "number" } } ]`
+- When a `tools/call` comes with `{name: "get_weather", arguments: {"lat": 40.7, "lon": -74.0}}`, the server calls the weather API and responds with `{"temperature":75,"conditions":"sunny"}` or similar
+
+## Client-Server Communication Flow (Tool Example)
+
+1. **Discovery**: Client may call `tools/list` after init. Server returns available tools
+2. **Invocation**: When the LLM (via the client) decides to use a tool, the client sends `tools/call`
+3. **Execution**: Server receives the request, runs the tool logic, possibly making external API calls or database queries
+4. **Response**: Server sends back a response with the results (or error). The client then delivers that info to the LLM or user
+
+The same pattern applies for resources:
+- Client calls `resources/list` to see what resource URIs exist (server might list file paths or IDs)
+- Client calls `resources/get` (or read) with a URI to retrieve content
+- Server returns the content (often chunked or streamed if large, though streaming can be handled via multiple events or a large single response)
+
+**Prompts**: The client might call `prompts/list` to get a list of named prompt templates. If the user chooses one or the context requires it, the client might fetch it and use it to prepend or shape the conversation.
+
+## Client-Side (Using the Exposed Capabilities)
+
+On the client (host) side, the Application layer's focus is to leverage the server's capabilities for the user/LLM. The client doesn't implement the functionality, but it needs to:
+
+1. Understand what the server offers (via the listing methods)
+2. Possibly present choices to the user (e.g. show a list of available resources or tools in a UI)
+3. When instructed by the LLM or user, call the appropriate JSON-RPC methods on the server
+4. Handle responses and feed the results into the LLM's context or back to the user
+
+For example, if the LLM asks for a file, the host's client will call `resources/get` on the server and then include the returned file content in the prompt it builds for the model. If the LLM "calls" a tool (imagine the model output indicating a function call), the host recognizes it and sends a `tools/call` request. In this way, the client mediates between the model and the server's functions.
+
+## MCP in AI Agent Loop
+
+MCP is often used in an AI agent loop:
+
+1. **Model**: "I need data X" or "I will use Tool Y"
+2. **Host/Client**: calls MCP server for that data or executes that tool
+3. **Server**: returns data or result
+4. **Host**: inserts result into model's next prompt or returns to user
+
+Throughout, the Application layer protocol (the specific JSON-RPC methods) defines the "language" they speak.
+
+## Example Interaction Flow
+
+Here's a brief example interaction to illustrate the flow:
+
+1. **User query** (to AI): "Summarize the latest sales from our database."
+2. **LLM** (to client): (thinks it needs data, perhaps it has been prompted that a "database" tool is available)
+3. **Client -> Server**: `tools/call` with `name: "run_query"`, `arguments: {"sql": "SELECT * FROM sales ORDER BY date DESC LIMIT 100"}`
+4. **Server** (Database) -> runs the query and returns results (perhaps a summary or the raw data)
+5. **Server -> Client**: Response with query results (or a resource URI if large)
+6. **Client**: Inserts the result (or part of it) into the conversation context for the LLM
+7. **LLM**: Produces an answer using that data
+8. **User**: Sees the answer, possibly with a citation that it came from the database
+
+From a developer perspective on the client side, much of this is handled by the host application or MCP client library. If you're writing a host, you will wire up the triggers: e.g., intercept model outputs that look like tool calls and translate them to MCP requests. You might also implement guardrails (require user confirmation before executing certain tools) – MCP provides a standard for that via an auth flow which we'll cover next.
+
+## Technologies & Libraries (Application Layer)
+
+### On the server
+Use the appropriate SDK to define your tools/resources. For Node/TS, the `@modelcontextprotocol/server` package allows defining handlers and tool schemas. For Python, the `mcp` library (if using FastAPI, you might integrate it with your web app logic). Even without an SDK, you can structure your server similarly to an RPC service: maintain a registry of methods and their handlers.
+
+### On the client
+The host application likely uses an MCP client SDK that gives a high-level API to call methods and subscribe to notifications. For example, a client SDK might have `client.request("tools/call", params)` which returns a promise of the result. In a custom implementation, you might just send JSON via the transport and wait for the matching response id.
+
+### Data formats
+Tools and resources often have to serialize/deserialize data. Use JSON for results that the LLM will see (since it ultimately goes into a prompt or answer). Keep results concise and parseable. For complex data, consider returning a summarized version or a reference (like a resource URI) that the client can fetch if needed.
+
+Next, we address authentication and authorization in MCP, which often comes into play when tools need access to third-party accounts or sensitive user data.
+
+---
+
+**Related Files in This Guide Series:**
+- `01-overview-introduction.mdc` - Overview & Introduction
+- `02-transport-layer.mdc` - Transport Layer Implementation
+- `03-protocol-layer.mdc` - Protocol Layer & JSON-RPC
+- `04-session-layer.mdc` - Session Management & Handshake
+- `06-authentication-oauth.mdc` - OAuth & Security
+- `07-summary-resources.mdc` - Implementation Summary & Sources

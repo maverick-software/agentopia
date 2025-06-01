@@ -1,0 +1,28 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Projects should follow the following system:
+
+(1) Research
+    (a) research the competition, libraries, languages, etc.
+(2) Planning
+    (a) use screenshots and notes from existing projects to understand the expectations.
+    (b) plan the technology stack
+    (c) plan the repo structure
+(3) Design
+    (a) create the file and folder structure first.
+    (b) create the files and directories
+    (c) write the pseudocode
+(4) Development
+    (a) always develop frontend code before backend, this way more gets done, and singular focused improves outcomes.
+(5) Testing
+    (a) Create automated tests to ensure all systems are functioning.
+(6) Iteration
+    (a) process change requests
+(7) Refinement
+    (a) Should have a centralized roadmap.
+(8) Maintenance
+
+(9) End of Life

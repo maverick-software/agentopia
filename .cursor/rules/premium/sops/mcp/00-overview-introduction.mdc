@@ -1,0 +1,51 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# MCP Developer Guide - Overview & Introduction
+
+## Model Context Protocol Developer Guide
+
+Model Context Protocol (MCP) is an open standard that defines how AI applications (LLM hosts) communicate with external tools and data sources in a consistent, secure way. It acts like a "USB-C for AI" – a universal interface so that any AI model can plug into any compliant data source or service. By using MCP, developers avoid building one-off integrations for each AI app and each tool; instead, they implement a common protocol once. This guide provides a comprehensive overview of MCP's architecture and layers, along with practical instructions, code examples, and best practices for building MCP servers and clients.
+
+## Overview of MCP and Its Purpose
+
+MCP was introduced by Anthropic in late 2024 to standardize how AI assistants access context and perform actions. In modern AI workflows, large language models often need extra information (context) or abilities (tools). MCP addresses this by defining a client-server architecture:
+
+**Host**: The AI application (e.g. a chat interface, IDE plugin, or custom agent) that uses an LLM and needs external data or functions. The host spawns one or more clients and orchestrates model interactions.
+
+**Client**: A connector inside the host that manages a 1:1 connection to an MCP server. Each external capability gets its own client. The client handles communication, session management, and enforces isolation (one client can't directly access another's data).
+
+**Server**: A lightweight service that exposes a specific set of data or tools via MCP. Examples include a filesystem server (for file access), a database server (for queries), or an API wrapper (for external services like Slack or GitHub). Servers focus on one domain and rely on the host/client to handle coordination and security.
+
+## MCP Architecture
+
+MCP architecture: A host (e.g. Claude Desktop or an IDE) runs multiple MCP clients, each connecting to a different server via the MCP protocol. Servers can interface with local resources (e.g. files) or remote services (e.g. Slack API), giving the AI model standardized access to various tools and data. 
+
+**Purpose of MCP**: By introducing a common protocol, MCP makes integrations composable and interchangeable. An AI host can support many tools by simply launching the corresponding MCP servers, without bespoke code for each. Likewise, a tool provider can create one MCP server and have it work with any MCP-compatible AI app. MCP draws inspiration from the Language Server Protocol (LSP) in how it standardizes communication.
+
+## What MCP Enables
+
+In summary, MCP enables:
+
+**Context Sharing**: Supplying the LLM with fresh data (files, documents, database rows, etc.) on demand.
+
+**Tool Use**: Allowing the LLM to invoke functions or actions (e.g. send an email, query an API) in a controlled manner.
+
+**Workflow Composition**: Building complex agent behaviors by combining multiple MCP servers, each adding capabilities to the AI.
+
+**Security & Isolation**: The host mediates access, so servers only see what they need and cannot read the entire conversation or each other's data. Users must grant permission for tools, and sensitive operations can be sandboxed or require explicit authorization.
+
+With this context, let's break down MCP's layers and how to implement each.
+
+---
+
+**Related Files in This Guide Series:**
+- `02-transport-layer.mdc` - Transport Layer Implementation
+- `03-protocol-layer.mdc` - Protocol Layer & JSON-RPC
+- `04-session-layer.mdc` - Session Management & Handshake
+- `05-application-layer.mdc` - Tools, Resources & Prompts
+- `06-authentication-oauth.mdc` - OAuth & Security
+- `07-summary-resources.mdc` - Implementation Summary & Sources
+

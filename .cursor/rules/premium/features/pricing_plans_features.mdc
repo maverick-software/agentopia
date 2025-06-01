@@ -1,0 +1,146 @@
+---
+description: Protocol for implementing flexible, modular pricing plans system with feature-based access control and subscription management
+globs: 
+alwaysApply: false
+---
+
+When this protocol is tagged, you are to:
+
+**STEP 1** Create the following directories:
+
+    a) `\docs\plans\pricing_plans\`
+    b) `\docs\plans\pricing_plans\research\`
+    c) `\docs\plans\pricing_plans\backups\`
+
+**STEP 2** Research the topic, create a plan for implementation.
+
+   a) Research existing user authentication, role-based access control, and feature flagging systems in codebase
+   b) Analyze current SQL schema for user accounts, permissions, and subscription-related tables
+   c) Research pricing model patterns (freemium, tiered, usage-based, feature-based, hybrid models)
+   d) Study subscription management best practices and common pricing page designs
+   e) Create proposed modular file structure including:
+      - Plan definition and configuration system
+      - Feature access control middleware
+      - Subscription state management
+      - Admin plan management interface
+      - User-facing pricing and plan selection components
+      - Usage tracking and billing integration hooks
+   f) Document findings in `\docs\plans\pricing_plans\plan.md`
+
+**STEP 3** Create a Work Breakdown Structure (WBS) checklist following standard project phases: Research, Planning, Design, Development, Testing, and Refinement.
+
+**STEP 4** Research each WBS task individually, documenting dependencies and creating mini-plans:
+
+   a) Reference README, SQL Database Dump, and existing authentication/authorization code
+   b) Create research files in `\docs\plans\pricing_plans\research\[task_files]`
+   c) Include plan configuration examples, access control patterns, and UI mockups
+   d) Research integration points with payment systems and billing management
+   e) Document comprehensive implementation notes for future reference
+
+**PHASE 4** Update WBS checklist items with detailed implementation notes:
+
+   a) Structure bullet points as: **Plan Review & Alignment: [notes]**, **Comprehensive Research: [methods_and_sources]**, **Findings: [notes]**, **Actions: [methods_and_modifications]**, **Backups: [file_locations]**, **Update: [completion_notes]**
+   b) Include backup instructions for all modified files in `\docs\plans\pricing_plans\backups`
+
+**PHASE 5** Add comprehensive implementation details to each checklist item:
+
+   a) Design modular plan configuration system allowing easy addition/removal of plans and features
+   b) Plan database schema for pricing plans, features, user subscriptions, and usage limits
+   c) Create feature access control middleware that integrates with existing authentication
+   d) Design admin interface for plan management and user subscription oversight
+   e) Plan user-facing pricing pages with comparison tables and upgrade/downgrade flows
+   f) Include usage tracking and quota enforcement mechanisms
+   g) End each item with: "a. refer to research document, b. complete implementation, c. update checklist with completion notes"
+
+**PHASE 6** Implementation-specific requirements:
+
+   a) **Plan Configuration System:**
+      - JSON/YAML-based plan definitions for easy modification
+      - Feature flag system with hierarchical inheritance
+      - Usage limits and quota definitions
+      - Plan metadata (descriptions, marketing copy, pricing)
+   
+   b) **Database Schema Design:**
+      - Pricing plans table with versioning support
+      - Plan features junction table for flexible feature assignment
+      - User subscriptions with status tracking
+      - Usage tracking tables for metered features
+      - Plan change history and audit logs
+   
+   c) **Access Control Middleware:**
+      - Feature availability checking functions
+      - Usage quota enforcement
+      - Plan upgrade prompts and restrictions
+      - API rate limiting based on plan tiers
+   
+   d) **Admin Interface Components:**
+      - Plan creation and editing forms
+      - Feature management interface
+      - User subscription management dashboard
+      - Usage analytics and reporting
+      - Plan performance metrics
+      - A/B testing tools for pricing strategies
+   
+   e) **User Interface Components:**
+      - Responsive pricing comparison tables
+      - Plan selection and checkout flows
+      - Account subscription management pages
+      - Usage dashboards with quota displays
+      - Upgrade/downgrade request forms
+      - Plan feature comparison modals
+
+**PHASE 7** Integration and Business Logic:
+
+   a) **Payment System Integration:**
+      - Automatic subscription creation/modification
+      - Plan change proration calculations
+      - Failed payment handling and grace periods
+      - Dunning management for expired subscriptions
+   
+   b) **Feature Access Control:**
+      - Middleware for route-level plan restrictions
+      - Component-level feature visibility controls
+      - API endpoint access based on plan tier
+      - Usage tracking and enforcement points
+   
+   c) **Plan Transition Logic:**
+      - Upgrade/downgrade workflows
+      - Data migration for plan changes
+      - Prorated billing calculations
+      - Feature access transition handling
+
+**PHASE 8** Testing and Validation:
+
+   a) Test all plan configurations and feature combinations
+   b) Validate access control across different user scenarios
+   c) Test plan upgrade/downgrade workflows
+   d) Verify usage tracking accuracy and quota enforcement
+   e) Test admin interface plan management functions
+   f) Validate pricing page responsiveness and user experience
+   g) Test integration with payment and billing systems
+
+**PHASE 9** Cleanup Phase:
+
+   a) Prompt user to test plan creation, modification, and user subscription flows
+   b) Verify feature access controls work correctly across all plan tiers
+   c) Confirm usage tracking and quota enforcement functions properly
+   d) Test admin interface can manage all aspects of pricing plans
+   e) Move backups to `/archive/pricing_plans_[timestamp]`
+   f) Update root README.md with pricing plans system documentation
+   g) Create cleanup log in `/docs/logs/cleanup/pricing_plans_implementation.md`
+   h) Update `/docs/logs/README.md` cleanup table
+
+**CONSTRAINTS:**
+
+1) Pricing system must be completely modular - plans and features can be added/modified without code changes
+2) Support multiple pricing models (subscription, usage-based, hybrid) within same system
+3) Include comprehensive audit logging for all plan and subscription changes
+4) Admin interface must provide complete control over pricing strategy and user subscriptions
+5) User interfaces must clearly communicate plan differences and value propositions
+6) Access control must be fail-safe - default to most restrictive when in doubt
+7) Plan changes must handle data migrations and feature access transitions gracefully
+8) Include analytics and A/B testing capabilities for pricing optimization
+9) Support plan versioning to handle legacy subscribers
+10) Integrate seamlessly with payment systems and billing management
+11) Include usage tracking that scales with application growth
+12) Provide clear upgrade paths and limit frustration for users hitting quotas

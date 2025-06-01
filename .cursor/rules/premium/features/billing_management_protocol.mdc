@@ -1,0 +1,187 @@
+---
+description: Protocol for implementing comprehensive billing management system with automated invoicing, payment tracking, and financial reporting
+globs: 
+alwaysApply: false
+---
+
+When this protocol is tagged, you are to:
+
+**STEP 1** Create the following directories:
+
+    a) `\docs\plans\billing_management\`
+    b) `\docs\plans\billing_management\research\`
+    c) `\docs\plans\billing_management\backups\`
+
+**STEP 2** Research the topic, create a plan for implementation.
+
+   a) Research existing payment systems, pricing plans, and user account structures in codebase
+   b) Analyze current SQL schema for transaction history, user subscriptions, and financial data
+   c) Research billing automation patterns, invoice generation, tax calculations, and compliance requirements
+   d) Study dunning management, payment retry logic, and subscription lifecycle handling
+   e) Research financial reporting requirements and accounting system integrations
+   f) Create proposed modular file structure including:
+      - Automated billing engine and scheduling system
+      - Invoice generation and template management
+      - Payment tracking and reconciliation
+      - Tax calculation and compliance handling
+      - Dunning management and retry logic
+      - Financial reporting and analytics
+      - Admin billing management interface
+      - User billing dashboard and invoice access
+   g) Document findings in `\docs\plans\billing_management\plan.md`
+
+**STEP 3** Create a Work Breakdown Structure (WBS) checklist following standard project phases: Research, Planning, Design, Development, Testing, and Refinement.
+
+**STEP 4** Research each WBS task individually, documenting dependencies and creating mini-plans:
+
+   a) Reference README, SQL Database Dump, existing payment and pricing systems code
+   b) Create research files in `\docs\plans\billing_management\research\[task_files]`
+   c) Include billing workflow diagrams, invoice templates, and tax calculation examples
+   d) Research integration requirements with accounting systems and financial APIs
+   e) Document comprehensive implementation notes assuming complete memory reset between tasks
+
+**PHASE 4** Update WBS checklist items with detailed implementation notes:
+
+   a) Structure bullet points as: **Plan Review & Alignment: [notes]**, **Comprehensive Research: [methods_and_sources]**, **Findings: [notes]**, **Actions: [methods_and_modifications]**, **Backups: [file_locations]**, **Update: [completion_notes]**
+   b) Include backup instructions for all modified files in `\docs\plans\billing_management\backups`
+
+**PHASE 5** Add comprehensive implementation details to each checklist item:
+
+   a) Design modular billing engine with configurable billing cycles and rules
+   b) Plan database schema for invoices, payments, credits, refunds, and financial transactions
+   c) Create automated invoice generation system with customizable templates
+   d) Design payment tracking and reconciliation processes
+   e) Plan admin interface for billing oversight and manual interventions
+   f) Design user-facing billing dashboard with invoice history and payment management
+   g) Include tax calculation integration and compliance reporting
+   h) End each item with: "a. refer to research document, b. complete implementation, c. update checklist with completion notes"
+
+**PHASE 6** Implementation-specific requirements:
+
+   a) **Billing Engine Core:**
+      - Automated billing cycle management (monthly, yearly, custom)
+      - Proration calculations for mid-cycle changes
+      - Usage-based billing aggregation and calculation
+      - Credit and discount application logic
+      - Multi-currency support with exchange rate handling
+   
+   b) **Database Schema Design:**
+      - Invoices table with line items and tax breakdowns
+      - Payments and refunds tracking with full audit trails
+      - Billing schedules and recurring charge definitions
+      - Credits, discounts, and promotional codes
+      - Tax rates and jurisdiction mapping
+      - Financial transaction logs with reconciliation status
+   
+   c) **Invoice Management System:**
+      - PDF invoice generation with customizable templates
+      - Invoice numbering and sequencing
+      - Multi-language invoice support
+      - Invoice delivery via email with tracking
+      - Invoice status tracking (draft, sent, paid, overdue)
+   
+   d) **Payment Processing Integration:**
+      - Automatic payment collection for recurring subscriptions
+      - Payment retry logic with exponential backoff
+      - Failed payment notification and dunning sequences
+      - Payment method updates and card expiration handling
+      - Refund processing and accounting
+   
+   e) **Admin Interface Components:**
+      - Billing dashboard with key metrics and alerts
+      - Invoice management and manual invoice creation
+      - Payment tracking and reconciliation tools
+      - Dunning management and collection workflows
+      - Financial reporting and analytics
+      - Tax configuration and compliance monitoring
+      - Customer billing history and account management
+
+**PHASE 7** Advanced Billing Features:
+
+   a) **Dunning Management:**
+      - Configurable dunning sequences (email reminders, account restrictions)
+      - Grace period management for failed payments
+      - Automated account suspension and reactivation
+      - Collection agency integration hooks
+   
+   b) **Tax and Compliance:**
+      - Automated tax calculation based on customer location
+      - Tax exempt customer handling
+      - Compliance reporting for various jurisdictions
+      - Integration with tax calculation services (Avalara, TaxJar)
+   
+   c) **Financial Reporting:**
+      - Revenue recognition and accrual accounting
+      - Monthly recurring revenue (MRR) and annual recurring revenue (ARR) tracking
+      - Churn analysis and cohort reporting
+      - Cash flow projections and forecasting
+      - Export capabilities for accounting systems
+   
+   d) **User Interface Components:**
+      - Billing dashboard with payment history and upcoming charges
+      - Invoice download and email functionality
+      - Payment method management with PCI compliance
+      - Billing address and tax information updates
+      - Subscription modification and cancellation flows
+      - Credit and refund request forms
+
+**PHASE 8** Integration and Automation:
+
+   a) **Payment System Integration:**
+      - Seamless integration with payment gateway webhooks
+      - Automatic payment status updates and reconciliation
+      - Multi-gateway support with fallback processing
+      - Payment method tokenization and secure storage
+   
+   b) **Pricing Plan Integration:**
+      - Automatic plan change billing adjustments
+      - Usage-based billing calculations
+      - Feature usage tracking and billing integration
+      - Plan upgrade/downgrade proration handling
+   
+   c) **External System Integration:**
+      - Accounting system export (QuickBooks, Xero, etc.)
+      - CRM system synchronization
+      - Business intelligence and analytics platforms
+      - Customer communication platforms
+
+**PHASE 9** Testing and Validation:
+
+   a) Test automated billing cycles and invoice generation
+   b) Validate payment processing and reconciliation accuracy
+   c) Test dunning sequences and failed payment handling
+   d) Verify tax calculations across different jurisdictions
+   e) Test admin interface billing management functions
+   f) Validate user billing dashboard functionality
+   g) Test integration with payment systems and pricing plans
+   h) Perform financial accuracy testing and audit trail verification
+
+**PHASE 10** Cleanup Phase:
+
+   a) Prompt user to test complete billing cycle from subscription to payment
+   b) Verify invoice generation, delivery, and payment processing
+   c) Confirm dunning management and failed payment handling works correctly
+   d) Test admin interface can manage all billing operations
+   e) Validate financial reporting accuracy and compliance features
+   f) Move backups to `/archive/billing_management_[timestamp]`
+   g) Update root README.md with billing management system documentation
+   h) Create cleanup log in `/docs/logs/cleanup/billing_management_implementation.md`
+   i) Update `/docs/logs/README.md` cleanup table
+
+**CONSTRAINTS:**
+
+1) Billing system must maintain complete financial accuracy with full audit trails
+2) All billing operations must be reversible and traceable
+3) Support multiple billing models (subscription, usage-based, one-time, hybrid)
+4) Include comprehensive tax compliance and multi-jurisdiction support
+5) Admin interface must provide complete billing oversight and manual intervention capabilities
+6) User interfaces must provide transparency in billing and easy payment management
+7) Integration with payment systems must handle all edge cases and failures gracefully
+8) Include robust dunning management with configurable collection workflows
+9) Financial reporting must support standard accounting practices and export formats
+10) System must scale to handle high-volume billing operations
+11) Include fraud detection and prevention measures
+12) Maintain PCI DSS compliance for all payment-related operations
+13) Support multiple currencies and international billing requirements
+14) Include disaster recovery and data backup procedures for financial data
+15) Provide comprehensive API access for third-party integrations

@@ -1,0 +1,121 @@
+---
+description: Protocol for implementing modular payment processing systems with multiple gateway support and centralized management
+globs: 
+alwaysApply: false
+---
+
+When this protocol is tagged, you are to:
+
+**STEP 1** Create the following directories:
+
+    a) `\docs\plans\payment_systems\`
+    b) `\docs\plans\payment_systems\research\`
+    c) `\docs\plans\payment_systems\backups\`
+
+**STEP 2** Research the topic, create a plan for implementation.
+
+   a) Research the existing codebase structure, authentication systems, database schema, and API patterns via grep, listdir, and README.md analysis
+   b) Research the current SQL schema via dump file to understand existing user, transaction, and financial data structures
+   c) Research the specific payment gateway APIs required: Stripe, Authorize.net, and ConnectBooster, including their integration patterns, webhook systems, and API documentation
+   d) Create a proposed modular file structure including:
+      - Payment gateway abstraction layer
+      - Transaction logging and audit trails
+      - Webhook handling systems
+      - Admin interface components
+      - User-facing payment components
+   e) Document findings in `\docs\plans\payment_systems\plan.md`
+
+**STEP 3** Create a Work Breakdown Structure (WBS) checklist following standard project phases: Research, Planning, Design, Development, Testing, and Refinement.
+
+**STEP 4** Research each WBS task individually, documenting dependencies and creating mini-plans:
+
+   a) Reference README, SQL Database Dump, and relevant codebase files for alignment
+   b) Create research files in `\docs\plans\payment_systems\research\[task_files]`
+   c) Include implementation code examples, contextual references, and web links in research documents
+   d) Review plan alignment and update accordingly
+   e) Document comprehensive notes assuming complete memory loss between tasks
+
+**PHASE 4** Update WBS checklist items with detailed implementation notes:
+
+   a) Structure bullet points as: **Plan Review & Alignment: [notes]**, **Comprehensive Research: [methods_and_sources]**, **Findings: [notes]**, **Actions: [methods_and_modifications]**, **Backups: [file_locations]**, **Update: [completion_notes]**
+   b) Include backup instructions for all modified files in `\docs\plans\payment_systems\backups`
+
+**PHASE 5** Add comprehensive implementation details to each checklist item:
+
+   a) Include modular design patterns ensuring easy attachment/detachment of payment gateways
+   b) Document database schema changes for transaction logging, payment methods, and audit trails
+   c) Plan webhook endpoint creation for payment status updates
+   d) Design admin interface wireframes and component structure
+   e) Plan user-facing payment forms and flow diagrams
+   f) Include security considerations (PCI compliance, data encryption, secure API keys)
+   g) End each item with: "a. refer to research document, b. complete implementation, c. update checklist with completion notes"
+
+**PHASE 6** Implementation-specific requirements:
+
+   a) **Payment Gateway Abstraction Layer:**
+      - Create interface contracts for Stripe, Authorize.net, and ConnectBooster
+      - Implement factory pattern for gateway selection between the three processors
+      - Include error handling and fallback mechanisms for each processor
+      - Standardize API response formats across all three gateways
+   
+   b) **Database Schema Updates:**
+      - Payment methods table (stored securely)
+      - Transaction logs with full audit trails
+      - Payment gateway configuration table
+      - Webhook event logging
+   
+   c) **Admin Interface Components:**
+      - Gateway configuration management for Stripe, Authorize.net, and ConnectBooster
+      - Transaction monitoring dashboard with processor-specific details
+      - Payment method management across all three processors
+      - Webhook status monitoring for all gateway webhooks
+      - Financial reporting tools with processor comparison metrics
+      - Processor failover and load balancing configuration
+   
+   d) **User Interface Components:**
+      - Secure payment forms
+      - Payment method selection
+      - Transaction history views
+      - Payment status notifications
+   
+   e) **API Endpoints:**
+      - RESTful payment processing endpoints with processor selection logic
+      - Separate webhook receivers for Stripe, Authorize.net, and ConnectBooster
+      - Admin management endpoints for each processor configuration
+      - User payment history endpoints with processor-agnostic data format
+
+**PHASE 7** Testing and Security Phase:
+
+   a) Create comprehensive test suites for Stripe, Authorize.net, and ConnectBooster integration
+   b) Test processor failover scenarios and fallback logic
+   c) Implement security testing for PCI DSS compliance across all processors
+   d) Test webhook reliability and signature verification for all three gateways
+   e) Validate admin interface functionality with all processor configurations
+   f) Test user payment flows end-to-end with each processor
+   g) Performance testing under load with processor load balancing
+
+**PHASE 8** Cleanup Phase:
+
+   a) Prompt user to test payment processing with test transactions across Stripe, Authorize.net, and ConnectBooster
+   b) Verify admin interface can manage all three payment processor configurations
+   c) Confirm webhook processing and transaction logging accuracy for all processors
+   d) Move backups to `/archive/payment_systems_[timestamp]`
+   e) Update root README.md with payment system documentation
+   f) Create cleanup log in `/docs/logs/cleanup/payment_systems_implementation.md`
+   g) Update `/docs/logs/README.md` cleanup table
+
+**CONSTRAINTS:**
+
+1) Payment system must be completely modular - Stripe, Authorize.net, and ConnectBooster can be enabled/disabled independently
+2) Include processor-specific configuration management while maintaining unified user experience
+3) All payment data must be handled securely with encryption at rest and in transit
+4) Include comprehensive audit logging for all financial transactions across all processors
+5) Admin interface must provide complete control over all three payment processor configurations
+6) User interfaces must be responsive and accessible regardless of active processor
+7) All webhook endpoints must include signature verification specific to each processor
+8) Never store sensitive payment data - use tokenization where possible for all processors
+9) Include rate limiting and fraud detection considerations for each processor
+10) Maintain PCI DSS compliance throughout implementation across all processors
+11) Document all security measures and compliance requirements for each processor
+12) Include processor failover logic and load balancing capabilities
+13) Standardize transaction data format regardless of processor used

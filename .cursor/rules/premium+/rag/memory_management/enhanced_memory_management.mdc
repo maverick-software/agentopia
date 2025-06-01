@@ -1,0 +1,180 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Enhanced Memory Management System for AI Agents
+
+## Overview
+
+This document describes a comprehensive memory management architecture for AI agents that balances retention and forgetting, enabling production-ready systems with scalable long-term memory capabilities.
+
+## Core Memory Architecture
+
+### 1. Three-Tier Memory System
+
+#### Working Memory (Short-term Memory)
+- **Capacity**: Limited context window (typically 4K-200K tokens)
+- **Duration**: Active conversation session
+- **Storage**: In-memory cache with context window management
+- **Purpose**: Maintains current conversation context and immediate reasoning steps
+- **Implementation**: 
+  - Rolling window of recent messages
+  - Dynamic summarization for overflow management
+  - Priority-based retention (importance scoring 1-100)
+
+#### Episodic Memory (Long-term Event Storage)
+- **Capacity**: Unlimited (database-bound)
+- **Duration**: Persistent across sessions
+- **Storage**: Hybrid Vector + Document Database
+- **Purpose**: Stores specific interactions, events, and experiences
+- **Implementation**:
+  - Vector embeddings for semantic search
+  - Temporal metadata for chronological retrieval
+  - Significance scoring (1-100) for archival decisions
+  - Links to semantic graph nodes/edges
+
+#### Semantic Memory (Long-term Knowledge Storage)
+- **Capacity**: Unlimited (graph-bound)
+- **Duration**: Persistent and evolving
+- **Storage**: Graph Database with labeled nodes and edges
+- **Purpose**: Stores facts, entities, concepts, and relationships
+- **Implementation**:
+  - Entity nodes with properties
+  - Labeled relationship edges
+  - Confidence scoring (0-100)
+  - Version control for knowledge evolution
+
+### 2. Memory Processing Pipeline
+
+#### Phase 1: Extraction
+1. **Input Processing**
+   - Latest message/interaction
+   - Rolling context summary
+   - Recent conversation history (m messages)
+
+2. **Asynchronous Memory Candidate Generation**
+   - Entity extraction
+   - Relationship identification
+   - Significance assessment
+   - Temporal tagging
+
+#### Phase 2: Update/Consolidation
+1. **Memory Operations**
+   - ADD: New unique memories
+   - UPDATE: Modify existing entries
+   - DELETE: Remove contradictions
+   - MERGE: Deduplicate similar memories
+   - ARCHIVE: Move low-significance memories
+
+2. **Conflict Resolution**
+   - Confidence-based prioritization
+   - Temporal precedence rules
+   - Source reliability weighting
+
+### 3. Intelligent Sub-Agents
+
+#### The Correlator Agent
+- **Function**: Discovers patterns and connections in memory
+- **Process**:
+  1. Continuously analyzes episodic memories
+  2. Identifies potential relationships
+  3. Proposes new semantic connections
+  4. Submits to Critic for validation
+- **Optimization**: Runs asynchronously in background
+
+#### The Critic Agent
+- **Function**: Validates and scores memory connections
+- **Scoring System**:
+  - Node Quality Score = (Number of edges × Average edge quality)
+  - Edge Quality Score = Average(Connected nodes quality)
+  - Confidence Score = Weighted combination (0-100)
+- **Prevents**: Cognitive dissonance and false connections
+
+### 4. Memory Optimization Strategies
+
+#### Deduplication
+- **Graph Deduplication**:
+  - Entity resolution using similarity matching
+  - Edge consolidation for merged nodes
+  - Property conflict resolution
+- **Document Deduplication**:
+  - MinHash for fast fuzzy matching
+  - Embedding-based semantic similarity
+  - Threshold-based merging (configurable)
+
+#### Archival & Forgetting
+- **Archival Triggers**:
+  - Age-based (configurable time windows)
+  - Access frequency below threshold
+  - Significance score below threshold
+  - Storage quota management
+- **Retrieval from Archive**:
+  - On-demand lazy loading
+  - Context-triggered restoration
+  - Background pre-fetching for predicted needs
+
+### 5. Implementation Technologies
+
+#### Recommended Stack
+- **Primary Database**: MongoDB Atlas
+  - Document storage with vector search
+  - Hybrid text + vector indexes
+  - Horizontal scalability
+  - Workload isolation
+  
+- **Alternative Options**:
+  - Neo4j (graph-focused)
+  - PostgreSQL + pgvector (open-source)
+  - Elasticsearch (text-search optimized)
+
+#### Memory Frameworks
+- **Mem0**: Production-ready memory layer
+  - 26% accuracy improvement over baseline
+  - 91% latency reduction
+  - 90% token savings
+- **LangChain Memory**: Flexible integration
+- **Custom Implementation**: For specific requirements
+
+### 6. Performance Metrics
+
+#### Key Performance Indicators
+- **Accuracy Metrics**:
+  - Fact recall precision: >95%
+  - Relationship accuracy: >90%
+  - Context relevance: >85%
+
+- **Efficiency Metrics**:
+  - Memory search latency: <200ms (p50)
+  - End-to-end response: <1.5s (p95)
+  - Token usage: 90% reduction vs full-context
+
+- **Scale Metrics**:
+  - Memories per user: 10K-100K
+  - Concurrent users: 1K-10K
+  - Storage efficiency: 10x compression
+
+### 7. Production Considerations
+
+#### Multi-tenancy
+- User-level memory isolation
+- Organization-level shared memory
+- Privacy-preserving memory sharing
+- GDPR-compliant data management
+
+#### Reliability
+- Memory backup strategies
+- Failover mechanisms
+- Consistency guarantees
+- Recovery procedures
+
+#### Monitoring
+- Memory growth tracking
+- Access pattern analysis
+- Performance degradation alerts
+- Quality score distributions
+
+## Conclusion
+
+This enhanced memory management system provides a scalable, production-ready foundation for AI agents that can truly remember, learn, and evolve over time while maintaining performance and cost efficiency.
+

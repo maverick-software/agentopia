@@ -1,0 +1,140 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP Developer Guide - Protocol Layer
+
+## MCP Protocol Layer
+
+On top of the transport, the Protocol layer defines the message format and basic interaction patterns. MCP uses JSON-RPC 2.0 for all its messages. This means each message is a JSON object that is one of:
+
+**Request**: A call from one side to invoke a method on the other, expecting a response. Contains a jsonrpc field (value "2.0"), an id (to match replies), a method name, and optional params.
+
+**Response**: A reply to a request. Must include the same id and either a result (on success) or an error (on failure).
+
+**Notification**: A one-way message that just has a method and params (no response expected, no id field).
+
+The MCP protocol layer frames all its operations in terms of JSON-RPC methods and notifications. For example, "list available tools" might be a request with method: "tools/list" and a corresponding result, whereas an asynchronous event like "new data available" could be a notification method. Both client and server can be callers or responders – MCP is bidirectional. The client typically initiates the session and tool calls, while the server may send notifications or request things like user authorization. The protocol layer ensures that each request from one side gets exactly one response from the other (or an error), matching by id.
+
+## JSON-RPC Message Structure and Example
+
+MCP does not extend JSON-RPC's syntax but defines a set of method names and parameters for various actions. All method names are namespaced (often by category). Key categories include resources/*, tools/*, prompts/*, and auth/*. For instance:
+
+- `resources/get` – request to retrieve the content of a resource by URI
+- `tools/call` – request to execute a tool with given arguments
+- `auth/requestAuthorization` – (if supported) request to initiate an auth flow
+
+### Example Request
+
+A typical JSON-RPC request from client to server might look like:
+
+```json
+{ 
+  "jsonrpc": "2.0",
+  "id": 42,
+  "method": "tools/call",
+  "params": { 
+    "name": "get_weather", 
+    "arguments": { "latitude": 40.7, "longitude": -74.0 } 
+  }
+}
+```
+
+This would ask the server to run the get_weather tool with the given coordinates.
+
+### Example Response
+
+The server would process that and send back a response such as:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 42,
+  "result": {
+    "output": "It's 75°F and sunny." 
+  }
+}
+```
+
+### Example Error Response
+
+Or if something went wrong, an error:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 42,
+  "error": { "code": -32601, "message": "Method not found" }
+}
+```
+
+## Error Handling
+
+MCP adopts the standard JSON-RPC error codes like -32601 Method not found, etc., and allows custom error codes < -32000 for application-specific errors.
+
+## Message Types and Flows
+
+After the initial handshake (discussed in Session layer), either side can send:
+
+**Requests**: e.g., client calls tools/call, server might call back to client with auth/authorize (if it needs user approval).
+
+**Notifications**: e.g., server sends resources/updated (no reply needed), or client sends an abort notification to cancel an operation.
+
+## Implementation in Code
+
+The protocol layer defines how these messages are correlated and handled. In code, an MCP client library typically provides methods to register handlers for incoming requests/notifications and to send requests easily. For example, a client might register a handler for auth/completeAuthorization to handle a server's auth callback, while a server registers handlers for things like tools/call.
+
+### Technologies & Libraries
+
+You can use existing JSON-RPC libraries, but the MCP SDKs already incorporate JSON-RPC handling with strong typing (using schemas for params/results). For example, the TypeScript SDK has `server.setRequestHandler(schema, handler)` to map a method to a handler function, and the Python SDK uses decorators (`@app.list_resources()` as seen below) for the same. These abstract away the low-level JSON parsing.
+
+### TypeScript Server Example
+
+```javascript
+// TypeScript server: define handler for a "ListResources" request
+server.setRequestHandler(ListResourcesRequestSchema, async (params) => {
+  // no params in this request type
+  return {
+    resources: [
+      { uri: "example://resource", name: "Example Resource" }
+    ]
+  };
+});
+```
+
+### Python Server Example
+
+```python
+# Python server: using decorator to handle list_resources request
+@app.list_resources()
+async def list_resources() -> list[types.Resource]:
+    return [
+        types.Resource(uri="example://resource", name="Example Resource")
+    ]
+```
+
+In both cases, when a client sends a JSON-RPC "method": "resources/list" (for example), the server will invoke these handlers and return the result in a JSON-RPC response. The library takes care of packing the return value into the proper JSON structure.
+
+## Communication Flow in Protocol Layer
+
+After setup, interactions follow a request-response or notification pattern:
+
+1. The caller constructs a JSON object with a unique id (if expecting a result) and sends it
+2. The receiver finds a matching handler for the method. If none, it returns an error (-32601 MethodNotFound)
+3. If a handler runs, it may perform arbitrary actions (read a file, call an API) and then returns a result or throws an error
+4. The receiver's MCP framework then sends back a JSON-RPC response with the result or error
+
+Notifications are simpler: the sender just emits the JSON, and the receiver invokes any registered handler or ignores it (no ack required).
+
+Because JSON-RPC is stateless at the message level, the Protocol layer relies on the Session layer to maintain any needed state (like capabilities negotiation or open context). We'll cover that next.
+
+---
+
+**Related Files in This Guide Series:**
+- `01-overview-introduction.mdc` - Overview & Introduction
+- `02-transport-layer.mdc` - Transport Layer Implementation
+- `04-session-layer.mdc` - Session Management & Handshake
+- `05-application-layer.mdc` - Tools, Resources & Prompts
+- `06-authentication-oauth.mdc` - OAuth & Security
+- `07-summary-resources.mdc` - Implementation Summary & Sources

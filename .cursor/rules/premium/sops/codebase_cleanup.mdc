@@ -1,0 +1,230 @@
+---
+description: The Cleanup Protocol organizes files, removes redundancies, updates dependencies, and ensures project integrity.
+globs: 
+alwaysApply: false
+---
+# 🧹 **Cleanup Protocol Rules**
+## *Comprehensive Project Organization & Maintenance*
+
+---
+
+## 📋 **Overview**
+
+This protocol establishes systematic procedures for maintaining project cleanliness, organization, and integrity. Follow these steps to ensure optimal codebase structure and eliminate redundancies while preserving critical functionality.
+
+---
+
+## 🎯 **Core Objectives**
+
+- **🔄 Systematic Organization**: Structured approach to file and folder management
+- **🗑️ Redundancy Elimination**: Remove duplicates and unnecessary files
+- **📝 Documentation Accuracy**: Ensure all documentation reflects current state
+- **⚡ Performance Optimization**: Maintain efficient project structure
+- **🔒 Data Integrity**: Preserve critical files and functionality
+
+---
+
+## ✅ **Mandatory Cleanup Checklist**
+
+### **1. 💾 Commit and Approve Changes**
+
+#### **Pre-Cleanup Requirements**
+- [ ] **Ensure All Changes Committed**: All changes must be committed to GitHub after receiving approval
+- [ ] **No Pending Modifications**: No cleanup should begin until all pending modifications have been reviewed, merged, and tested
+- [ ] **Approval Verification**: Confirm all changes have proper approval before proceeding
+- [ ] **Backup Creation**: Create backup of current state before cleanup begins
+
+---
+
+### **2. 📖 Review and Update index.md**
+
+#### **Documentation Verification**
+- [ ] **Verify Accuracy**: Verify that `index.md` accurately reflects the current project structure
+- [ ] **Document All Components**: Ensure all folders, files, and functions are properly documented
+- [ ] **Update Discrepancies**: If discrepancies are found, update `index.md` before proceeding
+- [ ] **Structure Validation**: Confirm documentation structure follows project guidelines
+
+---
+
+### **3. 🗂️ Organize Non-Code Files**
+
+#### **File Organization Tasks**
+- [ ] **Identify Documentation**: Identify documentation files (`.md`), logs, and configuration files
+- [ ] **Move Misplaced Files**: Move misplaced files into designated subfolders for better organization
+- [ ] **Follow Guidelines**: Ensure documentation structure follows project guidelines
+- [ ] **Categorize Properly**: Group similar files together in logical folder structures
+
+---
+
+### **4. 🔍 Remove Duplicates and Unnecessary Files**
+
+#### **Duplicate Detection & Removal**
+- [ ] **Identify Duplicates**: Identify duplicate batch files, scripts, or outdated shell commands
+- [ ] **Remove Unnecessary**: Remove files that are no longer required to maintain efficiency
+- [ ] **Document Uncertainties**: If unsure about deletion, log them in `.\docs\cleanup_review.md` for further review
+- [ ] **Verify Dependencies**: Ensure removed files don't break existing functionality
+
+---
+
+### **5. 📊 Review and Clean Log Files**
+
+#### **5a. 📁 Review All Log Files in `/logs/`**
+- [ ] **Identify All Logs**: Identify and analyze all log files stored in the `/logs/` directory
+- [ ] **Categorize by Purpose**: Categorize them based on their purpose:
+  - **🖥️ System logs**
+  - **❌ Error logs** 
+  - **📈 Activity logs**
+- [ ] **Assess Log Quality**: Review log content for relevance and accuracy
+
+#### **5b. 👤 Remove Profile-Specific Log Files**
+- [ ] **Identify Profile Logs**: Identify and delete log files created for specific profiles or users that are no longer relevant
+- [ ] **Preserve System Logs**: Ensure that system-wide logs remain intact
+- [ ] **Document Removals**: Log any profile-specific files removed for audit trail
+
+#### **5c. 🗓️ Prune General Log Entries Older Than 30 Days**
+- [ ] **Open and Review**: Open and review each log file
+- [ ] **Remove Old Entries**: Remove all log entries that are older than 30 days
+- [ ] **Maintain Rolling History**: Maintain a rolling log history to ensure recent activity is preserved
+- [ ] **Verify Integrity**: Ensure log file structure remains intact after pruning
+
+#### **5d. 📝 Clean _change.log Files**
+- [ ] **Identify Change Logs**: Identify all `_change.log` files in the project
+- [ ] **Remove Old Entries**: Remove all entries older than 30 days to keep the logs manageable
+- [ ] **Preserve Recent Changes**: Maintain recent change history for reference
+- [ ] **Update Documentation**: Ensure change log format remains consistent
+
+---
+
+### **6. 📦 Manage the Archive Folder**
+
+#### **Archive Management Tasks**
+- [ ] **Create Backups**: Backup any necessary files before proceeding
+- [ ] **Empty Archive**: Empty the Archive folder completely to prepare for new files
+- [ ] **Verify No Critical Loss**: Ensure no critical files are lost during this process
+- [ ] **Document Archive Actions**: Log all archive operations for audit trail
+
+---
+
+### **7. 🐍 Move Unused or Redundant .py Files**
+
+#### **Python File Management**
+- [ ] **Scan Repository**: Scan the repository for obsolete or unused Python files
+- [ ] **Move to Archive**: Move these files to the Archive folder unless explicitly required
+- [ ] **Flag Unclear Files**: If files are unclear in their usage, flag them for review in `.\docs\cleanup_review.md`
+- [ ] **Verify Dependencies**: Ensure moved files don't break import chains
+
+---
+
+### **8. 🔗 Update Imports and Dependencies**
+
+#### **Dependency Management**
+- [ ] **Check Broken Imports**: Check for broken imports or missing dependencies caused by file restructuring
+- [ ] **Update Python Imports**: Update all necessary imports in Python files to ensure continuity
+- [ ] **Run Test Suite**: Run a test suite to validate that the refactored code still functions correctly
+- [ ] **Verify Functionality**: Confirm all modules load and function as expected
+
+---
+
+### **9. ✅ Final Review and Verification**
+
+#### **Comprehensive Validation**
+- [ ] **Perform Dry Run**: Perform a dry run of the project to confirm all changes are stable
+- [ ] **Verify index.md**: Verify that `index.md` is still accurate after all file movements
+- [ ] **Review Flagged Items**: Cross-check with `.\docs\cleanup_review.md` to ensure flagged items were reviewed
+- [ ] **Test All Systems**: Ensure all critical functionality remains operational
+
+---
+
+### **10. 📝 Commit and Document Cleanup Changes**
+
+#### **Final Documentation & Commit**
+- [ ] **Complete Verification**: Once verification is complete, commit all cleanup-related changes to GitHub
+- [ ] **Update index.md**: Update `index.md` one final time to reflect the cleaned structure
+- [ ] **Document Changes**: Document any major changes or removed files in `.\docs\cleanup_log.md`
+- [ ] **Create Summary**: Provide comprehensive summary of cleanup activities performed
+
+---
+
+## 🤖 **Automation Recommendations**
+
+### **Automated Cleanup Tasks**
+- [ ] **Implement Detection Scripts**: Implement scripts to automate redundant tasks like:
+  - **🔍 Detecting duplicates**
+  - **📦 Identifying unused imports**
+  - **🔗 Checking for missing dependencies**
+- [ ] **Schedule Audits**: Schedule periodic cleanup audits to prevent clutter from accumulating in the repository
+- [ ] **Monitor File Growth**: Implement monitoring for file and folder growth patterns
+- [ ] **Automated Reporting**: Create automated reports on cleanup activities and recommendations
+
+---
+
+## 📁 **Required Documentation Locations**
+
+### **Cleanup Documentation Files**
+- **📋 Cleanup Review**: `.\docs\cleanup_review.md` - Items flagged for manual review
+- **📊 Cleanup Log**: `.\docs\cleanup_log.md` - Record of all cleanup activities
+- **📖 Project Index**: `.\index.md` - Current project structure documentation
+- **📦 Archive Log**: `.\archive\archive_log.md` - Record of archived files
+
+### **Log File Locations**
+- **📁 System Logs**: `.\logs\` - All system and application logs
+- **📝 Change Logs**: `*_change.log` - Distributed change logs throughout project
+- **🗂️ Activity Logs**: `.\logs\activity\` - User and system activity records
+
+---
+
+## 🔍 **Quality Assurance Checklist**
+
+### **Pre-Cleanup Verification**
+- [ ] All pending changes committed and approved
+- [ ] Backup created of current project state
+- [ ] Documentation reviewed and current
+- [ ] Dependencies mapped and understood
+
+### **During Cleanup Verification**
+- [ ] Each step completed systematically
+- [ ] All file movements documented
+- [ ] No critical files accidentally removed
+- [ ] Regular verification of project functionality
+
+### **Post-Cleanup Verification**
+- [ ] Project runs without errors
+- [ ] All documentation updated and accurate
+- [ ] Cleanup activities logged comprehensively
+- [ ] Archive properly organized and documented
+
+---
+
+## 🚀 **Success Criteria**
+
+### **Cleanup Quality Metrics**
+- **📊 File Reduction**: Measurable reduction in unnecessary files
+- **🗂️ Organization Score**: Improved folder structure and file categorization
+- **⚡ Performance**: Faster project load times and navigation
+- **📝 Documentation Accuracy**: 100% alignment between docs and actual structure
+
+### **Maintenance Standards**
+- **🔄 Consistency**: Uniform file naming and organization patterns
+- **🧹 Cleanliness**: No redundant or obsolete files remaining
+- **🔒 Integrity**: All critical functionality preserved and verified
+- **📈 Efficiency**: Streamlined project structure for optimal workflow
+
+---
+
+## ⚠️ **Critical Reminders**
+
+### **🔒 Safety Protocols**
+- **RULE #3 Compliance**: Never delete files - move to archive instead
+- **Backup First**: Always create backups before major cleanup operations
+- **Test Thoroughly**: Verify functionality after each major cleanup step
+- **Document Everything**: Maintain comprehensive logs of all cleanup activities
+
+### **🎯 Focus Areas**
+- **Preserve Functionality**: Ensure no critical features are broken
+- **Maintain Documentation**: Keep all documentation current and accurate
+- **Systematic Approach**: Follow the checklist methodically
+- **Quality Over Speed**: Thorough cleanup is better than rushed cleanup
+
+---
+
+**🎯 Remember**: The goal is to create a clean, organized, and efficient project structure while preserving all critical functionality and maintaining comprehensive documentation of all changes made.

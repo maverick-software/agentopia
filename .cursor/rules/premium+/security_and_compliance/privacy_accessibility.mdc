@@ -1,0 +1,332 @@
+---
+description: Protocol for implementing comprehensive privacy compliance (GDPR, CCPA) and accessibility standards (WCAG 2.1, Section 508, ADA) with automated monitoring and user rights management
+globs: 
+alwaysApply: false
+---
+
+When this protocol is tagged, you are to:
+
+**STEP 1** Create the following directories:
+
+    a) `\docs\plans\privacy_and_accessibility\`
+    b) `\docs\plans\privacy_and_accessibility\research\`
+    c) `\docs\plans\privacy_and_accessibility\backups\`
+    d) `\docs\compliance\gdpr\`
+    e) `\docs\compliance\ccpa\`
+    f) `\docs\compliance\accessibility\`
+
+**STEP 2** Research the topic, create a plan for implementation.
+
+   a) Research existing user data handling, consent management, and UI/UX patterns in codebase
+   b) Analyze current SQL schema for personal data identification, consent tracking, and accessibility metadata
+   c) Research GDPR requirements for data subject rights, lawful basis, data protection by design, and cross-border transfers
+   d) Research CCPA requirements for consumer rights, data categories, business purposes, and opt-out mechanisms
+   e) Research WCAG 2.1 Level AA requirements across four principles (Perceivable, Operable, Understandable, Robust)
+   f) Research Section 508 and ADA digital accessibility requirements for government and public accommodation compliance
+   g) Study automated accessibility testing tools, privacy impact assessments, and user rights management systems
+   h) Create proposed modular file structure including:
+      - Privacy management dashboard and consent system
+      - Data subject rights fulfillment engine
+      - Accessibility compliance monitoring and remediation
+      - User preference and consent management
+      - Automated privacy and accessibility testing
+      - Data mapping and inventory system
+      - Admin privacy and accessibility management interface
+      - User privacy controls and accessibility settings
+      - Cookie and tracking consent management
+      - Data breach notification and incident response
+   i) Document findings in `\docs\plans\privacy_and_accessibility\plan.md`
+
+**STEP 3** Create a Work Breakdown Structure (WBS) checklist following standard project phases: Research, Planning, Design, Development, Testing, and Refinement.
+
+**STEP 4** Research each WBS task individually, documenting privacy and accessibility requirements:
+
+   a) Reference README, SQL Database Dump, existing user management and UI code
+   b) Create research files in `\docs\plans\privacy_and_accessibility\research\[compliance_area]_requirements.md`
+   c) Include privacy impact assessments, accessibility audit checklists, and implementation examples
+   d) Research integration requirements with existing systems and third-party compliance tools
+   e) Document comprehensive implementation notes with specific regulation citations and WCAG success criteria
+
+**PHASE 4** Update WBS checklist items with detailed privacy and accessibility implementation notes:
+
+   a) Structure bullet points as: **Plan Review & Alignment: [notes]**, **Comprehensive Research: [regulations_and_standards]**, **Findings: [gaps_and_requirements]**, **Actions: [implementation_and_controls]**, **Backups: [file_locations]**, **Update: [compliance_verification_notes]**
+   b) Include backup instructions for all modified files in `\docs\plans\privacy_and_accessibility\backups`
+
+**PHASE 5** Add comprehensive privacy and accessibility implementation details to each checklist item:
+
+   a) Design modular privacy framework supporting GDPR and CCPA simultaneously
+   b) Plan database schema enhancements for personal data mapping and consent tracking
+   c) Create automated accessibility testing and monitoring system
+   d) Design admin interface for privacy and accessibility management
+   e) Plan user-facing privacy controls and accessibility preferences
+   f) Include continuous monitoring and automated remediation capabilities
+   g) End each item with: "a. refer to compliance research document, b. implement controls, c. verify privacy/accessibility requirements met, d. update checklist with compliance verification"
+
+**PHASE 6** GDPR Implementation Requirements:
+
+   a) **Lawful Basis and Consent Management (Art. 6, 7):**
+      - Granular consent collection and management system
+      - Lawful basis tracking for each data processing activity
+      - Consent withdrawal mechanisms with immediate effect
+      - Consent renewal and re-confirmation processes
+      - Clear and plain language consent notices
+   
+   b) **Data Subject Rights (Art. 15-22):**
+      - Right to access: Automated personal data export
+      - Right to rectification: Self-service data correction
+      - Right to erasure: Automated "right to be forgotten" implementation
+      - Right to restrict processing: Granular processing controls
+      - Right to data portability: Machine-readable data export
+      - Right to object: Opt-out mechanisms for each processing purpose
+      - Rights related to automated decision-making and profiling
+   
+   c) **Data Protection by Design and Default (Art. 25):**
+      - Privacy impact assessments (PIAs) for new features
+      - Data minimization principles in data collection
+      - Purpose limitation and storage limitation controls
+      - Pseudonymization and anonymization techniques
+      - Regular privacy reviews and updates
+   
+   d) **Data Processing Records (Art. 30):**
+      - Comprehensive data processing activity inventory
+      - Data flow mapping and documentation
+      - Third-party processor and controller relationships
+      - International data transfer documentation
+      - Regular processing activity reviews and updates
+   
+   e) **Breach Notification (Art. 33, 34):**
+      - Automated breach detection and classification
+      - 72-hour supervisory authority notification system
+      - Data subject notification for high-risk breaches
+      - Breach documentation and evidence collection
+      - Breach response workflow and escalation procedures
+
+**PHASE 7** CCPA Implementation Requirements:
+
+   a) **Consumer Rights (Sections 1798.100-1798.150):**
+      - Right to know: Disclosure of personal information collection and use
+      - Right to delete: Automated deletion request processing
+      - Right to opt-out: "Do Not Sell My Personal Information" implementation
+      - Right to non-discrimination: Equal service regardless of privacy choices
+      - Right to limit use of sensitive personal information
+   
+   b) **Data Categories and Business Purposes:**
+      - Personal information category classification system
+      - Business purpose documentation and tracking
+      - Third-party sharing and selling disclosure
+      - Sensitive personal information identification and protection
+      - Commercial purpose vs. business purpose differentiation
+   
+   c) **Consumer Request Fulfillment:**
+      - Identity verification for consumer requests
+      - Request processing workflows and timelines
+      - Automated response generation and delivery
+      - Request tracking and audit logging
+      - Fee structure for excessive requests
+   
+   d) **Disclosure and Transparency:**
+      - Privacy policy generation and maintenance
+      - Collection notice at point of data collection
+      - Annual disclosure of data sharing practices
+      - Consumer request metrics and reporting
+      - Third-party service provider agreements
+
+**PHASE 8** Accessibility Implementation Requirements (WCAG 2.1 Level AA):
+
+   a) **Perceivable (Principle 1):**
+      - Text alternatives for non-text content (1.1.1)
+      - Captions and transcripts for multimedia (1.2.1-1.2.5)
+      - Adaptable content structure and relationships (1.3.1-1.3.5)
+      - Color contrast ratio compliance (1.4.3, 1.4.6)
+      - Resizable text up to 200% without loss of functionality (1.4.4)
+      - Reflow content for mobile and responsive design (1.4.10)
+   
+   b) **Operable (Principle 2):**
+      - Keyboard accessible functionality (2.1.1-2.1.4)
+      - No seizure-inducing content (2.3.1-2.3.3)
+      - Navigation and wayfinding assistance (2.4.1-2.4.10)
+      - Input assistance and error prevention (3.3.1-3.3.6)
+      - Sufficient time limits and user control (2.2.1-2.2.6)
+   
+   c) **Understandable (Principle 3):**
+      - Readable and understandable text (3.1.1-3.1.6)
+      - Predictable functionality and navigation (3.2.1-3.2.5)
+      - Input assistance and error identification (3.3.1-3.3.6)
+      - Help and documentation accessibility
+   
+   d) **Robust (Principle 4):**
+      - Compatible with assistive technologies (4.1.1-4.1.3)
+      - Valid and semantic HTML markup
+      - ARIA labels and descriptions where needed
+      - Progressive enhancement and graceful degradation
+
+**PHASE 9** Technical Implementation Components:
+
+   a) **Privacy Management Dashboard:**
+      - Real-time consent status monitoring
+      - Data subject rights request processing
+      - Privacy impact assessment workflow
+      - Data breach incident management
+      - Cookie and tracking consent analytics
+   
+   b) **Consent Management Platform:**
+      - Granular consent collection interface
+      - Consent preference center for users
+      - Cookie consent banner with customization
+      - Third-party tracking opt-out mechanisms
+      - Consent renewal and confirmation workflows
+   
+   c) **Data Subject Rights Engine:**
+      - Automated personal data discovery and export
+      - Data rectification and correction workflows
+      - Right to erasure processing with cascading deletes
+      - Data portability export in common formats
+      - Processing restriction and objection handling
+   
+   d) **Accessibility Testing and Monitoring:**
+      - Automated accessibility scanning (axe-core, WAVE)
+      - Keyboard navigation testing automation
+      - Color contrast validation tools
+      - Screen reader compatibility testing
+      - Mobile accessibility testing suite
+   
+   e) **User Preference Management:**
+      - Accessibility settings and preferences
+      - Privacy preference dashboard
+      - Communication preference management
+      - Personalization and customization options
+      - Cross-device preference synchronization
+
+**PHASE 10** Database Schema Privacy and Accessibility Enhancements:
+
+   a) **Personal Data Management:**
+      - Data subject identification and linking
+      - Personal data category classification
+      - Consent records with timestamps and versions
+      - Data processing purpose and lawful basis tracking
+      - Data retention schedule and automatic deletion
+   
+   b) **Privacy Compliance Tracking:**
+      - Privacy impact assessment records
+      - Data subject rights request tracking
+      - Consent withdrawal and modification history
+      - Third-party data sharing audit logs
+      - Breach incident documentation and response
+   
+   c) **Accessibility Metadata:**
+      - User accessibility preferences and settings
+      - Content accessibility metadata and annotations
+      - Alternative content versions (audio descriptions, transcripts)
+      - Accessibility testing results and remediation tracking
+      - User feedback and accessibility issue reporting
+
+**PHASE 11** User Interface Components:
+
+   a) **Privacy Controls Interface:**
+      - Comprehensive privacy preference center
+      - Granular consent management dashboard
+      - Data subject rights request portal
+      - Personal data download and export tools
+      - Privacy policy and notice management
+   
+   b) **Accessibility Features:**
+      - High contrast and dark mode themes
+      - Font size and spacing customization
+      - Keyboard navigation indicators and shortcuts
+      - Screen reader optimized content structure
+      - Alternative input method support
+      - Skip navigation and landmark regions
+   
+   c) **Admin Privacy and Accessibility Management:**
+      - Data processing activity management
+      - Privacy impact assessment workflow
+      - Accessibility audit and remediation tracking
+      - User rights request processing dashboard
+      - Compliance reporting and analytics
+      - Cookie and tracking management interface
+
+**PHASE 12** Automated Compliance and Testing:
+
+   a) **Privacy Automation:**
+      - Automated privacy policy generation
+      - Cookie scanning and classification
+      - Personal data discovery and mapping
+      - Consent renewal and confirmation reminders
+      - Data retention and deletion automation
+   
+   b) **Accessibility Automation:**
+      - Continuous accessibility monitoring
+      - Automated testing integration with CI/CD
+      - Accessibility regression testing
+      - Alternative content generation suggestions
+      - User feedback collection and triage
+   
+   c) **Compliance Reporting:**
+      - GDPR compliance dashboard and reporting
+      - CCPA consumer request metrics
+      - Accessibility compliance scorecards
+      - Privacy and accessibility audit preparation
+      - Regulatory reporting automation
+
+**PHASE 13** Integration and API Development:
+
+   a) **Privacy API Endpoints:**
+      - Consent management API
+      - Data subject rights processing API
+      - Personal data export and deletion API
+      - Privacy preference management API
+      - Cookie consent and tracking API
+   
+   b) **Accessibility API Endpoints:**
+      - User accessibility preference API
+      - Alternative content delivery API
+      - Accessibility testing results API
+      - User feedback and issue reporting API
+      - Accessibility metadata management API
+
+**PHASE 14** Testing and Validation:
+
+   a) Test all privacy controls across GDPR and CCPA requirements
+   b) Validate data subject rights fulfillment workflows
+   c) Test accessibility compliance across all user interfaces
+   d) Verify keyboard navigation and screen reader compatibility
+   e) Test consent management and withdrawal processes
+   f) Validate automated privacy and accessibility monitoring
+   g) Perform user acceptance testing with diverse accessibility needs
+   h) Test multi-language and internationalization support
+
+**PHASE 15** Cleanup Phase:
+
+   a) Prompt user to test privacy preference center and data subject rights workflows
+   b) Verify accessibility features work across different assistive technologies
+   c) Confirm consent management captures all required privacy choices
+   d) Test automated privacy and accessibility monitoring systems
+   e) Validate compliance reporting and audit trail functionality
+   f) Move backups to `/archive/privacy_accessibility_[timestamp]`
+   g) Update root README.md with privacy and accessibility documentation
+   h) Create cleanup log in `/docs/logs/cleanup/privacy_accessibility_implementation.md`
+   i) Update `/docs/logs/README.md` cleanup table
+   j) Generate privacy impact assessment and accessibility audit report
+
+**CONSTRAINTS:**
+
+1) All privacy controls must provide clear user choice and control without dark patterns
+2) Accessibility features must not compromise security or privacy protections
+3) Implement privacy by design and accessibility by design principles
+4) Maintain performance while adding privacy and accessibility enhancements
+5) Support multiple languages and internationalization for global compliance
+6) Include comprehensive documentation for all privacy and accessibility features
+7) Implement fail-safe defaults that protect user privacy and accessibility
+8) Ensure all user interfaces are testable with assistive technologies
+9) Include regular privacy and accessibility training requirements
+10) Maintain audit trails for all privacy and accessibility compliance activities
+11) Support cross-border data transfers with appropriate safeguards
+12) Implement progressive enhancement for accessibility features
+13) Include user feedback mechanisms for privacy and accessibility issues
+14) Maintain compatibility with existing accessibility tools and software
+15) Include automated testing in CI/CD pipeline for continuous compliance
+16) Support various assistive technologies (screen readers, voice control, etc.)
+17) Implement responsive design that maintains accessibility across devices
+18) Include privacy and accessibility considerations in all future development
+19) Maintain transparency in privacy practices and accessibility accommodations
+20) Ensure all third-party integrations meet privacy and accessibility standards

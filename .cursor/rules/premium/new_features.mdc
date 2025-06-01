@@ -1,0 +1,371 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Workflow for adding and integrating new features.
+globs: 
+alwaysApply: false
+---
+# New Feature Development SOP
+
+## Overview
+
+This SOP provides comprehensive instructions for developing new features using the **@plan_and_execute.mdc protocol standards**. All feature development must follow the systematic planning methodology to ensure thorough research, proper implementation, and comprehensive documentation.
+
+## Protocol Integration Requirements
+
+### **MANDATORY**: Follow @plan_and_execute.mdc Protocol
+- [ ] **Reference Protocol**: Always refer to `@plan_and_execute.mdc` for detailed methodology
+- [ ] **Implementation Protocol**: All features are required to function independently, be modular,         centrally managed and extensible.
+- [ ] **Directory Structure**: Use the standardized planning directory structure
+- [ ] **Research Standards**: Follow the comprehensive research requirements
+- [ ] **WBS Methodology**: Implement the Work Breakdown Structure approach
+- [ ] **Documentation Standards**: Maintain the required documentation depth
+
+---
+
+## Phase 1: Planning Structure Setup (Following @plan_and_execute.mdc STEP 1)
+
+### **STEP 1**: Create Planning Directories
+
+**Required Directory Structure:**
+```
+\docs\plans\[feature_name]\
+\docs\plans\[feature_name]\research\
+\docs\plans\[feature_name]\backups\
+```
+
+**Additional Feature-Specific Directories:**
+```
+\docs\features\[feature_name]\
+\docs\features\[feature_name]\implementation\
+\docs\features\[feature_name]\testing\
+\docs\features\[feature_name]\documentation\
+```
+
+### **Compliance Check:**
+- [ ] All required directories created according to @plan_and_execute.mdc standards
+- [ ] Feature-specific directories established
+- [ ] Directory structure documented in planning folder
+- [ ] Confirm independence, modularity, central management and extensibility
+
+---
+
+## Phase 2: Comprehensive Research (Following @plan_and_execute.mdc STEP 2)
+
+### **STEP 2A**: Codebase Research
+
+**Required Research Activities (per @plan_and_execute.mdc):**
+- [ ] **Codebase Exploration**: Use grep, listdir, and file analysis
+- [ ] **README.md Analysis**: Review current project documentation
+- [ ] **Database Schema Research**: Analyze SQL dump files (ensure up-to-date)
+- [ ] **Web Research**: Industry best practices and similar implementations
+
+**Research Documentation:**
+- **Location:** `\docs\plans\[feature_name]\research\codebase_analysis.md`
+- **Contents:**
+  - Current codebase structure relevant to feature
+  - Existing similar functionality analysis
+  - Integration points identification
+  - Technology stack compatibility assessment
+
+### **STEP 2B**: External Research
+
+**Research Documentation:**
+- **Location:** `\docs\plans\[feature_name]\research\external_research.md`
+- **Contents:**
+  - Industry best practices research
+  - Similar implementations in open-source projects
+  - Technology-specific implementation patterns
+  - Performance and security considerations
+
+### **STEP 2C**: Database Impact Research
+
+**Research Documentation:**
+- **Location:** `\docs\plans\[feature_name]\research\database_analysis.md`
+- **Contents:**
+  - Current schema analysis from latest dump
+  - Required schema modifications
+  - Data migration requirements
+  - Performance impact assessment
+
+### **STEP 2D**: Master Plan Creation
+
+**Required Document (per @plan_and_execute.mdc):**
+- **Location:** `\docs\plans\[feature_name]\plan.md`
+- **Contents:**
+  - Comprehensive feature overview
+  - Implementation strategy
+  - Integration approach
+  - Risk assessment
+  - Success criteria
+
+---
+
+## Phase 3: Work Breakdown Structure Development (Following @plan_and_execute.mdc STEP 3)
+
+### **STEP 3**: Detailed Task Planning
+
+**Required WBS Document:**
+- **Location:** `\docs\plans\[feature_name]\wbs_checklist.md`
+
+**WBS Structure Requirements (per @plan_and_execute.mdc):**
+- [ ] **Line-by-Line Task Breakdown**: Each task individually researched
+- [ ] **Dependency Mapping**: All dependencies identified and documented
+- [ ] **File Association**: Associated codebase files identified for each task
+- [ ] **Mini-Plans**: Individual implementation plan for each task
+
+**Research File Creation (per @plan_and_execute.mdc STEP 3b):**
+For each WBS item, create research files in `\docs\plans\[feature_name]\research\`:
+- [ ] `task_[number]_research.md`
+- [ ] Reference file in WBS checklist as subitem
+- [ ] Include intent and contextual information
+- [ ] Provide comprehensive implementation details
+
+**Research File Contents (per @plan_and_execute.mdc STEP 3e):**
+- [ ] **Superfluous Notes**: Assume you will forget everything
+- [ ] **Complete Context**: Every bit of reasoning and thought process
+- [ ] **Code Examples**: Planned implementation code
+- [ ] **Reference Links**: Web links and external references
+
+---
+
+## Phase 4: Implementation Planning (Following @plan_and_execute.mdc PHASE 4)
+
+### **STEP 4**: WBS Enhancement
+
+**Required WBS Structure (per @plan_and_execute.mdc PHASE 4a):**
+For each checklist item, include:
+- [ ] **Research**: Reference to research file
+- [ ] **Findings**: Summary of research conclusions
+- [ ] **Actions**: Specific implementation steps
+
+**Backup Instructions (per @plan_and_execute.mdc PHASE 4b):**
+- [ ] Add backup instructions for each file modification
+- [ ] Document backup location: `\docs\plans\[feature_name]\backups\`
+- [ ] Include cleanup instructions as final checklist item
+
+### **Implementation Options Analysis**
+
+**Document Location:** `\docs\features\[feature_name]\implementation_options.md`
+**Contents:**
+- [ ] **Three Implementation Strategies**: Ordered by likelihood of success
+- [ ] **Feasibility Analysis**: Technical and resource feasibility
+- [ ] **Pros and Cons**: Detailed analysis for each option
+- [ ] **Recommendation**: Selected approach with justification
+
+---
+
+## Phase 5: Detailed Planning (Following @plan_and_execute.mdc PHASE 5)
+
+### **STEP 5**: Comprehensive Checklist Development
+
+**Requirements (per @plan_and_execute.mdc PHASE 5):**
+- [ ] **Complete Context**: Everything needed to remember for each item
+- [ ] **Subitems**: All considerations documented as subitems
+- [ ] **Meticulous Planning**: Ensure proper steps for AI agents
+
+**Checklist Item Structure (per @plan_and_execute.mdc PHASE 5a):**
+For each checklist item:
+- [ ] a. Refer to research document
+- [ ] b. Complete the checklist item
+- [ ] c. Update checklist with completion notes
+
+### **Impact Analysis Document**
+
+**Document Location:** `\docs\features\[feature_name]\impact_analysis.md`
+**Contents:**
+- [ ] **Potential Pitfalls**: Identified risks and challenges
+- [ ] **Second-Order Effects**: Indirect consequences
+- [ ] **Third-Order Effects**: Cascading impacts
+- [ ] **Component Interactions**: How feature affects existing components
+- [ ] **Performance Impact**: System performance considerations
+- [ ] **Security Implications**: Security analysis and requirements
+
+---
+
+## Phase 6: Implementation Execution
+
+### **Database Changes**
+
+**Planning Requirements:**
+- [ ] **Schema Modifications**: Detailed database changes
+- [ ] **Migration Scripts**: Step-by-step migration procedures
+- [ ] **Rollback Plans**: Procedures for reverting changes
+- [ ] **Data Integrity**: Validation and testing procedures
+
+**Documentation Location:** `\docs\features\[feature_name]\database_changes.md`
+
+### **API Development**
+
+**Planning Requirements:**
+- [ ] **Endpoint Design**: RESTful API endpoint specifications
+- [ ] **Request/Response Schemas**: Detailed data structures
+- [ ] **Authentication/Authorization**: Security implementation
+- [ ] **Error Handling**: Comprehensive error response design
+
+**Documentation Location:** `\docs\features\[feature_name]\api_specification.md`
+
+### **UI/Frontend Development**
+
+**Planning Requirements:**
+- [ ] **Component Design**: React component architecture
+- [ ] **State Management**: State handling strategy
+- [ ] **User Experience**: UX flow and interaction design
+- [ ] **Responsive Design**: Multi-device compatibility
+
+**Documentation Location:** `\docs\features\[feature_name]\ui_specification.md`
+
+### **System Architecture Updates**
+
+**Planning Requirements:**
+- [ ] **Architecture Modifications**: System architecture changes
+- [ ] **Integration Points**: Service integration specifications
+- [ ] **Scalability Considerations**: Performance and scaling requirements
+- [ ] **Monitoring and Logging**: Observability implementation
+
+**Documentation Location:** `\docs\features\[feature_name]\architecture_updates.md`
+
+---
+
+## Phase 7: Testing Strategy
+
+### **Testing Plan Development**
+
+**Document Location:** `\docs\features\[feature_name]\testing_strategy.md`
+**Contents:**
+- [ ] **Unit Testing**: Component-level testing approach
+- [ ] **Integration Testing**: Service integration testing
+- [ ] **End-to-End Testing**: Complete workflow testing
+- [ ] **Performance Testing**: Load and stress testing
+- [ ] **Security Testing**: Security validation procedures
+- [ ] **User Acceptance Testing**: UAT criteria and procedures
+
+### **Test Implementation**
+
+**Requirements:**
+- [ ] **Test Cases**: Comprehensive test case documentation
+- [ ] **Test Data**: Test data requirements and setup
+- [ ] **Automation**: Automated testing implementation
+- [ ] **Manual Testing**: Manual testing procedures
+
+---
+
+## Phase 8: Documentation and Knowledge Management
+
+### **Project Documentation Updates (per @plan_and_execute.mdc CONSTRAINT 4)**
+
+**Required Updates:**
+- [ ] **README.md**: Update root README with new feature information
+- [ ] **API Documentation**: Update API documentation if applicable
+- [ ] **Architecture Documentation**: Update system architecture docs
+- [ ] **Developer Notes**: Maintenance and scaling considerations
+
+**Document Location:** `\docs\project_documentation\` (update existing documents)
+
+### **Feature Documentation**
+
+**Document Location:** `\docs\features\[feature_name]\feature_documentation.md`
+**Contents:**
+- [ ] **Feature Overview**: Complete feature description
+- [ ] **Usage Instructions**: How to use the new feature
+- [ ] **Configuration**: Setup and configuration requirements
+- [ ] **Troubleshooting**: Common issues and solutions
+- [ ] **Maintenance**: Ongoing maintenance requirements
+
+---
+
+## Compliance and Quality Assurance
+
+### **@plan_and_execute.mdc Compliance Checklist**
+
+**CONSTRAINT 1 Compliance:**
+- [ ] **No Step Removal**: Never remove or summarize WBS steps
+- [ ] **Complete Documentation**: All steps fully documented
+
+**CONSTRAINT 2 Compliance:**
+- [ ] **Comprehensive Notes**: Assume you will forget everything
+- [ ] **Detailed Checklists**: WBS checklist provides complete guidance
+
+**CONSTRAINT 3 Compliance:**
+- [ ] **WBS Updates**: Always update WBS with completion notes
+- [ ] **Progress Documentation**: Document what happened at each step
+
+**CONSTRAINT 4 Compliance:**
+- [ ] **README Updates**: Update README.md for major application changes
+
+### **Quality Gates**
+
+**Before Implementation:**
+- [ ] All research documents completed
+- [ ] WBS checklist thoroughly developed
+- [ ] Impact analysis completed
+- [ ] Implementation strategy selected
+
+**During Implementation:**
+- [ ] Follow WBS checklist exactly
+- [ ] Update checklist with completion notes
+- [ ] Create backups before file modifications
+- [ ] Test after each major change
+
+**After Implementation:**
+- [ ] All tests passing
+- [ ] Documentation updated
+- [ ] README.md updated (if major change)
+- [ ] Cleanup completed (remove backup folder)
+
+---
+
+## Success Criteria
+
+### **Feature Development Success**
+- [ ] **Functionality**: Feature works as specified
+- [ ] **Integration**: Seamlessly integrates with existing system
+- [ ] **Performance**: Meets performance requirements
+- [ ] **Security**: Passes security validation
+- [ ] **Documentation**: Comprehensive documentation completed
+
+### **Process Compliance Success**
+- [ ] **@plan_and_execute.mdc**: Full protocol compliance
+- [ ] **Research Depth**: Thorough research completed
+- [ ] **WBS Quality**: Detailed work breakdown structure
+- [ ] **Documentation Standards**: All required documents created
+- [ ] **Knowledge Transfer**: Complete knowledge documentation
+
+---
+
+## Maintenance and Evolution
+
+### **Post-Implementation Review**
+- [ ] **Performance Monitoring**: Monitor feature performance
+- [ ] **User Feedback**: Collect and analyze user feedback
+- [ ] **Issue Tracking**: Track and resolve any issues
+- [ ] **Optimization**: Identify optimization opportunities
+
+### **Continuous Improvement**
+- [ ] **Process Refinement**: Improve development process
+- [ ] **Documentation Updates**: Keep documentation current
+- [ ] **Best Practice Integration**: Integrate lessons learned
+- [ ] **Team Knowledge Sharing**: Share knowledge with team
+
+---
+
+## Quick Reference
+
+### **Key Protocol References**
+- **@plan_and_execute.mdc**: Core planning methodology
+- **Directory Structure**: `\docs\plans\[feature_name]\`
+- **Research Standards**: Comprehensive research requirements
+- **WBS Methodology**: Work breakdown structure approach
+- **Documentation Depth**: Assume you will forget everything
+
+### **Critical Success Factors**
+- **Follow Protocol**: Strict adherence to @plan_and_execute.mdc
+- **Thorough Research**: Comprehensive research before implementation
+- [ ] **Detailed Planning**: Meticulous work breakdown structure
+- [ ] **Complete Documentation**: Superfluous notes and context
+- [ ] **Quality Assurance**: Testing and validation at every step
+
+By following this comprehensive SOP with strict adherence to the @plan_and_execute.mdc protocol, new feature development will be systematic, well-documented, and maintainable, reducing risk and improving long-term project success.
