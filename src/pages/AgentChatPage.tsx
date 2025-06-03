@@ -4,7 +4,10 @@ import { Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
-import type { Message, Agent } from '../types';
+import type { Message } from '../types';
+import type { Database } from '../types/database.types';
+
+type Agent = Database['public']['Tables']['agents']['Row'];
 
 export function AgentChatPage() {
   // console.log("[AgentChatPage] Component rendering start."); // Cleaned log
@@ -261,7 +264,7 @@ export function AgentChatPage() {
       }
 
       const responseData = await response.json();
-      const assistantReply = responseData.reply;
+      const assistantReply = responseData.message;
 
       if (typeof assistantReply !== 'string') {
           console.error('Invalid response format from chat API:', responseData);
@@ -381,7 +384,11 @@ export function AgentChatPage() {
           </div>
         ) : (
           messages.map((message, index) => (
-            <ChatMessage key={`${message.role}-${index}-${message.timestamp.toISOString()}`} message={message} />
+            <ChatMessage 
+              key={`${message.role}-${index}-${message.timestamp.toISOString()}`} 
+              message={message} 
+              members={[]} 
+            />
           ))
         )}
         {/* Removed the general loading spinner here, handled above */}

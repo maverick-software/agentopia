@@ -7,11 +7,16 @@ import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
 
 interface ChatMessageProps {
   message: Message;
-  members: WorkspaceMemberDetail[];
+  members?: WorkspaceMemberDetail[];
 }
 
-const formatMentions = (content: string, members: WorkspaceMemberDetail[]): React.ReactNode => {
+const formatMentions = (content: string, members: WorkspaceMemberDetail[] = []): React.ReactNode => {
   let formattedContent: React.ReactNode[] = [content];
+  
+  // Add safety check for members array
+  if (!members || !Array.isArray(members) || members.length === 0) {
+    return content;
+  }
   
   members.forEach(member => {
       if (member.agent?.name) {
@@ -37,12 +42,14 @@ const formatMentions = (content: string, members: WorkspaceMemberDetail[]): Reac
   return formattedContent;
 };
 
-export const ChatMessage = React.memo(function ChatMessage({ message, members }: ChatMessageProps) {
+export const ChatMessage = React.memo(function ChatMessage({ message, members = [] }: ChatMessageProps) {
   useEffect(() => {
       if (message.role === 'assistant') {
           console.log('[ChatMessage] Rendering Assistant Message:', message);
           console.log('[ChatMessage] Received Members Prop:', members);
-          const foundMember = members.find(m => m.agent_id === message.sender_agent_id);
+          // Type guard for sender_agent_id property
+          const senderAgentId = 'sender_agent_id' in message ? (message as any).sender_agent_id : null;
+          const foundMember = members?.find(m => m.agent_id === senderAgentId);
           console.log('[ChatMessage] Found Member based on sender_agent_id:', foundMember);
       }
   }, [message, members]);
@@ -51,16 +58,18 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members }:
 
   // Enhanced agent name lookup - prioritize all possible sources of the agent name
   const agentDisplayName = useMemo(() => {
-    // First check if the message already has the agent name property
-    if (message.agentName) {
-      return message.agentName;
+    // First check if the message already has the agent name property (with type guard)
+    const agentName = 'agentName' in message ? (message as any).agentName : null;
+    if (agentName) {
+      return agentName;
     }
     
     // Next try to find the agent in the members list
-    if (message.role === 'assistant' && members.length > 0) {
-      // Try matching by sender_agent_id if available
-      if (message.sender_agent_id) {
-        const foundMember = members.find(m => m.agent_id === message.sender_agent_id);
+    if (message.role === 'assistant' && members && members.length > 0) {
+      // Try matching by sender_agent_id if available (with type guard)
+      const senderAgentId = 'sender_agent_id' in message ? (message as any).sender_agent_id : null;
+      if (senderAgentId) {
+        const foundMember = members.find(m => m.agent_id === senderAgentId);
         if (foundMember?.agent?.name) {
           return foundMember.agent.name;
         }
@@ -91,7 +100,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members }:
   };
 
   const formattedContent = useMemo(() => {
-      return formatMentions(message.content, members);
+      return formatMentions(message.content, members || []);
   }, [message.content, members]);
 
   return (
