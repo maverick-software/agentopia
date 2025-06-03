@@ -7,8 +7,8 @@ WORKDIR /usr/src/app
 # Copy package.json and package-lock.json (or npm-shrinkwrap.json) 
 COPY package*.json ./
 
-# Install dependencies using npm ci for cleaner installs based on lock file
-RUN npm ci
+# Install dependencies using npm install (since we added new dependencies)
+RUN npm install
 
 # Copy the rest of the application code
 COPY . .
@@ -26,8 +26,8 @@ COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/package.json ./package.json
 
-# Expose the port the app runs on (default 3030, can be overridden by ENV)
-ENV PORT=3030
+# Expose the port the app runs on (default 30000 to match Agentopia expectations)
+ENV PORT=30000
 EXPOSE ${PORT}
 
 # Environment variables that need to be provided at runtime

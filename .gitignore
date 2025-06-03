@@ -1,6 +1,9 @@
 #debugging logs
 logs.txt
 
+#do not commit the image, too large
+agentopia-dtma.tar
+
 # Ignore environment files in service directories
 services/**/.env
 
