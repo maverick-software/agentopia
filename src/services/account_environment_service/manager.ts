@@ -60,40 +60,54 @@ export class AccountEnvironmentService {
         console.log(`- DTMA Docker Image: ${dtmaDockerImageUrl}`);
         // dtmaBearerToken and backendToDtmaApiKey are sensitive, not logged directly here but used below.
 
-        const dtmaRunUser = 'ubuntu'; // Common user on Ubuntu images
-  const logFile = '/var/log/dtma-bootstrap.log';
+        const logFile = '/var/log/dtma-bootstrap.log';
 
-  return `#!/bin/bash
+        return `#!/bin/bash
 set -e 
 set -x 
 
 LOG_FILE="${logFile}"
 touch "\${LOG_FILE}"
-chown "${dtmaRunUser}":"${dtmaRunUser}" "\${LOG_FILE}"
 exec &> >(tee -a "\${LOG_FILE}") 
 
 DTMA_CONTAINER_NAME="dtma_manager"
-RUN_USER="${dtmaRunUser}" 
 
 # Ensure DEBIAN_FRONTEND is set for non-interactive apt installs
 export DEBIAN_FRONTEND=noninteractive
 
 echo "--- Starting DTMA Docker Setup Script ---"
 
+# Create ubuntu user if it doesn't exist (some DO images don't have it)
+if ! id "ubuntu" &>/dev/null; then
+    echo "Creating ubuntu user..."
+    useradd -m -s /bin/bash ubuntu
+    usermod -aG sudo ubuntu
+    echo "ubuntu:ubuntu" | chpasswd
+    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    echo "Ubuntu user created successfully."
+else
+    echo "Ubuntu user already exists."
+fi
+
+RUN_USER="ubuntu"
+chown "\${RUN_USER}:\${RUN_USER}" "\${LOG_FILE}"
+
 # Install Docker if not present (basic check, image should ideally have it)
 if ! command -v docker &> /dev/null
 then
     echo "Docker not found. Installing Docker..."
-apt-get update -y
+    apt-get update -y
     apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-apt-get update -y
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-usermod -aG docker "\${RUN_USER}" || echo "Warning: Failed to add user \${RUN_USER} to docker group."
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    apt-get update -y
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    usermod -aG docker "\${RUN_USER}" || echo "Warning: Failed to add user \${RUN_USER} to docker group."
+    systemctl start docker
+    systemctl enable docker
     echo "Docker installation complete."
 else
     echo "Docker already installed."
@@ -110,12 +124,20 @@ echo "Running DTMA Docker container: ${dtmaDockerImageUrl}..."
 docker run -d \
   --name "\${DTMA_CONTAINER_NAME}" \
   --restart always \
+  -p 30000:30000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e DTMA_BEARER_TOKEN='${dtmaBearerToken}' \
   -e AGENTOPIA_API_BASE_URL='${agentopiaApiBaseUrl}' \
   -e BACKEND_TO_DTMA_API_KEY='${backendToDtmaApiKey}' \
   --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
   "${dtmaDockerImageUrl}"
+
+echo "Waiting for DTMA to start..."
+sleep 10
+
+echo "Checking DTMA container status..."
+docker ps | grep dtma_manager || echo "DTMA container not running!"
+docker logs dtma_manager --tail 20 || echo "Could not get DTMA logs"
 
 echo "--- DTMA Docker Setup Script Finished ---"
 `;
@@ -443,12 +465,46 @@ echo "--- DTMA Docker Setup Script Finished ---"
         if (!toolboxRecord) {
             throw new Error('Toolbox environment not found or user not authorized.');
         }
-        if (!toolboxRecord.public_ip_address) {
-            throw new Error('Toolbox public IP address is not set. Cannot refresh status from DTMA.');
-        }
+        
         if (toolboxRecord.status === 'deprovisioned' || toolboxRecord.status === 'pending_deprovision') {
              console.warn(`Toolbox ${toolboxId} is in state ${toolboxRecord.status}, skipping DTMA status refresh.`);
              return toolboxRecord;
+        }
+
+        if (!toolboxRecord.do_droplet_id) {
+            throw new Error('Toolbox droplet ID is not set. Cannot refresh status from DTMA.');
+        }
+
+        // Get current droplet information from DigitalOcean API instead of using stored IP
+        let currentDropletIP: string;
+        try {
+            console.log(`Fetching current droplet information for ID: ${toolboxRecord.do_droplet_id}`);
+            const { getDigitalOceanDroplet } = await import('../digitalocean_service/index.ts');
+            const dropletInfo = await getDigitalOceanDroplet(toolboxRecord.do_droplet_id!);
+            
+            // Get the public IPv4 address from the networks
+            const publicNetworks = dropletInfo.networks?.v4?.filter((network: any) => network.type === 'public');
+            if (!publicNetworks || publicNetworks.length === 0) {
+                throw new Error('No public IPv4 address found for droplet');
+            }
+            
+            currentDropletIP = publicNetworks[0].ip_address;
+            console.log(`Current droplet IP from DigitalOcean API: ${currentDropletIP}`);
+            
+            // Update the stored IP if it's different
+            if (currentDropletIP !== toolboxRecord.public_ip_address) {
+                console.log(`Updating stored IP from ${toolboxRecord.public_ip_address} to ${currentDropletIP}`);
+                await this.updateToolboxEnvironment(toolboxId, { public_ip_address: currentDropletIP });
+                toolboxRecord.public_ip_address = currentDropletIP; // Update local record
+            }
+        } catch (dropletError: any) {
+            console.error(`Failed to get current droplet IP for ${toolboxRecord.do_droplet_id}:`, dropletError.message);
+            // Fall back to stored IP if DigitalOcean API fails, but log the issue
+            if (!toolboxRecord.public_ip_address) {
+                throw new Error('Cannot determine droplet IP address and no stored IP available.');
+            }
+            console.warn(`Falling back to stored IP address: ${toolboxRecord.public_ip_address}`);
+            currentDropletIP = toolboxRecord.public_ip_address as string;
         }
 
         const dtmaPort = Deno.env.get('DTMA_PORT') || '30000'; // Fixed to match actual DTMA port
@@ -459,7 +515,7 @@ echo "--- DTMA Docker Setup Script Finished ---"
             throw new Error('Internal configuration error: Missing DTMA API key.');
         }
 
-        const dtmaStatusUrl = `http://${toolboxRecord.public_ip_address}:${dtmaPort}/status`;
+        const dtmaStatusUrl = `http://${currentDropletIP}:${dtmaPort}/status`;
         let dtmaStatusResponse;
         try {
             dtmaStatusResponse = await fetch(dtmaStatusUrl, {
