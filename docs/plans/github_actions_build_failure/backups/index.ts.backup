@@ -1,15 +1,4 @@
 import express from 'express';
-import Dockerode from 'dockerode';
-
-// Type definition for managed tool instances
-export interface ManagedToolInstance {
-  accountToolInstanceId: string;
-  dockerImageUrl: string;
-  creationPortBindings?: Dockerode.PortMap;
-}
-
-// Global state to track managed tool instances
-export const managedInstances = new Map<string, ManagedToolInstance>();
 
 const app = express();
 const PORT = process.env.PORT || 30000;
