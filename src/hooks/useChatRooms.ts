@@ -1,12 +1,10 @@
 // src/hooks/useChatRooms.ts
 import { useState, useEffect, useCallback } from 'react';
-// import { useSupabaseClient } from '@supabase/auth-helpers-react'; // Remove this
 import { supabase } from '../lib/supabase'; // Import client directly
 import { type ChatRoom } from '../types/chat'; // Assuming chat types are in src/types/chat.ts
 import { useAuth } from '../contexts/AuthContext'; // Corrected import
 
 export const useChatRooms = () => {
-  // const supabase = useSupabaseClient(); // Remove this line
   const { user } = useAuth();
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState<boolean>(false);

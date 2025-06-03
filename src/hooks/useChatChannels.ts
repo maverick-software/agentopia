@@ -1,6 +1,6 @@
 // src/hooks/useChatChannels.ts
 import { useState, useCallback, useEffect } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from './useSupabaseClient';
 import { type ChatChannel } from '../types/chat';
 import { useAuth } from '../contexts/AuthContext';
 

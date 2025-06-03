@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { MCPServerConfig, MCPServerCapabilities } from '../lib/mcp/types';
 import { useAuth } from '../contexts/AuthContext'; // Needed for user ID
-import { useSupabaseClient } from '@supabase/auth-helpers-react'; // Added import for Supabase client
+import { useSupabaseClient } from './useSupabaseClient';
 import type { Database } from '../types/database.types'; // Corrected path
 import type { MCPServerConfig as MCPServerConfigType } from '../lib/mcp/types'; // Corrected path
 
@@ -38,7 +38,7 @@ export type PlaceholderMcpConfigUpdate = Partial<Omit<MCPServerConfig, 'config_i
 
 export const useAgentMcp = (agentId: string | null) => {
   const { user } = useAuth(); // Get user for filtering/permissions
-  const supabase = useSupabaseClient<Database>();
+  const supabase = useSupabaseClient();
   const [mcpConfigurations, setMcpConfigurations] = useState<MCPServerConfig[]>([]); // Will become list of Toolboxes or ToolbeltItems
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

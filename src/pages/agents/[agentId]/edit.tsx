@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../../hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext'; 
 import { Button } from '@/components/ui/button';
 import { 

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from './useSupabaseClient';
 import { type ChatRoomMember, type MemberType } from '../types/chat';
 import { useAuth } from '../contexts/AuthContext'; // Corrected import
 

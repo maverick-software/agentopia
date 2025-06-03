@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from './useSupabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
 // TODO: Define a more detailed Member type, potentially joining with user profiles/agent names

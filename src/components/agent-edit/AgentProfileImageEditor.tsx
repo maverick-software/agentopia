@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, UploadCloud, Bot, Trash2, Terminal } from 'lucide-react';
 import { supabase } from '@/lib/supabase'; // Assuming supabase client path
 import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
 import { generateAgentAvatar } from '@/lib/openaiClient'; // Import the generation function
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
