@@ -70,7 +70,7 @@ async function getAgentDetails(agentId: string) {
     console.error('Agent fetch error:', agentError);
     return null;
   }
-  
+
   return agent;
 }
 
@@ -115,7 +115,7 @@ async function handleAgentMessage(
   agentId: string,
   userMessageContent: string,
   userId: string,
-  channelId: string | null,
+    channelId: string | null, 
   workspaceId: string | undefined
 ): Promise<Response> {
   console.log(`Handling message for agent: ${agentId} in workspace: ${workspaceId} channel: ${channelId}`);
@@ -128,17 +128,17 @@ async function handleAgentMessage(
 
   // Fetch workspace details and create context settings
   let workspaceDetails = null;
-  if (workspaceId) {
+    if (workspaceId) {
     workspaceDetails = await getWorkspaceDetails(workspaceId, supabaseClient);
-    if (!workspaceDetails) {
-      console.warn(`Could not fetch details for workspace ${workspaceId}. Proceeding without workspace context.`);
-    }
-  } else {
-    console.log('No workspaceId provided, assuming non-workspace chat context.');
+      if (!workspaceDetails) {
+        console.warn(`Could not fetch details for workspace ${workspaceId}. Proceeding without workspace context.`);
+      }
+    } else {
+        console.log('No workspaceId provided, assuming non-workspace chat context.');
   }
 
   const contextSettings = createContextSettings(workspaceDetails);
-  console.log(`[chat] Using context settings - Window Size: ${contextSettings.messageLimit}, Token Limit: ${contextSettings.tokenLimit}`);
+    console.log(`[chat] Using context settings - Window Size: ${contextSettings.messageLimit}, Token Limit: ${contextSettings.tokenLimit}`);
 
   // Fetch context components in parallel for performance
   const [vectorContextStr, historyMessages, mcpResourceContextStr] = await Promise.all([
@@ -148,68 +148,68 @@ async function handleAgentMessage(
   ]);
 
   // Create Context Builder
-  const contextBuilder = new ContextBuilder(contextSettings)
-    .addSystemInstruction(agent.system_instructions || '');
+      const contextBuilder = new ContextBuilder(contextSettings)
+        .addSystemInstruction(agent.system_instructions || '');
 
-  // Add agent identity and personality
-  if (agent.name) {
-    contextBuilder.addSystemInstruction(`You are ${agent.name}, an AI agent.`);
-    if (agent.personality) {
-      contextBuilder.addSystemInstruction(`Your personality: ${agent.personality}`);
-    }
-  }
+      // Add agent identity and personality
+      if (agent.name) {
+        contextBuilder.addSystemInstruction(`You are ${agent.name}, an AI agent.`);
+        if (agent.personality) {
+          contextBuilder.addSystemInstruction(`Your personality: ${agent.personality}`);
+        }
+      }
 
-  // Add workspace context
-  if (workspaceDetails) {
-    contextBuilder.addWorkspaceContext(workspaceDetails);
-  }
+      // Add workspace context
+      if (workspaceDetails) {
+        contextBuilder.addWorkspaceContext(workspaceDetails);
+      }
 
-  // Add assistant instructions
-  if (agent.assistant_instructions) {
-    contextBuilder.addAssistantInstruction(agent.assistant_instructions);
-  }
+      // Add assistant instructions
+      if (agent.assistant_instructions) {
+        contextBuilder.addAssistantInstruction(agent.assistant_instructions);
+      }
 
-  // Add vector search results if available
-  if (vectorContextStr) {
-    contextBuilder.addVectorMemories(vectorContextStr);
-  }
+      // Add vector search results if available
+      if (vectorContextStr) {
+        contextBuilder.addVectorMemories(vectorContextStr);
+      }
 
-  // Add MCP context if available
-  if (mcpResourceContextStr) {
-    contextBuilder.addMCPContext(mcpResourceContextStr);
-  }
+      // Add MCP context if available
+      if (mcpResourceContextStr) {
+        contextBuilder.addMCPContext(mcpResourceContextStr);
+      }
 
-  // Set chat history with agent names
-  contextBuilder.setHistory(historyMessages);
+      // Set chat history with agent names
+      contextBuilder.setHistory(historyMessages);
 
-  // Set the user's current message
-  contextBuilder.setUserInput(userMessageContent);
+      // Set the user's current message
+      contextBuilder.setUserInput(userMessageContent);
 
-  // Build the final context
-  const messages = contextBuilder.buildContext();
+      // Build the final context
+      const messages = contextBuilder.buildContext();
 
-  console.log(`[chat] Final context built - ${messages.length} messages, approximately ${contextBuilder.getTotalTokenCount()} tokens`);
+      console.log(`[chat] Final context built - ${messages.length} messages, approximately ${contextBuilder.getTotalTokenCount()} tokens`);
 
   // Get Response from LLM
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages,
-    temperature: 0.7,
-  });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages,
+        temperature: 0.7,
+      });
 
   // Extract assistant response
-  const completionContent = completion.choices[0].message.content;
+      const completionContent = completion.choices[0].message.content;
 
-  // Save agent response in the database
+      // Save agent response in the database
   const saveResult = await saveAgentResponse(channelId, completionContent, agentId, supabaseClient);
   if (!saveResult.success) {
     console.error('Error saving agent response');
-    // Note: We still return the response to the client even if saving fails
-  }
+        // Note: We still return the response to the client even if saving fails
+      }
 
   return createSuccessResponse({
-    message: completionContent,
-    agent: { id: agent.id, name: agent.name },
+          message: completionContent,
+          agent: { id: agent.id, name: agent.name },
   });
 }
 
