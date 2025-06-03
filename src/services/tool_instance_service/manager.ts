@@ -222,7 +222,7 @@ export class ToolInstanceService {
                 // requiredEnvVars: toolCatalogEntry.required_env_vars, // If this field exists in tool_catalog
             };
 
-            const dtmaPort = Deno.env.get('DTMA_PORT') || '3030'; // Get from env or config
+            const dtmaPort = Deno.env.get('DTMA_PORT') || '30000'; // Fixed to match actual DTMA port
             const backendToDtmaApiKey = Deno.env.get('BACKEND_TO_DTMA_API_KEY');
             if (!backendToDtmaApiKey) {
                 throw new Error('BACKEND_TO_DTMA_API_KEY is not configured.');
@@ -302,7 +302,7 @@ export class ToolInstanceService {
         path: string,
         payload?: object
     ): Promise<any> {
-        const dtmaPort = Deno.env.get('DTMA_PORT') || '3030';
+        const dtmaPort = Deno.env.get('DTMA_PORT') || '30000';
         const backendToDtmaApiKey = Deno.env.get('BACKEND_TO_DTMA_API_KEY');
         if (!backendToDtmaApiKey) {
             throw new Error('BACKEND_TO_DTMA_API_KEY is not configured for DTMA API calls.');

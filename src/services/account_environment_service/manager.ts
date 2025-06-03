@@ -451,7 +451,7 @@ echo "--- DTMA Docker Setup Script Finished ---"
              return toolboxRecord;
         }
 
-        const dtmaPort = Deno.env.get('DTMA_PORT') || '30300'; // Ensure this matches DTMA's actual port
+        const dtmaPort = Deno.env.get('DTMA_PORT') || '30000'; // Fixed to match actual DTMA port
         const backendToDtmaApiKeyFromEnv = Deno.env.get('BACKEND_TO_DTMA_API_KEY'); // Renamed to avoid conflict
 
         if (!backendToDtmaApiKeyFromEnv) { // Use the new variable name

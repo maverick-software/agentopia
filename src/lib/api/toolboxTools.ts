@@ -22,13 +22,16 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 const getToolboxToolsApiUrl = (toolboxId: string, path?: string) => {
-    // Base URL for the toolbox-tools function
-    // Example: /api/toolbox-tools/{toolboxId}/tools
-    let baseUrl = `/api/toolbox-tools/${toolboxId}/tools`;
-    if (path) {
-        baseUrl += path; // e.g., path = '/{toolInstanceId}/start'
+    // Use the proper Supabase functions URL pattern like other parts of the app
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+        throw new Error('VITE_SUPABASE_URL is not defined in environment variables');
     }
-    return baseUrl;
+    let url = `${supabaseUrl}/functions/v1/toolbox-tools/${toolboxId}/tools`;
+    if (path) {
+        url += path; // e.g., path = '/{toolInstanceId}/start'
+    }
+    return url;
 };
 
 /**

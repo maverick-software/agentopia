@@ -50,24 +50,12 @@ export interface ProvisionToolboxPayload {
 }
 
 const getApiUrl = (path: string) => {
-  // Ensure SUPABASE_URL is available, or construct from Supabase client if possible
-  // For Edge Functions, the path is typically /api/function-name/optional-sub-paths
-  // const functionsBaseUrl = `${supabase.functionsUrl}/toolboxes-user`; // This might give the base URL of the function itself
-  // Let's assume the base URL for functions invoked via fetch is simply /api/
-  // Check your project's actual function invocation URL structure.
-  // Example: If your Supabase project URL is https://<project_ref>.supabase.co
-  // then functions are at https://<project_ref>.supabase.co/functions/v1/<function-name>
-  // However, when deployed, they are often mapped under /api/
-  // For local dev with `supabase start`, it might be http://localhost:54321/functions/v1/
-  // This needs to be robust.
-  let baseUrl = '/api/toolboxes-user'; // Common convention for deployed Supabase Edge Functions via gateway
-  if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
-    // Attempt to get the local functions URL if running in dev mode
-    // This often requires an environment variable like SUPABASE_FUNCTIONS_URL or constructing it
-    // from the main SUPABASE_URL if that's how your Supabase client is configured.
-    // Defaulting to relative /api/ for now, which works if the Next.js/Vite dev server proxies /api to functions.
+  // Use the proper Supabase functions URL pattern like other parts of the app
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error('VITE_SUPABASE_URL is not defined in environment variables');
   }
-  return `${baseUrl}${path}`;
+  return `${supabaseUrl}/functions/v1/toolboxes-user${path}`;
 };
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -172,13 +160,12 @@ export interface DOSizeOption {
 }
 
 const getDOOptionsApiUrl = (path: string) => {
-    // Base URL for the digitalocean-options function
-    // Adjust if your Supabase function invocation URL is different
-    let baseUrl = '/api/digitalocean-options'; 
-    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
-      // Local dev might be proxied or directly http://localhost:54321/functions/v1/digitalocean-options
-    }
-    return `${baseUrl}${path}`;
+  // Use the proper Supabase functions URL pattern like other parts of the app
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error('VITE_SUPABASE_URL is not defined in environment variables');
+  }
+  return `${supabaseUrl}/functions/v1/digitalocean-options${path}`;
 };
 
 export const listDORegions = async (): Promise<DORegionOption[]> => {
