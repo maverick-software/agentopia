@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+You are going to present this project/product to investors. Here are you instructions:
+
+1. Review the folders inside /docs/investor_relations/pitch_deck
+    a) Each folder represents a part of the pitch deck presentation. 
+    b) For each folder inside the pitch_deck folder, there is a research document.
+    c) For each folder inside the pitch_deck folder, there is a template file in `/.cursor/rules/premium+/investor_relations/templates/`. Find the appropriate template, and then, based on the template and the research document, create the specified document (i.e. 'executive_summary.md', and so on).
+
+
+2. Once you are done creating all of the pitch_deck documents, stop and summarize your work for the user.

@@ -78,3 +78,6 @@ dist-ssr
 # Older context documents to ignore (this will ignore all not explicitly kept above)
 docs/context/ai_context_*.md
 docs/context/ai_context_2025-04-30.md
+
+# Investor Relations - Exclude all investor relations documents from Git
+docs/investor_relations/

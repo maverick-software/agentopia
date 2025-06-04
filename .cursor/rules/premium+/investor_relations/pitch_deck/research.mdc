@@ -1,0 +1,91 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+You are going to present this project/product to investors. Here are you instructions:
+
+1. Review the folders inside /docs/investor_relations/pitch_deck
+    a) Each folder represents a part of the pitch deck presentation. For each folder inside the pitch_deck folder, you are going to perform comprehensive research and create a research.md file inside that subfolder.
+
+2. Create a wbs_checklist.md for yourself inside docs/plans/ to help guide your research process. Here are some of the research that will need to be done for each aspect of the presentation.
+    A) For each aspect of the presentation, and as a guide for setting up your wbs_checklist.md, here is what you should be researching for each item:
+            
+            a. Executive Summary `/docs/investor_relations/pitch_deck/exec_summary/`
+                (i) Create this document last, as you will use your research from the next steps to build it.
+                (ii) Brief overview of the business, product, and funding goals.
+                (iii) Include: product purpose, target market, funding amount requested, and high-level traction (if any).
+                (iv) For any lacking information, you can ask the user to clarify in chat.
+             
+            c. Business Plan or Lean Canvas
+                (i) A 1-2 page summary of the business model.
+                (ii) Focus areas: customer segments, value proposition, channels, revenue streams, cost structure, etc.
+                
+                NOTE: Provide different business models that will work for the specific type of product presenting. Perform comprehensive web research in order to learn about the different types of SaaS models.
+
+            d. Product Overview / Technical Architecture
+                (ii) A clear explanation of how the product works (for technical and non-technical investors).
+                (iii) Include diagrams, workflows, and integrations (APIs, front-end/back-end, etc.).
+
+                NOTE: In order to properly gather this information, you will need to perform a comprehensive analysis of the project documentation (`docs/project_docs`), the README files.
+
+            e. Go-to-Market Strategy
+                (i) How you plan to acquire users/customers.
+                (ii) Sales channels, marketing strategy, onboarding, partnerships.
+
+                NOTE: Provide recommendations here and do web research. 
+
+            f. Market Research + Competitive Analysis
+                (i) Charts, data, and positioning relative to current competitors.
+                (ii) Highlight your differentiators or defensible moat.
+
+                NOTE: This should be a more comprehensive research process, so make sure to add copius subitems here to ensure you deeply research and truly understand the market and competion for this product.
+
+            g. Development Roadmap
+                (i) Timeline of feature rollouts and major milestones.
+                (ii) Indicate completed vs. future work (MVP, beta, launch, etc.).
+
+                NOTE: Here we want to develop an MVP and then add a roadmap as funding comes in through various sources.
+
+            h. Team Bios
+                (i) Founders, technical leads, and advisors.
+                (ii) Focus on relevant experience, wins, and roles.
+
+                NOTE: You will need to query the user for the names and linkedin profiles of the team.
+
+            i. Financial Model (3-5 Years)
+                (i) Revenue projections, user growth, CAC/LTV, burn rate, runway.
+                (ii) Clear assumptions and graphs help tremendously.
+
+                NOTE: You will likely need to provide the user with some information, and allow them to provide you back the necessary models.
+
+            j. Funding Ask + Use of Funds
+                (i) How much you're raising and exactly how it will be allocated:
+                    - Dev
+                    - Marketing
+                    - Operations
+                    - Runway
+                    - Contingency
+
+                NOTE: Use industry standards here, and perform web research about what other companies have done.
+
+            k. Legal + IP Overview
+                (i) Business entity
+                (ii) IP ownership
+                (iii) Trademarks/patents (if applicable)
+                (iv) Data compliance if relevant (HIPAA, SOC2, etc.)
+
+                NOTE: You will need to get the entity, IP ownership and trademarket information from the user. For data compliance, you can review the codebase against your knowledge of HIPAA, SOC2, ISO 27001, GDPR and CCPA.
+
+            l. Demo or Mockups
+                (i) The user will need to provide a video for this, so skip this.
+
+            m. Risk & Mitigation Plan
+                (i) Key Risks
+                (ii) Mitigation Strategies
+
+                NOTE: Perform web research on this and then using your knowledge to supplement, complete these bullet points.
+
+            n. Exit Strategy or Acquisition Potential
+                (i) Potential Exit Paths
+                (ii) Supporting Indicators

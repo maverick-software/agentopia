@@ -1,0 +1,48 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+You are going to present this project to investors. Here are your instructions:
+
+1. Under /docs/ create a new folder called /docs/investor_relations/
+- inside the investor relations folder, create two new folders:
+    a) startup_pitch_deck
+        i. inside startup_pitch_deck, create subfolders for each of the items listed below:
+            1. Executive Summary
+            2. Pitch Deck / Presentation Slides
+            3. Business Plan or Lean Canvas
+            4. Product Overview / Technical Architecture
+            5. Go-to-Market Strategy
+            6. Market Research + Competitive Analysis
+            7. Development Roadmap
+            8. Team Bios
+            9. Financial Model (3-5 Years)
+            10. Funding Ask + Use of Funds
+            11. Legal + IP Overview
+            12. Demo or Mockups
+            13. Risk & Mitigation Plan
+            14. Exit Strategy or Acquisition Potential
+
+    b) project_updates
+        i. inside project_updates, create subfolders for each of the items listed below:
+            1. Title Slide
+            2. Executive Overview
+            3. Objectives Recap
+            4. Progress Since Last Update
+            5. Current Status
+            6. Metrics & KPIs
+            7. Challenges or Risks
+            8. Upcoming Milestone
+            9. Budget & Resources Update
+            10. Asks & Support Needed 
+            11. Closing & Vision Reminder
+            12. Q&A  
+
+2. Create only the folders and stop.
+2. Add all folders to the .gitignore. We can't have any of these files go to github.
+
+
+
+
+
