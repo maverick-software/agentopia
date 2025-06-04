@@ -1825,6 +1825,41 @@ COMMENT ON COLUMN "public"."user_secrets"."encryption_key" IS 'Base64 encoded 32
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."user_ssh_keys" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "public_key_vault_id" "uuid" NOT NULL,
+    "private_key_vault_id" "uuid" NOT NULL,
+    "key_name" "text" DEFAULT 'default'::"text" NOT NULL,
+    "fingerprint" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."user_ssh_keys" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."user_ssh_keys" IS 'Metadata for user SSH keys stored securely in Supabase Vault';
+
+
+
+COMMENT ON COLUMN "public"."user_ssh_keys"."public_key_vault_id" IS 'UUID reference to public key stored in Supabase Vault';
+
+
+
+COMMENT ON COLUMN "public"."user_ssh_keys"."private_key_vault_id" IS 'UUID reference to private key stored in Supabase Vault';
+
+
+
+COMMENT ON COLUMN "public"."user_ssh_keys"."key_name" IS 'User-friendly name for the SSH key pair';
+
+
+
+COMMENT ON COLUMN "public"."user_ssh_keys"."fingerprint" IS 'SSH key fingerprint for identification and verification';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."user_team_memberships" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -2106,6 +2141,16 @@ ALTER TABLE ONLY "public"."user_secrets"
 
 
 
+ALTER TABLE ONLY "public"."user_ssh_keys"
+    ADD CONSTRAINT "user_ssh_keys_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_ssh_keys"
+    ADD CONSTRAINT "user_ssh_keys_user_id_key_name_key" UNIQUE ("user_id", "key_name");
+
+
+
 ALTER TABLE ONLY "public"."user_team_memberships"
     ADD CONSTRAINT "user_team_memberships_pkey" PRIMARY KEY ("id");
 
@@ -2276,6 +2321,14 @@ CREATE INDEX "idx_tool_catalog_status" ON "public"."tool_catalog" USING "btree" 
 
 
 
+CREATE INDEX "idx_user_ssh_keys_fingerprint" ON "public"."user_ssh_keys" USING "btree" ("fingerprint");
+
+
+
+CREATE INDEX "idx_user_ssh_keys_user_id" ON "public"."user_ssh_keys" USING "btree" ("user_id");
+
+
+
 CREATE INDEX "idx_user_team_memberships_team_id" ON "public"."user_team_memberships" USING "btree" ("team_id");
 
 
@@ -2309,6 +2362,10 @@ CREATE OR REPLACE TRIGGER "on_profile_update" BEFORE UPDATE ON "public"."profile
 
 
 CREATE OR REPLACE TRIGGER "on_user_secrets_update" BEFORE UPDATE ON "public"."user_secrets" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "on_user_ssh_keys_update" BEFORE UPDATE ON "public"."user_ssh_keys" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
 
 
@@ -2538,6 +2595,11 @@ ALTER TABLE ONLY "public"."user_roles"
 
 ALTER TABLE ONLY "public"."user_secrets"
     ADD CONSTRAINT "user_secrets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_ssh_keys"
+    ADD CONSTRAINT "user_ssh_keys_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 
 
@@ -2779,6 +2841,10 @@ CREATE POLICY "Disallow updates to chat messages" ON "public"."chat_messages" FO
 
 
 
+CREATE POLICY "Service role can manage all SSH keys" ON "public"."user_ssh_keys" USING (("auth"."role"() = 'service_role'::"text"));
+
+
+
 CREATE POLICY "Service roles can access all account tool environments" ON "public"."account_tool_environments" USING (("public"."get_my_claim"('role'::"text") = 'service_role'::"text")) WITH CHECK (("public"."get_my_claim"('role'::"text") = 'service_role'::"text"));
 
 
@@ -2811,7 +2877,15 @@ CREATE POLICY "Users can create datastores" ON "public"."datastores" FOR INSERT 
 
 
 
+CREATE POLICY "Users can delete own SSH keys" ON "public"."user_ssh_keys" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Users can delete own datastores" ON "public"."datastores" FOR DELETE TO "authenticated" USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can insert own SSH keys" ON "public"."user_ssh_keys" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -2881,11 +2955,19 @@ CREATE POLICY "Users can read own datastores" ON "public"."datastores" FOR SELEC
 
 
 
+CREATE POLICY "Users can update own SSH keys" ON "public"."user_ssh_keys" FOR UPDATE USING (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Users can update own datastores" ON "public"."datastores" FOR UPDATE TO "authenticated" USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
 CREATE POLICY "Users can update their own profile" ON "public"."profiles" FOR UPDATE TO "authenticated" USING (("auth"."uid"() = "id")) WITH CHECK (("auth"."uid"() = "id"));
+
+
+
+CREATE POLICY "Users can view own SSH keys" ON "public"."user_ssh_keys" FOR SELECT USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -2954,6 +3036,9 @@ ALTER TABLE "public"."user_roles" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."user_secrets" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."user_ssh_keys" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."user_team_memberships" ENABLE ROW LEVEL SECURITY;
@@ -4351,6 +4436,12 @@ GRANT ALL ON TABLE "public"."user_roles" TO "service_role";
 GRANT ALL ON TABLE "public"."user_secrets" TO "anon";
 GRANT ALL ON TABLE "public"."user_secrets" TO "authenticated";
 GRANT ALL ON TABLE "public"."user_secrets" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_ssh_keys" TO "anon";
+GRANT ALL ON TABLE "public"."user_ssh_keys" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_ssh_keys" TO "service_role";
 
 
 
