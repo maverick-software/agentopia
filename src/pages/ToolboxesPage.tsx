@@ -62,14 +62,15 @@ export function ToolboxesPage() {
 
   // Check for existing provisioning toolboxes and start timers for them
   useEffect(() => {
+    if (!toolboxes) return;
+    
     toolboxes.forEach(toolbox => {
       if (toolbox.name && !provisioningTimers[toolbox.name]) {
         if (toolbox.status === 'provisioning') {
-          // For existing provisioning toolboxes, we can't know how long they've been running
-          // So start with an estimate: if it's actively provisioning, assume it's been running for 2-3 minutes
-          // This gives a more realistic progress indication than starting from 0
+          // For existing provisioning toolboxes, start with a minimal elapsed time
+          // to avoid jumping straight to Phase 5
           const startTime = new Date();
-          const estimatedElapsed = 150; // Assume 2.5 minutes elapsed for existing provisioning toolboxes
+          const estimatedElapsed = 30; // Assume 30 seconds elapsed for existing provisioning toolboxes
           startTime.setTime(startTime.getTime() - (estimatedElapsed * 1000));
           
           setProvisioningTimers(prev => ({
@@ -82,7 +83,7 @@ export function ToolboxesPage() {
         }
       }
     });
-  }, [toolboxes, provisioningTimers]);
+  }, [toolboxes]); // REMOVED provisioningTimers from dependencies to prevent infinite loop
 
   // Update countdown timers every second
   useEffect(() => {
