@@ -1,0 +1,29 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+You are going to present this project/product to investors. Here are you instructions:
+
+1. Review the folders inside /docs/investor_relations/project_updates
+    a) Each folder represents a part of the project update presentation. For each folder inside the project_updates folder, you are going to perform comprehensive research and create a research.md file inside that subfolder.
+
+    b) project_updates
+        i. inside project_updates, create subfolders for each of the items listed below:
+            1. Title Slide
+            2. Executive Overview
+            3. Objectives Recap
+            4. Progress Since Last Update
+            5. Current Status
+            6. Metrics & KPIs
+            7. Challenges or Risks
+            8. Upcoming Milestone
+            9. Budget & Resources Update
+            10. Asks & Support Needed 
+            11. Closing & Vision Reminder
+            12. Q&A   
+
+
+
+
+

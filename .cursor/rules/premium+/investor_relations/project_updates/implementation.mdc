@@ -1,0 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+You are going to provide a project update to investors. Here are your instructions:
+
+1. Review the folders inside /docs/investor_relations/project_updates/
+    a) Each folder represents a part of the project update presentation. 
+    b) For each folder inside the project_updates folder, there is a research document.
+    c) From all of these documents, create a single project update presentation.
+
+2. Once you are done creating all of thek documents, stop and summarize your work for the user.

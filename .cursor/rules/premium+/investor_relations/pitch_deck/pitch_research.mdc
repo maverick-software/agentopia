@@ -8,8 +8,12 @@ You are going to present this project/product to investors. Here are you instruc
 1. Review the folders inside /docs/investor_relations/pitch_deck
     a) Each folder represents a part of the pitch deck presentation. For each folder inside the pitch_deck folder, you are going to perform comprehensive research and create a research.md file inside that subfolder.
 
-2. Create a wbs_checklist.md for yourself inside docs/plans/ to help guide your research process. Here are some of the research that will need to be done for each aspect of the presentation.
-    A) For each aspect of the presentation, and as a guide for setting up your wbs_checklist.md, here is what you should be researching for each item:
+2. Create a wbs_checklist.md for yourself inside docs/plans/ to help guide your research process. 
+
+    A) For each aspect of the presentation, along with the lists provided below, provide yourself a note within each presentation area to create the research document for that folder before moving on to the next phase.
+    
+    
+    Here is what you should be researching for each item:
             
             a. Executive Summary `/docs/investor_relations/pitch_deck/exec_summary/`
                 (i) Create this document last, as you will use your research from the next steps to build it.
