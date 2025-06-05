@@ -84,6 +84,24 @@ export async function createAndStartContainer(
 }
 
 /**
+ * Starts a stopped Docker container.
+ * @param containerIdOrName - The ID or name of the container to start.
+ * @returns Promise<void>
+ * @throws {Error} If starting fails.
+ */
+export async function startContainer(containerIdOrName: string): Promise<void> {
+  console.log(`Attempting to start container "${containerIdOrName}"...`);
+  try {
+    const container = docker.getContainer(containerIdOrName);
+    await container.start();
+    console.log(`Container "${containerIdOrName}" started.`);
+  } catch (error) {
+    console.error(`Error starting container "${containerIdOrName}":`, error);
+    throw error;
+  }
+}
+
+/**
  * Stops a running Docker container.
  * @param containerIdOrName - The ID or name of the container to stop.
  * @returns Promise<void>
@@ -146,10 +164,14 @@ export async function inspectContainer(containerIdOrName: string): Promise<Docke
  * @param filters - Optional filters (e.g., { name: [containerName] }).
  * @returns Promise<Dockerode.ContainerInfo[]>
  */
-export async function listContainers(all: boolean = false, filters?: object): Promise<Dockerode.ContainerInfo[]> {
+export async function listContainers(all: boolean = false, filters?: { [key: string]: string[] }): Promise<Dockerode.ContainerInfo[]> {
   console.log(`Listing containers (all=${all}, filters=${JSON.stringify(filters)})...`);
   try {
-    const containers = await docker.listContainers({ all, filters });
+    const options: Dockerode.ContainerListOptions = { all };
+    if (filters) {
+      options.filters = filters;
+    }
+    const containers = await docker.listContainers(options);
     return containers;
   } catch (error) {
     console.error('Error listing containers:', error);

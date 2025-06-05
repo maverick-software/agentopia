@@ -97,7 +97,7 @@ const ToolboxModal: React.FC<ToolboxModalProps> = ({
       
       // Show "Submitted" success message briefly, then close
       setTimeout(() => {
-        // Parent component handles closing and ongoing provisioning status
+        onClose(); // Actually close the modal
       }, 1500);
     } catch (apiError: any) {
       setFormError(apiError.message || 'Failed to submit toolbox request. Please try again.');

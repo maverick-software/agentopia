@@ -19,6 +19,13 @@ interface SupabaseClient<T> {
   [key: string]: any; // Allow other properties
 }
 
+// Deno global declaration for environment access
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 import type { Database, Json } from '../../types/database.types.ts'; // Adjusted path for consistency
 import {
   createDigitalOceanDroplet,
@@ -341,7 +348,7 @@ echo "--- DTMA Docker Setup Script Finished ---"
 
             // 8. Update DB with do_droplet_id
             toolboxRecord = await this.updateToolboxEnvironment(toolboxId, { 
-                do_droplet_id: doDroplet.id.toString(), // Ensure it's string if DO SDK returns number
+                do_droplet_id: Number(doDroplet.id), // Ensure it's number as expected by DB schema
                 // Status will be updated by polling or first heartbeat
             });
 
@@ -570,11 +577,14 @@ echo "--- DTMA Docker Setup Script Finished ---"
         console.log('Received DTMA status payload:', JSON.stringify(dtmaStatusPayload, null, 2));
 
         // Update toolbox environment with general DTMA health
+        // If DTMA responds successfully, set status to 'active' unless in final states
+        const shouldSetActive = !['deprovisioned', 'pending_deprovision', 'deprovisioning', 'error_deprovisioning'].includes(toolboxRecord.status);
+        
         const toolboxUpdates: AccountToolEnvironmentUpdate = {
-            dtma_last_known_version: dtmaStatusPayload.dtma_version,
-            dtma_health_details_json: dtmaStatusPayload.system_metrics as Json,
+            dtma_last_known_version: dtmaStatusPayload.version || dtmaStatusPayload.dtma_version,
+            dtma_health_details_json: (dtmaStatusPayload.environment || dtmaStatusPayload.system_metrics || dtmaStatusPayload) as Json,
             last_heartbeat_at: new Date().toISOString(), 
-            status: (toolboxRecord.status === ('awaiting_heartbeat' as AccountToolEnvironmentStatusEnum) || toolboxRecord.status === ('provisioning' as AccountToolEnvironmentStatusEnum)) ? ('active' as AccountToolEnvironmentStatusEnum) : toolboxRecord.status,
+            status: shouldSetActive ? ('active' as AccountToolEnvironmentStatusEnum) : toolboxRecord.status,
         };
         const updatedToolboxRecord = await this.updateToolboxEnvironment(toolboxId, toolboxUpdates);
 

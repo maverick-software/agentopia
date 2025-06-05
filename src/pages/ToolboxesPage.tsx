@@ -269,15 +269,26 @@ export function ToolboxesPage() {
       {/* Display active provisioning status */}
       {activeProvisioningToolboxes.size > 0 && (
         <div className="bg-blue-900/30 border border-blue-700 text-blue-300 p-4 rounded-md mb-6">
-          <div className="flex items-center">
-            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-            <h3 className="font-semibold">Provisioning in Progress</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              <h3 className="font-semibold">Provisioning in Progress</h3>
+            </div>
+            <div className="text-xs bg-blue-800/50 px-2 py-1 rounded">
+              ⏱️ ~3 minutes expected
+            </div>
           </div>
           <p className="mt-1 text-sm">
             {activeProvisioningToolboxes.size === 1 
-              ? `Monitoring provisioning status for: ${Array.from(activeProvisioningToolboxes)[0]}`
-              : `Monitoring ${activeProvisioningToolboxes.size} toolboxes: ${Array.from(activeProvisioningToolboxes).join(', ')}`
+              ? `Creating and configuring server for: ${Array.from(activeProvisioningToolboxes)[0]}`
+              : `Creating ${activeProvisioningToolboxes.size} toolboxes: ${Array.from(activeProvisioningToolboxes).join(', ')}`
             }
+          </p>
+          <div className="mt-3 bg-blue-800/30 rounded-full h-2 overflow-hidden">
+            <div className="bg-blue-400 h-full animate-pulse" style={{ width: '60%' }}></div>
+          </div>
+          <p className="mt-2 text-xs text-blue-200">
+            Installing Docker, pulling DTMA container, and establishing connection...
           </p>
         </div>
       )}
@@ -357,7 +368,7 @@ export function ToolboxesPage() {
                   <p className="text-sm text-muted-foreground mb-1">Region: {toolbox.region_slug}</p>
                   <p className="text-sm text-muted-foreground mb-1">Size: {toolbox.size_slug}</p>
                   {toolbox.public_ip_address && (
-                    <p className="text-sm text-muted-foreground mb-3">
+                    <p className="text-sm text-muted-foreground mb-1">
                       IP: {toolbox.public_ip_address}
                       {toolbox.status === 'active' && (
                           <a href={`http://${toolbox.public_ip_address}`} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center text-indigo-400 hover:text-indigo-300">
@@ -365,6 +376,39 @@ export function ToolboxesPage() {
                           </a>
                       )}
                     </p>
+                  )}
+                  {toolbox.status === 'active' && (
+                    <p className="text-xs text-green-400 bg-green-900/20 p-2 rounded mb-2">
+                      ✅ Server is healthy and ready for tool deployment
+                    </p>
+                  )}
+                  {toolbox.status === 'provisioning' && (
+                    <div className="text-xs text-blue-400 bg-blue-900/20 p-2 rounded mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span>🔄 Setting up your server...</span>
+                        <span className="text-blue-300">~3 min</span>
+                      </div>
+                      <div className="bg-blue-800/30 rounded-full h-1 overflow-hidden">
+                        <div className="bg-blue-400 h-full animate-pulse" style={{ width: '45%' }}></div>
+                      </div>
+                      <div className="mt-1 text-xs text-blue-300">
+                        Installing Docker, configuring DTMA...
+                      </div>
+                    </div>
+                  )}
+                  {(toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && (
+                    <div className="text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span>⏳ Finalizing setup...</span>
+                        <span className="text-yellow-300">~1 min</span>
+                      </div>
+                      <div className="bg-yellow-800/30 rounded-full h-1 overflow-hidden">
+                        <div className="bg-yellow-400 h-full animate-pulse" style={{ width: '80%' }}></div>
+                      </div>
+                      <div className="mt-1 text-xs text-yellow-300">
+                        Establishing connection and verifying health...
+                      </div>
+                    </div>
                   )}
                   {toolbox.status.includes('error') && toolbox.provisioning_error_message && (
                       <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Error: {toolbox.provisioning_error_message}</p>

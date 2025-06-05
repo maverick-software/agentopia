@@ -2,205 +2,349 @@ import express, { Request, Response } from 'express';
 import {
   pullImage,
   createAndStartContainer,
+  startContainer,
   stopContainer,
   removeContainer,
   listContainers,
   inspectContainer,
 } from '../docker_manager.js'; 
-import { fetchToolSecrets } from '../agentopia_api_client.js'; 
-import Dockerode from 'dockerode';
+// import { fetchToolSecrets } from '../agentopia_api_client.js'; // Unused for now
 
 const router = express.Router();
 
-/**
- * POST /tools/install
- * Body: { 
- *   image_name: string // e.g., 'ubuntu:latest' or 'org/repo:tag'
- *   // Potentially other options like credentials for private repos in future
- * }
- * Action: Pulls the specified Docker image.
- */
-router.post('/install', async (req: Request, res: Response) => {
-  const { image_name } = req.body;
+// In-memory tracking of managed tool instances
+interface ManagedToolInstance {
+  accountToolInstanceId: string;
+  dockerImageUrl: string;
+  creationPortBindings?: PortMap;
+}
 
-  if (!image_name || typeof image_name !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid image_name in request body' });
-  }
+const managedInstances = new Map<string, ManagedToolInstance>();
 
-  try {
-    console.log(`Received install request for image: ${image_name}`);
-    // Perform the Docker pull operation
-    await pullImage(image_name);
-    console.log(`Successfully pulled image: ${image_name}`);
-    res.status(200).json({ success: true, message: `Image '${image_name}' pulled successfully.` });
-  } catch (error: any) {
-    console.error(`Failed to install/pull image ${image_name}:`, error.message);
-    // Provide a more specific error message if possible
-    res.status(500).json({ 
-        success: false, 
-        message: `Failed to pull image '${image_name}'.`, 
-        error: error.message || 'Unknown error' 
-    });
-  }
-});
-
-/**
- * POST /tools/start
- * Body: { 
- *   agent_droplet_tool_id: string, // DB ID of the tool instance 
- *   image_name: string,           // e.g., org/repo:tag
- *   container_name: string,       // Unique name for the container
- *   create_options?: Dockerode.ContainerCreateOptions // Base options from Agentopia backend (ports, volumes etc.)
- * }
- * Action: Fetches secrets, injects them, creates and starts the container.
- */
-router.post('/start', async (req: Request, res: Response) => {
-  const { agent_droplet_tool_id, image_name, container_name, create_options = {} } = req.body;
-
-  if (!agent_droplet_tool_id || !image_name || !container_name) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Missing required fields: agent_droplet_tool_id, image_name, container_name' 
-    });
-  }
-
-  try {
-    // 1. Fetch secrets from Agentopia backend
-    console.log(`Fetching secrets for tool instance ID: ${agent_droplet_tool_id}`);
-    const secrets = await fetchToolSecrets(agent_droplet_tool_id);
-
-    if (!secrets) {
-      // fetchToolSecrets logs the error, return a generic failure
-      return res.status(500).json({ success: false, message: 'Failed to fetch secrets for the tool.' });
+// Helper function to extract explicitly defined host ports from PortBindings
+function getExplicitHostPorts(portBindings?: PortMap): string[] {
+  const hostPorts = new Set<string>();
+  if (portBindings) {
+    for (const [, bindings] of Object.entries(portBindings)) {
+      if (Array.isArray(bindings)) {
+        for (const binding of bindings) {
+          if (binding.HostPort) {
+            hostPorts.add(binding.HostPort);
+          }
+        }
+      }
     }
-    console.log('Successfully fetched secrets.');
+  }
+  return Array.from(hostPorts);
+}
 
-    // 2. Prepare Docker environment variables from secrets
-    const envVars: string[] = create_options.Env || [];
-    for (const [key, value] of Object.entries(secrets)) {
-      if (value !== null) { // Only add non-null secrets as env vars
-        envVars.push(`${key}=${value}`);
-      } else {
-        console.warn(`Secret key "${key}" was null, not adding to environment.`);
+// Import interface from local file since we can't import from dockerode
+interface PortMap {
+  [containerPort: string]: {
+    HostIp?: string;
+    HostPort?: string;
+  }[];
+}
+
+interface ContainerCreateOptions {
+  Image?: string;
+  name?: string;
+  Env?: string[];
+  HostConfig?: {
+    RestartPolicy?: { Name: string };
+    PortBindings?: PortMap;
+  };
+}
+
+/**
+ * POST / (maps to /tools via index.ts)
+ * Deploys a new tool instance onto the Toolbox.
+ * Request Body: {
+ *   dockerImageUrl: string,
+ *   instanceNameOnToolbox: string, // This will be the container name
+ *   accountToolInstanceId: string, // Agentopia DB ID for this instance
+ *   baseConfigOverrideJson?: object, // Includes PortBindings, Env vars etc.
+ * }
+ */
+router.post('/', async (req: Request, res: Response) => {
+  const {
+    dockerImageUrl,
+    instanceNameOnToolbox,
+    accountToolInstanceId,
+    baseConfigOverrideJson = {},
+  } = req.body;
+
+  if (!dockerImageUrl || !instanceNameOnToolbox || !accountToolInstanceId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields: dockerImageUrl, instanceNameOnToolbox, accountToolInstanceId',
+    });
+  }
+
+  if (managedInstances.has(instanceNameOnToolbox)) {
+    return res.status(409).json({
+        success: false,
+        error: `Instance with name '${instanceNameOnToolbox}' already exists.`,
+    });
+  }
+
+  try {
+    console.log(`Deploy request for ${instanceNameOnToolbox} (AID: ${accountToolInstanceId}) with image ${dockerImageUrl}`);
+
+    // Port conflict pre-check for explicitly defined HostPorts
+    const requestedPortBindings = (baseConfigOverrideJson as any).HostConfig?.PortBindings as PortMap | undefined;
+    if (requestedPortBindings) {
+      const explicitlyRequestedHostPorts = getExplicitHostPorts(requestedPortBindings);
+
+      if (explicitlyRequestedHostPorts.length > 0) {
+        for (const instance of managedInstances.values()) {
+          if (instance.creationPortBindings) {
+            const existingInstanceHostPorts = getExplicitHostPorts(instance.creationPortBindings);
+            const conflict = explicitlyRequestedHostPorts.find(port => existingInstanceHostPorts.includes(port));
+            if (conflict) {
+              console.warn(`Port conflict detected for instance ${instanceNameOnToolbox}: Port ${conflict} is already in use by another managed instance.`);
+              return res.status(409).json({
+                success: false,
+                error: `Port conflict: Requested HostPort ${conflict} is already in use by a managed instance.`,
+              });
+            }
+          }
+        }
       }
     }
 
-    // 3. Merge fetched secrets env vars with any provided create_options
-    const finalCreateOptions: Dockerode.ContainerCreateOptions = {
-      ...create_options,
-      Env: envVars,
+    // 1. Pull the image
+    await pullImage(dockerImageUrl);
+    console.log(`Image ${dockerImageUrl} pulled successfully for ${instanceNameOnToolbox}.`);
+
+    // 2. Prepare Docker Create Options
+    const createOptions: ContainerCreateOptions = {
+      Image: dockerImageUrl,
+      name: instanceNameOnToolbox,
+      Env: (baseConfigOverrideJson as any).Env || [], // Extract Env from baseConfig or default to empty
+      HostConfig: {
+        RestartPolicy: { Name: 'unless-stopped' },
+        PortBindings: requestedPortBindings || {}, // Use the validated/extracted PortBindings
+      },
     };
 
-    // 4. Call docker_manager.createAndStartContainer
-    console.log(`Attempting to start container "${container_name}" with image "${image_name}"`);
-    const container = await createAndStartContainer(image_name, container_name, finalCreateOptions);
+    // 3. Create and start the container
+    const container = await createAndStartContainer(dockerImageUrl, instanceNameOnToolbox, createOptions);
+    console.log(`Container ${instanceNameOnToolbox} (ID: ${container.id}) started successfully.`);
 
-    // 5. Respond with success and potentially useful info
-    // Inspect the container to get runtime details like port mappings
+    // 4. Store in managed instances map
+    managedInstances.set(instanceNameOnToolbox, {
+      accountToolInstanceId,
+      dockerImageUrl,
+      creationPortBindings: createOptions.HostConfig?.PortBindings, // Store the port bindings used
+    });
+
+    // 5. Respond with success
     const inspectInfo = await inspectContainer(container.id);
-    const portMappings = inspectInfo.NetworkSettings.Ports;
+    res.status(201).json({
+      success: true,
+      message: `Tool '${instanceNameOnToolbox}' deployed successfully.`,
+      data: {
+        container_id: container.id,
+        instance_name_on_toolbox: instanceNameOnToolbox,
+        account_tool_instance_id: accountToolInstanceId,
+        image: inspectInfo.Config.Image,
+        ports: inspectInfo.NetworkSettings.Ports,
+        state: inspectInfo.State,
+      },
+    });
+
+  } catch (error: any) {
+    console.error(`Failed to deploy tool '${instanceNameOnToolbox}':`, error.message);
+    res.status(500).json({
+      success: false,
+      message: `Failed to deploy tool '${instanceNameOnToolbox}'.`,
+      error: error.message || 'Unknown error',
+    });
+  }
+});
+
+/**
+ * DELETE /{instanceNameOnToolbox}
+ * Removes/deletes a tool instance from the Toolbox.
+ */
+router.delete('/:instanceNameOnToolbox', async (req: Request, res: Response) => {
+  const { instanceNameOnToolbox } = req.params;
+
+  if (!instanceNameOnToolbox) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing instanceNameOnToolbox parameter.',
+    });
+  }
+
+  if (!managedInstances.has(instanceNameOnToolbox)) {
+    return res.status(404).json({
+        success: false,
+        error: `Tool instance '${instanceNameOnToolbox}' not found or not managed by this DTMA.`
+    });
+  }
+
+  try {
+    console.log(`Uninstall request for tool instance: ${instanceNameOnToolbox}`);
+    
+    // Attempt to stop and remove the container
+    await removeContainer(instanceNameOnToolbox, true);
+    console.log(`Container for '${instanceNameOnToolbox}' removed successfully.`);
+
+    // Remove from managed instances map
+    managedInstances.delete(instanceNameOnToolbox);
+    console.log(`'${instanceNameOnToolbox}' removed from managed instances.`);
 
     res.status(200).json({
       success: true,
-      message: `Container '${container_name}' started successfully.`,
-      container_id: container.id,
-      ports: portMappings, // Include discovered port mappings
+      message: `Tool instance '${instanceNameOnToolbox}' removed successfully.`,
     });
 
   } catch (error: any) {
-    console.error(`Failed to start tool ${agent_droplet_tool_id} (container: ${container_name}):`, error.message);
-    res.status(500).json({ 
-        success: false, 
-        message: `Failed to start container '${container_name}'.`, 
-        error: error.message || 'Unknown error' 
+    console.error(`Failed to remove tool instance '${instanceNameOnToolbox}':`, error.message);
+    res.status(500).json({
+      success: false,
+      message: `Failed to remove tool instance '${instanceNameOnToolbox}'.`,
+      error: error.message || 'Unknown error',
     });
   }
 });
 
 /**
- * POST /tools/stop
- * Body: { container_id_or_name: string }
- * Action: Stops the specified container.
+ * POST /{instanceNameOnToolbox}/start
+ * Starts a previously stopped tool instance.
  */
-router.post('/stop', async (req: Request, res: Response) => {
-  const { container_id_or_name } = req.body;
+router.post('/:instanceNameOnToolbox/start', async (req: Request, res: Response) => {
+  const { instanceNameOnToolbox } = req.params;
 
-  if (!container_id_or_name) {
-    return res.status(400).json({ success: false, error: 'Missing container_id_or_name' });
+  if (!instanceNameOnToolbox) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing instanceNameOnToolbox parameter.',
+    });
+  }
+
+  if (!managedInstances.has(instanceNameOnToolbox)) {
+    return res.status(404).json({
+      success: false,
+      error: `Tool instance '${instanceNameOnToolbox}' not found or not managed by this DTMA.`,
+    });
   }
 
   try {
-    console.log(`Received stop request for container: ${container_id_or_name}`);
-    await stopContainer(container_id_or_name);
-    console.log(`Successfully stopped container: ${container_id_or_name}`);
-    res.status(200).json({ success: true, message: `Container '${container_id_or_name}' stopped.` });
+    console.log(`Start request for tool instance: ${instanceNameOnToolbox}`);
+    
+    // Check if container exists and start it
+    let inspectInfo = await inspectContainer(instanceNameOnToolbox);
+    if (inspectInfo.State.Running) {
+      return res.status(200).json({
+        success: true,
+        message: `Tool instance '${instanceNameOnToolbox}' is already running.`,
+      });
+    }
+
+    // Start the container
+    await startContainer(instanceNameOnToolbox);
+    console.log(`Tool instance '${instanceNameOnToolbox}' started successfully.`);
+
+    res.status(200).json({
+      success: true,
+      message: `Tool instance '${instanceNameOnToolbox}' started successfully.`,
+    });
+
   } catch (error: any) {
-    console.error(`Failed to stop container ${container_id_or_name}:`, error.message);
-    // Check for 404 error from dockerode? 
-    const statusCode = error.statusCode === 404 ? 404 : 500;
-    res.status(statusCode).json({ 
-        success: false, 
-        message: `Failed to stop container '${container_id_or_name}'.`, 
-        error: error.message || 'Unknown error' 
+    console.error(`Failed to start tool instance '${instanceNameOnToolbox}':`, error.message);
+    res.status(500).json({
+      success: false,
+      message: `Failed to start tool instance '${instanceNameOnToolbox}'.`,
+      error: error.message || 'Unknown error',
     });
   }
 });
 
 /**
- * DELETE /tools/uninstall
- * Body: { container_id_or_name: string, force?: boolean }
- * Action: Stops (if needed via force) and removes the specified container.
+ * POST /{instanceNameOnToolbox}/stop
+ * Stops a running tool instance.
  */
-router.delete('/uninstall', async (req: Request, res: Response) => {
-  const { container_id_or_name, force = false } = req.body;
+router.post('/:instanceNameOnToolbox/stop', async (req: Request, res: Response) => {
+  const { instanceNameOnToolbox } = req.params;
 
-  if (!container_id_or_name) {
-    return res.status(400).json({ success: false, error: 'Missing container_id_or_name' });
+  if (!instanceNameOnToolbox) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing instanceNameOnToolbox parameter.',
+    });
+  }
+
+  if (!managedInstances.has(instanceNameOnToolbox)) {
+    return res.status(404).json({
+      success: false,
+      error: `Tool instance '${instanceNameOnToolbox}' not found or not managed by this DTMA.`,
+    });
   }
 
   try {
-    console.log(`Received uninstall request for container: ${container_id_or_name} (force=${force})`);
-    // docker_manager.removeContainer handles the removal.
-    // It includes a `force` option which implicitly handles stopping if needed.
-    await removeContainer(container_id_or_name, force);
-    console.log(`Successfully removed container: ${container_id_or_name}`);
-    res.status(200).json({ success: true, message: `Container '${container_id_or_name}' removed.` });
+    console.log(`Stop request for tool instance: ${instanceNameOnToolbox}`);
+    
+    await stopContainer(instanceNameOnToolbox);
+    console.log(`Tool instance '${instanceNameOnToolbox}' stopped successfully.`);
+
+    res.status(200).json({
+      success: true,
+      message: `Tool instance '${instanceNameOnToolbox}' stopped successfully.`,
+    });
+
   } catch (error: any) {
-    console.error(`Failed to remove container ${container_id_or_name}:`, error.message);
-    const statusCode = error.statusCode === 404 ? 404 : 500;
-    res.status(statusCode).json({ 
-        success: false, 
-        message: `Failed to remove container '${container_id_or_name}'.`, 
-        error: error.message || 'Unknown error' 
+    console.error(`Failed to stop tool instance '${instanceNameOnToolbox}':`, error.message);
+    res.status(500).json({
+      success: false,
+      message: `Failed to stop tool instance '${instanceNameOnToolbox}'.`,
+      error: error.message || 'Unknown error',
     });
   }
 });
 
 /**
  * GET /status
- * Action: Returns DTMA status and status of managed containers.
+ * Action: Returns DTMA status and status of managed containers in the format expected by the backend.
  */
 router.get('/status', async (req: Request, res: Response) => {
   try {
     console.log('Received status request.');
-    // List only running containers by default
-    // TODO: Add filtering if needed (e.g., by label `agentopia_tool=true`)
-    const runningContainers = await listContainers(false); 
+    // List all containers (running and stopped)
+    const allContainers = await listContainers(true); 
 
-    // Format the response
-    const toolStatuses = runningContainers.map(container => ({
-      id: container.Id,
-      name: container.Names[0]?.substring(1), // Remove leading '/'
-      image: container.Image,
-      state: container.State,
-      status: container.Status,
-      ports: container.Ports,
-    }));
+    // Format the response to match what the backend expects
+    const toolInstances = allContainers.map(container => {
+      const containerName = container.Names[0]?.substring(1) || container.Id; // Remove leading '/' or use ID as fallback
+      const managedInstance = managedInstances.get(containerName);
+      
+      return {
+        account_tool_instance_id: managedInstance?.accountToolInstanceId || null,
+        instance_name_on_toolbox: containerName,
+        container_id: container.Id,
+        status: container.State, // 'running', 'exited', etc.
+        image: container.Image,
+        ports: container.Ports,
+        created: container.Created,
+        // Add any other fields the backend might expect
+      };
+    });
 
+    // Also include system information that backend expects
     res.status(200).json({
-      success: true,
-      dtma_status: 'running', // Basic status for DTMA itself
-      managed_tools: toolStatuses,
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      service: 'DTMA',
+      environment: {
+        hasAuthToken: true,
+        hasApiKey: true,
+        hasApiBaseUrl: true,
+        port: '30000'
+      },
+      tool_instances: toolInstances, // This is the key field the backend looks for
     });
 
   } catch (error: any) {
