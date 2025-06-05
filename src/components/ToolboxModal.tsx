@@ -35,63 +35,46 @@ const ToolboxModal: React.FC<ToolboxModalProps> = ({
   onClose, 
   onProvision,
 }) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [region, setRegion] = useState('');
-  const [size, setSize] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const [regions, setRegions] = useState<DORegionOption[]>([]);
-  const [sizes, setSizes] = useState<DOSizeOption[]>([]);
-  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
-  const [optionsError, setOptionsError] = useState<string | null>(null);
-
   useEffect(() => {
     if (isOpen) {
-      // Reset form fields
-      setName('');
-      setDescription('');
-      setRegion('');
-      setSize('');
+      // Reset modal state
       setIsSaving(false);
       setFormError(null);
       setIsSuccess(false);
-      setOptionsError(null);
-
-      // Fetch options
-      const fetchOptions = async () => {
-        setIsLoadingOptions(true);
-        try {
-          const [fetchedRegions, fetchedSizes] = await Promise.all([
-            listDORegions(),
-            listDOSizes(),
-          ]);
-          setRegions(fetchedRegions.filter((r: DORegionOption) => r.available)); // Only show available regions
-          setSizes(fetchedSizes.filter((s: DOSizeOption) => s.available));     // Only show available sizes
-        } catch (err: any) {
-          console.error("Failed to fetch DO options:", err);
-          setOptionsError(err.message || 'Could not load provisioning options.');
-        }
-        setIsLoadingOptions(false);
-      };
-      fetchOptions();
     }
   }, [isOpen]);
+
+  // Generate automatic toolbox configuration
+  const generateToolboxConfig = (): ProvisionToolboxPayload => {
+    const now = new Date();
+    const timestamp = now.toISOString()
+      .replace(/[-:]/g, '')
+      .replace('T', '-')
+      .slice(0, 15); // YYYYMMDD-HHMMSS format
+    
+    const name = `toolbox-${timestamp}`;
+    const description = `Toolbox created on ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`;
+    
+    return {
+      name,
+      description,
+      regionSlug: 'nyc1', // Primary region (nyc2 as fallback handled in backend)
+      sizeSlug: 's-1vcpu-512mb-10gb' // $4.00/month plan
+    };
+  };
 
   const handleSubmit = async () => {
     setFormError(null);
     setIsSuccess(false);
     
-    if (!name || !region || !size) {
-      setFormError('Name, Region, and Size are required.');
-      return;
-    }
-    
     setIsSaving(true);
     try {
-      await onProvision({ name, description, regionSlug: region, sizeSlug: size });
+      const config = generateToolboxConfig();
+      await onProvision(config);
       setIsSuccess(true);
       setFormError(null);
       

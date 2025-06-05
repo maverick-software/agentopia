@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 // import { supabase } from '../lib/supabase'; // Supabase client is now used via the API module
 import { useAuth } from '../contexts/AuthContext';
 import { Server, Power, Loader2, CheckCircle, XCircle, RefreshCw, ServerOff, PlusCircle, ExternalLink } from 'lucide-react';
-import ToolboxModal, { ProvisionToolboxPayload } from '../components/ToolboxModal';
+import { ProvisionToolboxPayload } from '../components/ToolboxModal';
 import {
   listToolboxes,
   provisionToolbox,
@@ -31,9 +31,9 @@ export function ToolboxesPage() {
   const [loading, setLoading] = useState(true); // For fetching the list
   const [error, setError] = useState<string | null>(null); // For fetching the list
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [provisioningError, setProvisioningError] = useState<string | null>(null);
   const [provisioningSuccess, setProvisioningSuccess] = useState<string | null>(null);
+  const [isCreatingToolbox, setIsCreatingToolbox] = useState(false);
   const [activeProvisioningToolboxes, setActiveProvisioningToolboxes] = useState<Set<string>>(new Set());
   const [provisioningTimers, setProvisioningTimers] = useState<Record<string, { startTime: Date; remainingSeconds: number }>>({}); 
   
@@ -99,6 +99,25 @@ export function ToolboxesPage() {
     return Math.max(0, Math.min(100, ((180 - remainingSeconds) / 180) * 100));
   };
 
+  // Generate automatic toolbox configuration
+  const generateToolboxConfig = (): ProvisionToolboxPayload => {
+    const now = new Date();
+    const timestamp = now.toISOString()
+      .replace(/[-:]/g, '')
+      .replace('T', '-')
+      .slice(0, 15); // YYYYMMDD-HHMMSS format
+    
+    const name = `toolbox-${timestamp}`;
+    const description = `Toolbox created on ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`;
+    
+    return {
+      name,
+      description,
+      regionSlug: 'nyc1', // Primary region (nyc2 as fallback handled in backend)
+      sizeSlug: 's-1vcpu-512mb-10gb' // $4.00/month plan
+    };
+  };
+
   const handleProvisionToolbox = async (payload: ProvisionToolboxPayload) => {
     setProvisioningError(null);
     setProvisioningSuccess(null);
@@ -107,16 +126,31 @@ export function ToolboxesPage() {
       // Start the provisioning process
       await provisionToolbox(payload);
       
-      // After successful API call, let modal handle the success display and closing
-      // Just refresh the list and start monitoring
+      // Refresh the list and start monitoring
       fetchUserToolboxes();
       startProvisioningStatusCheck(payload.name);
       
     } catch (err: any) {
       console.error('Error starting toolbox provisioning:', err);
       setProvisioningError(err.message || 'Failed to start toolbox provisioning.');
-      // Don't close modal on error so user can see the error and retry
-      throw err; // Re-throw to let the modal handle the error display
+    }
+  };
+
+  // Direct toolbox creation function
+  const handleCreateToolbox = async () => {
+    setIsCreatingToolbox(true);
+    setProvisioningError(null);
+    setProvisioningSuccess(null);
+    
+    try {
+      const config = generateToolboxConfig();
+      await handleProvisionToolbox(config);
+      setProvisioningSuccess(`Toolbox "${config.name}" created! Provisioning server in NYC region...`);
+    } catch (err: any) {
+      console.error('Error creating toolbox:', err);
+      setProvisioningError(err.message || 'Failed to create toolbox.');
+    } finally {
+      setIsCreatingToolbox(false);
     }
   };
 
@@ -267,14 +301,16 @@ export function ToolboxesPage() {
           {pageTitle}
         </h1>
         <button 
-            onClick={() => { 
-              setProvisioningError(null); 
-              setProvisioningSuccess(null); 
-              setIsModalOpen(true); 
+            onClick={() => {
+              if (window.confirm('Create a new toolbox server? This will provision a new $4/month DigitalOcean droplet in NYC region.')) {
+                handleCreateToolbox();
+              }
             }}
             className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+            disabled={isCreatingToolbox}
         >
-          <PlusCircle className="mr-2 h-4 w-4" /> New Toolbox
+          {isCreatingToolbox && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingToolbox ? 'Creating...' : 'New Toolbox'}
         </button>
       </div>
 
@@ -367,8 +403,8 @@ export function ToolboxesPage() {
         </div>
       )}
 
-      {/* Display provisioning error if any, outside the modal as a general feedback for the page action */}
-      {provisioningError && !isModalOpen && ( 
+      {/* Display provisioning error if any */}
+      {provisioningError && ( 
         <div className="bg-red-900/30 border border-red-700 text-red-300 p-4 rounded-md mb-6">
           <div className="flex items-center">
             <XCircle className="h-5 w-5 mr-2" />
@@ -386,14 +422,16 @@ export function ToolboxesPage() {
                 Create your first Toolbox to start managing your AI server environments.
             </p>
             <button 
-                onClick={() => { 
-                  setProvisioningError(null); 
-                  setProvisioningSuccess(null); 
-                  setIsModalOpen(true); 
+                onClick={() => {
+                  if (window.confirm('Create a new toolbox server? This will provision a new $4/month DigitalOcean droplet in NYC region.')) {
+                    handleCreateToolbox();
+                  }
                 }}
                 className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors mt-2"
+                disabled={isCreatingToolbox}
             >
-                <PlusCircle className="mr-2 h-4 w-4" /> Create New Toolbox
+                {isCreatingToolbox && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingToolbox ? 'Creating...' : 'Create New Toolbox'}
             </button>
         </div>
       )}
@@ -513,15 +551,7 @@ export function ToolboxesPage() {
         </div>
       )}
 
-      <ToolboxModal 
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          // Clear any provisioning error from parent when modal is closed
-          setProvisioningError(null);
-        }}
-        onProvision={handleProvisionToolbox} 
-      />
+
 
 
     </div>
