@@ -115,34 +115,12 @@ export function ToolboxesPage() {
   // Helper to check if toolbox has been provisioning too long (10 minutes)
   const isProvisioningTimedOut = (toolboxName: string): boolean => {
     const startTime = provisioningStartTimes[toolboxName];
-    if (!startTime) return false;
+    if (!startTime) return false; // Don't show timeout for existing toolboxes on page load
     const elapsed = new Date().getTime() - startTime.getTime();
     return elapsed > 600000; // 10 minutes
   };
 
-  // Helper to get user-friendly error message instead of technical errors
-  const getUserFriendlyErrorMessage = (error: string, status: AccountToolEnvironmentStatus): string => {
-    // Check for common API/network errors
-    if (error.includes('500') || error.includes('Internal Server Error') || error.includes('network') || error.includes('fetch')) {
-      if (status.includes('provisioning') || status.includes('pending') || status.includes('creating')) {
-        return "Your toolbox is still being set up. This can take 3-5 minutes. Please wait a few moments and refresh to check the status.";
-      }
-      return "There was a temporary server issue. Please wait a moment and try refreshing the status.";
-    }
-    
-    // Check for timeout errors
-    if (error.includes('timeout') || error.includes('Timeout')) {
-      return "The request took longer than expected. Your toolbox may still be setting up. Please wait about 5 minutes and check back.";
-    }
-    
-    // Check for authentication errors
-    if (error.includes('401') || error.includes('unauthorized') || error.includes('authentication')) {
-      return "Your session may have expired. Please refresh the page and try again.";
-    }
-    
-    // For unknown errors, provide helpful guidance
-    return "Something went wrong. If your toolbox was provisioning, please wait about 5 minutes for it to complete, then refresh the status.";
-  };
+
 
   // Friendly animal names for toolboxes
   const animalNames = [
@@ -519,29 +497,11 @@ export function ToolboxesPage() {
                     </div>
                   )}
                   {toolbox.status.includes('error') && toolbox.provisioning_error_message && (
-                      <div className="text-xs text-orange-400 bg-orange-900/20 p-3 rounded-lg my-2 border border-orange-800/30">
-                        <div className="flex items-start">
-                          <span className="text-orange-300 mr-2">⚠️</span>
-                          <div>
-                            <p className="font-medium text-orange-300 mb-1">Setup Issue Detected</p>
-                            <p className="text-orange-400/80 mb-2">{getUserFriendlyErrorMessage(toolbox.provisioning_error_message, toolbox.status)}</p>
-                            <p className="text-xs text-orange-400/60">💡 Tip: Most setup issues resolve themselves within 5 minutes. Try refreshing the status.</p>
-                          </div>
-                        </div>
-                      </div>
+                      <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Error: {toolbox.provisioning_error_message}</p>
                   )}
-                  {/* Show action errors with friendly messages */}
+                  {/* Show action errors */}
                   {currentToolboxError && (
-                    <div className="text-xs text-orange-400 bg-orange-900/20 p-3 rounded-lg my-2 border border-orange-800/30">
-                      <div className="flex items-start">
-                        <span className="text-orange-300 mr-2">⚠️</span>
-                        <div>
-                          <p className="font-medium text-orange-300 mb-1">Action Issue</p>
-                          <p className="text-orange-400/80 mb-2">{getUserFriendlyErrorMessage(currentToolboxError, toolbox.status)}</p>
-                          <p className="text-xs text-orange-400/60">💡 Tip: Try refreshing the status or wait a few minutes if the toolbox is still setting up.</p>
-                        </div>
-                      </div>
-                    </div>
+                    <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Action Error: {currentToolboxError}</p>
                   )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-end space-x-2">
