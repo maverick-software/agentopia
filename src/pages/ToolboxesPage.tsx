@@ -70,7 +70,7 @@ export function ToolboxesPage() {
         Object.keys(updated).forEach(toolboxName => {
           const timer = updated[toolboxName];
           const elapsedSeconds = Math.floor((new Date().getTime() - timer.startTime.getTime()) / 1000);
-          const newRemainingSeconds = Math.max(0, 180 - elapsedSeconds);
+          const newRemainingSeconds = Math.max(0, 300 - elapsedSeconds);
           
           if (newRemainingSeconds !== timer.remainingSeconds) {
             updated[toolboxName] = { ...timer, remainingSeconds: newRemainingSeconds };
@@ -94,7 +94,24 @@ export function ToolboxesPage() {
 
   // Helper function to get progress percentage
   const getProgressPercentage = (remainingSeconds: number): number => {
-    return Math.max(0, Math.min(100, ((180 - remainingSeconds) / 180) * 100));
+    return Math.max(0, Math.min(100, ((300 - remainingSeconds) / 300) * 100));
+  };
+
+  // Helper function to get current deployment phase
+  const getDeploymentPhase = (remainingSeconds: number): { phase: number; name: string } => {
+    const elapsed = 300 - remainingSeconds;
+    
+    if (elapsed < 60) {
+      return { phase: 1, name: "Creating server infrastructure" };
+    } else if (elapsed < 120) {
+      return { phase: 2, name: "Installing Docker and dependencies" };
+    } else if (elapsed < 180) {
+      return { phase: 3, name: "Configuring DTMA container" };
+    } else if (elapsed < 240) {
+      return { phase: 4, name: "Establishing secure connections" };
+    } else {
+      return { phase: 5, name: "Finalizing setup and health checks" };
+    }
   };
 
   // Friendly animal names for toolboxes
@@ -159,11 +176,11 @@ export function ToolboxesPage() {
 
   // Function to periodically check provisioning status
   const startProvisioningStatusCheck = (toolboxName: string) => {
-    // Start countdown timer (3 minutes = 180 seconds)
+    // Start countdown timer (5 minutes = 300 seconds for 5-stage deployment)
     const startTime = new Date();
     setProvisioningTimers(prev => ({
       ...prev,
-      [toolboxName]: { startTime, remainingSeconds: 180 }
+      [toolboxName]: { startTime, remainingSeconds: 300 }
     }));
     
     const checkInterval = setInterval(async () => {
@@ -413,55 +430,53 @@ export function ToolboxesPage() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="flex items-center">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          🚀 Building your server...
+                          Deploying...
                         </span>
                         <span className="text-blue-300 font-mono bg-blue-800/50 px-2 py-0.5 rounded">
                           {(() => {
                             const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
                             if (timer && timer.remainingSeconds > 0) {
-                              return `⏱️ ${formatTime(timer.remainingSeconds)}`;
+                              return formatTime(timer.remainingSeconds);
                             }
-                            return "⏱️ Almost ready...";
+                            return "Almost ready...";
                           })()}
                         </span>
                       </div>
-                      <div className="bg-blue-800/30 rounded-full h-2 overflow-hidden mb-2">
+                      <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
                         {(() => {
                           const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
-                          const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 45;
-                          return <div className="bg-gradient-to-r from-blue-500 to-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
+                          const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 10;
+                          return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
                         })()}
                       </div>
-                      <div className="text-xs text-blue-300/80">
+                      <div className="text-xs text-blue-300/60">
                         {(() => {
                           const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
-                          if (timer && timer.remainingSeconds > 120) {
-                            return "🐳 Installing Docker and security updates...";
-                          } else if (timer && timer.remainingSeconds > 60) {
-                            return "⚙️ Configuring DTMA container...";
-                          } else {
-                            return "🔗 Establishing secure connection...";
+                          if (timer && timer.remainingSeconds > 0) {
+                            const phase = getDeploymentPhase(timer.remainingSeconds);
+                            return `Phase ${phase.phase}: ${phase.name}...`;
                           }
+                          return "Phase 5: Finalizing setup and health checks...";
                         })()}
                       </div>
                     </div>
                   )}
                   {(toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && (
-                    <div className="text-xs text-yellow-400 bg-yellow-900/20 p-3 rounded-lg mb-2 border border-yellow-800/30">
+                    <div className="text-xs text-blue-400 bg-blue-900/20 p-3 rounded-lg mb-2 border border-blue-800/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="flex items-center">
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          ⏳ Finalizing setup...
+                          Deploying...
                         </span>
-                        <span className="text-yellow-300 font-mono bg-yellow-800/50 px-2 py-0.5 rounded">
+                        <span className="text-blue-300 font-mono bg-blue-800/50 px-2 py-0.5 rounded">
                           ~1 min
                         </span>
                       </div>
-                      <div className="bg-yellow-800/30 rounded-full h-2 overflow-hidden mb-2">
-                        <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 h-full animate-pulse" style={{ width: '85%' }}></div>
+                      <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
+                        <div className="bg-blue-400 h-full animate-pulse" style={{ width: '90%' }}></div>
                       </div>
-                      <div className="text-xs text-yellow-300/80">
-                        🔗 Establishing connection and verifying health...
+                      <div className="text-xs text-blue-300/60">
+                        Phase 5: Finalizing setup and health checks...
                       </div>
                     </div>
                   )}
