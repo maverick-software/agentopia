@@ -120,6 +120,30 @@ export function ToolboxesPage() {
     return elapsed > 600000; // 10 minutes
   };
 
+  // Helper to get user-friendly error message instead of technical errors
+  const getUserFriendlyErrorMessage = (error: string, status: AccountToolEnvironmentStatus): string => {
+    // Check for common API/network errors
+    if (error.includes('500') || error.includes('Internal Server Error') || error.includes('network') || error.includes('fetch')) {
+      if (status.includes('provisioning') || status.includes('pending') || status.includes('creating')) {
+        return "Your toolbox is still being set up. This can take 3-5 minutes. Please wait a few moments and refresh to check the status.";
+      }
+      return "There was a temporary server issue. Please wait a moment and try refreshing the status.";
+    }
+    
+    // Check for timeout errors
+    if (error.includes('timeout') || error.includes('Timeout')) {
+      return "The request took longer than expected. Your toolbox may still be setting up. Please wait about 5 minutes and check back.";
+    }
+    
+    // Check for authentication errors
+    if (error.includes('401') || error.includes('unauthorized') || error.includes('authentication')) {
+      return "Your session may have expired. Please refresh the page and try again.";
+    }
+    
+    // For unknown errors, provide helpful guidance
+    return "Something went wrong. If your toolbox was provisioning, please wait about 5 minutes for it to complete, then refresh the status.";
+  };
+
   // Friendly animal names for toolboxes
   const animalNames = [
     'dolphin', 'eagle', 'tiger', 'wolf', 'lion', 'bear', 'fox', 'hawk', 'shark', 'whale',
@@ -453,6 +477,11 @@ export function ToolboxesPage() {
                             <div className="text-xs text-blue-300/60">
                               {display.phase}
                             </div>
+                            {toolbox.name && isProvisioningTimedOut(toolbox.name) && (
+                              <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800/30 rounded text-xs text-yellow-300">
+                                <span className="text-yellow-300">⏱️</span> This is taking longer than usual. You can refresh the status to check progress.
+                              </div>
+                            )}
                           </>
                         );
                       })()}
@@ -479,27 +508,54 @@ export function ToolboxesPage() {
                             <div className="text-xs text-blue-300/60">
                               {display.phase}
                             </div>
+                            {toolbox.name && isProvisioningTimedOut(toolbox.name) && (
+                              <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800/30 rounded text-xs text-yellow-300">
+                                <span className="text-yellow-300">⏱️</span> This is taking longer than usual. You can refresh the status to check progress.
+                              </div>
+                            )}
                           </>
                         );
                       })()}
                     </div>
                   )}
                   {toolbox.status.includes('error') && toolbox.provisioning_error_message && (
-                      <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Error: {toolbox.provisioning_error_message}</p>
+                      <div className="text-xs text-orange-400 bg-orange-900/20 p-3 rounded-lg my-2 border border-orange-800/30">
+                        <div className="flex items-start">
+                          <span className="text-orange-300 mr-2">⚠️</span>
+                          <div>
+                            <p className="font-medium text-orange-300 mb-1">Setup Issue Detected</p>
+                            <p className="text-orange-400/80 mb-2">{getUserFriendlyErrorMessage(toolbox.provisioning_error_message, toolbox.status)}</p>
+                            <p className="text-xs text-orange-400/60">💡 Tip: Most setup issues resolve themselves within 5 minutes. Try refreshing the status.</p>
+                          </div>
+                        </div>
+                      </div>
                   )}
-                  {/* Only show action errors if not actively provisioning or if provisioning timer has expired */}
-                  {currentToolboxError && !toolbox.status.includes('provisioning') && !toolbox.status.includes('pending') && !toolbox.status.includes('awaiting') && (
-                    <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Action Error: {currentToolboxError}</p>
+                  {/* Show action errors with friendly messages */}
+                  {currentToolboxError && (
+                    <div className="text-xs text-orange-400 bg-orange-900/20 p-3 rounded-lg my-2 border border-orange-800/30">
+                      <div className="flex items-start">
+                        <span className="text-orange-300 mr-2">⚠️</span>
+                        <div>
+                          <p className="font-medium text-orange-300 mb-1">Action Issue</p>
+                          <p className="text-orange-400/80 mb-2">{getUserFriendlyErrorMessage(currentToolboxError, toolbox.status)}</p>
+                          <p className="text-xs text-orange-400/60">💡 Tip: Try refreshing the status or wait a few minutes if the toolbox is still setting up.</p>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-end space-x-2">
-                  {/* Only show refresh button when toolbox is active or has an error (not during provisioning) */}
-                  {(toolbox.status === 'active' || toolbox.status.includes('error')) && (
+                  {/* Show refresh button for all toolboxes except those being deleted */}
+                  {!toolbox.status.includes('deleting') && toolbox.status !== 'deprovisioned' && (
                     <button 
                       onClick={() => handleRefreshStatusUI(toolbox.id)}
                       className="p-2 text-sm bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 rounded-md transition-colors disabled:opacity-50"
                       disabled={isCurrentToolboxLoading}
-                      title="Refresh Status"
+                      title={
+                        toolbox.status.includes('provisioning') || toolbox.status.includes('pending') || toolbox.status.includes('creating')
+                          ? "Check if toolbox setup is complete"
+                          : "Refresh Status"
+                      }
                     >
                       {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16} />}
                     </button>
