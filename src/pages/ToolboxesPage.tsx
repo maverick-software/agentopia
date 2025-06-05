@@ -60,30 +60,25 @@ export function ToolboxesPage() {
     fetchUserToolboxes();
   }, [fetchUserToolboxes]);
 
-  // Check for existing provisioning toolboxes and start timers for them
+  // Only set up timers for toolboxes that we explicitly started monitoring
+  // Don't create timers for existing provisioning toolboxes on page load
+  // as we can't know their actual start time
   useEffect(() => {
     if (!toolboxes) return;
     
     toolboxes.forEach(toolbox => {
-      if (toolbox.name && !provisioningTimers[toolbox.name]) {
-        if (toolbox.status === 'provisioning') {
-          // For existing provisioning toolboxes, start with a minimal elapsed time
-          // to avoid jumping straight to Phase 5
-          const startTime = new Date();
-          const estimatedElapsed = 30; // Assume 30 seconds elapsed for existing provisioning toolboxes
-          startTime.setTime(startTime.getTime() - (estimatedElapsed * 1000));
-          
-          setProvisioningTimers(prev => ({
-            ...prev,
-            [toolbox.name!]: { startTime, remainingSeconds: 300 - estimatedElapsed }
-          }));
-        } else if (toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) {
-          // For awaiting heartbeat, don't use a countdown timer - just show as near completion
-          // Don't add to provisioningTimers so it shows as "Almost ready..." without countdown
+      if (toolbox.name && provisioningTimers[toolbox.name]) {
+        // If toolbox is no longer provisioning, clear its timer
+        if (toolbox.status === 'active' || toolbox.status.includes('error')) {
+          setProvisioningTimers(prev => {
+            const updated = { ...prev };
+            delete updated[toolbox.name!];
+            return updated;
+          });
         }
       }
     });
-  }, [toolboxes]); // REMOVED provisioningTimers from dependencies to prevent infinite loop
+  }, [toolboxes, provisioningTimers]);
 
   // Update countdown timers every second
   useEffect(() => {
