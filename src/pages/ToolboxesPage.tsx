@@ -33,7 +33,9 @@ export function ToolboxesPage() {
 
   const [provisioningError, setProvisioningError] = useState<string | null>(null);
   const [isCreatingToolbox, setIsCreatingToolbox] = useState(false);
-  const [provisioningTimers, setProvisioningTimers] = useState<Record<string, { startTime: Date; remainingSeconds: number }>>({}); 
+  
+  // Simple state management: only track start times for timeout logic
+  const [provisioningStartTimes, setProvisioningStartTimes] = useState<Record<string, Date>>({});
   
   // State for per-toolbox actions
   const [actionStates, setActionStates] = useState<Record<string, { isLoading: boolean; error: string | null }>>({});
@@ -60,17 +62,15 @@ export function ToolboxesPage() {
     fetchUserToolboxes();
   }, [fetchUserToolboxes]);
 
-  // Only set up timers for toolboxes that we explicitly started monitoring
-  // Don't create timers for existing provisioning toolboxes on page load
-  // as we can't know their actual start time
+  // Clean up start times when toolboxes complete or error
   useEffect(() => {
     if (!toolboxes) return;
     
     toolboxes.forEach(toolbox => {
-      if (toolbox.name && provisioningTimers[toolbox.name]) {
-        // If toolbox is no longer provisioning, clear its timer
+      if (toolbox.name && provisioningStartTimes[toolbox.name]) {
+        // If toolbox is no longer provisioning, clean up start time
         if (toolbox.status === 'active' || toolbox.status.includes('error')) {
-          setProvisioningTimers(prev => {
+          setProvisioningStartTimes(prev => {
             const updated = { ...prev };
             delete updated[toolbox.name!];
             return updated;
@@ -78,60 +78,46 @@ export function ToolboxesPage() {
         }
       }
     });
-  }, [toolboxes, provisioningTimers]);
+  }, [toolboxes, provisioningStartTimes]);
 
-  // Update countdown timers every second
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setProvisioningTimers(prev => {
-        const updated = { ...prev };
-        let hasChanges = false;
-
-        Object.keys(updated).forEach(toolboxName => {
-          const timer = updated[toolboxName];
-          const elapsedSeconds = Math.floor((new Date().getTime() - timer.startTime.getTime()) / 1000);
-          const newRemainingSeconds = Math.max(0, 300 - elapsedSeconds);
-          
-          if (newRemainingSeconds !== timer.remainingSeconds) {
-            updated[toolboxName] = { ...timer, remainingSeconds: newRemainingSeconds };
-            hasChanges = true;
-          }
-        });
-
-        return hasChanges ? updated : prev;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Helper function to format seconds as MM:SS
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Helper function to get progress percentage
-  const getProgressPercentage = (remainingSeconds: number): number => {
-    return Math.max(0, Math.min(100, ((300 - remainingSeconds) / 300) * 100));
-  };
-
-  // Helper function to get current deployment phase
-  const getDeploymentPhase = (remainingSeconds: number): { phase: number; name: string } => {
-    const elapsed = 300 - remainingSeconds;
-    
-    if (elapsed < 60) {
-      return { phase: 1, name: "Creating server infrastructure" };
-    } else if (elapsed < 120) {
-      return { phase: 2, name: "Installing Docker and dependencies" };
-    } else if (elapsed < 180) {
-      return { phase: 3, name: "Configuring DTMA container" };
-    } else if (elapsed < 240) {
-      return { phase: 4, name: "Establishing secure connections" };
-    } else {
-      return { phase: 5, name: "Finalizing setup and health checks" };
+  // Status-based display function - replaces timer-based approach
+  const getProvisioningDisplay = (status: AccountToolEnvironmentStatus, startTime?: Date) => {
+    switch (status) {
+      case 'pending_creation':
+      case 'creating':
+        return { 
+          phase: 'Creating server infrastructure...', 
+          progress: 25,
+          message: 'Setting up your toolbox environment'
+        };
+      case 'pending_provision':
+      case 'provisioning':
+        return { 
+          phase: 'Installing and configuring...', 
+          progress: 75,
+          message: 'Installing Docker and DTMA container'
+        };
+      case 'unresponsive': // This often indicates waiting for heartbeat
+        return { 
+          phase: 'Almost ready...', 
+          progress: 95,
+          message: 'Finalizing setup and health checks'
+        };
+      default:
+        return { 
+          phase: 'Processing...', 
+          progress: 10,
+          message: 'Initializing toolbox creation'
+        };
     }
+  };
+
+  // Helper to check if toolbox has been provisioning too long (10 minutes)
+  const isProvisioningTimedOut = (toolboxName: string): boolean => {
+    const startTime = provisioningStartTimes[toolboxName];
+    if (!startTime) return false;
+    const elapsed = new Date().getTime() - startTime.getTime();
+    return elapsed > 600000; // 10 minutes
   };
 
   // Friendly animal names for toolboxes
@@ -194,13 +180,12 @@ export function ToolboxesPage() {
     }
   };
 
-  // Function to periodically check provisioning status
+  // Function to periodically check provisioning status (simplified)
   const startProvisioningStatusCheck = (toolboxName: string) => {
-    // Start countdown timer for NEW toolbox (5 minutes = 300 seconds for 5-stage deployment)
-    const startTime = new Date();
-    setProvisioningTimers(prev => ({
+    // Record start time for timeout tracking only
+    setProvisioningStartTimes(prev => ({
       ...prev,
-      [toolboxName]: { startTime, remainingSeconds: 300 }
+      [toolboxName]: new Date()
     }));
     
     const checkInterval = setInterval(async () => {
@@ -213,7 +198,7 @@ export function ToolboxesPage() {
           if (newToolbox.status === 'active') {
             // Provisioning completed successfully
             clearInterval(checkInterval);
-            setProvisioningTimers(prev => {
+            setProvisioningStartTimes(prev => {
               const updated = { ...prev };
               delete updated[toolboxName];
               return updated;
@@ -223,7 +208,7 @@ export function ToolboxesPage() {
           } else if (newToolbox.status.includes('error')) {
             // Provisioning failed
             clearInterval(checkInterval);
-            setProvisioningTimers(prev => {
+            setProvisioningStartTimes(prev => {
               const updated = { ...prev };
               delete updated[toolboxName];
               return updated;
@@ -232,17 +217,17 @@ export function ToolboxesPage() {
             setToolboxes(currentToolboxes || []);
             setProvisioningError(`Toolbox "${toolboxName}" provisioning failed: ${newToolbox.status}`);
           }
-          // If still provisioning, pending, or awaiting heartbeat, continue checking and let timer run
+          // Continue checking if still in progress
         }
       } catch (err) {
         console.error('Error checking provisioning status:', err);
       }
-    }, 15000); // Check every 15 seconds (reduced frequency to be less intrusive)
+    }, 15000); // Check every 15 seconds
 
     // Stop checking after 10 minutes (in case something goes wrong)
     setTimeout(() => {
       clearInterval(checkInterval);
-      setProvisioningTimers(prev => {
+      setProvisioningStartTimes(prev => {
         const updated = { ...prev };
         delete updated[toolboxName];
         return updated;
@@ -446,59 +431,57 @@ export function ToolboxesPage() {
                       ✅ Server is healthy and ready for tool deployment
                     </p>
                   )}
-                  {toolbox.status === 'provisioning' && (
+                  {(toolbox.status === 'provisioning' || toolbox.status === 'pending_provision' || 
+                    toolbox.status === 'creating' || toolbox.status === 'pending_creation') && (
                     <div className="text-xs text-blue-400 bg-blue-900/20 p-3 rounded-lg mb-2 border border-blue-800/30">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="flex items-center">
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          Deploying...
-                        </span>
-                        <span className="text-blue-300 font-mono bg-blue-800/50 px-2 py-0.5 rounded">
-                          {(() => {
-                            const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
-                            if (timer && timer.remainingSeconds > 0) {
-                              return formatTime(timer.remainingSeconds);
-                            }
-                            return "Almost ready...";
-                          })()}
-                        </span>
-                      </div>
-                      <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
-                        {(() => {
-                          const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
-                          const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 10;
-                          return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
-                        })()}
-                      </div>
-                      <div className="text-xs text-blue-300/60">
-                        {(() => {
-                          const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
-                          if (timer && timer.remainingSeconds > 0) {
-                            const phase = getDeploymentPhase(timer.remainingSeconds);
-                            return `Phase ${phase.phase}: ${phase.name}...`;
-                          }
-                          return "Finalizing deployment...";
-                        })()}
-                      </div>
+                      {(() => {
+                        const display = getProvisioningDisplay(toolbox.status);
+                        return (
+                          <>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="flex items-center">
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                Deploying...
+                              </span>
+                              <span className="text-blue-300 text-xs bg-blue-800/50 px-2 py-0.5 rounded">
+                                Usually takes 3-5 minutes
+                              </span>
+                            </div>
+                            <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
+                              <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${display.progress}%` }}></div>
+                            </div>
+                            <div className="text-xs text-blue-300/60">
+                              {display.phase}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
-                  {(toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && (
+                  {toolbox.status === 'unresponsive' && (
                     <div className="text-xs text-blue-400 bg-blue-900/20 p-3 rounded-lg mb-2 border border-blue-800/30">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="flex items-center">
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          Deploying...
-                        </span>
-                        <span className="text-blue-300 font-mono bg-blue-800/50 px-2 py-0.5 rounded">
-                          Almost ready...
-                        </span>
-                      </div>
-                      <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
-                        <div className="bg-blue-400 h-full animate-pulse" style={{ width: '95%' }}></div>
-                      </div>
-                      <div className="text-xs text-blue-300/60">
-                        Finalizing setup and health checks...
-                      </div>
+                      {(() => {
+                        const display = getProvisioningDisplay(toolbox.status);
+                        return (
+                          <>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="flex items-center">
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                Deploying...
+                              </span>
+                              <span className="text-blue-300 text-xs bg-blue-800/50 px-2 py-0.5 rounded">
+                                Almost ready...
+                              </span>
+                            </div>
+                            <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
+                              <div className="bg-blue-400 h-full animate-pulse" style={{ width: `${display.progress}%` }}></div>
+                            </div>
+                            <div className="text-xs text-blue-300/60">
+                              {display.phase}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                   {toolbox.status.includes('error') && toolbox.provisioning_error_message && (
