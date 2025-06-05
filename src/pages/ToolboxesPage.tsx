@@ -244,15 +244,19 @@ export function ToolboxesPage() {
     try {
       await refreshToolboxStatus(toolboxId);
       fetchUserToolboxes(); // Re-fetch the whole list to get updated status
-      // TODO: Ideally, refreshToolboxStatus would return the updated toolbox record,
-      // and we would update only that item in the local state.
     } catch (err: any) {
       console.error(`Error refreshing status for ${toolboxId}:`, err);
-      setActionStates(prev => ({ ...prev, [toolboxId]: { isLoading: false, error: err.message || 'Refresh failed' } }));
+      // Only set error if the toolbox is expected to be responsive (active or error state)
+      const toolbox = toolboxes.find(t => t.id === toolboxId);
+      if (toolbox && (toolbox.status === 'active' || toolbox.status.includes('error'))) {
+        setActionStates(prev => ({ ...prev, [toolboxId]: { isLoading: false, error: err.message || 'Refresh failed' } }));
+      } else {
+        // Clear error for provisioning states - it's expected that services might not respond yet
+        setActionStates(prev => ({ ...prev, [toolboxId]: { isLoading: false, error: null } }));
+      }
     } finally {
       // Ensure isLoading is set to false even if it was successful but we re-fetched
-      // If not re-fetching, this would just be: setActionStates(prev => ({ ...prev, [toolboxId]: { ...prev[toolboxId], isLoading: false } }));
-      setTimeout(() => setActionStates(prev => ({ ...prev, [toolboxId]: { ...prev[toolboxId], isLoading: false } })), 500); // give time for list refresh to reflect
+      setTimeout(() => setActionStates(prev => ({ ...prev, [toolboxId]: { ...prev[toolboxId], isLoading: false } })), 500);
     }
   };
 
@@ -464,19 +468,23 @@ export function ToolboxesPage() {
                   {toolbox.status.includes('error') && toolbox.provisioning_error_message && (
                       <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Error: {toolbox.provisioning_error_message}</p>
                   )}
-                  {currentToolboxError && (
+                  {/* Only show action errors if not actively provisioning or if provisioning timer has expired */}
+                  {currentToolboxError && !toolbox.status.includes('provisioning') && !toolbox.status.includes('pending') && !toolbox.status.includes('awaiting') && (
                     <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Action Error: {currentToolboxError}</p>
                   )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-end space-x-2">
-                  <button 
-                    onClick={() => handleRefreshStatusUI(toolbox.id)}
-                    className="p-2 text-sm bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 rounded-md transition-colors disabled:opacity-50"
-                    disabled={isCurrentToolboxLoading || toolbox.status.includes('pending') || toolbox.status.includes('creating') || toolbox.status.includes('deleting') || toolbox.status === 'deprovisioned'}
-                    title="Refresh Status"
-                  >
-                    {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16} />}
-                  </button>
+                  {/* Only show refresh button when toolbox is active or has an error (not during provisioning) */}
+                  {(toolbox.status === 'active' || toolbox.status.includes('error')) && (
+                    <button 
+                      onClick={() => handleRefreshStatusUI(toolbox.id)}
+                      className="p-2 text-sm bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 rounded-md transition-colors disabled:opacity-50"
+                      disabled={isCurrentToolboxLoading}
+                      title="Refresh Status"
+                    >
+                      {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16} />}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeprovisionUI(toolbox.id)}
                     className={`p-2 text-sm rounded-md transition-colors disabled:opacity-50 flex items-center bg-red-700/80 hover:bg-red-600/80 text-white'`}
