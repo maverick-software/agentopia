@@ -34,7 +34,6 @@ export function ToolboxesPage() {
   const [provisioningError, setProvisioningError] = useState<string | null>(null);
   const [provisioningSuccess, setProvisioningSuccess] = useState<string | null>(null);
   const [isCreatingToolbox, setIsCreatingToolbox] = useState(false);
-  const [activeProvisioningToolboxes, setActiveProvisioningToolboxes] = useState<Set<string>>(new Set());
   const [provisioningTimers, setProvisioningTimers] = useState<Record<string, { startTime: Date; remainingSeconds: number }>>({}); 
   
   // State for per-toolbox actions
@@ -99,16 +98,23 @@ export function ToolboxesPage() {
     return Math.max(0, Math.min(100, ((180 - remainingSeconds) / 180) * 100));
   };
 
-  // Generate automatic toolbox configuration
+  // Friendly animal names for toolboxes
+  const animalNames = [
+    'dolphin', 'eagle', 'tiger', 'wolf', 'lion', 'bear', 'fox', 'hawk', 'shark', 'whale',
+    'falcon', 'panther', 'lynx', 'jaguar', 'cheetah', 'leopard', 'cobra', 'viper', 'python',
+    'raven', 'owl', 'phoenix', 'dragon', 'griffin', 'pegasus', 'unicorn', 'kraken', 'hydra'
+  ];
+
+  // Generate automatic toolbox configuration with friendly names
   const generateToolboxConfig = (): ProvisionToolboxPayload => {
     const now = new Date();
-    const timestamp = now.toISOString()
-      .replace(/[-:]/g, '')
-      .replace('T', '-')
-      .slice(0, 15); // YYYYMMDD-HHMMSS format
     
-    const name = `toolbox-${timestamp}`;
-    const description = `Toolbox created on ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`;
+    // Generate friendly name: animal + random number
+    const randomAnimal = animalNames[Math.floor(Math.random() * animalNames.length)];
+    const randomNumber = Math.floor(Math.random() * 999) + 1;
+    const name = `${randomAnimal}-${randomNumber}`;
+    
+    const description = `${randomAnimal.charAt(0).toUpperCase() + randomAnimal.slice(1)} toolbox created on ${now.toLocaleDateString()}`;
     
     return {
       name,
@@ -145,7 +151,7 @@ export function ToolboxesPage() {
     try {
       const config = generateToolboxConfig();
       await handleProvisionToolbox(config);
-      setProvisioningSuccess(`Toolbox "${config.name}" created! Provisioning server in NYC region...`);
+      setProvisioningSuccess(`Creating toolbox "${config.name}"...`);
     } catch (err: any) {
       console.error('Error creating toolbox:', err);
       setProvisioningError(err.message || 'Failed to create toolbox.');
@@ -156,9 +162,6 @@ export function ToolboxesPage() {
 
   // Function to periodically check provisioning status
   const startProvisioningStatusCheck = (toolboxName: string) => {
-    // Add to active provisioning set
-    setActiveProvisioningToolboxes(prev => new Set([...prev, toolboxName]));
-    
     // Start countdown timer (3 minutes = 180 seconds)
     const startTime = new Date();
     setProvisioningTimers(prev => ({
@@ -178,26 +181,16 @@ export function ToolboxesPage() {
           if (newToolbox.status === 'active') {
             // Provisioning completed successfully
             clearInterval(checkInterval);
-            setActiveProvisioningToolboxes(prev => {
-              const updated = new Set(prev);
-              updated.delete(toolboxName);
-              return updated;
-            });
             setProvisioningTimers(prev => {
               const updated = { ...prev };
               delete updated[toolboxName];
               return updated;
             });
-            setProvisioningSuccess(`Toolbox "${toolboxName}" has been provisioned successfully and is now active!`);
+            setProvisioningSuccess(`Toolbox "${toolboxName}" is now active and ready!`);
             setTimeout(() => setProvisioningSuccess(null), 8000);
           } else if (newToolbox.status.includes('error')) {
             // Provisioning failed
             clearInterval(checkInterval);
-            setActiveProvisioningToolboxes(prev => {
-              const updated = new Set(prev);
-              updated.delete(toolboxName);
-              return updated;
-            });
             setProvisioningTimers(prev => {
               const updated = { ...prev };
               delete updated[toolboxName];
@@ -215,11 +208,6 @@ export function ToolboxesPage() {
     // Stop checking after 10 minutes (in case something goes wrong)
     setTimeout(() => {
       clearInterval(checkInterval);
-      setActiveProvisioningToolboxes(prev => {
-        const updated = new Set(prev);
-        updated.delete(toolboxName);
-        return updated;
-      });
       setProvisioningTimers(prev => {
         const updated = { ...prev };
         delete updated[toolboxName];
@@ -302,7 +290,7 @@ export function ToolboxesPage() {
         </h1>
         <button 
             onClick={() => {
-              if (window.confirm('Create a new toolbox server? This will provision a new $4/month DigitalOcean droplet in NYC region.')) {
+              if (window.confirm('Create a new toolbox? This will set up a new server environment with a randomly generated name.')) {
                 handleCreateToolbox();
               }
             }}
@@ -351,44 +339,7 @@ export function ToolboxesPage() {
         </div>
       )}
 
-      {/* Display active provisioning status */}
-      {activeProvisioningToolboxes.size > 0 && (
-        <div className="bg-blue-900/30 border border-blue-700 text-blue-300 p-4 rounded-md mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              <h3 className="font-semibold">Provisioning in Progress</h3>
-            </div>
-            <div className="text-xs bg-blue-800/50 px-2 py-1 rounded font-mono">
-              {(() => {
-                const firstToolbox = Array.from(activeProvisioningToolboxes)[0];
-                const timer = provisioningTimers[firstToolbox];
-                if (timer && timer.remainingSeconds > 0) {
-                  return `⏱️ ${formatTime(timer.remainingSeconds)}`;
-                }
-                return "⏱️ Finishing up...";
-              })()}
-            </div>
-          </div>
-          <p className="mt-1 text-sm">
-            {activeProvisioningToolboxes.size === 1 
-              ? `Creating and configuring server for: ${Array.from(activeProvisioningToolboxes)[0]}`
-              : `Creating ${activeProvisioningToolboxes.size} toolboxes: ${Array.from(activeProvisioningToolboxes).join(', ')}`
-            }
-          </p>
-          <div className="mt-3 bg-blue-800/30 rounded-full h-2 overflow-hidden">
-            {(() => {
-              const firstToolbox = Array.from(activeProvisioningToolboxes)[0];
-              const timer = provisioningTimers[firstToolbox];
-              const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 60;
-              return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
-            })()}
-          </div>
-          <p className="mt-2 text-xs text-blue-200">
-            Installing Docker, pulling DTMA container, and establishing connection...
-          </p>
-        </div>
-      )}
+
 
       {/* Display provisioning success message */}
       {provisioningSuccess && (
@@ -423,7 +374,7 @@ export function ToolboxesPage() {
             </p>
             <button 
                 onClick={() => {
-                  if (window.confirm('Create a new toolbox server? This will provision a new $4/month DigitalOcean droplet in NYC region.')) {
+                  if (window.confirm('Create a new toolbox? This will set up a new server environment with a randomly generated name.')) {
                     handleCreateToolbox();
                   }
                 }}
@@ -480,28 +431,40 @@ export function ToolboxesPage() {
                     </p>
                   )}
                   {toolbox.status === 'provisioning' && (
-                    <div className="text-xs text-blue-400 bg-blue-900/20 p-2 rounded mb-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span>🔄 Setting up your server...</span>
-                        <span className="text-blue-300 font-mono">
+                    <div className="text-xs text-blue-400 bg-blue-900/20 p-3 rounded-lg mb-2 border border-blue-800/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="flex items-center">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          🚀 Building your server...
+                        </span>
+                        <span className="text-blue-300 font-mono bg-blue-800/50 px-2 py-0.5 rounded">
                           {(() => {
                             const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
                             if (timer && timer.remainingSeconds > 0) {
-                              return formatTime(timer.remainingSeconds);
+                              return `⏱️ ${formatTime(timer.remainingSeconds)}`;
                             }
-                            return "Finishing...";
+                            return "⏱️ Almost ready...";
                           })()}
                         </span>
                       </div>
-                      <div className="bg-blue-800/30 rounded-full h-1 overflow-hidden">
+                      <div className="bg-blue-800/30 rounded-full h-2 overflow-hidden mb-2">
                         {(() => {
                           const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
                           const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 45;
-                          return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
+                          return <div className="bg-gradient-to-r from-blue-500 to-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
                         })()}
                       </div>
-                      <div className="mt-1 text-xs text-blue-300">
-                        Installing Docker, configuring DTMA...
+                      <div className="text-xs text-blue-300/80">
+                        {(() => {
+                          const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
+                          if (timer && timer.remainingSeconds > 120) {
+                            return "🐳 Installing Docker and security updates...";
+                          } else if (timer && timer.remainingSeconds > 60) {
+                            return "⚙️ Configuring DTMA container...";
+                          } else {
+                            return "🔗 Establishing secure connection...";
+                          }
+                        })()}
                       </div>
                     </div>
                   )}
