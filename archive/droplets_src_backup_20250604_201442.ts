@@ -4,42 +4,13 @@ import type {
   CreateDropletServiceOptions,
   // CreateDropletServiceResponse, // We might return the raw Droplet object from dots-wrapper directly
 } from './types.ts';
+// Attempt to import types directly from 'dots-wrapper'
+import type { Droplet, CreateDropletsRequest, Action } from 'https://esm.sh/dots-wrapper@3.11.17';
 import { callWithRetry } from './utils.ts';
 import {
   DigitalOceanServiceError, // Import base error if needed for specific catches
   // Potentially import other specific errors if needed directly here
 } from './errors.ts';
-
-// Local type definitions to avoid external import linter issues
-// These match the dots-wrapper types used in this file
-interface Droplet {
-  id: number;
-  name: string;
-  status: string;
-  region?: { slug: string } | string;
-  [key: string]: any; // Allow other properties
-}
-
-interface CreateDropletsRequest {
-  names: string[];
-  region: string;
-  size: string;
-  image: string;
-  ssh_keys?: (string | number)[];
-  backups?: boolean;
-  ipv6?: boolean;
-  user_data?: string;
-  monitoring?: boolean;
-  tags?: string[];
-  vpc_uuid?: string;
-  with_droplet_agent?: boolean;
-}
-
-interface Action {
-  id: number;
-  status: string;
-  [key: string]: any; // Allow other properties
-}
 
 /**
  * Creates a new DigitalOcean Droplet.
@@ -51,7 +22,7 @@ export async function createDigitalOceanDroplet(
   options: CreateDropletServiceOptions
 ): Promise<Droplet> {
   const createRequest: CreateDropletsRequest = {
-    names: [options.name], // Fixed: Use names array instead of name string
+    name: options.name, // Needs verification: name vs names: [options.name]
     region: options.region,
     size: options.size,
     image: options.image,
@@ -65,96 +36,23 @@ export async function createDigitalOceanDroplet(
     with_droplet_agent: options.with_droplet_agent,
   };
 
-  console.log(`[DigitalOcean] Creating droplet with request:`, JSON.stringify(createRequest, null, 2));
-
   // Wrap the API call with retry logic
   const response = await callWithRetry(async () => {
     const doClient = await getDOClient();
-    // Using createDroplets which expects names as an array
+    // TODO: Verify if it should be createDroplets or createDroplet, and name vs names
     return doClient.droplet.createDroplets(createRequest);
   });
 
-  console.log(`[DigitalOcean] Raw API response:`, JSON.stringify(response, null, 2));
-  console.log(`[DigitalOcean] Response type:`, typeof response);
-  console.log(`[DigitalOcean] Response keys:`, Object.keys(response || {}));
-
-  // Comprehensive response parsing with multiple format support
-  let foundDroplet: any = null;
-
-  // Format 1: Standard { droplets: [Droplet] } format
+  // Existing response parsing logic - should be safe, but depends on correct API call
   if (Array.isArray(response.droplets) && response.droplets.length > 0) {
-    console.log(`[DigitalOcean] Found droplets array with ${response.droplets.length} items`);
-    foundDroplet = response.droplets[0];
+    return response.droplets[0] as Droplet;
   }
-  // Format 2: Single droplet { droplet: Droplet } format
-  else if (response.droplet) {
-    console.log(`[DigitalOcean] Found single droplet object`);
-    foundDroplet = response.droplet;
+  if (response.droplet) {
+      return response.droplet as Droplet;
   }
-  // Format 3: Response might be the droplet object itself
-  else if (response && response.id && response.name) {
-    console.log(`[DigitalOcean] Response appears to be droplet object directly`);
-    foundDroplet = response;
-  }
-  // Format 4: Check for 'data' property containing droplets
-  else if (response.data) {
-    console.log(`[DigitalOcean] Found data property`);
-    if (Array.isArray(response.data.droplets) && response.data.droplets.length > 0) {
-      console.log(`[DigitalOcean] Found droplets in data property`);
-      foundDroplet = response.data.droplets[0];
-    } else if (response.data.droplet) {
-      console.log(`[DigitalOcean] Found single droplet in data property`);
-      foundDroplet = response.data.droplet;
-    } else if (response.data.id && response.data.name) {
-      console.log(`[DigitalOcean] Data appears to be droplet object directly`);
-      foundDroplet = response.data;
-    }
-  }
-
-  if (foundDroplet) {
-    console.log(`[DigitalOcean] Successfully parsed droplet:`, {
-      id: foundDroplet.id,
-      name: foundDroplet.name,
-      status: foundDroplet.status,
-      region: foundDroplet.region?.slug || foundDroplet.region
-    });
-    return foundDroplet as Droplet;
-  }
-  
-  // Enhanced error logging if no droplet found
-  console.error(`[DigitalOcean] Could not parse droplet from response.`);
-  console.error(`[DigitalOcean] Response structure analysis:`);
-  
-  if (response && typeof response === 'object') {
-    const responseKeys = Object.keys(response);
-    console.error(`[DigitalOcean] Top-level keys:`, responseKeys);
-    
-    // Log structure of each top-level property
-    for (const key of responseKeys) {
-      const value = response[key];
-      const valueType = typeof value;
-      const isArray = Array.isArray(value);
-      const arrayInfo = isArray ? `Array[${value.length}]` : '';
-      console.error(`[DigitalOcean] Key "${key}": ${valueType}${arrayInfo}`);
-      
-      // Log first item of arrays for debugging
-      if (isArray && value.length > 0) {
-        console.error(`[DigitalOcean] First item in "${key}":`, JSON.stringify(value[0], null, 2));
-      }
-      // Log object structure
-      else if (valueType === 'object' && value !== null) {
-        console.error(`[DigitalOcean] Object "${key}" keys:`, Object.keys(value));
-      }
-    }
-  } else {
-    console.error(`[DigitalOcean] Response is not an object:`, typeof response, response);
-  }
-  
-  // Throw detailed error for debugging
-  throw new DigitalOceanServiceError(
-    `Failed to parse create droplet response: Unexpected API response format. ` +
-    `Response keys: ${response ? Object.keys(response).join(', ') : 'null'}`
-  );
+  console.error("Unexpected response structure from createDroplets:", response);
+  // Throw specific error if parsing fails after successful call
+  throw new DigitalOceanServiceError('Failed to parse create droplet response: Unexpected API response format.');
 }
 
 /**

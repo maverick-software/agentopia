@@ -70,7 +70,7 @@ let apiClientInstance: DotsApiClient | null = null;
 
 /**
  * Initializes and returns the DigitalOcean API client.
- * Fetches the API token from a secure vault.
+ * Fetches the API token from a secure vault or directly from environment.
  * @returns {Promise<DotsApiClient>} The initialized API client.
  * @throws {Error} If the API token cannot be retrieved or client initialization fails.
  */
@@ -79,20 +79,35 @@ export async function getDOClient(): Promise<DotsApiClient> {
     return apiClientInstance;
   }
 
-  const apiToken = Deno.env.get('DO_API_TOKEN'); // Directly get the token
+  let apiToken: string | null = null;
+
+  // First, try to get token from vault if vault ID is configured
+  const apiTokenSecretId = Deno.env.get('DO_API_TOKEN_VAULT_ID');
+  if (apiTokenSecretId) {
+    console.log('DO_API_TOKEN_VAULT_ID found, attempting to retrieve token from Supabase Vault...');
+    apiToken = await getSecretFromVault(apiTokenSecretId);
+  }
+
+  // Fallback: If vault retrieval failed or vault ID not configured, try direct token
   if (!apiToken) {
-    console.error(
-      'DigitalOcean API token (DO_API_TOKEN) is not configured in environment.'
-    );
-    throw new Error('DigitalOcean API token (DO_API_TOKEN) is not configured.');
+    console.log('Vault token retrieval failed or not configured, trying direct DO_API_TOKEN...');
+    apiToken = Deno.env.get('DO_API_TOKEN');
+    if (apiToken) {
+      console.log('Successfully retrieved DO_API_TOKEN from environment variables.');
+    }
+  }
+
+  if (!apiToken) {
+    console.error('Failed to retrieve DigitalOcean API token from both Vault and direct environment variable.');
+    throw new Error('DigitalOcean API token not found. Please configure either DO_API_TOKEN_VAULT_ID (for vault usage) or DO_API_TOKEN (for direct usage).');
   }
 
   try {
     apiClientInstance = createApiClient({ token: apiToken });
-    console.info('DigitalOcean API client initialized successfully using direct DO_API_TOKEN.');
+    console.info('DigitalOcean API client initialized successfully.');
     return apiClientInstance;
   } catch (error) {
-    console.error('Failed to initialize DigitalOcean API client with direct DO_API_TOKEN:', error);
+    console.error('Failed to initialize DigitalOcean API client:', error);
     // Ensure the error is typed or cast to access error.message if needed
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to initialize DigitalOcean API client: ${errorMessage}`);

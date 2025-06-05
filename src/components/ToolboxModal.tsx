@@ -11,6 +11,7 @@ import { listDORegions, listDOSizes, DORegionOption, DOSizeOption } from '@/lib/
 // Temporary placeholder types - these will be replaced with actual Toolbox/Service/Toolbelt types
 interface McpConfigurationCreate { name?: string; driver_type?: string; endpoint_url?: string; vault_api_key_id?: string | null; is_active?: boolean; priority?: number; timeout_ms?: number; max_retries?: number; retry_backoff_ms?: number; }
 interface McpConfigurationUpdate extends McpConfigurationCreate { id: number; }
+interface MCPServerCapabilities { [key: string]: any; }
 interface McpConfiguration { id: number; name: string; driver_type?: string; endpoint_url?: string; vault_api_key_id?: string | null; is_active?: boolean; priority?: number; timeout_ms?: number; max_retries?: number; retry_backoff_ms?: number; capabilities?: MCPServerCapabilities; config_id?: number; }
 interface McpDriverInfo { id: string; name: string; description: string; }
 
@@ -40,6 +41,7 @@ const ToolboxModal: React.FC<ToolboxModalProps> = ({
   const [size, setSize] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const [regions, setRegions] = useState<DORegionOption[]>([]);
   const [sizes, setSizes] = useState<DOSizeOption[]>([]);
@@ -55,6 +57,7 @@ const ToolboxModal: React.FC<ToolboxModalProps> = ({
       setSize('');
       setIsSaving(false);
       setFormError(null);
+      setIsSuccess(false);
       setOptionsError(null);
 
       // Fetch options
@@ -79,16 +82,26 @@ const ToolboxModal: React.FC<ToolboxModalProps> = ({
 
   const handleSubmit = async () => {
     setFormError(null);
+    setIsSuccess(false);
+    
     if (!name || !region || !size) {
       setFormError('Name, Region, and Size are required.');
       return;
     }
+    
     setIsSaving(true);
     try {
       await onProvision({ name, description, regionSlug: region, sizeSlug: size });
-      // Parent handles closing on success
+      setIsSuccess(true);
+      setFormError(null);
+      
+      // Show "Submitted" success message briefly, then close
+      setTimeout(() => {
+        // Parent component handles closing and ongoing provisioning status
+      }, 1500);
     } catch (apiError: any) {
-      setFormError(apiError.message || 'Failed to provision toolbox. Please try again.');
+      setFormError(apiError.message || 'Failed to submit toolbox request. Please try again.');
+      setIsSuccess(false);
     } finally {
       setIsSaving(false);
     }
@@ -170,18 +183,43 @@ const ToolboxModal: React.FC<ToolboxModalProps> = ({
             </div>
           )}
 
+          {/* Success Message */}
+          {isSuccess && (
+            <div className="col-span-4 bg-green-900/30 border border-green-700 text-green-300 p-3 rounded-md text-sm flex items-center">
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Toolbox request submitted successfully! Provisioning will continue in the background.
+            </div>
+          )}
+
+          {/* Error Message */}
           {formError && (
-            <div className="col-span-4 bg-destructive/10 border border-destructive/30 text-destructive p-3 rounded-md text-sm">
+            <div className="col-span-4 bg-destructive/10 border border-destructive/30 text-destructive p-3 rounded-md text-sm flex items-center">
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               {formError}
             </div>
           )}
 
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions || !name || !region || !size}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {isSaving ? 'Provisioning...' : 'Provision Toolbox'}
+          <Button variant="outline" onClick={onClose} disabled={isSaving || isSuccess}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={isSaving || isLoadingOptions || !name || !region || !size || isSuccess}
+            className={isSuccess ? "bg-green-600 hover:bg-green-700" : ""}
+          >
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSuccess && (
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            {isSuccess ? 'Submitted Successfully!' : isSaving ? 'Submitting...' : 'Provision Toolbox'}
           </Button>
         </DialogFooter>
       </DialogContent>

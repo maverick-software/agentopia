@@ -1,4 +1,24 @@
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'; // Changed to Deno-friendly URL import
+// Local type definition to avoid external import linter issues
+// This matches the SupabaseClient interface used in this file
+interface SupabaseClient<T> {
+  from(table: string): {
+    select(columns?: string): any;
+    insert(data: any): any;
+    update(data: any): any;
+    delete(): any;
+    eq(column: string, value: any): any;
+    neq(column: string, value: any): any;
+    order(column: string, options?: any): any;
+    limit(count: number): any;
+    single(): any;
+    maybeSingle(): any;
+  };
+  auth: {
+    getUser(token: string): Promise<any>;
+  };
+  [key: string]: any; // Allow other properties
+}
+
 import type { Database, Json } from '../../types/database.types.ts'; // Adjusted path for consistency
 import {
   createDigitalOceanDroplet,
@@ -399,53 +419,51 @@ echo "--- DTMA Docker Setup Script Finished ---"
         try {
             if (toolboxRecord.do_droplet_id) {
                 console.log(`Deleting DigitalOcean droplet ${toolboxRecord.do_droplet_id} for Toolbox ${toolboxId}...`);
-                // Pass do_droplet_id directly as a string, as indicated by linter error
                 await deleteDigitalOceanDroplet(toolboxRecord.do_droplet_id!); 
                 console.log(`Droplet ${toolboxRecord.do_droplet_id} deleted successfully from DigitalOcean.`);
             } else {
                 console.log(`No DigitalOcean droplet ID found for Toolbox ${toolboxId}. Skipping DO deletion.`);
             }
 
-            // Update DB: status to deprovisioned, clear fields
-            const updates: AccountToolEnvironmentUpdate = {
-                status: 'deprovisioned' as AccountToolEnvironmentStatusEnum, // Cast for enum
-                do_droplet_id: null,
-                public_ip_address: null,
-                dtma_bearer_token: null, 
-                dtma_last_known_version: null,
-                dtma_health_details_json: null,
-                last_heartbeat_at: null,
-                provisioning_error_message: null, // Corrected field name
-            };
-            await this.updateToolboxEnvironment(toolboxId, updates);
-            console.log(`Toolbox ${toolboxId} marked as deprovisioned in DB.`);
-            return { success: true, finalStatus: 'deprovisioned' };
+            // DELETE the database record completely instead of marking as deprovisioned
+            const { error: deleteError } = await this.supabase
+                .from('account_tool_environments')
+                .delete()
+                .eq('id', toolboxId);
+
+            if (deleteError) {
+                console.error(`Failed to delete Toolbox record from DB for ${toolboxId}:`, deleteError);
+                return { success: false, message: `DB deletion failed after DO deletion: ${deleteError.message}` };
+            }
+
+            console.log(`Toolbox ${toolboxId} completely deleted from database.`);
+            return { success: true, message: 'Toolbox deprovisioned and deleted from database.' };
 
         } catch (error: any) {
             console.error(`Error during Toolbox deprovisioning (${toolboxId}):`, error);
             let errorMessage = 'Unknown deprovisioning error';
             if (error instanceof DigitalOceanResourceNotFoundError) {
                 console.warn(`Droplet for Toolbox ${toolboxId} (DO ID: ${toolboxRecord.do_droplet_id}) not found on DigitalOcean. Assuming already deleted.`);
-                // Proceed to mark as deprovisioned in DB if DO says not found
-                const updates: AccountToolEnvironmentUpdate = {
-                    status: 'deprovisioned' as AccountToolEnvironmentStatusEnum, // Cast for enum
-                    do_droplet_id: null,
-                    public_ip_address: null,
-                    dtma_bearer_token: null,
-                    dtma_last_known_version: null,
-                    dtma_health_details_json: null,
-                    last_heartbeat_at: null,
-                    provisioning_error_message: 'Droplet not found on provider, marked as deprovisioned.', // Corrected field name
-                };
-                await this.updateToolboxEnvironment(toolboxId, updates)
-                    .catch(updateErr => console.error('Failed to update Toolbox to deprovisioned after DO not found:', updateErr));
-                return { success: true, message: 'Droplet not found on provider, marked as deprovisioned.', finalStatus: 'deprovisioned' };
+                
+                // Still DELETE the database record even if droplet not found
+                const { error: deleteError } = await this.supabase
+                    .from('account_tool_environments')
+                    .delete()
+                    .eq('id', toolboxId);
+
+                if (deleteError) {
+                    console.error(`Failed to delete Toolbox record from DB after DO not found for ${toolboxId}:`, deleteError);
+                    return { success: false, message: `DB deletion failed: ${deleteError.message}` };
+                }
+
+                console.log(`Toolbox ${toolboxId} deleted from database (droplet was already gone).`);
+                return { success: true, message: 'Droplet not found on provider, toolbox deleted from database.' };
             }
             errorMessage = error.message || errorMessage;
             
             await this.updateToolboxEnvironment(toolboxId, {
-                status: 'error_deprovisioning' as AccountToolEnvironmentStatusEnum, // Cast for enum
-                provisioning_error_message: errorMessage.substring(0,200), // Corrected field name
+                status: 'error_deprovisioning' as AccountToolEnvironmentStatusEnum,
+                provisioning_error_message: errorMessage.substring(0,200),
             }).catch(updateError => console.error('Failed to update Toolbox status to error_deprovisioning:', updateError));
             return { success: false, message: errorMessage, finalStatus: 'error_deprovisioning' as AccountToolEnvironmentStatusEnum };
         }

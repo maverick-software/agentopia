@@ -34,6 +34,8 @@ export function ToolboxesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisioningError, setProvisioningError] = useState<string | null>(null);
+  const [provisioningSuccess, setProvisioningSuccess] = useState<string | null>(null);
+  const [activeProvisioningToolboxes, setActiveProvisioningToolboxes] = useState<Set<string>>(new Set());
   
   // State for per-toolbox actions
   const [actionStates, setActionStates] = useState<Record<string, { isLoading: boolean; error: string | null }>>({});
@@ -62,17 +64,83 @@ export function ToolboxesPage() {
 
   const handleProvisionToolbox = async (payload: ProvisionToolboxPayload) => {
     setProvisioningError(null);
+    setProvisioningSuccess(null);
     setIsProvisioning(true);
+    
     try {
+      // Start the provisioning process
       await provisionToolbox(payload);
-      setIsModalOpen(false);
-      fetchUserToolboxes();
+      
+      // Close modal immediately after successful submission
+      setTimeout(() => {
+        setIsModalOpen(false);
+        // Refresh toolbox list to show the new toolbox in "provisioning" state
+        fetchUserToolboxes();
+        
+        // Set up polling to check for completion
+        startProvisioningStatusCheck(payload.name);
+      }, 1500);
+      
     } catch (err: any) {
-      console.error('Error provisioning toolbox:', err);
-      setProvisioningError(err.message || 'Failed to provision toolbox.');
+      console.error('Error starting toolbox provisioning:', err);
+      setProvisioningError(err.message || 'Failed to start toolbox provisioning.');
+      // Don't close modal on error so user can see the error and retry
+      throw err; // Re-throw to let the modal handle the error display
     } finally {
       setIsProvisioning(false);
     }
+  };
+
+  // Function to periodically check provisioning status
+  const startProvisioningStatusCheck = (toolboxName: string) => {
+    // Add to active provisioning set
+    setActiveProvisioningToolboxes(prev => new Set([...prev, toolboxName]));
+    
+    const checkInterval = setInterval(async () => {
+      try {
+        await fetchUserToolboxes();
+        
+        // Find the toolbox we're waiting for
+        const currentToolboxes = await listToolboxes();
+        const newToolbox = currentToolboxes?.find(t => t.name === toolboxName);
+        
+        if (newToolbox) {
+          if (newToolbox.status === 'active') {
+            // Provisioning completed successfully
+            clearInterval(checkInterval);
+            setActiveProvisioningToolboxes(prev => {
+              const updated = new Set(prev);
+              updated.delete(toolboxName);
+              return updated;
+            });
+            setProvisioningSuccess(`Toolbox "${toolboxName}" has been provisioned successfully and is now active!`);
+            setTimeout(() => setProvisioningSuccess(null), 8000);
+          } else if (newToolbox.status.includes('error')) {
+            // Provisioning failed
+            clearInterval(checkInterval);
+            setActiveProvisioningToolboxes(prev => {
+              const updated = new Set(prev);
+              updated.delete(toolboxName);
+              return updated;
+            });
+            setProvisioningError(`Toolbox "${toolboxName}" provisioning failed: ${newToolbox.status}`);
+          }
+          // If still provisioning, continue checking
+        }
+      } catch (err) {
+        console.error('Error checking provisioning status:', err);
+      }
+    }, 5000); // Check every 5 seconds
+
+    // Stop checking after 10 minutes (in case something goes wrong)
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      setActiveProvisioningToolboxes(prev => {
+        const updated = new Set(prev);
+        updated.delete(toolboxName);
+        return updated;
+      });
+    }, 600000);
   };
 
   const getStatusText = (status: AccountToolEnvironmentStatus): string => {
@@ -91,9 +159,9 @@ export function ToolboxesPage() {
       case 'error_deprovisioning': return 'Deprovisioning Failed';
       case 'unresponsive': return 'Unresponsive';
       case 'scaling': return 'Scaling';
-      case 'pending_provision': return 'Pending Provision';
-      case 'provisioning': return 'Provisioning';
-      case 'error_provisioning': return 'Provisioning Error';
+      case 'pending_provision': return 'Preparing to Provision';
+      case 'provisioning': return 'Provisioning Server...';
+      case 'error_provisioning': return 'Provisioning Failed';
       case 'pending_deprovision': return 'Pending Deprovision';
       case 'deprovisioning': return 'Deprovisioning';
       default:
@@ -148,7 +216,11 @@ export function ToolboxesPage() {
           {pageTitle}
         </h1>
         <button 
-            onClick={() => { setProvisioningError(null); setIsModalOpen(true); }}
+            onClick={() => { 
+              setProvisioningError(null); 
+              setProvisioningSuccess(null); 
+              setIsModalOpen(true); 
+            }}
             className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
             disabled={isProvisioning} 
         >
@@ -194,6 +266,35 @@ export function ToolboxesPage() {
         </div>
       )}
 
+      {/* Display active provisioning status */}
+      {activeProvisioningToolboxes.size > 0 && (
+        <div className="bg-blue-900/30 border border-blue-700 text-blue-300 p-4 rounded-md mb-6">
+          <div className="flex items-center">
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            <h3 className="font-semibold">Provisioning in Progress</h3>
+          </div>
+          <p className="mt-1 text-sm">
+            {activeProvisioningToolboxes.size === 1 
+              ? `Monitoring provisioning status for: ${Array.from(activeProvisioningToolboxes)[0]}`
+              : `Monitoring ${activeProvisioningToolboxes.size} toolboxes: ${Array.from(activeProvisioningToolboxes).join(', ')}`
+            }
+          </p>
+        </div>
+      )}
+
+      {/* Display provisioning success message */}
+      {provisioningSuccess && (
+        <div className="bg-green-900/30 border border-green-700 text-green-300 p-4 rounded-md mb-6">
+          <div className="flex items-center">
+            <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <h3 className="font-semibold">Success</h3>
+          </div>
+          <p className="mt-1 text-sm">{provisioningSuccess}</p>
+        </div>
+      )}
+
       {/* Display provisioning error if any, outside the modal as a general feedback for the page action */}
       {provisioningError && !isModalOpen && ( 
         <div className="bg-red-900/30 border border-red-700 text-red-300 p-4 rounded-md mb-6">
@@ -213,7 +314,11 @@ export function ToolboxesPage() {
                 Create your first Toolbox to start managing your AI server environments.
             </p>
             <button 
-                onClick={() => { setProvisioningError(null); setIsModalOpen(true); }}
+                onClick={() => { 
+                  setProvisioningError(null); 
+                  setProvisioningSuccess(null); 
+                  setIsModalOpen(true); 
+                }}
                 className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors mt-2"
                 disabled={isProvisioning}
             >
@@ -237,12 +342,15 @@ export function ToolboxesPage() {
                     <h2 className="text-xl font-semibold text-primary truncate" title={toolbox.name || 'Unnamed Toolbox'}>
                       {toolbox.name || 'Unnamed Toolbox'}
                     </h2>
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex items-center ${
                       toolbox.status === 'active' ? 'bg-green-700/30 text-green-300' :
                       toolbox.status.includes('error') ? 'bg-red-700/30 text-red-300' :
-                      (toolbox.status.includes('pending') || toolbox.status.includes('creating') || toolbox.status.includes('deleting')) ? 'bg-yellow-700/30 text-yellow-300' :
+                      (toolbox.status.includes('pending') || toolbox.status.includes('creating') || toolbox.status.includes('deleting') || toolbox.status.includes('provisioning')) ? 'bg-yellow-700/30 text-yellow-300' :
                       'bg-gray-700/50 text-gray-400'
                     }`}>
+                      {(toolbox.status.includes('provisioning') || toolbox.status.includes('pending') || toolbox.status.includes('creating')) && (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      )}
                       {getStatusText(toolbox.status)}
                     </span>
                   </div>
