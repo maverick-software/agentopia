@@ -63,14 +63,23 @@ export function ToolboxesPage() {
   // Check for existing provisioning toolboxes and start timers for them
   useEffect(() => {
     toolboxes.forEach(toolbox => {
-      if ((toolbox.status === 'provisioning' || toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && 
-          toolbox.name && !provisioningTimers[toolbox.name]) {
-        // Start timer for existing provisioning toolbox (assume it started recently if no timer exists)
-        const startTime = new Date();
-        setProvisioningTimers(prev => ({
-          ...prev,
-          [toolbox.name!]: { startTime, remainingSeconds: 300 }
-        }));
+      if (toolbox.name && !provisioningTimers[toolbox.name]) {
+        if (toolbox.status === 'provisioning') {
+          // For existing provisioning toolboxes, we can't know how long they've been running
+          // So start with an estimate: if it's actively provisioning, assume it's been running for 2-3 minutes
+          // This gives a more realistic progress indication than starting from 0
+          const startTime = new Date();
+          const estimatedElapsed = 150; // Assume 2.5 minutes elapsed for existing provisioning toolboxes
+          startTime.setTime(startTime.getTime() - (estimatedElapsed * 1000));
+          
+          setProvisioningTimers(prev => ({
+            ...prev,
+            [toolbox.name!]: { startTime, remainingSeconds: 300 - estimatedElapsed }
+          }));
+        } else if (toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) {
+          // For awaiting heartbeat, don't use a countdown timer - just show as near completion
+          // Don't add to provisioningTimers so it shows as "Almost ready..." without countdown
+        }
       }
     });
   }, [toolboxes, provisioningTimers]);
@@ -191,7 +200,7 @@ export function ToolboxesPage() {
 
   // Function to periodically check provisioning status
   const startProvisioningStatusCheck = (toolboxName: string) => {
-    // Start countdown timer (5 minutes = 300 seconds for 5-stage deployment)
+    // Start countdown timer for NEW toolbox (5 minutes = 300 seconds for 5-stage deployment)
     const startTime = new Date();
     setProvisioningTimers(prev => ({
       ...prev,
@@ -440,7 +449,7 @@ export function ToolboxesPage() {
                       ✅ Server is healthy and ready for tool deployment
                     </p>
                   )}
-                  {(toolbox.status === 'provisioning' || toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && (
+                  {toolbox.status === 'provisioning' && (
                     <div className="text-xs text-blue-400 bg-blue-900/20 p-3 rounded-lg mb-2 border border-blue-800/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="flex items-center">
@@ -460,7 +469,7 @@ export function ToolboxesPage() {
                       <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
                         {(() => {
                           const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
-                          const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 90; // Default to 90% if no timer
+                          const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 10;
                           return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
                         })()}
                       </div>
@@ -471,8 +480,27 @@ export function ToolboxesPage() {
                             const phase = getDeploymentPhase(timer.remainingSeconds);
                             return `Phase ${phase.phase}: ${phase.name}...`;
                           }
-                          return "Phase 5: Finalizing setup and health checks...";
+                          return "Finalizing deployment...";
                         })()}
+                      </div>
+                    </div>
+                  )}
+                  {(toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && (
+                    <div className="text-xs text-blue-400 bg-blue-900/20 p-3 rounded-lg mb-2 border border-blue-800/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="flex items-center">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          Deploying...
+                        </span>
+                        <span className="text-blue-300 font-mono bg-blue-800/50 px-2 py-0.5 rounded">
+                          Almost ready...
+                        </span>
+                      </div>
+                      <div className="bg-blue-800/30 rounded-full h-1.5 overflow-hidden mb-2">
+                        <div className="bg-blue-400 h-full animate-pulse" style={{ width: '95%' }}></div>
+                      </div>
+                      <div className="text-xs text-blue-300/60">
+                        Finalizing setup and health checks...
                       </div>
                     </div>
                   )}
