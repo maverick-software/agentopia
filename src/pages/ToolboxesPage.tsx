@@ -210,9 +210,7 @@ export function ToolboxesPage() {
     
     const checkInterval = setInterval(async () => {
       try {
-        await fetchUserToolboxes();
-        
-        // Find the toolbox we're waiting for
+        // Check status without triggering a full page refresh
         const currentToolboxes = await listToolboxes();
         const newToolbox = currentToolboxes?.find(t => t.name === toolboxName);
         
@@ -225,7 +223,8 @@ export function ToolboxesPage() {
               delete updated[toolboxName];
               return updated;
             });
-            // No need for page-wide success message - the card status will show it's active
+            // Update the toolboxes state with the new status
+            setToolboxes(currentToolboxes || []);
           } else if (newToolbox.status.includes('error')) {
             // Provisioning failed
             clearInterval(checkInterval);
@@ -234,6 +233,8 @@ export function ToolboxesPage() {
               delete updated[toolboxName];
               return updated;
             });
+            // Update the toolboxes state with the new status
+            setToolboxes(currentToolboxes || []);
             setProvisioningError(`Toolbox "${toolboxName}" provisioning failed: ${newToolbox.status}`);
           }
           // If still provisioning, pending, or awaiting heartbeat, continue checking and let timer run
@@ -241,7 +242,7 @@ export function ToolboxesPage() {
       } catch (err) {
         console.error('Error checking provisioning status:', err);
       }
-    }, 10000); // Check every 10 seconds
+    }, 15000); // Check every 15 seconds (reduced frequency to be less intrusive)
 
     // Stop checking after 10 minutes (in case something goes wrong)
     setTimeout(() => {
