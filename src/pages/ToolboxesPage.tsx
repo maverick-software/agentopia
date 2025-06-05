@@ -32,7 +32,6 @@ export function ToolboxesPage() {
   const [error, setError] = useState<string | null>(null); // For fetching the list
 
   const [provisioningError, setProvisioningError] = useState<string | null>(null);
-  const [provisioningSuccess, setProvisioningSuccess] = useState<string | null>(null);
   const [isCreatingToolbox, setIsCreatingToolbox] = useState(false);
   const [provisioningTimers, setProvisioningTimers] = useState<Record<string, { startTime: Date; remainingSeconds: number }>>({}); 
   
@@ -126,7 +125,6 @@ export function ToolboxesPage() {
 
   const handleProvisionToolbox = async (payload: ProvisionToolboxPayload) => {
     setProvisioningError(null);
-    setProvisioningSuccess(null);
     
     try {
       // Start the provisioning process
@@ -146,12 +144,11 @@ export function ToolboxesPage() {
   const handleCreateToolbox = async () => {
     setIsCreatingToolbox(true);
     setProvisioningError(null);
-    setProvisioningSuccess(null);
     
     try {
       const config = generateToolboxConfig();
       await handleProvisionToolbox(config);
-      setProvisioningSuccess(`Creating toolbox "${config.name}"...`);
+      // Success will be shown in the individual toolbox card
     } catch (err: any) {
       console.error('Error creating toolbox:', err);
       setProvisioningError(err.message || 'Failed to create toolbox.');
@@ -186,8 +183,7 @@ export function ToolboxesPage() {
               delete updated[toolboxName];
               return updated;
             });
-            setProvisioningSuccess(`Toolbox "${toolboxName}" is now active and ready!`);
-            setTimeout(() => setProvisioningSuccess(null), 8000);
+            // No need for page-wide success message - the card status will show it's active
           } else if (newToolbox.status.includes('error')) {
             // Provisioning failed
             clearInterval(checkInterval);
@@ -203,7 +199,7 @@ export function ToolboxesPage() {
       } catch (err) {
         console.error('Error checking provisioning status:', err);
       }
-    }, 5000); // Check every 5 seconds
+    }, 10000); // Check every 10 seconds
 
     // Stop checking after 10 minutes (in case something goes wrong)
     setTimeout(() => {
@@ -341,29 +337,7 @@ export function ToolboxesPage() {
 
 
 
-      {/* Display provisioning success message */}
-      {provisioningSuccess && (
-        <div className="bg-green-900/30 border border-green-700 text-green-300 p-4 rounded-md mb-6">
-          <div className="flex items-center">
-            <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <h3 className="font-semibold">Success</h3>
-          </div>
-          <p className="mt-1 text-sm">{provisioningSuccess}</p>
-        </div>
-      )}
 
-      {/* Display provisioning error if any */}
-      {provisioningError && ( 
-        <div className="bg-red-900/30 border border-red-700 text-red-300 p-4 rounded-md mb-6">
-          <div className="flex items-center">
-            <XCircle className="h-5 w-5 mr-2" />
-            <h3 className="font-semibold">Provisioning Error</h3>
-          </div>
-          <p className="mt-1 text-sm">{provisioningError}</p>
-        </div>
-      )}
 
       {!loading && !error && toolboxes.length === 0 && (
         <div className="text-center py-10 border-2 border-dashed border-gray-700 rounded-lg bg-card flex flex-col items-center">
@@ -469,16 +443,21 @@ export function ToolboxesPage() {
                     </div>
                   )}
                   {(toolbox.status.includes('pending') || toolbox.status.includes('awaiting')) && (
-                    <div className="text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded mb-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span>⏳ Finalizing setup...</span>
-                        <span className="text-yellow-300">~1 min</span>
+                    <div className="text-xs text-yellow-400 bg-yellow-900/20 p-3 rounded-lg mb-2 border border-yellow-800/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="flex items-center">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          ⏳ Finalizing setup...
+                        </span>
+                        <span className="text-yellow-300 font-mono bg-yellow-800/50 px-2 py-0.5 rounded">
+                          ~1 min
+                        </span>
                       </div>
-                      <div className="bg-yellow-800/30 rounded-full h-1 overflow-hidden">
-                        <div className="bg-yellow-400 h-full animate-pulse" style={{ width: '80%' }}></div>
+                      <div className="bg-yellow-800/30 rounded-full h-2 overflow-hidden mb-2">
+                        <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 h-full animate-pulse" style={{ width: '85%' }}></div>
                       </div>
-                      <div className="mt-1 text-xs text-yellow-300">
-                        Establishing connection and verifying health...
+                      <div className="text-xs text-yellow-300/80">
+                        🔗 Establishing connection and verifying health...
                       </div>
                     </div>
                   )}
