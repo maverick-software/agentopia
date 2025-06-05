@@ -32,10 +32,10 @@ export function ToolboxesPage() {
   const [error, setError] = useState<string | null>(null); // For fetching the list
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisioningError, setProvisioningError] = useState<string | null>(null);
   const [provisioningSuccess, setProvisioningSuccess] = useState<string | null>(null);
   const [activeProvisioningToolboxes, setActiveProvisioningToolboxes] = useState<Set<string>>(new Set());
+  const [provisioningTimers, setProvisioningTimers] = useState<Record<string, { startTime: Date; remainingSeconds: number }>>({}); 
   
   // State for per-toolbox actions
   const [actionStates, setActionStates] = useState<Record<string, { isLoading: boolean; error: string | null }>>({});
@@ -62,32 +62,61 @@ export function ToolboxesPage() {
     fetchUserToolboxes();
   }, [fetchUserToolboxes]);
 
+  // Update countdown timers every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProvisioningTimers(prev => {
+        const updated = { ...prev };
+        let hasChanges = false;
+
+        Object.keys(updated).forEach(toolboxName => {
+          const timer = updated[toolboxName];
+          const elapsedSeconds = Math.floor((new Date().getTime() - timer.startTime.getTime()) / 1000);
+          const newRemainingSeconds = Math.max(0, 180 - elapsedSeconds);
+          
+          if (newRemainingSeconds !== timer.remainingSeconds) {
+            updated[toolboxName] = { ...timer, remainingSeconds: newRemainingSeconds };
+            hasChanges = true;
+          }
+        });
+
+        return hasChanges ? updated : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Helper function to format seconds as MM:SS
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Helper function to get progress percentage
+  const getProgressPercentage = (remainingSeconds: number): number => {
+    return Math.max(0, Math.min(100, ((180 - remainingSeconds) / 180) * 100));
+  };
+
   const handleProvisionToolbox = async (payload: ProvisionToolboxPayload) => {
     setProvisioningError(null);
     setProvisioningSuccess(null);
-    setIsProvisioning(true);
     
     try {
       // Start the provisioning process
       await provisionToolbox(payload);
       
-      // Close modal immediately after successful submission
-      setTimeout(() => {
-        setIsModalOpen(false);
-        // Refresh toolbox list to show the new toolbox in "provisioning" state
-        fetchUserToolboxes();
-        
-        // Set up polling to check for completion
-        startProvisioningStatusCheck(payload.name);
-      }, 1500);
+      // After successful API call, let modal handle the success display and closing
+      // Just refresh the list and start monitoring
+      fetchUserToolboxes();
+      startProvisioningStatusCheck(payload.name);
       
     } catch (err: any) {
       console.error('Error starting toolbox provisioning:', err);
       setProvisioningError(err.message || 'Failed to start toolbox provisioning.');
       // Don't close modal on error so user can see the error and retry
       throw err; // Re-throw to let the modal handle the error display
-    } finally {
-      setIsProvisioning(false);
     }
   };
 
@@ -95,6 +124,13 @@ export function ToolboxesPage() {
   const startProvisioningStatusCheck = (toolboxName: string) => {
     // Add to active provisioning set
     setActiveProvisioningToolboxes(prev => new Set([...prev, toolboxName]));
+    
+    // Start countdown timer (3 minutes = 180 seconds)
+    const startTime = new Date();
+    setProvisioningTimers(prev => ({
+      ...prev,
+      [toolboxName]: { startTime, remainingSeconds: 180 }
+    }));
     
     const checkInterval = setInterval(async () => {
       try {
@@ -113,6 +149,11 @@ export function ToolboxesPage() {
               updated.delete(toolboxName);
               return updated;
             });
+            setProvisioningTimers(prev => {
+              const updated = { ...prev };
+              delete updated[toolboxName];
+              return updated;
+            });
             setProvisioningSuccess(`Toolbox "${toolboxName}" has been provisioned successfully and is now active!`);
             setTimeout(() => setProvisioningSuccess(null), 8000);
           } else if (newToolbox.status.includes('error')) {
@@ -121,6 +162,11 @@ export function ToolboxesPage() {
             setActiveProvisioningToolboxes(prev => {
               const updated = new Set(prev);
               updated.delete(toolboxName);
+              return updated;
+            });
+            setProvisioningTimers(prev => {
+              const updated = { ...prev };
+              delete updated[toolboxName];
               return updated;
             });
             setProvisioningError(`Toolbox "${toolboxName}" provisioning failed: ${newToolbox.status}`);
@@ -138,6 +184,11 @@ export function ToolboxesPage() {
       setActiveProvisioningToolboxes(prev => {
         const updated = new Set(prev);
         updated.delete(toolboxName);
+        return updated;
+      });
+      setProvisioningTimers(prev => {
+        const updated = { ...prev };
+        delete updated[toolboxName];
         return updated;
       });
     }, 600000);
@@ -222,9 +273,7 @@ export function ToolboxesPage() {
               setIsModalOpen(true); 
             }}
             className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-            disabled={isProvisioning} 
         >
-          {isProvisioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           <PlusCircle className="mr-2 h-4 w-4" /> New Toolbox
         </button>
       </div>
@@ -274,8 +323,15 @@ export function ToolboxesPage() {
               <Loader2 className="h-5 w-5 mr-2 animate-spin" />
               <h3 className="font-semibold">Provisioning in Progress</h3>
             </div>
-            <div className="text-xs bg-blue-800/50 px-2 py-1 rounded">
-              ⏱️ ~3 minutes expected
+            <div className="text-xs bg-blue-800/50 px-2 py-1 rounded font-mono">
+              {(() => {
+                const firstToolbox = Array.from(activeProvisioningToolboxes)[0];
+                const timer = provisioningTimers[firstToolbox];
+                if (timer && timer.remainingSeconds > 0) {
+                  return `⏱️ ${formatTime(timer.remainingSeconds)}`;
+                }
+                return "⏱️ Finishing up...";
+              })()}
             </div>
           </div>
           <p className="mt-1 text-sm">
@@ -285,7 +341,12 @@ export function ToolboxesPage() {
             }
           </p>
           <div className="mt-3 bg-blue-800/30 rounded-full h-2 overflow-hidden">
-            <div className="bg-blue-400 h-full animate-pulse" style={{ width: '60%' }}></div>
+            {(() => {
+              const firstToolbox = Array.from(activeProvisioningToolboxes)[0];
+              const timer = provisioningTimers[firstToolbox];
+              const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 60;
+              return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
+            })()}
           </div>
           <p className="mt-2 text-xs text-blue-200">
             Installing Docker, pulling DTMA container, and establishing connection...
@@ -331,9 +392,7 @@ export function ToolboxesPage() {
                   setIsModalOpen(true); 
                 }}
                 className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors mt-2"
-                disabled={isProvisioning}
             >
-                {isProvisioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <PlusCircle className="mr-2 h-4 w-4" /> Create New Toolbox
             </button>
         </div>
@@ -386,10 +445,22 @@ export function ToolboxesPage() {
                     <div className="text-xs text-blue-400 bg-blue-900/20 p-2 rounded mb-2">
                       <div className="flex items-center justify-between mb-1">
                         <span>🔄 Setting up your server...</span>
-                        <span className="text-blue-300">~3 min</span>
+                        <span className="text-blue-300 font-mono">
+                          {(() => {
+                            const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
+                            if (timer && timer.remainingSeconds > 0) {
+                              return formatTime(timer.remainingSeconds);
+                            }
+                            return "Finishing...";
+                          })()}
+                        </span>
                       </div>
                       <div className="bg-blue-800/30 rounded-full h-1 overflow-hidden">
-                        <div className="bg-blue-400 h-full animate-pulse" style={{ width: '45%' }}></div>
+                        {(() => {
+                          const timer = toolbox.name ? provisioningTimers[toolbox.name] : null;
+                          const progressPercentage = timer ? getProgressPercentage(timer.remainingSeconds) : 45;
+                          return <div className="bg-blue-400 h-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>;
+                        })()}
                       </div>
                       <div className="mt-1 text-xs text-blue-300">
                         Installing Docker, configuring DTMA...
@@ -444,18 +515,15 @@ export function ToolboxesPage() {
 
       <ToolboxModal 
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          // Clear any provisioning error from parent when modal is closed
+          setProvisioningError(null);
+        }}
         onProvision={handleProvisionToolbox} 
       />
 
-      <div className="mt-8 p-4 border border-gray-700 rounded-lg bg-gray-800/30">
-        <h2 className="text-lg font-semibold text-gray-300">Developer Note (ToolboxesPage.tsx)</h2>
-        <p className="text-sm text-muted-foreground">
-          This page lists user-owned Toolboxes. It fetches data from the <code>GET /api/toolboxes-user</code> endpoint.
-          Actions per toolbox (refresh, deprovision) are illustrative and will call respective API endpoints.
-          The "New Toolbox" button will trigger a modal for provisioning.
-        </p>
-      </div>
+
     </div>
   );
 }
