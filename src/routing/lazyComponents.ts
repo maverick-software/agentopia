@@ -42,4 +42,10 @@ export const WorkspaceSettingsPage = lazy(() => import('../pages/WorkspaceSettin
 // export const DatasetStorePage = lazy(() => import('../pages/DatasetStorePage.tsx'));
 // export const NotFoundPage = lazy(() => import('../pages/NotFoundPage.tsx')); 
 
-export const ToolboxDetailPage = lazy(() => import('../pages/ToolboxDetailPage').then(module => ({ default: module.ToolboxDetailPage }))); 
+export const ToolboxDetailPage = lazy(() => import('../pages/ToolboxDetailPage').then(module => ({ default: module.ToolboxDetailPage })));
+
+// MCP Server Management Pages
+export const MCPServersPage = lazy(() => import('../pages/mcp/MCPServersPage').then(module => ({ default: module.MCPServersPage })));
+export const MCPMarketplacePage = lazy(() => import('../pages/mcp/MCPMarketplacePage').then(module => ({ default: module.MCPMarketplacePage })));
+export const MCPDeployPage = lazy(() => import('../pages/mcp/MCPDeployPage').then(module => ({ default: module.MCPDeployPage })));
+export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConfigPage').then(module => ({ default: module.MCPServerConfigPage }))); 

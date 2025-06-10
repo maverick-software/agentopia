@@ -150,55 +150,95 @@ const MCPMarketplace: React.FC<MCPMarketplaceProps> = ({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-4">
+    <div className="p-6 space-y-8">
+      {/* Search and Filter Section */}
+      <div className="space-y-6">
+        {/* Search Bar */}
         <div className="flex items-center gap-4">
-          <div className="relative flex-1">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search MCP servers..."
               value={searchQuery}
               onChange={(e) => onSearchChange?.(e.target.value)}
-              className="pl-10"
+              className="pl-10 h-11"
             />
           </div>
         </div>
 
         {/* Category Filter */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={selectedCategory === null ? "default" : "outline"}
-            size="sm"
-            onClick={() => onCategoryChange?.(null)}
-          >
-            All Categories
-          </Button>
-          {categories.map((category) => (
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Filter by Category</h3>
+          <div className="flex flex-wrap gap-2">
             <Button
-              key={category}
-              variant={selectedCategory === category ? "default" : "outline"}
+              variant={selectedCategory === null ? "default" : "outline"}
               size="sm"
-              onClick={() => onCategoryChange?.(category)}
+              onClick={() => onCategoryChange?.(null)}
+              className="rounded-full"
             >
-              {category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              All Categories
             </Button>
-          ))}
+            {categories.map((category) => (
+              <Button
+                key={category}
+                variant={selectedCategory === category ? "default" : "outline"}
+                size="sm"
+                onClick={() => onCategoryChange?.(category)}
+                className="rounded-full"
+              >
+                {category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Results Summary */}
+      {searchQuery || selectedCategory ? (
+        <div className="flex items-center justify-between py-2 border-b">
+          <div className="text-sm text-muted-foreground">
+            {filteredTemplates.length} server{filteredTemplates.length !== 1 ? 's' : ''} found
+            {selectedCategory && ` in ${selectedCategory.replace('-', ' ')}`}
+            {searchQuery && ` for "${searchQuery}"`}
+          </div>
+          {(searchQuery || selectedCategory) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onSearchChange?.('');
+                onCategoryChange?.(null);
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+      ) : null}
 
       {/* Template Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTemplates.length === 0 ? (
           <div className="col-span-full">
-            <Card>
-              <CardContent className="p-8 text-center">
-                <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No MCP servers found</p>
-                {searchQuery && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Try adjusting your search or category filter
-                  </p>
+            <Card className="border-dashed">
+              <CardContent className="p-12 text-center">
+                <Package className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
+                <h3 className="text-lg font-medium mb-2">No MCP servers found</h3>
+                <p className="text-muted-foreground mb-4">
+                  {searchQuery || selectedCategory 
+                    ? "Try adjusting your search or category filter" 
+                    : "No servers are currently available"}
+                </p>
+                {(searchQuery || selectedCategory) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      onSearchChange?.('');
+                      onCategoryChange?.(null);
+                    }}
+                  >
+                    Clear filters
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -207,36 +247,38 @@ const MCPMarketplace: React.FC<MCPMarketplaceProps> = ({
           filteredTemplates.map((template) => (
             <Card 
               key={template.id} 
-              className="cursor-pointer transition-colors hover:bg-muted/50"
+              className="cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] group"
               onClick={() => handleTemplateClick(template)}
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
+              <CardHeader className="pb-4">
+                <div className="flex items-start justify-between mb-2">
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg line-clamp-1">{template.name}</CardTitle>
+                      <CardTitle className="text-lg line-clamp-1 group-hover:text-primary transition-colors">
+                        {template.name}
+                      </CardTitle>
                       {template.verified && (
-                        <Shield className="h-4 w-4 text-blue-600" />
+                        <Shield className="h-4 w-4 text-blue-600 flex-shrink-0" />
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <User className="h-3 w-3" />
                       <span>{template.author}</span>
-                      <span>•</span>
+                      <span className="text-muted-foreground/50">•</span>
                       <span>v{template.version}</span>
                     </div>
                   </div>
                 </div>
 
-                <CardDescription className="line-clamp-2">
+                <CardDescription className="line-clamp-2 text-sm leading-relaxed">
                   {template.description}
                 </CardDescription>
 
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-4 text-sm text-muted-foreground pt-2">
                   <div className="flex items-center gap-1">
                     <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span>{template.rating.average.toFixed(1)}</span>
-                    <span>({template.rating.count})</span>
+                    <span className="font-medium">{template.rating.average.toFixed(1)}</span>
+                    <span className="text-muted-foreground/70">({template.rating.count})</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Download className="h-3 w-3" />
@@ -245,52 +287,53 @@ const MCPMarketplace: React.FC<MCPMarketplaceProps> = ({
                 </div>
               </CardHeader>
               
-              <CardContent className="pt-0">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Badge 
-                      className={cn("text-xs", categoryColors[template.category])}
-                      variant="outline"
-                    >
-                      {template.category.replace('-', ' ')}
-                    </Badge>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>{template.lastUpdated.toLocaleDateString()}</span>
-                    </div>
+              <CardContent className="pt-0 space-y-4">
+                <div className="flex items-center justify-between">
+                  <Badge 
+                    className={cn("text-xs font-medium", categoryColors[template.category])}
+                    variant="outline"
+                  >
+                    {template.category.replace('-', ' ')}
+                  </Badge>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>{template.lastUpdated.toLocaleDateString()}</span>
                   </div>
+                </div>
 
-                  {template.tags.slice(0, 3).length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {template.tags.slice(0, 3).map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          <Tag className="h-2 w-2 mr-1" />
-                          {tag}
-                        </Badge>
-                      ))}
-                      {template.tags.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{template.tags.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="text-xs text-muted-foreground">
-                      {template.resourceRequirements.memory} • {template.resourceRequirements.cpu} CPU
-                    </div>
-                    <Button 
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeploy(template);
-                      }}
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      Deploy
-                    </Button>
+                {template.tags.slice(0, 3).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {template.tags.slice(0, 3).map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-xs px-2 py-0.5">
+                        <Tag className="h-2 w-2 mr-1" />
+                        {tag}
+                      </Badge>
+                    ))}
+                    {template.tags.length > 3 && (
+                      <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                        +{template.tags.length - 3}
+                      </Badge>
+                    )}
                   </div>
+                )}
+
+                <div className="flex items-center justify-between pt-3 border-t">
+                  <div className="text-xs text-muted-foreground">
+                    <span className="font-medium">{template.resourceRequirements.memory}</span>
+                    <span className="mx-1">•</span>
+                    <span className="font-medium">{template.resourceRequirements.cpu}</span> CPU
+                  </div>
+                  <Button 
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeploy(template);
+                    }}
+                    className="gap-1.5 group-hover:scale-105 transition-transform"
+                  >
+                    <Play className="h-3 w-3" />
+                    Deploy
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -303,7 +346,7 @@ const MCPMarketplace: React.FC<MCPMarketplaceProps> = ({
         <DialogContent className="max-w-2xl">
           {selectedTemplate && (
             <>
-              <DialogHeader>
+              <DialogHeader className="space-y-3">
                 <div className="flex items-center gap-3">
                   <DialogTitle className="text-xl">{selectedTemplate.name}</DialogTitle>
                   {selectedTemplate.verified && (

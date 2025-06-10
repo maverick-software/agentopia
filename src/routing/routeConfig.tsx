@@ -46,6 +46,10 @@ import {
     // AgentStorePage, // Commented out
     // DatasetStorePage, // Commented out
     // NotFoundPage, // Commented out
+    MCPServersPage,
+    MCPMarketplacePage,
+    MCPDeployPage,
+    MCPServerConfigPage,
 } from './lazyComponents';
 
 // Manually import the new non-lazy pages
@@ -89,6 +93,12 @@ export const appRoutes: RouteConfig[] = [
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
   // { path: 'agent-store', element: AgentStorePage, protection: 'protected', layout: true }, // Commented out
   // { path: 'dataset-store', element: DatasetStorePage, protection: 'protected', layout: true }, // Commented out
+  
+  // MCP Server Management routes
+  { path: '/mcp/servers', element: MCPServersPage, protection: 'protected', layout: true },
+  { path: '/mcp/marketplace', element: MCPMarketplacePage, protection: 'protected', layout: true },
+  { path: '/mcp/deploy', element: MCPDeployPage, protection: 'protected', layout: true },
+  { path: '/mcp/config/:serverId', element: MCPServerConfigPage, protection: 'protected', layout: true },
   
   // Admin routes (nested under a protected layout)
   {

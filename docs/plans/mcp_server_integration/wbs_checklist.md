@@ -248,6 +248,101 @@
   - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/3.3.2_beta_user_testing_research.md` based on Phase 3.3.1 internal testing results and beta testing best practices
   - Plan Review & Alignment: Deploy to limited beta users for real-world testing based on research document
   - Future Intent: Deploy MCP integration to selective beta user group (10-20 users) for real-world testing scenarios. Monitor production usage patterns, collect user feedback on multi-MCP workflows, validate OAuth authentication flows under real load conditions, and gather performance metrics for scale optimization.
+  - Cautionary Notes: Monitor beta user system performance closely to avoid production impact. Implement feature flags for gradual rollout control. Ensure comprehensive feedback collection system.
+  - Backups: `/docs/plans/mcp_server_integration/backups/3.3.2_beta_deployment_configs.json`
+
+## Phase 4: GitHub MCP Repository Integration (Weeks 9-12)
+
+### 4.1 GitHub Discovery & Integration Phase
+
+- [x] **4.1.1 GitHub Repository Discovery Research** ✅ **COMPLETED** (June 10, 2025)
+  - **✅ RESEARCH COMPLETED**: Comprehensive research document created at `/docs/plans/mcp_server_integration/research/4.1.1_github_repository_discovery_research.md` analyzing current GitHub MCP ecosystem (52.7k+ star repository with 1000+ community servers), GitHub API integration patterns (GraphQL, REST, rate limiting strategies), MCP server detection algorithms (package.json patterns, dependency analysis, README parsing), metadata extraction strategies (quality scoring, community metrics, security indicators), and community server cataloging approaches (3-tier quality system: Official → High-Quality Community → General Community)
+  - **✅ ANALYSIS COMPLETE**: Current MCP ecosystem shows massive adoption with multiple official SDKs (TypeScript, Python, Java, Kotlin, C#, Swift, Ruby, Rust), robust framework ecosystem (FastMCP, EasyMCP, Quarkus), and 100+ official company integrations (AWS, Microsoft, Google, Stripe). Discovery patterns identified including automated GitHub API scanning, quality scoring algorithms, security assessment frameworks, and integration pathways with existing tool_catalog system.
+  - **🎯 IMPLEMENTATION READY**: Research provides foundation for Phase 4.1.2 (Security Auditing) with comprehensive understanding of GitHub repository structure patterns, community quality metrics, official vs community server distinctions, API rate limiting strategies, caching approaches, and enterprise-grade security requirements for automated discovery and approval workflows.
+
+- [ ] **4.1.2 Security Auditing & Compliance Scanner**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.1.2_security_auditing_compliance_research.md` based on Phase 3.2.3 security testing and GitHub repository security scanning best practices
+  - Plan Review & Alignment: Implement automated security scanning and compliance checking for discovered GitHub repositories based on research document
+  - Future Intent: Develop comprehensive security auditing pipeline for GitHub MCP servers including dependency vulnerability scanning, code security analysis, supply chain attack detection, compliance verification (open source licenses), and automated security scoring for admin approval workflow.
+  - Cautionary Notes: Implement strict sandboxing for security analysis to prevent malicious code execution. Maintain audit trails for all security decisions. Ensure compliance with open source licensing requirements.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.1.2_security_scan_configs.json`
+
+- [ ] **4.1.3 Automated Containerization Pipeline**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.1.3_automated_containerization_research.md` based on Phase 2.2.5 refactoring research and CI/CD containerization best practices
+  - Plan Review & Alignment: Implement automated Docker containerization for approved GitHub MCP servers based on research document
+  - Future Intent: Create automated containerization pipeline for GitHub MCP servers including dynamic Dockerfile generation, multi-architecture builds, security hardening automation, dependency optimization, container scanning, and integration with existing DTMA infrastructure for seamless deployment.
+  - Cautionary Notes: Ensure container isolation and security hardening during automated builds. Implement proper image signing and verification. Test containerized servers thoroughly before adding to catalog.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.1.3_container_build_configs.json`
+
+### 4.2 Tool Catalog Enhancement Phase
+
+- [ ] **4.2.1 Enhanced Tool Catalog with GitHub Metadata**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.2.1_enhanced_tool_catalog_research.md` based on Phase 2.2.1 database schema and GitHub metadata integration patterns
+  - Plan Review & Alignment: Enhance existing tool_catalog system with GitHub repository metadata and source tracking based on research document
+  - Future Intent: Extend tool_catalog table with GitHub-specific fields including repository URL, commit hash tracking, contributor information, update frequency monitoring, community metrics (stars, forks), version compatibility matrix, and automatic update notification system for community-maintained tools.
+  - Cautionary Notes: Maintain backward compatibility with existing tool catalog entries. Implement proper versioning for GitHub-sourced tools. Ensure metadata accuracy and freshness.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.2.1_catalog_schema_backup.sql`
+
+- [ ] **4.2.2 Admin Approval Workflow Implementation**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.2.2_admin_approval_workflow_research.md` based on Phase 2.1.1 admin UI design and workflow automation patterns
+  - Plan Review & Alignment: Implement admin review and approval system for GitHub-discovered MCP servers based on research document
+  - Future Intent: Create comprehensive admin approval workflow including security report review interface, manual testing environment, approval tracking system, community feedback integration, automated deployment upon approval, and rejection feedback mechanism for improvement guidance.
+  - Cautionary Notes: Ensure thorough admin review process to prevent security risks. Implement proper audit trails for approval decisions. Provide clear feedback for rejected submissions.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.2.2_approval_workflow_configs.json`
+
+- [ ] **4.2.3 Community MCP Server Marketplace Enhancement**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.2.3_community_marketplace_enhancement_research.md` based on Phase 2.1.2 marketplace design and community platform best practices
+  - Plan Review & Alignment: Enhance MCP marketplace with community features and GitHub integration based on research document
+  - Future Intent: Expand marketplace with community features including user ratings and reviews, GitHub repository linking, contributor profiles, update notifications, dependency tracking, community discussion forums, and featured/trending server recommendations based on usage analytics.
+  - Cautionary Notes: Moderate community content to maintain quality standards. Implement spam and abuse protection for reviews. Ensure accurate attribution to original authors.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.2.3_marketplace_enhancements_backup.json`
+
+### 4.3 User Experience Enhancement Phase
+
+- [ ] **4.3.1 GitHub-to-Agent Installation Workflow**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.3.1_github_agent_installation_research.md` based on Phase 2.3.4 agent integration UI and streamlined installation patterns
+  - Plan Review & Alignment: Create seamless GitHub MCP server to agent installation workflow based on research document
+  - Future Intent: Implement one-click installation flow for GitHub MCP servers including automatic dependency resolution, configuration template selection, permission setup guidance, agent compatibility checking, and post-installation verification testing to ensure seamless user experience from discovery to deployment.
+  - Cautionary Notes: Validate agent compatibility before installation. Provide clear rollback options for failed installations. Ensure proper permission and security guidance during setup.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.3.1_installation_workflow_configs.json`
+
+- [ ] **4.3.2 Tool Update & Maintenance Automation**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.3.2_tool_update_maintenance_research.md` based on GitHub repository monitoring and automated update patterns
+  - Plan Review & Alignment: Implement automated update system for GitHub-sourced MCP servers based on research document
+  - Future Intent: Create comprehensive update management system including GitHub webhook integration for repository changes, automated security re-scanning for updates, user notification system for available updates, compatibility testing before deployment, and rollback mechanisms for problematic updates.
+  - Cautionary Notes: Test updates thoroughly before automatic deployment. Implement staged rollouts for critical updates. Maintain update history for troubleshooting.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.3.2_update_system_configs.json`
+
+### 4.4 Integration Testing & Deployment Phase
+
+- [ ] **4.4.1 GitHub Integration End-to-End Testing**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.4.1_github_integration_e2e_testing_research.md` based on Phase 3.2.1 E2E testing framework and GitHub integration workflows
+  - Plan Review & Alignment: Test complete GitHub repository discovery to agent deployment workflow based on research document
+  - Future Intent: Implement comprehensive E2E testing for GitHub integration including automated repository discovery testing, security scanning validation, containerization pipeline testing, approval workflow verification, and end-user installation flow testing with real GitHub repositories.
+  - Cautionary Notes: Use test repositories to avoid impacting real GitHub projects. Implement proper test data cleanup. Ensure comprehensive test coverage for edge cases.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.4.1_github_e2e_test_configs.json`
+
+- [ ] **4.4.2 Performance Testing with GitHub Workloads**
+  - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/4.4.2_github_performance_testing_research.md` based on Phase 3.2.2 performance testing and GitHub API integration patterns
+  - Plan Review & Alignment: Test system performance with GitHub discovery and deployment workloads based on research document
+  - Future Intent: Conduct comprehensive performance testing including GitHub API rate limit handling, concurrent repository processing, batch containerization performance, discovery system scalability, and end-to-end workflow performance optimization under realistic GitHub ecosystem loads.
+  - Cautionary Notes: Monitor GitHub API usage to avoid rate limiting. Test with realistic repository sizes and quantities. Implement proper resource management for batch operations.
+  - Backups: `/docs/plans/mcp_server_integration/backups/4.4.2_github_performance_test_data.json`
+
+## Phase 5: Cleanup & Documentation
+
+- [ ] **5.1 System Documentation & Knowledge Transfer**
+  - **📖 REQUIRED READING BEFORE STARTING**: Compile comprehensive documentation from all phases including GitHub integration architecture, security protocols, and operational procedures
+  - Plan Review & Alignment: Create complete documentation package for GitHub MCP integration system
+  - Future Intent: Document complete GitHub MCP integration system including architecture diagrams, security protocols, operational procedures, troubleshooting guides, admin training materials, and developer API documentation for future maintenance and enhancement.
+  - Cautionary Notes: Ensure documentation accuracy and completeness. Include security considerations prominently. Provide clear operational procedures for ongoing maintenance.
+  - Backups: Complete project documentation backup in `/docs/plans/mcp_server_integration/backups/final_documentation_package.zip`
+
+- [ ] **5.2 Cleanup & Archive**
+  - Move all backup files to `/archive/mcp_server_integration_backups/`
+  - Ensure .gitignore includes archive folder
+  - Update README.md with GitHub MCP integration details
+  - Create final cleanup log in `/docs/logs/cleanup/mcp_server_integration/`
   - Cautionary Notes: Implement comprehensive monitoring and rollback procedures for beta deployment. Ensure beta users have adequate support channels and clear escalation paths. Monitor resource usage closely to prevent system overload during beta testing period.
   - Backups: `/docs/plans/mcp_server_integration/backups/3.3.2_beta_environment_configuration_backup.json`
 

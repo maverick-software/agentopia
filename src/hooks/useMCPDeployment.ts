@@ -5,8 +5,9 @@ import {
   UseMCPDeploymentReturn,
   MCPDeploymentResponse 
 } from '@/lib/mcp/ui-types';
+import { config } from '@/lib/config/environment';
 
-const DTMA_BASE_URL = process.env.DTMA_API_URL || 'http://localhost:3001';
+const DTMA_BASE_URL = config.dtma.apiUrl;
 
 export function useMCPDeployment(): UseMCPDeploymentReturn {
   const [deploymentStatus, setDeploymentStatus] = useState<MCPDeploymentStatus | null>(null);

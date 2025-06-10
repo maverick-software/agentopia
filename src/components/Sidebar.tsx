@@ -6,7 +6,8 @@ import {
   MessageSquare, ChevronDown, ChevronRight, MemoryStick,
   Wrench, GitBranch, FolderKanban, Folder,
   Building2,
-  User as UserIcon
+  User as UserIcon,
+  Server, Store
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -42,6 +43,15 @@ const navItems: NavItem[] = [
   },
   { to: '/teams', icon: Building2, label: 'Teams' },
   { to: '/tools', icon: Wrench, label: 'Tools' },
+  { 
+    to: '/mcp/servers', 
+    icon: Server, 
+    label: 'MCP Servers',
+    children: [
+      { to: '/mcp/servers', icon: Server, label: 'My Servers' },
+      { to: '/mcp/marketplace', icon: Store, label: 'Marketplace' },
+    ]
+  },
   { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },

@@ -29,7 +29,8 @@ import {
   BarChart3,
   Search,
   Filter,
-  ArrowUpDown
+  ArrowUpDown,
+  Server
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -166,16 +167,16 @@ const MCPServerList: React.FC<MCPServerListProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="p-6 space-y-6">
       {/* Header Controls */}
       <div className="flex items-center gap-4">
-        <div className="relative flex-1">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search servers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-11"
           />
         </div>
         
@@ -183,15 +184,16 @@ const MCPServerList: React.FC<MCPServerListProps> = ({
           variant="outline"
           size="sm"
           onClick={() => setShowFilters(!showFilters)}
+          className="gap-2"
         >
-          <Filter className="h-4 w-4 mr-2" />
+          <Filter className="h-4 w-4" />
           Filters
         </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <ArrowUpDown className="h-4 w-4 mr-2" />
+            <Button variant="outline" size="sm" className="gap-2">
+              <ArrowUpDown className="h-4 w-4" />
               Sort
             </Button>
           </DropdownMenuTrigger>
@@ -213,36 +215,40 @@ const MCPServerList: React.FC<MCPServerListProps> = ({
       </div>
 
       {/* Server Cards */}
-      <div className="grid gap-4">
+      <div className="space-y-4">
         {filteredAndSortedServers.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <p className="text-muted-foreground">No MCP servers found</p>
-              {searchQuery && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Try adjusting your search or filters
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <div className="text-center py-12">
+            <Server className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
+            <h3 className="text-lg font-medium mb-2">No MCP servers found</h3>
+            <p className="text-muted-foreground mb-4">
+              {searchQuery 
+                ? "Try adjusting your search or filters" 
+                : "You haven't deployed any servers yet"}
+            </p>
+            {!searchQuery && (
+              <Button onClick={() => window.location.href = '/mcp/marketplace'}>
+                Browse Marketplace
+              </Button>
+            )}
+          </div>
         ) : (
           filteredAndSortedServers.map((server) => (
             <Card 
               key={server.id} 
               className={cn(
-                "transition-colors hover:bg-muted/50 cursor-pointer",
+                "transition-all duration-200 hover:shadow-md hover:scale-[1.01] cursor-pointer group",
                 server.status.state === 'error' && "border-destructive/50"
               )}
               onClick={() => onServerSelect?.(server)}
             >
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <CardTitle className="text-lg">{server.name}</CardTitle>
-                    <Badge variant={getStatusBadgeVariant(server.status.state)}>
+                    <CardTitle className="text-lg group-hover:text-primary transition-colors">{server.name}</CardTitle>
+                    <Badge variant={getStatusBadgeVariant(server.status.state)} className="font-medium">
                       {server.status.state}
                     </Badge>
-                    <Badge variant={getHealthBadgeVariant(server.health.overall)}>
+                    <Badge variant={getHealthBadgeVariant(server.health.overall)} className="font-medium">
                       {server.health.overall}
                     </Badge>
                   </div>
@@ -294,28 +300,32 @@ const MCPServerList: React.FC<MCPServerListProps> = ({
                 </div>
               </CardHeader>
               
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Endpoint:</span>
-                    <p className="text-muted-foreground break-all">{server.endpoint_url}</p>
+              <CardContent className="pt-0 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                  <div className="space-y-1">
+                    <span className="font-medium text-foreground">Endpoint:</span>
+                    <p className="text-muted-foreground break-all font-mono text-xs bg-muted px-2 py-1 rounded">
+                      {server.endpoint_url}
+                    </p>
                   </div>
                   
                   {server.status.uptime && (
-                    <div>
-                      <span className="font-medium">Uptime:</span>
-                      <p className="text-muted-foreground">
+                    <div className="space-y-1">
+                      <span className="font-medium text-foreground">Uptime:</span>
+                      <p className="text-muted-foreground font-medium">
                         {Math.floor(server.status.uptime / 3600)}h {Math.floor((server.status.uptime % 3600) / 60)}m
                       </p>
                     </div>
                   )}
                   
                   {server.resourceUsage && (
-                    <div>
-                      <span className="font-medium">Memory:</span>
+                    <div className="space-y-1">
+                      <span className="font-medium text-foreground">Memory Usage:</span>
                       <p className="text-muted-foreground">
-                        {server.resourceUsage.memory.percentage.toFixed(1)}% 
-                        ({server.resourceUsage.memory.used}MB / {server.resourceUsage.memory.limit}MB)
+                        <span className="font-medium">{server.resourceUsage.memory.percentage.toFixed(1)}%</span>
+                        <span className="text-xs ml-1">
+                          ({server.resourceUsage.memory.used}MB / {server.resourceUsage.memory.limit}MB)
+                        </span>
                       </p>
                     </div>
                   )}

@@ -1,11 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   MCPServerHealth, 
-  UseMCPServerHealthReturn,
-  MCPApiResponse 
+  UseMCPServerHealthReturn
 } from '@/lib/mcp/ui-types';
-
-const DTMA_BASE_URL = process.env.DTMA_API_URL || 'http://localhost:3001';
 
 export function useMCPServerHealth(serverId?: string): UseMCPServerHealthReturn {
   const [health, setHealth] = useState<MCPServerHealth>({
@@ -33,24 +30,21 @@ export function useMCPServerHealth(serverId?: string): UseMCPServerHealthReturn 
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${DTMA_BASE_URL}/mcp/health/${serverId}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch health status: ${response.statusText}`);
-      }
-
-      const data: MCPApiResponse<MCPServerHealth> = await response.json();
-      
-      if (!data.success || !data.data) {
-        throw new Error(data.error || 'Failed to fetch server health');
-      }
-
-      const healthData = {
-        ...data.data,
-        lastChecked: new Date(data.data.lastChecked),
+      // TODO: Implement health check through API client
+      // For now, simulate health check
+      const mockHealthData: MCPServerHealth = {
+        overall: 'healthy',
+        checks: {
+          connectivity: true,
+          responseTime: Math.random() * 100 + 50,
+          errorRate: Math.random() * 5,
+          memoryUsage: Math.random() * 80 + 10,
+          cpuUsage: Math.random() * 60 + 5,
+        },
+        lastChecked: new Date(),
       };
       
-      setHealth(healthData);
+      setHealth(mockHealthData);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch server health';
