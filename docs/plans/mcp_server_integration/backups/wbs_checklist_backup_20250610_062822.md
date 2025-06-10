@@ -4,76 +4,138 @@
 **Project:** MCP Server Integration  
 **Timeline:** 6-8 weeks (3 phases)  
 **Architecture:** Multi-MCP Server Toolboxes with Agent Access Control & OAuth Integration  
-**Latest Update:** Updated to comply with plan_and_execute.mdc protocol format  
+**Latest Update:** Added authentication storage and granular access control components  
 
 ## Phase 1: Research & Planning (Week 1)
 
 ### 1.1 Research Phase
 
 - [x] **1.1.1 MCP Protocol Deep Dive Research**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/1.1.1_mcp_protocol_research.md`
   - Plan Review & Alignment: Research latest MCP specification, Docker integration patterns, and security best practices
-  - Actions Taken: **[COMPLETED]** Research documented comprehensive MCP understanding covering protocol, capabilities, integration patterns, authentication, security, performance, and multi-server architecture with specific integration recommendations. Created detailed research document with protocol deep-dive, integration patterns, security requirements, performance analysis, and multi-server architecture recommendations. Documented findings: MCP follows client-host-server architecture with JSON-RPC 2.0 transport, Docker has official MCP namespace with pre-built servers, Security threats include MCP Rug Pull, Shadowing, and Tool Poisoning, MCP Gateway pattern recommended for centralized security, Protocol version 2024-11-05 with stdio/SSE transport mechanisms.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.1.1_reversal_instructions.md`
-  - Update: **[COMPLETED]** Research validates our Docker-first approach and existing infrastructure alignment - ready for Phase 1.1.2 Current Infrastructure Analysis
+  - Comprehensive Research: Study MCP protocol spec, Docker Hub MCP catalog, Anthropic documentation, and security guidelines
+  - Findings: **[COMPLETED]** Research documented in `/docs/plans/mcp_server_integration/research/1.1.1_mcp_protocol_research.md`
+    - MCP follows client-host-server architecture with JSON-RPC 2.0 transport
+    - Docker has official MCP namespace with pre-built servers
+    - Security threats include MCP Rug Pull, Shadowing, and Tool Poisoning
+    - MCP Gateway pattern recommended for centralized security
+    - Protocol version 2024-11-05 with stdio/SSE transport mechanisms
+  - Actions: **[COMPLETED]** Researched official docs, Docker integration patterns, security guidelines
+  - Backups: **[COMPLETED]** Current MCP tables backed up before proceeding
+  - Update: **[COMPLETED]** Research validates our Docker-first approach and existing infrastructure alignment
 
 - [x] **1.1.2 Current Infrastructure Analysis**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/1.1.2_current_infrastructure_analysis.md`
   - Plan Review & Alignment: Analyze existing account_tool_environments, DTMA, and agent framework capabilities
-  - Actions Taken: **[COMPLETED]** Infrastructure analysis documented comprehensive assessment: Infrastructure Readiness 95% ready for MCP integration, Database schema perfectly positioned with account_tool_environments and account_tool_instances, DTMA provides comprehensive Docker container management capabilities, Existing MCP tables (mcp_configurations, mcp_servers) provide foundation, Agent framework with toolbox access and toolbelt items ready for MCP server integration, Security model with RLS, user isolation, and vault integration is sufficient, Frontend components and backend services well-positioned for extension. Completed database schema analysis, DTMA capabilities review, agent framework assessment, security analysis.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.1.2_reversal_instructions.md`
-  - Update: **[COMPLETED]** Infrastructure assessment confirms exceptional readiness for MCP integration - ready for Phase 1.1.3 Docker Multi-MCP Integration Research
+  - Comprehensive Research: Deep dive into database schema, DTMA source code, and current MCP table structure
+  - Findings: **[COMPLETED]** Infrastructure analysis documented in `/docs/plans/mcp_server_integration/research/1.1.2_current_infrastructure_analysis.md`
+    - Infrastructure Readiness: 95% ready for MCP integration
+    - Database schema perfectly positioned with account_tool_environments and account_tool_instances
+    - DTMA provides comprehensive Docker container management capabilities
+    - Existing MCP tables (mcp_configurations, mcp_servers) provide foundation
+    - Agent framework with toolbox access and toolbelt items ready for MCP server integration
+    - Security model with RLS, user isolation, and vault integration is sufficient
+    - Frontend components and backend services well-positioned for extension
+  - Actions: **[COMPLETED]** Database schema analysis, DTMA capabilities review, agent framework assessment, security analysis
+  - Backups: **[COMPLETED]** Current infrastructure documented and analyzed
+  - Update: **[COMPLETED]** Infrastructure assessment confirms exceptional readiness for MCP integration
 
 - [x] **1.1.3 Docker Multi-MCP Integration Research**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/1.1.3_docker_multi_mcp_integration_research.md`
   - Plan Review & Alignment: Research Docker multi-MCP server hosting, container orchestration, and open source MCP server refactoring
-  - Actions Taken: **[COMPLETED]** Research documented comprehensive analysis: Docker's official MCP Catalog and Toolkit launched May 2025 confirms our strategic direction, Multi-container orchestration patterns documented with gateway architecture, Open source MCP server analysis completed (Tier 1-3 prioritization), Security model validated with container isolation and secret management, Performance benchmarks: 2-5s startup, ~50MB overhead, <1ms inter-container latency. Completed multi-container architecture research, open source MCP server evaluation, security analysis, performance considerations for multiple servers.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.1.3_reversal_instructions.md`
-  - Update: **[COMPLETED]** Docker ecosystem leadership validates our multi-MCP approach with proven technical foundation - ready for Phase 1.1.4 Agent-to-Toolbox-to-MCP Communication Patterns
+  - Comprehensive Research: Study Docker Hub MCP catalog, multi-container orchestration patterns, open source MCP servers for refactoring, and resource allocation strategies
+  - Findings: **[COMPLETED]** Research documented in `/docs/plans/mcp_server_integration/research/1.1.3_docker_multi_mcp_integration_research.md`
+    - Docker's official MCP Catalog and Toolkit launched May 2025 confirms our strategic direction
+    - Multi-container orchestration patterns documented with gateway architecture 
+    - Open source MCP server analysis completed (Tier 1-3 prioritization)
+    - Security model validated with container isolation and secret management
+    - Performance benchmarks: 2-5s startup, ~50MB overhead, <1ms inter-container latency
+  - Actions: **[COMPLETED]** Multi-container architecture research, open source MCP server evaluation, security analysis, performance considerations for multiple servers
+  - Backups: **[COMPLETED]** Current Docker configurations documented and analyzed
+  - Update: **[COMPLETED]** Docker ecosystem leadership validates our multi-MCP approach with proven technical foundation
 
 - [x] **1.1.4 Agent-to-Toolbox-to-MCP Communication Patterns**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/1.1.4_agent_toolbox_mcp_communication_patterns.md`
   - Plan Review & Alignment: Research agent-to-toolbox access control, multi-MCP server discovery protocols, and granular tool selection
-  - Actions Taken: **[COMPLETED]** Research documented comprehensive communication architecture: Agent → Toolbox → MCP communication hierarchy established as definitive architecture, Three-tier hierarchical pattern provides powerful abstraction layer for capability composition, Dynamic MCP server discovery and tool federation protocols documented, Granular access control with capability-based security model validated, Real-time communication patterns with WebSocket and Server-Sent Events, Load balancing and failover strategies for multi-MCP environments. Completed agent framework analysis, chat function review, MCP client research documentation, access control pattern analysis.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.1.4_reversal_instructions.md`
-  - Update: **[COMPLETED]** Agent integration approach refined for multi-MCP access control with hierarchical communication patterns - ready for Phase 1.1.5 Authentication & OAuth Integration Research
+  - Comprehensive Research: Study existing chat function, agent context building, MCP client patterns, and granular access control mechanisms
+  - Findings: **[COMPLETED]** Research documented in `/docs/plans/mcp_server_integration/research/1.1.4_agent_toolbox_mcp_communication_patterns.md`
+    - Agent → Toolbox → MCP communication hierarchy established as definitive architecture
+    - Three-tier hierarchical pattern provides powerful abstraction layer for capability composition
+    - Dynamic MCP server discovery and tool federation protocols documented
+    - Granular access control with capability-based security model validated
+    - Real-time communication patterns with WebSocket and Server-Sent Events
+    - Load balancing and failover strategies for multi-MCP environments
+  - Actions: **[COMPLETED]** Agent framework analysis completed, chat function review finished, MCP client research documented, access control pattern analysis finalized
+  - Backups: **[COMPLETED]** Current chat function and agent code analyzed and documented
+  - Update: **[COMPLETED]** Agent integration approach refined for multi-MCP access control with hierarchical communication patterns
 
 - [x] **1.1.5 Authentication & OAuth Integration Research**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/1.1.5_authentication_oauth_integration_research.md`
   - Plan Review & Alignment: Research secure authentication storage, OAuth integration patterns, and agent-to-user account access
-  - Actions Taken: **[COMPLETED]** Research documented comprehensive authentication strategy: OAuth 2.1 with PKCE established as definitive authentication standard, MCP's official authorization specification (2025-03-26) provides complete OAuth 2.1 framework, Dynamic Client Registration (RFC7591) for runtime client discovery implemented, Enterprise IdP integration with SSO delegation capabilities validated, Comprehensive security analysis including Trail of Bits vulnerability assessment, Multi-layered credential encryption with hardware security modules, Zero-trust security model with complete audit trails. Completed OAuth provider research (GitHub, Google, Microsoft, Slack), credential storage analysis, agent permission models documentation.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.1.5_reversal_instructions.md`
-  - Update: **[COMPLETED]** Authentication integration approach finalized with OAuth 2.1/PKCE foundation and enterprise security compliance - ready for Phase 1.2 Planning Phase
+  - Comprehensive Research: Study OAuth 2.0/OIDC implementation, credential encryption, token management, and external service integration patterns
+  - Findings: **[COMPLETED]** Research documented in `/docs/plans/mcp_server_integration/research/1.1.5_authentication_oauth_integration_research.md`
+    - OAuth 2.1 with PKCE established as definitive authentication standard
+    - MCP's official authorization specification (2025-03-26) provides complete OAuth 2.1 framework
+    - Dynamic Client Registration (RFC7591) for runtime client discovery implemented
+    - Enterprise IdP integration with SSO delegation capabilities validated
+    - Comprehensive security analysis including Trail of Bits vulnerability assessment
+    - Multi-layered credential encryption with hardware security modules
+    - Zero-trust security model with complete audit trails
+  - Actions: **[COMPLETED]** OAuth provider research completed (GitHub, Google, Microsoft, Slack), credential storage analysis finished, agent permission models documented
+  - Backups: **[COMPLETED]** Current authentication code analyzed and documented
+  - Update: **[COMPLETED]** Authentication integration approach finalized with OAuth 2.1/PKCE foundation and enterprise security compliance
 
 ### 1.2 Planning Phase
 
 - [x] **1.2.1 Database Schema Enhancement Planning**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/planning/1.2.1_database_schema_enhancement_planning.md`
   - Plan Review & Alignment: Design enhanced MCP tables for multi-MCP server toolbox integration and authentication storage
-  - Actions Taken: **[COMPLETED]** Database schema enhancement plan documented comprehensive design: Multi-MCP server support via enhanced account_tool_instances table with minimal changes, OAuth integration with oauth_providers, user_oauth_connections, and agent_oauth_permissions tables, Comprehensive migration strategy with 2-phase rollout and backward compatibility, Performance optimization with strategic indexes and database functions, Enterprise security compliance with RLS policies and Supabase Vault integration. Completed multi-MCP schema design with enhanced account_tool_instances, OAuth authentication tables planning with comprehensive provider support, migration scripts planning with rollback procedures, access control relationship definitions with granular permissions.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.2.1_reversal_instructions.md`
-  - Update: **[COMPLETED]** Database enhancement plan finalized for multi-MCP and authentication integration with enterprise-grade security - ready for Phase 1.2.2 DTMA Integration Architecture
+  - Comprehensive Research: Current schema analysis, one-to-many relationship mapping, migration planning, authentication table design
+  - Findings: **[COMPLETED]** Database schema enhancement plan documented in `/docs/plans/mcp_server_integration/planning/1.2.1_database_schema_enhancement_planning.md`
+    - Multi-MCP server support via enhanced `account_tool_instances` table with minimal changes
+    - OAuth integration with `oauth_providers`, `user_oauth_connections`, and `agent_oauth_permissions` tables
+    - Comprehensive migration strategy with 2-phase rollout and backward compatibility
+    - Performance optimization with strategic indexes and database functions
+    - Enterprise security compliance with RLS policies and Supabase Vault integration
+  - Actions: **[COMPLETED]** Multi-MCP schema design with enhanced `account_tool_instances`, OAuth authentication tables planning with comprehensive provider support, migration scripts planning with rollback procedures, access control relationship definitions with granular permissions
+  - Backups: **[COMPLETED]** Current database schema analyzed and migration rollback procedures documented
+  - Update: **[COMPLETED]** Database enhancement plan finalized for multi-MCP and authentication integration with enterprise-grade security
 
 - [x] **1.2.2 DTMA Integration Architecture**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/planning/1.2.2_dtma_integration_architecture_planning.md`
   - Plan Review & Alignment: Plan DTMA enhancements for multi-MCP server container orchestration and credential injection
-  - Actions Taken: **[COMPLETED]** DTMA integration architecture documented comprehensive strategy: DTMA foundation analysis shows excellent readiness for MCP server orchestration, 4-module enhancement strategy: MultiMCPManager, CollectiveHealthMonitor, CredentialInjector, ConfigurationManager, Comprehensive API enhancement with MCP-specific endpoints and OAuth integration, 4-phase implementation plan with backward compatibility and gradual migration, Advanced security model with zero-persistence credential injection and audit trails. Completed multi-container architecture design with 4-module strategy, MCP orchestration module planning with collective health monitoring, API enhancements with OAuth integration endpoints, credential injection planning with enterprise security compliance.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.2.2_reversal_instructions.md`
-  - Update: **[COMPLETED]** DTMA integration plan finalized for multi-MCP hosting with comprehensive container orchestration and OAuth credential management - ready for Phase 1.2.3 Frontend Component Architecture
+  - Comprehensive Research: DTMA codebase analysis, multi-container lifecycle patterns, health monitoring across multiple servers, credential injection patterns
+  - Findings: **[COMPLETED]** DTMA integration architecture documented in `/docs/plans/mcp_server_integration/planning/1.2.2_dtma_integration_architecture_planning.md`
+    - DTMA foundation analysis shows excellent readiness for MCP server orchestration
+    - 4-module enhancement strategy: MultiMCPManager, CollectiveHealthMonitor, CredentialInjector, ConfigurationManager
+    - Comprehensive API enhancement with MCP-specific endpoints and OAuth integration
+    - 4-phase implementation plan with backward compatibility and gradual migration
+    - Advanced security model with zero-persistence credential injection and audit trails
+  - Actions: **[COMPLETED]** Multi-container architecture design with 4-module strategy, MCP orchestration module planning with collective health monitoring, API enhancements with OAuth integration endpoints, credential injection planning with enterprise security compliance
+  - Backups: **[COMPLETED]** Current DTMA source code analyzed and backward compatibility strategy documented
+  - Update: **[COMPLETED]** DTMA integration plan finalized for multi-MCP hosting with comprehensive container orchestration and OAuth credential management
 
 - [x] **1.2.3 Frontend Component Architecture**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/planning/1.2.3_frontend_component_architecture_planning.md`
   - Plan Review & Alignment: Design multi-MCP server management and OAuth/authentication UI components following existing patterns
-  - Actions Taken: **[COMPLETED]** UI architecture documented comprehensive design: Cursor-inspired UX pattern with admin-user separation: Platform admins manage server infrastructure; users select and configure tools, Admin Area: MCP server lifecycle management, tool catalog approval, health monitoring (new admin pages), User Area: Tool discovery page with clean cards, agent-centric tool configuration, credential management, Enhanced Agent Edit page with new Tools tab for toolbox access and toolbelt management, Modal system for tool configuration, credential connection, and permission management, Component architecture follows existing design patterns with 23 new components planned. Completed multi-MCP component design, OAuth UI design integration, user flow mapping, authentication workflow planning, integration architecture documentation.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.2.3_reversal_instructions.md`
-  - Update: **[COMPLETED]** Frontend architecture finalized for multi-MCP and authentication integration with clear migration strategy - ready for Phase 1.2.4 Authentication & OAuth Architecture Planning
+  - Comprehensive Research: Current UI components, design system, user workflow analysis, authentication UI patterns
+  - Findings: **[COMPLETED]** UI architecture documented in `/docs/plans/mcp_server_integration/planning/1.2.3_frontend_component_architecture_planning.md`
+    - Cursor-inspired UX pattern with admin-user separation: Platform admins manage server infrastructure; users select and configure tools
+    - Admin Area: MCP server lifecycle management, tool catalog approval, health monitoring (new admin pages)
+    - User Area: Tool discovery page with clean cards, agent-centric tool configuration, credential management
+    - Enhanced Agent Edit page with new "Tools" tab for toolbox access and toolbelt management
+    - Modal system for tool configuration, credential connection, and permission management
+    - Component architecture follows existing design patterns with 23 new components planned
+  - Actions: **[COMPLETED]** Multi-MCP component design completed, OAuth UI design integrated, user flow mapping finalized, authentication workflow planned, integration architecture documented
+  - Backups: **[COMPLETED]** Current UI components analyzed and documented for safe migration
+  - Update: **[COMPLETED]** Frontend architecture finalized for multi-MCP and authentication integration with clear migration strategy
 
 - [x] **1.2.4 Authentication & OAuth Architecture Planning**
-  - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/planning/1.2.4_authentication_oauth_architecture_planning.md`
   - Plan Review & Alignment: Design comprehensive authentication architecture and OAuth integration strategy
-  - Actions Taken: **[COMPLETED]** Authentication architecture documented comprehensive strategy: Multi-layer authentication: User Auth (Supabase) → Agent Auth → MCP Server OAuth 2.1+PKCE → External Services, Comprehensive OAuth provider integration (GitHub, Google, Microsoft, Slack, Enterprise IdPs), Supabase Vault integration for secure credential storage with automatic encryption, Zero-trust security architecture with complete audit trails and compliance (GDPR, SOC 2), DTMA credential injection system for secure container-level authentication, Dynamic client registration and token lifecycle management with automatic refresh, Enterprise security compliance with comprehensive monitoring and incident response. Completed OAuth provider integration planning (8 providers), credential vault design with Supabase integration, permission matrix with granular agent-service controls, audit system with comprehensive logging.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/1.2.4_reversal_instructions.md`
-  - Update: **[COMPLETED]** Authentication and OAuth integration architecture finalized with security-first approach and enterprise compliance - ready for Phase 2 Design & Development
+  - Comprehensive Research: OAuth provider APIs, credential encryption patterns, permission management systems, audit trail requirements
+  - Findings: **[COMPLETED]** Authentication architecture documented in `/docs/plans/mcp_server_integration/planning/1.2.4_authentication_oauth_architecture_planning.md`
+    - Multi-layer authentication: User Auth (Supabase) → Agent Auth → MCP Server OAuth 2.1+PKCE → External Services
+    - Comprehensive OAuth provider integration (GitHub, Google, Microsoft, Slack, Enterprise IdPs)
+    - Supabase Vault integration for secure credential storage with automatic encryption
+    - Zero-trust security architecture with complete audit trails and compliance (GDPR, SOC 2)
+    - DTMA credential injection system for secure container-level authentication
+    - Dynamic client registration and token lifecycle management with automatic refresh
+    - Enterprise security compliance with comprehensive monitoring and incident response
+  - Actions: **[COMPLETED]** OAuth provider integration planned (8 providers), credential vault design with Supabase integration, permission matrix with granular agent-service controls, audit system with comprehensive logging
+  - Backups: **[COMPLETED]** Current authentication components analyzed and integration strategy documented
+  - Update: **[COMPLETED]** Authentication and OAuth integration architecture finalized with security-first approach and enterprise compliance
 
 ## Phase 2: Design & Development (Weeks 2-5)
 
@@ -82,60 +144,97 @@
 - [x] **2.1.1 MCP Server Management UI Design**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/2.1.1_mcp_server_management_ui_design_research.md`
   - Plan Review & Alignment: Design user-friendly MCP server management interface with Cursor-inspired approach based on research document
-  - Actions Taken: **[COMPLETED]** Comprehensive design specifications documented covering admin, user, and agent interfaces. Created 23 component specifications, user flow designs, and Cursor-inspired UX patterns. No existing UI files modified; new design documents created from scratch. Complete UI design specification ready for development with accessibility and responsive design covering modern admin UI patterns (2024), existing Agentopia design system integration, and accessibility requirements compliance.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.1.1_reversal_instructions.md`
-  - Update: **[COMPLETED]** Complete UI design specification ready for development with accessibility and responsive design - ready for Phase 2.1.2 MCP Marketplace Design
+  - Comprehensive Research: Modern admin UI patterns (2024), existing Agentopia design system, accessibility requirements
+  - Findings: **[COMPLETED]** Comprehensive design specifications documented covering admin, user, and agent interfaces
+  - Actions: **[COMPLETED]** Created 23 component specifications, user flow designs, and Cursor-inspired UX patterns
+  - Backups: **[COMPLETED]** No existing UI files modified; new design documents created
+  - Update: **[COMPLETED]** Complete UI design specification ready for development with accessibility and responsive design
 
 - [x] **2.1.2 MCP Marketplace Design**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/2.1.2_mcp_marketplace_design_research.md`
   - Plan Review & Alignment: Design MCP server discovery and deployment interface inspired by GitHub Marketplace and VS Code extensions based on research document
-  - Actions Taken: **[COMPLETED]** Comprehensive marketplace design documented with discovery platform, deployment interface, template library, and community features. Created marketplace UI specifications, server cards, deployment modal, search/filter interface, and user experience flows. No existing marketplace components to backup; new design created from scratch. Complete marketplace design specification with admin interface, server discovery, and deployment workflows incorporating modern marketplace patterns (GitHub, VS Code), developer tool catalogs, search functionality, and deployment workflows.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.1.2_reversal_instructions.md`
-  - Update: **[COMPLETED]** Complete marketplace design specification with admin interface, server discovery, and deployment workflows - ready for Phase 2.1.3 Agent-MCP Connection UI Design
+  - Comprehensive Research: Modern marketplace patterns (GitHub, VS Code), developer tool catalogs, search functionality, deployment workflows
+  - Findings: **[COMPLETED]** Comprehensive marketplace design documented with discovery platform, deployment interface, template library, and community features
+  - Actions: **[COMPLETED]** Created marketplace UI specifications, server cards, deployment modal, search/filter interface, and user experience flows
+  - Backups: **[COMPLETED]** No existing marketplace components to backup; new design created from scratch
+  - Update: **[COMPLETED]** Complete marketplace design specification with admin interface, server discovery, and deployment workflows
 
 - [x] **2.1.3 Agent-MCP Connection UI Design**
   - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/2.1.3_agent_mcp_connection_ui_design_research.md` based on Phase 1 research and 2.1.1-2.1.2 design foundations
   - Plan Review & Alignment: Design agent-to-MCP server connection interface based on research document
-  - Actions Taken: **[COMPLETED]** Documented comprehensive connection UI design based on RTS game interfaces and network visualization patterns. Created network topology visualization, real-time dashboards, event logging system, connection management interface. No existing components to backup for new connection UI. Completed agent-MCP connection interface design with god's-eye view topology, real-time monitoring panels, and interactive controls incorporating agent management UI, connection visualization patterns, and network monitoring tools.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.1.3_reversal_instructions.md`
-  - Update: **[COMPLETED]** Completed agent-MCP connection interface design with god's-eye view topology, real-time monitoring panels, and interactive controls - ready for Phase 2.2 Backend Development Phase
+  - Comprehensive Research: Agent management UI, connection visualization patterns, network monitoring tools
+  - Findings: [Documented comprehensive connection UI design based on RTS game interfaces and network visualization patterns]
+  - Actions: [Created network topology visualization, real-time dashboards, event logging system, connection management interface]
+  - Backups: [No existing components to backup for new connection UI]
+  - Update: [Completed agent-MCP connection interface design with god's-eye view topology, real-time monitoring panels, and interactive controls]
 
 ### 2.2 Backend Development Phase
 
 - [x] **2.2.1 Database Schema Implementation**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/planning/1.2.1_database_schema_enhancement_planning.md`
   - Plan Review & Alignment: Implement enhanced multi-MCP tables, authentication storage, and access control relationships based on planning document
-  - Actions Taken: **[IMPLEMENTED]** Successfully deployed comprehensive database schema with 3 migration files: Migration 1 (20250607000001): Enhanced account_tool_instances with MCP columns (mcp_server_type, mcp_endpoint_path, mcp_transport_type, mcp_server_capabilities, mcp_discovery_metadata) and created agent_mcp_server_access table for granular access control; Migration 2 (20250607000002): Complete OAuth integration with oauth_providers (GitHub, Google, Microsoft, Slack), user_oauth_connections, and agent_oauth_permissions tables with enterprise security; Migration 3 (20250607000003): 8 database functions for MCP/OAuth operations including get_agent_mcp_servers(), grant_agent_mcp_access(), get_user_oauth_connections(), and permission management. Successfully applied all migrations to linked database, enhanced existing account_tool_instances table with backward compatibility, implemented comprehensive RLS policies for multi-tenant security, created performance indexes optimized for MCP queries, deployed 8 helper functions for streamlined operations. Pre-migration backup (schema_dump_backup_before_mcp_enhancement.sql), post-migration verification (schema_dump_after_mcp_enhancement.sql) - all schema changes verified successfully.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.2.1_reversal_instructions.md`
+  - Comprehensive Research: Multi-tenant database patterns, migration best practices, data integrity, performance optimization, encryption requirements
+  - Findings: **[IMPLEMENTED]** Successfully deployed comprehensive database schema with 3 migration files:
+    - Migration 1 (`20250607000001`): Enhanced `account_tool_instances` with MCP columns (`mcp_server_type`, `mcp_endpoint_path`, `mcp_transport_type`, `mcp_server_capabilities`, `mcp_discovery_metadata`) and created `agent_mcp_server_access` table for granular access control
+    - Migration 2 (`20250607000002`): Complete OAuth integration with `oauth_providers` (GitHub, Google, Microsoft, Slack), `user_oauth_connections`, and `agent_oauth_permissions` tables with enterprise security
+    - Migration 3 (`20250607000003`): 8 database functions for MCP/OAuth operations including `get_agent_mcp_servers()`, `grant_agent_mcp_access()`, `get_user_oauth_connections()`, and permission management
+  - Actions: **[COMPLETED]** Successfully applied all migrations to linked database, enhanced existing `account_tool_instances` table with backward compatibility, implemented comprehensive RLS policies for multi-tenant security, created performance indexes optimized for MCP queries, deployed 8 helper functions for streamlined operations
+  - Backups: **[COMPLETED]** Pre-migration backup (`schema_dump_backup_before_mcp_enhancement.sql`), post-migration verification (`schema_dump_after_mcp_enhancement.sql`) - all schema changes verified successfully
   - Update: **[PRODUCTION READY]** Database schema implementation successfully deployed and verified - ready for DTMA module development (2.2.2)
 
 - [x] **2.2.2 DTMA Multi-MCP Module Development**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/planning/1.2.2_dtma_integration_architecture_planning.md`
   - Plan Review & Alignment: Develop multi-MCP server container orchestration module for DTMA with credential injection based on planning document
-  - Actions Taken: **[COMPLETED]** Successfully implemented 4-module enhancement strategy with comprehensive multi-MCP orchestration capabilities: MultiMCPManager (583 lines) - Complete container group management with dependency handling and auto-restart; CollectiveHealthMonitor (663 lines) - Advanced health monitoring with individual and group-level aggregation; CredentialInjector (568 lines) - Zero-persistence OAuth credential injection with automatic refresh; ConfigurationManager (654 lines) - Dynamic container configuration with security hardening and templates. Implemented all 4 modules with event-driven architecture, Docker integration, enterprise security model, and comprehensive error handling. Created 2,468 lines of production-ready TypeScript code across specialized modules. Source code secured, all modules created in dtma/src/modules/ with full functionality and backward compatibility.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.2.2_reversal_instructions.md`
+  - Comprehensive Research: DTMA architecture, multi-container APIs, health monitoring patterns, credential injection mechanisms, modern container orchestration best practices
+  - Findings: **[COMPLETED]** Successfully implemented 4-module enhancement strategy with comprehensive multi-MCP orchestration capabilities
+    - MultiMCPManager (583 lines) - Complete container group management with dependency handling and auto-restart
+    - CollectiveHealthMonitor (663 lines) - Advanced health monitoring with individual and group-level aggregation
+    - CredentialInjector (568 lines) - Zero-persistence OAuth credential injection with automatic refresh
+    - ConfigurationManager (654 lines) - Dynamic container configuration with security hardening and templates
+  - Actions: **[COMPLETED]** Implemented all 4 modules with event-driven architecture, Docker integration, enterprise security model, and comprehensive error handling. Created 2,468 lines of production-ready TypeScript code across specialized modules.
+  - Backups: **[COMPLETED]** Source code secured, all modules created in dtma/src/modules/ with full functionality and backward compatibility
   - Update: **[PRODUCTION READY]** Core DTMA multi-MCP functionality complete - ready for API route integration and testing. Minor TypeScript linting warnings remaining (unused variables only).
 
 - [x] **2.2.3 Supabase Function Enhancement**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/2.2.3_supabase_function_enhancement_research.md`
   - Plan Review & Alignment: Enhance chat function for multi-MCP access control and create MCP server manager function
-  - Actions Taken: **[COMPLETED]** Successfully implemented comprehensive Supabase function enhancements with multi-MCP access control integration: Enhanced chat/mcp_integration.ts with new database schema support, Created getAgentMCPServers() function using database RPC calls, Implemented validateAgentMCPAccess() for granular permission validation, Added prepareMCPContextWithAccessControl() for enhanced context processing, Created new mcp-server-manager Edge Function for complete lifecycle management. Enhanced chat function MCP integration with access control validation, created comprehensive MCP server manager function with deploy/remove/status/permissions endpoints, implemented agent permission system using database functions, added DTMA integration for container orchestration, created comprehensive API endpoints for MCP server lifecycle. Original chat function backed up, new enhanced functions created alongside existing ones for backward compatibility.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.2.3_reversal_instructions.md`
+  - Comprehensive Research: Supabase Edge Functions, chat function architecture, multi-MCP integration patterns, multi-tenant authentication integration, RLS patterns
+  - Findings: **[COMPLETED]** Successfully implemented comprehensive Supabase function enhancements with multi-MCP access control integration:
+    - Enhanced chat/mcp_integration.ts with new database schema support
+    - Created getAgentMCPServers() function using database RPC calls
+    - Implemented validateAgentMCPAccess() for granular permission validation
+    - Added prepareMCPContextWithAccessControl() for enhanced context processing
+    - Created new mcp-server-manager Edge Function for complete lifecycle management
+  - Actions: **[COMPLETED]** Enhanced chat function MCP integration with access control validation, created comprehensive MCP server manager function with deploy/remove/status/permissions endpoints, implemented agent permission system using database functions, added DTMA integration for container orchestration, created comprehensive API endpoints for MCP server lifecycle
+  - Backups: **[COMPLETED]** Original chat function backed up, new enhanced functions created alongside existing ones for backward compatibility
   - Update: **[PRODUCTION READY]** Supabase function enhancement complete - chat function now supports multi-MCP access control, new MCP server manager provides full lifecycle management with DTMA integration
 
 - [x] **2.2.4 DTMA API Route Integration**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/2.2.4_dtma_api_integration_research.md`
   - Plan Review & Alignment: Create DTMA API routes to integrate the multi-MCP modules with REST endpoints
-  - Actions Taken: **[COMPLETED]** Successfully implemented comprehensive MCP API routes with 9 endpoints covering full multi-MCP lifecycle: POST /mcp/groups - Deploy MCP server groups with dependency management, DELETE /mcp/groups/:groupId - Remove MCP server groups with graceful shutdown, GET /mcp/status - Get comprehensive status of all groups and servers, POST /mcp/servers/:instanceName/restart - Individual server restart capability, GET /mcp/servers/:instanceName/logs - Real-time log access with filtering, GET /mcp/health/:groupId - Detailed health monitoring per group, POST /mcp/credentials/refresh/:instanceName - Manual credential refresh, GET /mcp/templates - Configuration template management, POST /mcp/validate - Pre-deployment configuration validation. Created comprehensive MCP routes file (dtma/src/routes/mcp_routes.ts), integrated authentication middleware, updated main DTMA index.ts with MCP route mounting, implemented error handling and status responses. Original DTMA index.ts backed up, new auth middleware created for compatibility.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.2.4_reversal_instructions.md`
+  - Comprehensive Research: Express routing, authentication middleware, MCP module integration, REST API design patterns
+  - Findings: **[COMPLETED]** Successfully implemented comprehensive MCP API routes with 9 endpoints covering full multi-MCP lifecycle:
+    - POST /mcp/groups - Deploy MCP server groups with dependency management
+    - DELETE /mcp/groups/:groupId - Remove MCP server groups with graceful shutdown
+    - GET /mcp/status - Get comprehensive status of all groups and servers
+    - POST /mcp/servers/:instanceName/restart - Individual server restart capability
+    - GET /mcp/servers/:instanceName/logs - Real-time log access with filtering
+    - GET /mcp/health/:groupId - Detailed health monitoring per group
+    - POST /mcp/credentials/refresh/:instanceName - Manual credential refresh
+    - GET /mcp/templates - Configuration template management
+    - POST /mcp/validate - Pre-deployment configuration validation
+  - Actions: **[COMPLETED]** Created comprehensive MCP routes file (dtma/src/routes/mcp_routes.ts), integrated authentication middleware, updated main DTMA index.ts with MCP route mounting, implemented error handling and status responses
+  - Backups: **[COMPLETED]** Original DTMA index.ts backed up, new auth middleware created for compatibility
   - Update: **[PRODUCTION READY]** DTMA API integration complete with full multi-MCP orchestration endpoints - ready for frontend integration
 
 - [x] **2.2.5 Refactored Open Source MCP Server Docker Images**
   - **📖 REQUIRED READING BEFORE STARTING**: `/docs/plans/mcp_server_integration/research/2.2.5_open_source_mcp_server_refactoring_research.md`
   - Plan Review & Alignment: Refactor open source MCP servers for multi-tenant hosting with authentication integration based on research document
-  - Actions Taken: **[COMPLETED]** Documented comprehensive refactoring approach for 50+ open source MCP servers with enterprise-grade security hardening. Created hardened container foundation, authentication integration layer, multi-tenant configuration system, server-specific refactoring plans, security monitoring, deployment strategy, testing framework. Version control Docker configurations and original source code for security rollback. Documented complete refactored MCP server image creation with multi-architecture support, CI/CD pipeline, and compliance framework including open source MCP server analysis, Docker best practices, multi-tenant patterns, security hardening, and credential integration.
-  - Reversal Instructions: `/docs/plans/mcp_server_integration/implementation/2.2.5_reversal_instructions.md`
-  - Update: **[COMPLETED]** Documented complete refactored MCP server image creation with multi-architecture support, CI/CD pipeline, and compliance framework - ready for Phase 2.3 Frontend Development Phase
+  - Comprehensive Research: Open source MCP server analysis, Docker best practices, multi-tenant patterns, security hardening, credential integration
+  - Findings: [Documented comprehensive refactoring approach for 50+ open source MCP servers with enterprise-grade security hardening]
+  - Actions: [Created hardened container foundation, authentication integration layer, multi-tenant configuration system, server-specific refactoring plans, security monitoring, deployment strategy, testing framework]
+  - Backups: [Version control Docker configurations and original source code for security rollback]
+  - Update: [Documented complete refactored MCP server image creation with multi-architecture support, CI/CD pipeline, and compliance framework]
 
 ### 2.3 Frontend Development Phase
 
@@ -240,16 +339,20 @@
 - [ ] **3.3.1 Internal User Testing**
   - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/3.3.1_internal_user_testing_research.md` based on Phase 2.3 UI implementations and user testing methodologies
   - Plan Review & Alignment: Conduct internal team testing of MCP functionality based on research document
-  - Future Intent: Conduct comprehensive internal user testing of all MCP integration features including multi-MCP server deployment, agent-to-toolbox-to-MCP communication, OAuth authentication flows, and UI/UX testing for all 23 new components. Execute systematic testing sessions with internal team members covering admin interface, user workflows, and agent orchestration capabilities.
-  - Cautionary Notes: Ensure proper test environment isolation to prevent interference with production systems. Document all edge cases and user workflow pain points for future optimization. Maintain comprehensive test data backups for regression testing.
-  - Backups: `/docs/plans/mcp_server_integration/backups/3.3.1_user_feedback_data_backup.json`
+  - Comprehensive Research: User testing methodologies, feedback collection, usability testing
+  - Findings: [Document user testing approach]
+  - Actions: [Internal testing sessions, feedback collection, issue identification]
+  - Backups: [Backup user feedback data]
+  - Update: [Document user testing results and improvements]
 
 - [ ] **3.3.2 Beta User Testing**
   - **📖 REQUIRED READING BEFORE STARTING**: Create research document `/docs/plans/mcp_server_integration/research/3.3.2_beta_user_testing_research.md` based on Phase 3.3.1 internal testing results and beta testing best practices
   - Plan Review & Alignment: Deploy to limited beta users for real-world testing based on research document
-  - Future Intent: Deploy MCP integration to selective beta user group (10-20 users) for real-world testing scenarios. Monitor production usage patterns, collect user feedback on multi-MCP workflows, validate OAuth authentication flows under real load conditions, and gather performance metrics for scale optimization.
-  - Cautionary Notes: Implement comprehensive monitoring and rollback procedures for beta deployment. Ensure beta users have adequate support channels and clear escalation paths. Monitor resource usage closely to prevent system overload during beta testing period.
-  - Backups: `/docs/plans/mcp_server_integration/backups/3.3.2_beta_environment_configuration_backup.json`
+  - Comprehensive Research: Beta testing strategies, user onboarding, support processes
+  - Findings: [Document beta testing approach]
+  - Actions: [Beta deployment, user onboarding, support and feedback collection]
+  - Backups: [Backup beta testing data]
+  - Update: [Document beta testing results]
 
 ### 3.4 Refinement Phase
 
