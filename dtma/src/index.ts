@@ -1,152 +1,188 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import si from 'systeminformation';
+import { authenticateDtmaRequest } from './auth_middleware.js';
+import toolRoutes from './routes/tool_routes.js';
+import mcpRoutes from './routes/mcp_routes.js'; // Import our new MCP routes
+import { sendHeartbeat } from './agentopia_api_client.js';
+import { listContainers } from './docker_manager.js';
 import Dockerode from 'dockerode';
+import http from 'http';
 
-// Type definition for managed tool instances
-export interface ManagedToolInstance {
-  accountToolInstanceId: string;
-  dockerImageUrl: string;
-  creationPortBindings?: Dockerode.PortMap;
+// --- Constants & Config ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PORT = process.env.PORT || 30000;
+const HEARTBEAT_INTERVAL_MS = 60 * 1000; // 60 seconds
+let dtmaVersion = 'unknown';
+
+// --- System Status Function ---
+async function getSystemStatus() {
+  try {
+    const cpuLoad = await si.currentLoad();
+    const mem = await si.mem();
+    const fsSize = await si.fsSize();
+
+    const mainFs = fsSize.find((fs: si.Systeminformation.FsSizeData) => fs.mount === '/');
+
+    return {
+      cpu_load_percent: cpuLoad.currentLoad,
+      memory: {
+        total_bytes: mem.total,
+        active_bytes: mem.active,
+        free_bytes: mem.free,
+        used_bytes: mem.used,
+      },
+      disk: mainFs ? {
+        mount: mainFs.mount,
+        total_bytes: mainFs.size,
+        used_bytes: mainFs.used,
+        free_bytes: mainFs.size - mainFs.used,
+      } : { error: 'Could not determine main filesystem usage.' },
+    };
+  } catch (error) {
+    console.error('Error fetching system status:', error);
+    return { error: 'Failed to fetch system status' };
+  }
 }
 
-// Global state to track managed tool instances
-export const managedInstances = new Map<string, ManagedToolInstance>();
+// --- Tool Status Function ---
+async function getToolStatuses() {
+  try {
+    const containers = await listContainers(true);
 
+    return containers.map(container => ({
+      id: container.Id,
+      names: container.Names.map((name: string) => name.startsWith('/') ? name.substring(1) : name),
+      image: container.Image,
+      image_id: container.ImageID,
+      command: container.Command,
+      created: container.Created,
+      state: container.State,
+      status: container.Status,
+      ports: container.Ports.map((port: Dockerode.Port) => ({
+        ip: port.IP,
+        private_port: port.PrivatePort,
+        public_port: port.PublicPort,
+        type: port.Type,
+      })),
+    }));
+  } catch (error) {
+    console.error('Error fetching tool statuses:', error);
+    return [{ error: 'Failed to fetch tool statuses' }];
+  }
+}
+
+// --- Initialization ---
 const app = express();
-const PORT = process.env.PORT || 30000;
-
-// Environment variables for configuration
-const DTMA_BEARER_TOKEN = process.env.DTMA_BEARER_TOKEN || '';
-const AGENTOPIA_API_BASE_URL = process.env.AGENTOPIA_API_BASE_URL || '';
-const BACKEND_TO_DTMA_API_KEY = process.env.BACKEND_TO_DTMA_API_KEY || '';
-
-// Middleware
 app.use(express.json());
+let server: http.Server;
 
-// Simple authentication middleware
-const authenticate = (req: any, res: any, next: any) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!DTMA_BEARER_TOKEN && !BACKEND_TO_DTMA_API_KEY) {
-    console.log('No auth tokens configured, allowing request');
-    return next();
+async function loadDtmaVersion() {
+  try {
+    const pkgPath = path.join(__dirname, '..', 'package.json');
+    const pkgContent = await fs.readFile(pkgPath, 'utf-8');
+    dtmaVersion = JSON.parse(pkgContent).version || 'unknown';
+    console.log(`DTMA Version: ${dtmaVersion}`);
+  } catch (error) {
+    console.error('Failed to load DTMA version from package.json:', error);
   }
+}
 
-  const isValidToken = token === DTMA_BEARER_TOKEN || token === BACKEND_TO_DTMA_API_KEY;
+async function startHeartbeat() {
+  console.log(`Starting heartbeat interval (${HEARTBEAT_INTERVAL_MS}ms)`);
   
-  if (!token || !isValidToken) {
-    console.log('Invalid or missing authentication token');
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const getHeartbeatPayload = async () => {
+    const systemStatus = await getSystemStatus();
+    const toolStatuses = await getToolStatuses();
+    return {
+      dtma_version: dtmaVersion,
+      system_status: systemStatus,
+      tool_statuses: toolStatuses,
+    };
+  };
 
-  next();
-};
+  console.log('Sending initial heartbeat...');
+  sendHeartbeat(await getHeartbeatPayload());
 
-// Health check endpoint (public - no auth required)
-app.get('/status', (_req: any, res: any) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-    service: 'DTMA',
-    environment: {
-      hasAuthToken: !!DTMA_BEARER_TOKEN,
-      hasApiKey: !!BACKEND_TO_DTMA_API_KEY,
-      hasApiBaseUrl: !!AGENTOPIA_API_BASE_URL,
-      port: PORT
-    }
-  });
+  setInterval(async () => {
+    sendHeartbeat(await getHeartbeatPayload());
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+// --- Express Routes ---
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).send('OK');
 });
 
-// Root endpoint
-app.get('/', (_req: any, res: any) => {
+// Root endpoint with updated info
+app.get('/', (req: Request, res: Response) => {
   res.json({
     service: 'Droplet Tool Management Agent (DTMA)',
-    version: '1.0.0',
+    version: dtmaVersion,
     status: 'running',
+    features: ['Standard Tool Management', 'Multi-MCP Server Orchestration'],
     endpoints: [
       'GET / - Service info',
-      'GET /status - Health check',
-      'GET /tools - List tools (auth required)',
-      'POST /tools - Deploy tool (auth required)'
+      'GET /health - Health check',
+      'GET /tools/* - Standard tool management (auth required)',
+      'GET /mcp/* - Multi-MCP server management (auth required)'
     ]
   });
 });
 
-// Tools listing endpoint
-app.get('/tools', authenticate, (_req: any, res: any) => {
-  res.json({
-    status: 'success',
-    tools: [],
-    message: 'Tool management service available - Docker integration pending'
-  });
-});
+// Mount tool management routes (existing functionality)
+app.use('/tools', authenticateDtmaRequest, toolRoutes);
 
-// Tool deployment endpoint
-app.post('/tools', authenticate, (req: any, res: any) => {
-  const { dockerImageUrl, instanceNameOnToolbox, accountToolInstanceId } = req.body;
-  
-  if (!dockerImageUrl || !instanceNameOnToolbox) {
-    return res.status(400).json({
-      error: 'Missing required fields: dockerImageUrl, instanceNameOnToolbox'
+// Mount MCP management routes (new multi-MCP functionality)
+app.use('/mcp', authenticateDtmaRequest, mcpRoutes);
+
+// Default route for handling 404s on API paths
+app.use((req: Request, res: Response) => {
+    res.status(404).json({ 
+      error: 'Not Found',
+      availableRoutes: [
+        '/health - Health check',
+        '/tools/* - Standard tool management',
+        '/mcp/* - Multi-MCP server management'
+      ]
     });
-  }
-
-  console.log(`Tool deployment request received:`, {
-    dockerImageUrl,
-    instanceNameOnToolbox,
-    accountToolInstanceId
-  });
-
-  // For now, acknowledge the request
-  res.json({
-    status: 'accepted',
-    message: 'Tool deployment request received and logged',
-    instanceNameOnToolbox,
-    dockerImageUrl,
-    accountToolInstanceId,
-    note: 'Full Docker container management will be implemented in next phase'
-  });
 });
 
-// Error handling
-app.use((err: any, _req: any, res: any, _next: any) => {
-  console.error('Error:', err);
-  res.status(500).json({ 
-    error: 'Internal server error',
-    message: err.message 
-  });
+// Basic error handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    console.error('Unhandled error:', err.stack);
+    res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// 404 handler
-app.use((_req: any, res: any) => {
-  res.status(404).json({ error: 'Not Found' });
-});
-
-// Start server
-const server = app.listen(PORT, () => {
+// --- Server Start & Shutdown ---
+server = app.listen(PORT, async () => {
   console.log(`=== DTMA Service Starting ===`);
   console.log(`Port: ${PORT}`);
-  console.log(`Auth Token Configured: ${!!DTMA_BEARER_TOKEN}`);
-  console.log(`API Key Configured: ${!!BACKEND_TO_DTMA_API_KEY}`);
-  console.log(`API Base URL: ${AGENTOPIA_API_BASE_URL || 'Not configured'}`);
-  console.log(`Health Check: http://localhost:${PORT}/status`);
+  console.log(`Features: Standard Tools + Multi-MCP Orchestration`);
+  console.log(`Health Check: http://localhost:${PORT}/health`);
+  console.log(`Tool Management: http://localhost:${PORT}/tools/*`);
+  console.log(`MCP Management: http://localhost:${PORT}/mcp/*`);
   console.log(`=== DTMA Service Ready ===`);
+  
+  await loadDtmaVersion();
+  startHeartbeat(); 
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
+const gracefulShutdown = (signal: string) => {
+  console.log(`${signal} signal received: closing HTTP server`);
   server.close(() => {
-    console.log('Server closed');
+    console.log('HTTP server closed.');
     process.exit(0);
   });
-});
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-}); 
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 5000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT')); 
