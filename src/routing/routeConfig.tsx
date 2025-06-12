@@ -34,6 +34,7 @@ import {
     MonitoringPage,
     AdminUserManagement,
     AdminAgentManagement,
+    AdminMCPMarketplaceManagement,
     HomePage,
     LoginPage, // Now imported here
     RegisterPage, // Now imported here
@@ -109,6 +110,7 @@ export const appRoutes: RouteConfig[] = [
     children: [
       { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
+      { path: '/admin/marketplace', element: AdminMCPMarketplaceManagement, protection: 'admin', layout: false }, // Add marketplace management
     ]
   },
 

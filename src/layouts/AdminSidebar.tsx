@@ -5,6 +5,7 @@ import {
   LayoutDashboard, 
   Users, 
   Bot, // Using Bot icon for Agent Management
+  Store, // Add Store icon for marketplace
   PanelLeftClose, 
   PanelRightClose 
 } from 'lucide-react';
@@ -20,6 +21,7 @@ const navigation = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'User Management', href: '/admin/users', icon: Users },
     { name: 'Agent Management', href: '/admin/agents', icon: Bot }, 
+    { name: 'MCP Marketplace', href: '/admin/marketplace', icon: Store },
     // Add other admin items here if needed
 ];
 

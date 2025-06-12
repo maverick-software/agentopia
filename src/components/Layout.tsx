@@ -47,7 +47,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
             </div>
           ) : (
-            children
+            <div className="p-6">
+              {children}
+            </div>
           )}
         </main>
       </div>

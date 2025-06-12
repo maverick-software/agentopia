@@ -49,3 +49,5 @@ export const MCPServersPage = lazy(() => import('../pages/mcp/MCPServersPage').t
 export const MCPMarketplacePage = lazy(() => import('../pages/mcp/MCPMarketplacePage').then(module => ({ default: module.MCPMarketplacePage })));
 export const MCPDeployPage = lazy(() => import('../pages/mcp/MCPDeployPage').then(module => ({ default: module.MCPDeployPage })));
 export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConfigPage').then(module => ({ default: module.MCPServerConfigPage }))); 
+
+export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 

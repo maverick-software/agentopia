@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MCPMarketplace from '../../components/mcp/MCPMarketplace';
 import { MCPServerTemplate, MCPServerCategory, MCPDeploymentConfig } from '../../lib/mcp/ui-types';
+import { mcpService } from '../../lib/services/mcpService';
 import { Button } from '../../components/ui/button';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { ArrowLeft, Layers } from 'lucide-react';
@@ -101,11 +102,32 @@ const categories: MCPServerCategory[] = [
 
 export const MCPMarketplacePage: React.FC = () => {
   const navigate = useNavigate();
-  const [templates] = useState<MCPServerTemplate[]>(mockTemplates);
+  const [templates, setTemplates] = useState<MCPServerTemplate[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MCPServerCategory | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading] = useState(false);
-  const [error] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load marketplace templates
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const marketplaceTemplates = await mcpService.getMarketplaceTemplates();
+        setTemplates(marketplaceTemplates);
+      } catch (err) {
+        console.error('Error loading marketplace templates:', err);
+        setError('Failed to load marketplace templates. Please try again.');
+        // Fallback to mock data
+        setTemplates(mockTemplates);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTemplates();
+  }, []);
 
   const handleTemplateSelect = (template: MCPServerTemplate) => {
     // Navigate to deployment page with template pre-selected

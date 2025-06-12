@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MCPServer, UseMCPServersReturn } from '@/lib/mcp/ui-types';
-import { mcpApiClient } from '@/lib/api/mcpApiClient';
+import { mcpService } from '@/lib/services/mcpService';
 
 export function useMCPServers(): UseMCPServersReturn {
   const [servers, setServers] = useState<MCPServer[]>([]);
@@ -12,7 +12,7 @@ export function useMCPServers(): UseMCPServersReturn {
       setLoading(true);
       setError(null);
 
-      const servers = await mcpApiClient.getServers();
+      const servers = await mcpService.getServers();
       setServers(servers);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch MCP servers';
@@ -27,7 +27,7 @@ export function useMCPServers(): UseMCPServersReturn {
     try {
       setError(null);
 
-      const updatedServer = await mcpApiClient.updateServer(id, updates);
+      const updatedServer = await mcpService.updateServer(id, updates);
       
       // Update the local state
       setServers(prev => 
@@ -48,7 +48,7 @@ export function useMCPServers(): UseMCPServersReturn {
     try {
       setError(null);
 
-      await mcpApiClient.deleteServer(id);
+      await mcpService.deleteServer(id);
       
       // Remove from local state
       setServers(prev => prev.filter(server => server.id.toString() !== id));
