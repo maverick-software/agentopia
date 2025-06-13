@@ -316,7 +316,11 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
             Manage MCP server templates and monitor marketplace activity
           </p>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
+        <Button onClick={() => {
+          console.log('Add Template button clicked');
+          alert('Add Template button clicked!');
+          setIsAddDialogOpen(true);
+        }}>
           <Plus className="mr-2 h-4 w-4" />
           Add Template
         </Button>
