@@ -223,8 +223,168 @@ export class MCPService {
    * Get available MCP server templates from registry
    */
   async getMarketplaceTemplates(): Promise<MCPServerTemplate[]> {
-    // For now, return a basic set of templates
-    // In the future, this could connect to a real MCP registry
+    try {
+      const { data, error } = await supabase
+        .from('mcp_server_catalog')
+        .select('*')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Transform database records to MCPServerTemplate format
+      return (data || []).map(record => ({
+        id: record.id,
+        name: record.display_name || record.name,
+        description: record.description || '',
+        version: record.version,
+        author: record.provider || 'Unknown',
+        category: record.category || 'other',
+        tags: Array.isArray(record.tags) ? record.tags : [],
+        dockerImage: record.docker_image,
+        documentation: record.documentation_url || '',
+        sourceCode: record.repository_url || '',
+        rating: {
+          average: parseFloat(record.rating_average) || 0,
+          count: record.rating_count || 0
+        },
+        downloads: record.download_count || 0,
+        verified: record.is_verified || false,
+        configSchema: record.configuration_schema || {
+          type: 'object',
+          properties: {},
+          required: []
+        },
+        requiredCapabilities: Array.isArray(record.capabilities) ? record.capabilities : ['tools'],
+        supportedTransports: ['stdio'], // Default, could be enhanced
+        resourceRequirements: {
+          memory: '256Mi',
+          cpu: '0.25'
+        },
+        environment: {},
+        lastUpdated: new Date(record.updated_at),
+        isActive: true
+      }));
+    } catch (error) {
+      console.error('Error fetching marketplace templates:', error);
+      // Fallback to hardcoded templates if database fails
+      return this.getFallbackTemplates();
+    }
+  }
+
+  /**
+   * Create a new MCP server template
+   */
+  async createTemplate(templateData: Partial<MCPServerTemplate>): Promise<MCPServerTemplate> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('mcp_server_catalog')
+        .insert({
+          name: templateData.name,
+          display_name: templateData.name,
+          description: templateData.description,
+          version: templateData.version || '1.0.0',
+          docker_image: templateData.dockerImage,
+          category: templateData.category,
+          provider: templateData.author || 'community',
+          capabilities: templateData.requiredCapabilities || ['tools'],
+          configuration_schema: templateData.configSchema || {
+            type: 'object',
+            properties: {},
+            required: []
+          },
+          documentation_url: templateData.documentation,
+          repository_url: templateData.sourceCode,
+          tags: templateData.tags || [],
+          is_verified: false,
+          is_published: true,
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Transform back to MCPServerTemplate format
+      return {
+        id: data.id,
+        name: data.display_name || data.name,
+        description: data.description || '',
+        version: data.version,
+        author: data.provider || 'Unknown',
+        category: data.category || 'other',
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        dockerImage: data.docker_image,
+        documentation: data.documentation_url || '',
+        sourceCode: data.repository_url || '',
+        rating: {
+          average: 0,
+          count: 0
+        },
+        downloads: 0,
+        verified: data.is_verified || false,
+        configSchema: data.configuration_schema || {
+          type: 'object',
+          properties: {},
+          required: []
+        },
+        requiredCapabilities: Array.isArray(data.capabilities) ? data.capabilities : ['tools'],
+        supportedTransports: ['stdio'],
+        resourceRequirements: {
+          memory: '256Mi',
+          cpu: '0.25'
+        },
+        environment: {},
+        lastUpdated: new Date(data.created_at),
+        isActive: true
+      };
+    } catch (error) {
+      console.error('Error creating template:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update template verification status (admin only)
+   */
+  async updateTemplateVerification(templateId: string, isVerified: boolean): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('mcp_server_catalog')
+        .update({ is_verified: isVerified })
+        .eq('id', templateId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating template verification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a template (admin only)
+   */
+  async deleteTemplate(templateId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('mcp_server_catalog')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fallback templates when database is unavailable
+   */
+  private getFallbackTemplates(): MCPServerTemplate[] {
     return [
       {
         id: 'aws-tools',

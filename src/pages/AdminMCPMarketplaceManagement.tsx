@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp } from 'lucide-react';
 import { mcpService } from '@/lib/services/mcpService';
-import { MCPServerTemplate } from '@/lib/mcp/ui-types';
+import { MCPServerTemplate, MCPServerCategory } from '@/lib/mcp/ui-types';
 
 // Extend the MCPServerTemplate interface for admin view
 interface AdminMCPTemplate extends MCPServerTemplate {
@@ -19,13 +19,178 @@ interface AdminMCPTemplate extends MCPServerTemplate {
   isVerified: boolean; // Additional field for backwards compatibility
 }
 
+interface AddTemplateFormProps {
+  onSubmit: (templateData: Partial<AdminMCPTemplate>) => void;
+  onCancel: () => void;
+}
+
+const AddTemplateForm: React.FC<AddTemplateFormProps> = ({ onSubmit, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    version: '1.0.0',
+    author: '',
+    category: 'other' as MCPServerCategory,
+    dockerImage: '',
+    documentation: '',
+    sourceCode: '',
+    tags: ''
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const templateData: Partial<AdminMCPTemplate> = {
+      ...formData,
+      category: formData.category as MCPServerCategory,
+      tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+    };
+    
+    onSubmit(templateData);
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setFormData(prev => ({ ...prev, category: value as MCPServerCategory }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="name">Template Name *</Label>
+          <Input
+            id="name"
+            value={formData.name}
+            onChange={(e) => handleInputChange('name', e.target.value)}
+            placeholder="e.g., GitHub Tools"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="version">Version *</Label>
+          <Input
+            id="version"
+            value={formData.version}
+            onChange={(e) => handleInputChange('version', e.target.value)}
+            placeholder="e.g., 1.0.0"
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="description">Description *</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => handleInputChange('description', e.target.value)}
+          placeholder="Brief description of what this MCP server does"
+          required
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="author">Author *</Label>
+          <Input
+            id="author"
+            value={formData.author}
+            onChange={(e) => handleInputChange('author', e.target.value)}
+            placeholder="e.g., GitHub Inc."
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="category">Category</Label>
+          <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="productivity">Productivity</SelectItem>
+              <SelectItem value="development">Development</SelectItem>
+              <SelectItem value="data-analysis">Data Analysis</SelectItem>
+              <SelectItem value="ai-tools">AI Tools</SelectItem>
+              <SelectItem value="integrations">Integrations</SelectItem>
+              <SelectItem value="utilities">Utilities</SelectItem>
+              <SelectItem value="business">Business</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="dockerImage">Docker Image *</Label>
+        <Input
+          id="dockerImage"
+          value={formData.dockerImage}
+          onChange={(e) => handleInputChange('dockerImage', e.target.value)}
+          placeholder="e.g., mcp-servers/github-tools:latest"
+          required
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="documentation">Documentation URL</Label>
+          <Input
+            id="documentation"
+            value={formData.documentation}
+            onChange={(e) => handleInputChange('documentation', e.target.value)}
+            placeholder="https://docs.example.com"
+          />
+        </div>
+        <div>
+          <Label htmlFor="sourceCode">Source Code URL</Label>
+          <Input
+            id="sourceCode"
+            value={formData.sourceCode}
+            onChange={(e) => handleInputChange('sourceCode', e.target.value)}
+            placeholder="https://github.com/example/repo"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="tags">Tags (comma-separated)</Label>
+        <Input
+          id="tags"
+          value={formData.tags}
+          onChange={(e) => handleInputChange('tags', e.target.value)}
+          placeholder="e.g., github, git, development"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit">
+          Add Template
+        </Button>
+      </div>
+    </form>
+  );
+};
+
 const AdminMCPMarketplaceManagement: React.FC = () => {
   const [templates, setTemplates] = useState<AdminMCPTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<AdminMCPTemplate | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+
+  // Debug: Track dialog state changes
+  useEffect(() => {
+    console.log('Add Dialog Open state changed:', isAddDialogOpen);
+  }, [isAddDialogOpen]);
 
   // Statistics
   const [stats, setStats] = useState({
@@ -35,6 +200,11 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     activeServers: 0
   });
 
+  // Debug: Track dialog state changes
+  useEffect(() => {
+    console.log('Add Dialog Open state changed:', isAddDialogOpen);
+  }, [isAddDialogOpen]);
+
   useEffect(() => {
     loadTemplates();
     loadStats();
@@ -43,19 +213,21 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
   const loadTemplates = async () => {
     try {
       setLoading(true);
-      const rawTemplates = await mcpService.getMarketplaceTemplates();
+      // Use the new database-backed method
+      const marketplaceTemplates = await mcpService.getMarketplaceTemplates();
       
-      // Transform MCPServerTemplate to AdminMCPTemplate with additional admin fields
-      const adminTemplates: AdminMCPTemplate[] = rawTemplates.map(template => ({
+      // Transform to AdminMCPTemplate format (add admin-specific fields)
+      const adminTemplates: AdminMCPTemplate[] = marketplaceTemplates.map(template => ({
         ...template,
-        totalDeployments: Math.floor(Math.random() * 100) + 10, // Mock data
-        activeDeployments: Math.floor(Math.random() * 50) + 5, // Mock data
-        isVerified: template.verified // Copy for compatibility
+        isVerified: template.verified, // Map verified to isVerified for backwards compatibility
+        totalDeployments: template.downloads, // Use downloads as proxy for deployments
+        activeDeployments: Math.floor(template.downloads * 0.1) // Estimate active deployments
       }));
       
       setTemplates(adminTemplates);
     } catch (error) {
-      console.error('Failed to load marketplace templates:', error);
+      console.error('Failed to load templates:', error);
+      // Keep existing templates on error
     } finally {
       setLoading(false);
     }
@@ -85,13 +257,11 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
 
   const toggleVerification = async (templateId: string, isVerified: boolean) => {
     try {
-      // In a real implementation, this would call an admin API
-      // For now, we'll update locally
-      setTemplates(prev =>
-        prev.map(t =>
-          t.id === templateId ? { ...t, isVerified: !isVerified, verified: !isVerified } : t
-        )
-      );
+      // Use the new persistent updateTemplateVerification method
+      await mcpService.updateTemplateVerification(templateId, !isVerified);
+      
+      // Reload templates to reflect changes
+      await loadTemplates();
       await loadStats();
     } catch (error) {
       console.error('Failed to toggle verification:', error);
@@ -102,11 +272,29 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     if (!confirm('Are you sure you want to delete this template?')) return;
 
     try {
-      // In a real implementation, this would call an admin API
-      setTemplates(prev => prev.filter(t => t.id !== templateId));
+      // Use the new persistent deleteTemplate method
+      await mcpService.deleteTemplate(templateId);
+      
+      // Reload templates to reflect changes
+      await loadTemplates();
       await loadStats();
     } catch (error) {
       console.error('Failed to delete template:', error);
+    }
+  };
+
+  const addTemplate = async (templateData: Partial<AdminMCPTemplate>) => {
+    try {
+      // Use the new persistent createTemplate method
+      const newTemplate = await mcpService.createTemplate(templateData);
+      
+      // Reload templates from database to get updated list
+      await loadTemplates();
+      await loadStats();
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to add template:', error);
+      // You could add error state handling here
     }
   };
 
@@ -128,7 +316,11 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
             Manage MCP server templates and monitor marketplace activity
           </p>
         </div>
-        <Button>
+        <Button onClick={() => {
+          console.log('Add Template button clicked');
+          alert('Add Template button clicked!');
+          setIsAddDialogOpen(true);
+        }}>
           <Plus className="mr-2 h-4 w-4" />
           Add Template
         </Button>
@@ -418,6 +610,16 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Add Template Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add New MCP Template</DialogTitle>
+          </DialogHeader>
+          <AddTemplateForm onSubmit={addTemplate} onCancel={() => setIsAddDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
