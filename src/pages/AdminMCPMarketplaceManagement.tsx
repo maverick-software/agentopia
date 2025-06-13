@@ -39,6 +39,7 @@ const AddTemplateForm: React.FC<AddTemplateFormProps> = ({ onSubmit, onCancel })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted with data:', formData);
     
     const templateData: Partial<AdminMCPTemplate> = {
       ...formData,
@@ -46,6 +47,7 @@ const AddTemplateForm: React.FC<AddTemplateFormProps> = ({ onSubmit, onCancel })
       tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
     };
     
+    console.log('Processed template data:', templateData);
     onSubmit(templateData);
   };
 
@@ -100,9 +102,12 @@ const AddTemplateForm: React.FC<AddTemplateFormProps> = ({ onSubmit, onCancel })
             id="author"
             value={formData.author}
             onChange={(e) => handleInputChange('author', e.target.value)}
-            placeholder="e.g., GitHub Inc."
+            placeholder="e.g., GitHub Inc., OpenAI, Community Developer"
             required
           />
+          <p className="text-xs text-muted-foreground mt-1">
+            Enter the author or organization name (not a URL)
+          </p>
         </div>
         <div>
           <Label htmlFor="category">Category</Label>
@@ -285,16 +290,20 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
 
   const addTemplate = async (templateData: Partial<AdminMCPTemplate>) => {
     try {
+      console.log('addTemplate called with:', templateData);
+      
       // Use the new persistent createTemplate method
       const newTemplate = await mcpService.createTemplate(templateData);
+      console.log('Template created successfully:', newTemplate);
       
       // Reload templates from database to get updated list
       await loadTemplates();
       await loadStats();
       setIsAddDialogOpen(false);
+      console.log('Dialog closed and templates reloaded');
     } catch (error) {
       console.error('Failed to add template:', error);
-      // You could add error state handling here
+      alert(`Failed to add template: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 

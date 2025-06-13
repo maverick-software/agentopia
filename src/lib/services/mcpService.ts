@@ -280,6 +280,18 @@ export class MCPService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      // Map author to valid provider values
+      let provider = 'community'; // default
+      if (templateData.author) {
+        const authorLower = templateData.author.toLowerCase();
+        if (authorLower.includes('official') || authorLower.includes('agentopia')) {
+          provider = 'official';
+        } else if (authorLower.includes('custom') || authorLower.includes('private')) {
+          provider = 'custom';
+        }
+        // Everything else remains 'community'
+      }
+
       const { data, error } = await supabase
         .from('mcp_server_catalog')
         .insert({
@@ -289,7 +301,7 @@ export class MCPService {
           version: templateData.version || '1.0.0',
           docker_image: templateData.dockerImage,
           category: templateData.category,
-          provider: templateData.author || 'community',
+          provider: provider,
           capabilities: templateData.requiredCapabilities || ['tools'],
           configuration_schema: templateData.configSchema || {
             type: 'object',
