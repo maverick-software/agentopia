@@ -3,7 +3,7 @@ import {
   MCPServer, 
   UseMCPServerConfigReturn
 } from '@/lib/mcp/ui-types';
-import { mcpApiClient } from '@/lib/api/mcpApiClient';
+import { mcpService } from '@/lib/services/mcpService';
 
 export function useMCPServerConfig(serverId?: string): UseMCPServerConfigReturn {
   const [config, setConfig] = useState<MCPServer | null>(null);
@@ -16,7 +16,7 @@ export function useMCPServerConfig(serverId?: string): UseMCPServerConfigReturn 
       setLoading(true);
       setError(null);
       
-      const serverConfig = await mcpApiClient.getServer(id);
+      const serverConfig = await mcpService.getServer(id);
       setConfig(serverConfig);
       return serverConfig;
 
@@ -38,7 +38,7 @@ export function useMCPServerConfig(serverId?: string): UseMCPServerConfigReturn 
       setSaving(true);
       setError(null);
 
-      const updatedConfig = await mcpApiClient.updateServer(config.id.toString(), updates);
+      const updatedConfig = await mcpService.updateServer(config.id.toString(), updates);
       setConfig(updatedConfig);
 
     } catch (err) {

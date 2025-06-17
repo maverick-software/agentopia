@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://mzcvdilmavlpttqncutj.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16Y3ZkaWxtYXZscHR0cW5jdXRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMyNTgzNTQsImV4cCI6MjA0ODgzNDM1NH0.bHhNzfcQ_ufEGNKLe-7OejllsxWAY8gvDxzkcCKZHmM';
@@ -29,9 +29,9 @@ async function checkAdminRoles() {
     
   console.log('Users with admin role:', userRoles, userRolesError);
   
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  console.log('Current user:', user?.id, userError);
+  // Get all users to see who we can assign admin to
+  const { data: users, error: usersError } = await supabase.auth.admin.listUsers();
+  console.log('All users:', users?.users?.map(u => ({ id: u.id, email: u.email })), usersError);
 }
 
 checkAdminRoles(); 

@@ -1,51 +1,16 @@
 // src/lib/services/mcpService.ts
-// Enhanced MCP Server management service with comprehensive DTMA integration
+// Real MCP Server management service connected to Supabase with DTMA integration
 
 import { supabase } from '../supabase';
 import { MCPServer, MCPServerTemplate, MCPDeploymentConfig, MCPDeploymentStatus } from '../mcp/ui-types';
 import { ToolInstanceService } from '../../services/tool_instance_service/manager';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Enhanced type definitions for better DTMA integration
-export interface MCPServerStatus {
-  state: 'running' | 'stopped' | 'error' | 'starting' | 'stopping' | 'unknown';
-  health: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
-  uptime?: number;
-  lastStarted?: Date;
-  lastError?: string;
-}
-
-export interface ConnectionTest {
-  success: boolean;
-  error?: string;
-  latency?: number;
-  capabilities?: string[];
-  timestamp: Date;
-}
-
-export interface EnhancedMCPServer extends MCPServer {
-  environment: {
-    id: string;
-    name: string;
-    publicIP: string;
-    privateIP: string;
-    region: string;
-    size: string;
-  };
-  endpoint: string;
-  lastHeartbeat: Date | null;
-  serverType: string;
-  transport: 'http' | 'stdio' | 'websocket';
-  discoveryMetadata: Record<string, any>;
-}
-
 export class MCPService {
-  protected supabase: SupabaseClient;
   protected toolInstanceService: ToolInstanceService;
 
   constructor(supabaseClient?: SupabaseClient) {
-    this.supabase = supabaseClient || supabase;
-    this.toolInstanceService = new ToolInstanceService(this.supabase);
+    this.toolInstanceService = new ToolInstanceService(supabaseClient || supabase);
   }
 
   /**
@@ -54,7 +19,7 @@ export class MCPService {
   protected async getAdminToolboxEnvironment() {
     // For now, get the first available admin environment
     // In production, this should be a dedicated admin environment
-    const { data, error } = await this.supabase
+    const { data, error } = await supabase
       .from('account_tool_environments')
       .select('id, public_ip_address, status')
       .eq('status', 'active')
@@ -69,353 +34,99 @@ export class MCPService {
   }
 
   /**
-   * Enhanced server querying with comprehensive DTMA integration
+   * Get all MCP server instances for the current user
    */
-  async getServers(): Promise<EnhancedMCPServer[]> {
+  async getServers(): Promise<MCPServer[]> {
     try {
-      const { data: { user } } = await this.supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Enhanced query with full DTMA integration
-      const { data, error } = await this.supabase
+      // Query account_tool_instances with MCP server details
+      const { data, error } = await supabase
         .from('account_tool_instances')
         .select(`
           id,
-          instance_name_on_toolbox,
+          account_tool_environment_id,
+          tool_catalog_id,
           status_on_toolbox,
-          last_heartbeat_from_dtma,
+          instance_name_on_toolbox,
           created_at,
           updated_at,
           mcp_server_type,
-          mcp_transport_type,
           mcp_endpoint_path,
+          mcp_transport_type,
           mcp_server_capabilities,
           mcp_discovery_metadata,
           account_tool_environment:account_tool_environments!inner(
             id,
-            name,
-            public_ip_address,
-            private_ip_address,
-            region_slug,
-            size_slug,
-            user_id
+            user_id,
+            name
           )
         `)
         .eq('account_tool_environment.user_id', user.id)
-        .not('mcp_server_type', 'is', null)
-        .order('instance_name_on_toolbox');
+        .not('mcp_server_type', 'is', null) // Only get instances that are MCP servers
+        .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching MCP servers:', error);
-        throw new Error(`Failed to fetch MCP servers: ${error.message}`);
-      }
+      if (error) throw error;
 
-      return (data || []).map(this.transformToEnhancedMCPServer.bind(this));
-         } catch (error) {
-       console.error('Error in getServers:', error);
-       throw error instanceof Error ? error : new Error('Unknown error in getServers');
-     }
-  }
-
-  /**
-   * Transform database record to enhanced MCP server object
-   */
-  protected transformToEnhancedMCPServer(record: any): EnhancedMCPServer {
-    const environment = record.account_tool_environment;
-    const status = this.mapStatusToMCPStatus(record.status_on_toolbox, record.last_heartbeat_from_dtma);
-    
-    return {
-      // Original MCPServer fields for backward compatibility
-      id: parseInt(record.id) || 0,
-      config_id: 0,
-      name: record.instance_name_on_toolbox || `MCP Server ${record.id}`,
-      endpoint_url: this.buildServerEndpoint(environment.public_ip_address, record.mcp_endpoint_path),
-      vault_api_key_id: null,
-      timeout_ms: 30000,
-      max_retries: 3,
-      retry_backoff_ms: 1000,
-      priority: 1,
-      is_active: status.state === 'running',
-      capabilities: record.mcp_server_capabilities || null,
-      status: {
-        state: status.state === 'running' ? 'running' : 'stopped',
-        uptime: status.uptime || 0,
-        lastStarted: status.lastStarted || new Date(record.created_at)
-      },
-      health: {
-        overall: status.health === 'healthy' ? 'healthy' : 'unhealthy',
-        checks: {
-          connectivity: status.state === 'running',
-          responseTime: 0,
-          errorRate: 0,
-          memoryUsage: 0,
-          cpuUsage: 0
+      // Transform database records to MCPServer format
+      const servers: MCPServer[] = (data || []).map(instance => ({
+        // MCPServerConfig fields
+        id: parseInt(instance.id) || 0,
+        config_id: 0, // No config table yet
+        name: instance.instance_name_on_toolbox || `MCP Server ${instance.id}`,
+        endpoint_url: instance.mcp_endpoint_path || '',
+        vault_api_key_id: null,
+        timeout_ms: 30000,
+        max_retries: 3,
+        retry_backoff_ms: 1000,
+        priority: 1,
+        is_active: instance.status_on_toolbox === 'active',
+        capabilities: instance.mcp_server_capabilities || null,
+        
+        // MCPServer additional fields
+        status: {
+          state: instance.status_on_toolbox === 'active' ? 'running' : 'stopped',
+          uptime: instance.status_on_toolbox === 'active' ? Math.floor((Date.now() - new Date(instance.created_at).getTime()) / 1000) : 0,
+          lastStarted: new Date(instance.created_at)
         },
-        lastChecked: new Date()
-      },
-
-      // Enhanced fields for DTMA integration
-      serverType: record.mcp_server_type || 'generic',
-      transport: record.mcp_transport_type || 'http',
-      discoveryMetadata: record.mcp_discovery_metadata || {},
-      environment: {
-        id: environment.id,
-        name: environment.name,
-        publicIP: environment.public_ip_address,
-        privateIP: environment.private_ip_address,
-        region: environment.region_slug,
-        size: environment.size_slug
-      },
-      endpoint: this.buildServerEndpoint(environment.public_ip_address, record.mcp_endpoint_path),
-      lastHeartbeat: record.last_heartbeat_from_dtma ? new Date(record.last_heartbeat_from_dtma) : null
-    };
-  }
-
-  /**
-   * Build server endpoint from DTMA infrastructure (replaces localhost)
-   */
-  protected buildServerEndpoint(publicIP: string, endpointPath: string = ''): string {
-    if (!publicIP) {
-      throw new Error('Server public IP not available');
-    }
-    
-    // Use port 30000 for DTMA deployed containers (not localhost:8000)
-    const baseUrl = `http://${publicIP}:30000`;
-    return endpointPath ? `${baseUrl}${endpointPath}` : baseUrl;
-  }
-
-  /**
-   * Map DTMA status to MCP status with health determination
-   */
-  protected mapStatusToMCPStatus(dtmaStatus: string, lastHeartbeat: string | null): MCPServerStatus {
-    const now = new Date();
-    const heartbeatAge = lastHeartbeat ? 
-      (now.getTime() - new Date(lastHeartbeat).getTime()) / (1000 * 60) : null;
-
-    let state: MCPServerStatus['state'];
-    let health: MCPServerStatus['health'] = 'unknown';
-
-    // Map DTMA status to MCP state
-    switch (dtmaStatus) {
-      case 'running':
-        state = 'running';
-        health = heartbeatAge && heartbeatAge < 5 ? 'healthy' : 
-                heartbeatAge && heartbeatAge < 15 ? 'degraded' : 'unhealthy';
-        break;
-      case 'stopped':
-      case 'exited':
-        state = 'stopped';
-        health = 'unknown';
-        break;
-      case 'starting_on_toolbox':
-        state = 'starting';
-        health = 'unknown';
-        break;
-      case 'stopping_on_toolbox':
-        state = 'stopping';
-        health = 'unknown';
-        break;
-      case 'error_starting':
-      case 'error_stopping':
-        state = 'error';
-        health = 'unhealthy';
-        break;
-      default:
-        state = 'unknown';
-        health = 'unknown';
-    }
-
-    return {
-      state,
-      health,
-      uptime: state === 'running' && lastHeartbeat ? 
-        Math.floor((now.getTime() - new Date(lastHeartbeat).getTime()) / 1000) : undefined,
-      lastStarted: lastHeartbeat ? new Date(lastHeartbeat) : undefined,
-      lastError: state === 'error' ? 'Container error - check DTMA logs' : undefined
-    };
-  }
-
-  /**
-   * Get single server by ID with enhanced error handling
-   */
-  async getServerById(serverId: string): Promise<EnhancedMCPServer | null> {
-    try {
-      const { data: { user } } = await this.supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      const { data, error } = await this.supabase
-        .from('account_tool_instances')
-        .select(`
-          id,
-          instance_name_on_toolbox,
-          status_on_toolbox,
-          last_heartbeat_from_dtma,
-          created_at,
-          updated_at,
-          mcp_server_type,
-          mcp_transport_type,
-          mcp_endpoint_path,
-          mcp_server_capabilities,
-          mcp_discovery_metadata,
-          account_tool_environment:account_tool_environments!inner(
-            id,
-            name,
-            public_ip_address,
-            private_ip_address,
-            region_slug,
-            size_slug,
-            user_id
-          )
-        `)
-        .eq('id', serverId)
-        .eq('account_tool_environment.user_id', user.id)
-        .not('mcp_server_type', 'is', null)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return null; // Not found
+        health: {
+          overall: instance.status_on_toolbox === 'active' ? 'healthy' : 'unhealthy',
+          checks: {
+            connectivity: instance.status_on_toolbox === 'active',
+            responseTime: 0,
+            errorRate: 0,
+            memoryUsage: 0,
+            cpuUsage: 0
+          },
+          lastChecked: new Date()
         }
-        throw new Error(`Failed to fetch MCP server: ${error.message}`);
-      }
+      }));
 
-      return this.transformToEnhancedMCPServer(data);
-         } catch (error) {
-       console.error(`Error fetching server ${serverId}:`, error);
-       throw error instanceof Error ? error : new Error(`Unknown error fetching server ${serverId}`);
-     }
+      return servers;
+    } catch (error) {
+      console.error('Error fetching MCP servers:', error);
+      throw error;
+    }
   }
 
   /**
-   * Backward compatibility: Get server using original interface
+   * Get a specific MCP server by ID
    */
   async getServer(id: string): Promise<MCPServer> {
-    const enhancedServer = await this.getServerById(id);
-    if (!enhancedServer) {
-      throw new Error(`MCP server with ID ${id} not found`);
-    }
-    
-    // Return only the original MCPServer fields
-    const { environment, endpoint, lastHeartbeat, serverType, transport, discoveryMetadata, ...originalServer } = enhancedServer;
-    return originalServer;
-  }
-
-  /**
-   * Test server connectivity with comprehensive error handling
-   */
-  async testServerConnection(serverId: string): Promise<ConnectionTest> {
-    const server = await this.getServerById(serverId);
-    if (!server) {
-      return {
-        success: false,
-        error: 'Server not found',
-        timestamp: new Date()
-      };
-    }
-
-    const status = this.mapStatusToMCPStatus(server.status.state, server.lastHeartbeat?.toISOString() || null);
-    if (status.state !== 'running') {
-      return {
-        success: false,
-        error: `Server is not running (status: ${status.state})`,
-        timestamp: new Date()
-      };
-    }
-
     try {
-      const startTime = Date.now();
+      const servers = await this.getServers();
+      const server = servers.find(s => s.id.toString() === id);
       
-      // Test basic connectivity to DTMA endpoint (not localhost)
-      const response = await fetch(`${server.endpoint}/health`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(5000) // 5 second timeout
-      });
-
-      const latency = Date.now() - startTime;
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
-          latency,
-          timestamp: new Date()
-        };
+      if (!server) {
+        throw new Error(`MCP server with ID ${id} not found`);
       }
 
-      // Test MCP protocol if health check passes
-      const capabilities = await this.testMCPCapabilities(server.endpoint);
-
-      return {
-        success: true,
-        latency,
-        capabilities,
-        timestamp: new Date()
-      };
-
-         } catch (error) {
-       return {
-         success: false,
-         error: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-         timestamp: new Date()
-       };
-     }
-  }
-
-  /**
-   * Test MCP protocol capabilities
-   */
-  protected async testMCPCapabilities(endpoint: string): Promise<string[]> {
-    try {
-      const response = await fetch(`${endpoint}/mcp/capabilities`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(3000)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.capabilities || [];
-      }
-         } catch (error) {
-       console.warn('Could not fetch MCP capabilities:', error instanceof Error ? error.message : 'Unknown error');
-     }
-    
-    return []; // Return empty array if capabilities cannot be determined
-  }
-
-  /**
-   * Refresh server status from DTMA
-   */
-  async refreshServerStatus(serverId: string): Promise<EnhancedMCPServer> {
-    const server = await this.getServerById(serverId);
-    if (!server) {
-      throw new Error('Server not found');
+      return server;
+    } catch (error) {
+      console.error(`Error fetching MCP server ${id}:`, error);
+      throw error;
     }
-
-    try {
-      // Refresh status via ToolInstanceService
-      await this.toolInstanceService.refreshInstanceStatusFromDtma({
-        userId: 'system',
-        accountToolInstanceId: serverId,
-        accountToolEnvironmentId: server.environment.id
-      });
-
-      // Return updated server data
-      const updatedServer = await this.getServerById(serverId);
-      if (!updatedServer) {
-        throw new Error('Server not found after refresh');
-      }
-
-      return updatedServer;
-         } catch (error) {
-       console.error(`Failed to refresh server status for ${serverId}:`, error);
-       throw new Error(`Status refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-     }
   }
 
   /**
@@ -424,7 +135,7 @@ export class MCPService {
    */
   async deployServer(config: MCPDeploymentConfig): Promise<MCPDeploymentStatus> {
     try {
-      const { data: { user } } = await this.supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
       // Get admin toolbox environment for MCP server deployment
@@ -450,7 +161,7 @@ export class MCPService {
        });
 
       // Update MCP-specific fields
-      await this.supabase
+      await supabase
         .from('account_tool_instances')
         .update({
           mcp_server_type: 'mcp_server',
@@ -490,7 +201,7 @@ export class MCPService {
    */
   async updateServer(id: string, updates: Partial<MCPServer>): Promise<MCPServer> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await supabase
         .from('account_tool_instances')
         .update({
           instance_name_on_toolbox: updates.name,
@@ -517,7 +228,7 @@ export class MCPService {
    */
   async deleteServer(id: string): Promise<void> {
     try {
-      const { error } = await this.supabase
+      const { error } = await supabase
         .from('account_tool_instances')
         .delete()
         .eq('id', parseInt(id));
@@ -534,7 +245,7 @@ export class MCPService {
    */
   async getMarketplaceTemplates(): Promise<MCPServerTemplate[]> {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await supabase
         .from('mcp_server_catalog')
         .select('*')
         .eq('is_published', true)
@@ -587,7 +298,7 @@ export class MCPService {
    */
   async createTemplate(templateData: Partial<MCPServerTemplate>): Promise<MCPServerTemplate> {
     try {
-      const { data: { user } } = await this.supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
       // Map author to valid provider values
@@ -602,7 +313,7 @@ export class MCPService {
         // Everything else remains 'community'
       }
 
-      const { data, error } = await this.supabase
+      const { data, error } = await supabase
         .from('mcp_server_catalog')
         .insert({
           name: templateData.name,
@@ -674,7 +385,7 @@ export class MCPService {
    */
   async updateTemplateVerification(templateId: string, isVerified: boolean): Promise<void> {
     try {
-      const { error } = await this.supabase
+      const { error } = await supabase
         .from('mcp_server_catalog')
         .update({ is_verified: isVerified })
         .eq('id', templateId);
@@ -691,7 +402,7 @@ export class MCPService {
    */
   async deleteTemplate(templateId: string): Promise<void> {
     try {
-      const { error } = await this.supabase
+      const { error } = await supabase
         .from('mcp_server_catalog')
         .delete()
         .eq('id', templateId);

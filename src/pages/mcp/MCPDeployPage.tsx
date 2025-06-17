@@ -9,11 +9,26 @@ import { Textarea } from '../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { ArrowLeft, Rocket, Server, CheckCircle } from 'lucide-react';
+import { Badge } from '../../components/ui/badge';
+import { ArrowLeft, Rocket, Server, CheckCircle, Package } from 'lucide-react';
 
 interface LocationState {
   template?: MCPServerTemplate;
   config?: MCPDeploymentConfig;
+}
+
+// Simplified deployment config that matches what the service expects
+interface SimpleDeploymentConfig {
+  templateId?: string;
+  name: string;
+  description?: string;
+  configuration?: {
+    serverType?: string;
+    endpoint?: string;
+    transport?: string;
+    capabilities?: string[];
+    [key: string]: any;
+  };
 }
 
 export const MCPDeployPage: React.FC = () => {
@@ -26,11 +41,13 @@ export const MCPDeployPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   // Form data
-  const [name, setName] = useState(state?.config?.name || '');
-  const [serverType, setServerType] = useState(state?.template?.id || 'aws-tools');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState(state?.config?.name || state?.template?.name || '');
+  const [serverType, setServerType] = useState(state?.template?.id || 'custom');
+  const [description, setDescription] = useState(state?.template?.description || '');
   const [endpoint, setEndpoint] = useState('/mcp');
-  const [transport, setTransport] = useState<'stdio' | 'sse' | 'websocket'>('stdio');
+  const [transport, setTransport] = useState<'stdio' | 'sse' | 'websocket'>(
+    state?.template?.supportedTransports?.[0] || 'stdio'
+  );
 
   const handleDeploy = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,21 +61,20 @@ export const MCPDeployPage: React.FC = () => {
       setIsDeploying(true);
       setError(null);
 
-      const deploymentConfig: MCPDeploymentConfig = {
+      const deploymentConfig: SimpleDeploymentConfig = {
+        templateId: state?.template?.id,
         name: name.trim(),
-        serverType,
         description: description.trim() || undefined,
-        endpoint,
-        transport,
-        capabilities: state?.template?.requiredCapabilities || ['tools'],
-        environment: {},
-        resources: {
-          memory: '256Mi',
-          cpu: '0.2'
+        configuration: {
+          serverType,
+          endpoint,
+          transport,
+          capabilities: state?.template?.requiredCapabilities || ['tools'],
+          ...(state?.template?.environment || {})
         }
       };
 
-      const deployment = await mcpService.deployServer(deploymentConfig);
+      const deployment = await mcpService.deployServer(deploymentConfig as any);
       
       console.log('Deployment initiated:', deployment);
       setDeploymentSuccess(true);
@@ -158,6 +174,37 @@ export const MCPDeployPage: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleDeploy} className="space-y-6">
+                  {/* Selected Template Display (if from marketplace) */}
+                  {state?.template && (
+                    <div className="bg-muted/50 rounded-lg p-4 border">
+                      <div className="flex items-start gap-3">
+                        <Package className="h-5 w-5 text-primary mt-0.5" />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-semibold">{state.template.name}</h3>
+                            <Badge variant="secondary">{state.template.version}</Badge>
+                            {state.template.verified && (
+                              <Badge variant="default" className="bg-green-100 text-green-800">
+                                Verified
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            by {state.template.author}
+                          </p>
+                          <p className="text-sm">{state.template.description}</p>
+                          <div className="flex gap-1 mt-2">
+                            {state.template.tags.map((tag) => (
+                              <Badge key={tag} variant="outline" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Basic Information */}
                   <div className="space-y-4">
                     <div>
@@ -174,21 +221,24 @@ export const MCPDeployPage: React.FC = () => {
                       </p>
                     </div>
 
-                    <div>
-                      <Label htmlFor="serverType">Server Type</Label>
-                      <Select value={serverType} onValueChange={setServerType}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select server type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="aws-tools">AWS Tools</SelectItem>
-                          <SelectItem value="github-tools">GitHub Tools</SelectItem>
-                          <SelectItem value="slack-tools">Slack Tools</SelectItem>
-                          <SelectItem value="database-tools">Database Tools</SelectItem>
-                          <SelectItem value="custom">Custom Server</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {/* Only show Server Type dropdown if no template provided */}
+                    {!state?.template && (
+                      <div>
+                        <Label htmlFor="serverType">Server Type</Label>
+                        <Select value={serverType} onValueChange={setServerType}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select server type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="aws-tools">AWS Tools</SelectItem>
+                            <SelectItem value="github-tools">GitHub Tools</SelectItem>
+                            <SelectItem value="slack-tools">Slack Tools</SelectItem>
+                            <SelectItem value="database-tools">Database Tools</SelectItem>
+                            <SelectItem value="custom">Custom Server</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     <div>
                       <Label htmlFor="description">Description (Optional)</Label>
@@ -253,58 +303,70 @@ export const MCPDeployPage: React.FC = () => {
             </Card>
           </div>
 
-          {/* Sidebar Info */}
+          {/* Sidebar - Configuration Summary */}
           <div className="space-y-6">
             {state?.template && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Selected Template</CardTitle>
+                  <CardTitle className="text-sm">Template Details</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="font-semibold">{state.template.name}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {state.template.description}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm">
-                        <span className="font-medium">Version:</span> {state.template.version}
-                      </p>
-                      <p className="text-sm">
-                        <span className="font-medium">Author:</span> {state.template.author}
-                      </p>
-                    </div>
-                    {state.template.verified && (
-                      <div className="flex items-center gap-1 text-green-600 text-sm">
-                        <CheckCircle className="h-4 w-4" />
-                        Verified Template
-                      </div>
-                    )}
+                <CardContent className="space-y-3 text-sm">
+                  <div>
+                    <span className="font-medium">Docker Image:</span>
+                    <p className="text-muted-foreground break-all">{state.template.dockerImage}</p>
                   </div>
+                  <div>
+                    <span className="font-medium">Capabilities:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {state.template.requiredCapabilities.map((cap) => (
+                        <Badge key={cap} variant="outline" className="text-xs">
+                          {cap}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-medium">Resource Requirements:</span>
+                    <p className="text-muted-foreground">
+                      Memory: {state.template.resourceRequirements.memory}<br />
+                      CPU: {state.template.resourceRequirements.cpu}
+                    </p>
+                  </div>
+                  {state.template.documentation && (
+                    <div>
+                      <Button variant="outline" size="sm" asChild className="w-full">
+                        <a href={state.template.documentation} target="_blank" rel="noopener noreferrer">
+                          View Documentation
+                        </a>
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
 
             <Card>
               <CardHeader>
-                <CardTitle>Deployment Info</CardTitle>
+                <CardTitle className="text-sm">Deployment Summary</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3 text-sm">
-                  <p>
-                    • Your MCP server will be deployed to your account
-                  </p>
-                  <p>
-                    • It will be accessible to your agents immediately
-                  </p>
-                  <p>
-                    • You can configure authentication and permissions later
-                  </p>
-                  <p>
-                    • Deployment typically takes 30-60 seconds
-                  </p>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Name:</span>
+                  <span className="font-medium">{name || 'Not set'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Type:</span>
+                  <span className="font-medium">
+                    {state?.template ? state.template.name : serverType}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Transport:</span>
+                  <span className="font-medium">{transport}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Endpoint:</span>
+                  <span className="font-medium">{endpoint}</span>
                 </div>
               </CardContent>
             </Card>

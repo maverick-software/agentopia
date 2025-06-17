@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,13 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp, Activity, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp } from 'lucide-react';
 import { mcpService } from '@/lib/services/mcpService';
-import { AdminMCPService } from '@/lib/services/adminMCPService';
-import { StatusSyncService } from '@/lib/services/statusSyncService';
 import { MCPServerTemplate, MCPServerCategory } from '@/lib/mcp/ui-types';
-import { EnhancedMCPServer, MCPServerStatus } from '@/lib/services/mcpService';
-import { AgentMCPConnection } from '@/lib/services/userMCPService';
 
 // Extend the MCPServerTemplate interface for admin view
 interface AdminMCPTemplate extends MCPServerTemplate {
@@ -188,48 +184,25 @@ const AddTemplateForm: React.FC<AddTemplateFormProps> = ({ onSubmit, onCancel })
 };
 
 const AdminMCPMarketplaceManagement: React.FC = () => {
-  // Existing template management state
   const [templates, setTemplates] = useState<AdminMCPTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<AdminMCPTemplate | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
-  // New MCP server management state
-  const [servers, setServers] = useState<EnhancedMCPServer[]>([]);
-  const [connections, setConnections] = useState<AgentMCPConnection[]>([]);
-  const [selectedServer, setSelectedServer] = useState<EnhancedMCPServer | null>(null);
-  const [activeTab, setActiveTab] = useState('templates');
-  
-  // Loading states
-  const [loading, setLoading] = useState({
-    templates: true,
-    servers: false,
-    connections: false,
-    deployment: false
-  });
-
-  // Error handling
-  const [error, setError] = useState<{ message: string; type: string } | null>(null);
-
-  // Service instances
-  const [adminMCPService] = useState(() => new AdminMCPService());
-  const [statusSyncService] = useState(() => new StatusSyncService());
-
   // Debug: Track dialog state changes
   useEffect(() => {
     console.log('Add Dialog Open state changed:', isAddDialogOpen);
   }, [isAddDialogOpen]);
 
-  // Enhanced statistics
+  // Statistics
   const [stats, setStats] = useState({
     totalTemplates: 0,
     verifiedTemplates: 0,
     totalDeployments: 0,
-    activeServers: 0,
-    totalConnections: 0,
-    errorRate: 0
+    activeServers: 0
   });
 
   // Debug: Track dialog state changes
@@ -237,55 +210,14 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     console.log('Add Dialog Open state changed:', isAddDialogOpen);
   }, [isAddDialogOpen]);
 
-  // Load MCP servers
-  const loadMCPServers = useCallback(async () => {
-    try {
-      setLoading(prev => ({ ...prev, servers: true }));
-      const serversData = await adminMCPService.getAllMCPServers();
-      setServers(serversData);
-    } catch (error) {
-      console.error('Failed to load MCP servers:', error);
-      setError({ message: 'Failed to load MCP servers', type: 'servers' });
-    } finally {
-      setLoading(prev => ({ ...prev, servers: false }));
-    }
-  }, [adminMCPService]);
-
-  // Load agent connections
-  const loadConnections = useCallback(async () => {
-    try {
-      setLoading(prev => ({ ...prev, connections: true }));
-      // TODO: Implement proper connection loading method
-      // For now, set empty array
-      setConnections([]);
-    } catch (error) {
-      console.error('Failed to load connections:', error);
-      setError({ message: 'Failed to load connections', type: 'connections' });
-    } finally {
-      setLoading(prev => ({ ...prev, connections: false }));
-    }
-  }, []);
-
-  // Initialize data loading
   useEffect(() => {
     loadTemplates();
     loadStats();
-    if (activeTab === 'servers') {
-      loadMCPServers();
-    } else if (activeTab === 'connections') {
-      loadConnections();
-    }
-  }, [activeTab, loadMCPServers, loadConnections]);
-
-  // TODO: Implement real-time updates subscription
-  // useEffect(() => {
-  //   const subscription = statusSyncService.subscribeToServer(...);
-  //   return () => subscription.unsubscribe();
-  // }, [statusSyncService]);
+  }, []);
 
   const loadTemplates = async () => {
     try {
-      setLoading(prev => ({ ...prev, templates: true }));
+      setLoading(true);
       // Use the new database-backed method
       const marketplaceTemplates = await mcpService.getMarketplaceTemplates();
       
@@ -300,9 +232,9 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
       setTemplates(adminTemplates);
     } catch (error) {
       console.error('Failed to load templates:', error);
-      setError({ message: 'Failed to load templates', type: 'templates' });
+      // Keep existing templates on error
     } finally {
-      setLoading(prev => ({ ...prev, templates: false }));
+      setLoading(false);
     }
   };
 
@@ -313,20 +245,18 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
       const totalTemplates = rawTemplates.length;
       const verifiedTemplates = rawTemplates.filter(t => t.verified).length;
       
-      // Get real server and connection stats from AdminMCPService
-      const dashboardStats = await adminMCPService.getAdminDashboardStats();
+      // Mock deployment stats
+      const totalDeployments = Math.floor(Math.random() * 1000) + 500;
+      const activeServers = Math.floor(Math.random() * 200) + 100;
 
       setStats({
         totalTemplates,
         verifiedTemplates,
-        totalDeployments: dashboardStats.totalServers || 0,
-        activeServers: dashboardStats.runningServers || 0,
-        totalConnections: dashboardStats.totalConnections || 0,
-        errorRate: Math.round((dashboardStats.errorServers / Math.max(dashboardStats.totalServers, 1)) * 100)
+        totalDeployments,
+        activeServers
       });
     } catch (error) {
       console.error('Failed to load stats:', error);
-      setError({ message: 'Failed to load statistics', type: 'stats' });
     }
   };
 
@@ -390,55 +320,59 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">MCP Server Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">MCP Marketplace Management</h1>
           <p className="text-muted-foreground">
-            Manage MCP server templates, deployments, and monitor active connections
+            Manage MCP server templates and monitor marketplace activity
           </p>
         </div>
-        <div className="flex gap-2">
-          {error && (
-            <Badge variant="destructive" className="mr-2">
-              <AlertCircle className="w-3 h-3 mr-1" />
-              {error.message}
-            </Badge>
-          )}
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Template
-          </Button>
-        </div>
+        <Button onClick={() => setIsAddDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Template
+        </Button>
       </div>
 
-      {/* Enhanced Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+      {/* Statistics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Templates</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Templates</CardTitle>
             <Server className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalTemplates}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.verifiedTemplates} verified
+              Available in marketplace
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Deployed Servers</CardTitle>
+            <CardTitle className="text-sm font-medium">Verified Templates</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.verifiedTemplates}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.totalTemplates > 0 ? Math.round((stats.verifiedTemplates / stats.totalTemplates) * 100) : 0}% of total
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Deployments</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalDeployments}</div>
             <p className="text-xs text-muted-foreground">
-              Total deployed
+              All time deployments
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Servers</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.activeServers}</div>
@@ -447,80 +381,29 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Connections</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalConnections}</div>
-            <p className="text-xs text-muted-foreground">
-              Agent connections
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Error Rate</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.errorRate}%</div>
-            <p className="text-xs text-muted-foreground">
-              Server errors
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading.servers || loading.templates ? (
-                <Clock className="h-6 w-6 animate-spin" />
-              ) : (
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              System status
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Main Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="servers">Deployed Servers</TabsTrigger>
-          <TabsTrigger value="connections">Active Connections</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="templates" className="space-y-4">
-          {/* Template Filters */}
-          <div className="flex gap-4">
-            <Input
-              placeholder="Search templates..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map(category => (
-                  <SelectItem key={category} value={category}>
-                    {category === 'all' ? 'All Categories' : category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Filters */}
+      <div className="flex gap-4">
+        <Input
+          placeholder="Search templates..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-sm"
+        />
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Select category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map(category => (
+              <SelectItem key={category} value={category}>
+                {category === 'all' ? 'All Categories' : category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Templates Table */}
       <Card>

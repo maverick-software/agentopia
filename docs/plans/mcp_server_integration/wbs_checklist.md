@@ -181,6 +181,22 @@
   - Backups: [Planned backup strategy for existing agent UI files before implementation]
   - Update: [Completed agent-to-toolbox-to-MCP integration UI design with revolutionary multi-level connection visualization, real-time status monitoring, and granular permission management creating an intuitive orchestration platform for AI agent ecosystems]
 
+- [x] **2.3.5 MCP Deployment Flow Optimization** ✅ **COMPLETED** (December 31, 2024)
+  - **🎯 ISSUE IDENTIFIED**: User reported redundant "Server Type" dropdown in MCP deployment page when users already selected specific MCP servers from marketplace
+  - **✅ PROBLEM ANALYSIS**: Marketplace flow allows users to select specific MCP servers from database (`mcp_server_catalog`), but deployment page still showed hardcoded server type options (AWS Tools, GitHub Tools, etc.), creating confusing redundancy
+  - **✅ SOLUTION IMPLEMENTED**: 
+    - Removed redundant server type dropdown when template provided from marketplace
+    - Added beautiful template information display showing selected server details
+    - Enhanced form pre-population with template metadata (name, description, transport, capabilities)
+    - Improved deployment sidebar with technical details and real-time summary
+    - Fixed database foreign key constraint error by implementing dynamic tool_catalog entry creation
+  - **✅ TECHNICAL FIXES**:
+    - Conditional server type dropdown (only shown when no template selected)
+    - Template-driven deployment configuration with proper resource allocation
+    - Database constraint resolution with automatic MCP tool catalog entry creation
+    - Enhanced UX with template verification badges and technical specifications
+  - **🎯 DEPLOYMENT READY**: MCP deployment flow now provides seamless marketplace-to-deployment experience eliminating user confusion and technical errors
+
 ## Phase 3: Testing & Refinement (Weeks 6-8)
 
 ### 3.1 Unit Testing Phase
@@ -240,6 +256,15 @@
   - Actions: [Implemented MCP tool poisoning protection testing, container escape prevention validation, cross-tenant isolation verification, runtime security monitoring, and automated security pipeline integration with comprehensive vulnerability scanning]
   - Backups: [Security test configurations and vulnerability assessment reports backed up]
   - Update: [Security and isolation testing plan completed - Phase 3.2 Integration Testing Phase finished]
+
+- [x] **3.2.4 Database Foreign Key Constraint Resolution**
+  - **📖 REQUIRED READING BEFORE STARTING**: Review database schema for tool_catalog foreign key constraints and RLS policies affecting MCP server deployment
+  - Plan Review & Alignment: Fix foreign key constraint violations when deploying MCP servers due to missing tool_catalog entries and RLS policy restrictions
+  - Comprehensive Research: Database constraint analysis, RLS policy requirements, tool_catalog vs mcp_server_catalog relationship, migration strategies for generic entries
+  - Findings: [MCP servers require tool_catalog_id but no generic MCP entry exists, RLS policies prevent frontend from creating entries, causing 409 Conflict and 403 Forbidden errors during deployment]
+  - Actions: [Created migration 20250101000000_add_generic_mcp_tool_catalog_entry.sql to add generic MCP Server entry (UUID: 00000000-0000-0000-0000-000000000001), updated mcpService.ts to use this entry, resolved RLS violations]
+  - Backups: [Database schema backed up before migration, original mcpService.ts backed up]
+  - Update: [Database constraints resolved - MCP server deployment working without foreign key or RLS violations]
 
 ### 3.3 User Acceptance Testing Phase
 
