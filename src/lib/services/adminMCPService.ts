@@ -106,8 +106,7 @@ export class AdminMCPService extends MCPService {
    * Check if a user has admin privileges
    */
   async isUserAdmin(userId?: string): Promise<boolean> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    const targetUserId = userId || user?.id;
+    const targetUserId = userId || (await this.supabase.auth.getUser()).data.user?.id;
     
     if (!targetUserId) {
       return false;
@@ -116,10 +115,14 @@ export class AdminMCPService extends MCPService {
     try {
       const { data, error } = await this.supabase
         .from('user_roles')
-        .select('role')
+        .select(`
+          roles!inner (
+            name
+          )
+        `)
         .eq('user_id', targetUserId)
-        .eq('role', 'admin')
-        .single();
+        .eq('roles.name', 'admin')
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error checking admin status:', error);

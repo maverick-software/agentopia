@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import AdminLayout from '../layouts/AdminLayout';
 
 interface AdminRouteProps {
   // Props if needed
@@ -34,6 +35,10 @@ export function AdminRoute({}: AdminRouteProps) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  console.log('[AdminRoute] Decision: User is admin. Rendering Outlet.');
-  return <Outlet />;
+  console.log('[AdminRoute] Decision: User is admin. Rendering AdminLayout with Outlet.');
+  return (
+    <AdminLayout>
+      <Outlet />
+    </AdminLayout>
+  );
 } 

@@ -390,9 +390,9 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">MCP Server Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">MCP Template Management</h1>
           <p className="text-muted-foreground">
-            Manage MCP server templates, deployments, and monitor active connections
+            Manage MCP server templates and deploy them to droplets
           </p>
         </div>
         <div className="flex gap-2">
@@ -522,80 +522,96 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
             </Select>
           </div>
 
-      {/* Templates Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>MCP Templates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8">Loading templates...</div>
-          ) : (
-            <div className="space-y-4">
-              {filteredTemplates.map((template) => (
-                <div
-                  key={template.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold">{template.name}</h3>
-                      {template.isVerified && (
-                        <Badge variant="default" className="bg-green-100 text-green-800">
-                          <Shield className="w-3 h-3 mr-1" />
-                          Verified
-                        </Badge>
-                      )}
-                      <Badge variant="secondary">{template.category}</Badge>
-                      <Badge variant="outline">v{template.version}</Badge>
+          {/* Templates Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>MCP Templates</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8">Loading templates...</div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredTemplates.map((template) => (
+                    <div
+                      key={template.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold">{template.name}</h3>
+                          {template.isVerified && (
+                            <Badge variant="default" className="bg-green-100 text-green-800">
+                              <Shield className="w-3 h-3 mr-1" />
+                              Verified
+                            </Badge>
+                          )}
+                          <Badge variant="secondary">{template.category}</Badge>
+                          <Badge variant="outline">v{template.version}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {template.description}
+                        </p>
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span>Deployments: {template.totalDeployments}</span>
+                          <span>Active: {template.activeDeployments}</span>
+                          <span>Rating: {template.rating.average.toFixed(1)}/5 ({template.rating.count})</span>
+                          <span>Author: {template.author}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTemplate(template);
+                            setIsEditDialogOpen(true);
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleVerification(template.id, template.isVerified)}
+                        >
+                          <Shield className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteTemplate(template.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {template.description}
-                    </p>
-                    <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>Deployments: {template.totalDeployments}</span>
-                      <span>Active: {template.activeDeployments}</span>
-                      <span>Rating: {template.rating.average.toFixed(1)}/5 ({template.rating.count})</span>
-                      <span>Author: {template.author}</span>
+                  ))}
+                  {filteredTemplates.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No templates found matching your criteria
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedTemplate(template);
-                        setIsEditDialogOpen(true);
-                      }}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleVerification(template.id, template.isVerified)}
-                    >
-                      <Shield className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteTemplate(template.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {filteredTemplates.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No templates found matching your criteria
+                  )}
                 </div>
               )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="servers" className="space-y-4">
+          {/* TODO: Add servers content */}
+          <div className="text-center py-8 text-muted-foreground">
+            Server management coming soon...
+          </div>
+        </TabsContent>
+
+        <TabsContent value="connections" className="space-y-4">
+          {/* TODO: Add connections content */}
+          <div className="text-center py-8 text-muted-foreground">
+            Connection monitoring coming soon...
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Template Details Dialog */}
       {selectedTemplate && (

@@ -42,16 +42,6 @@ const navItems: NavItem[] = [
     ]
   },
   { to: '/teams', icon: Building2, label: 'Teams' },
-  { to: '/tools', icon: Wrench, label: 'Tools' },
-  { 
-    to: '/mcp/servers', 
-    icon: Server, 
-    label: 'MCP Servers',
-    children: [
-      { to: '/mcp/servers', icon: Server, label: 'My Servers' },
-      { to: '/mcp/marketplace', icon: Store, label: 'Marketplace' },
-    ]
-  },
   { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },

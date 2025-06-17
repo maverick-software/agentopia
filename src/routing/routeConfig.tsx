@@ -87,30 +87,28 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces/:roomId/settings', element: WorkspaceSettingsPage, protection: 'protected', layout: false },
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: false },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
-  { path: '/tools', element: ToolboxesPage, protection: 'protected', layout: true },
-  { path: '/toolboxes/:toolboxId', element: ToolboxDetailPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
   // { path: 'agent-store', element: AgentStorePage, protection: 'protected', layout: true }, // Commented out
   // { path: 'dataset-store', element: DatasetStorePage, protection: 'protected', layout: true }, // Commented out
   
-  // MCP Server Management routes
-  { path: '/mcp/servers', element: MCPServersPage, protection: 'protected', layout: true },
-  { path: '/mcp/marketplace', element: MCPMarketplacePage, protection: 'protected', layout: true },
-  { path: '/mcp/deploy', element: MCPDeployPage, protection: 'protected', layout: true },
-  { path: '/mcp/config/:serverId', element: MCPServerConfigPage, protection: 'protected', layout: true },
+  // MCP Server Management routes - REMOVED: Users should not deploy their own MCP servers
+  // MCP servers are now managed by admins only via /admin/marketplace
+  // Users connect to admin-deployed servers via agent configuration
   
   // Admin routes (nested under a protected layout)
   {
     path: '/admin', 
     protection: 'admin', 
-    layout: true, // The parent route requires layout and admin check
+    layout: false, // AdminRoute now provides AdminLayout, no need for regular Layout
     element: AdminDashboardPage, // Base element for /admin
     children: [
       { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/marketplace', element: AdminMCPMarketplaceManagement, protection: 'admin', layout: false }, // Add marketplace management
+      { path: '/admin/tools', element: ToolboxesPage, protection: 'admin', layout: false }, // Droplet management moved to admin
+      { path: '/admin/toolboxes/:toolboxId', element: ToolboxDetailPage, protection: 'admin', layout: false }, // Toolbox details moved to admin
     ]
   },
 

@@ -6,6 +6,7 @@ import {
   Users, 
   Bot, // Using Bot icon for Agent Management
   Store, // Add Store icon for marketplace
+  Wrench, // Add Wrench icon for Tools
   PanelLeftClose, 
   PanelRightClose 
 } from 'lucide-react';
@@ -18,10 +19,11 @@ interface AdminSidebarProps {
 
 const navigation = [
     // Update icons to Lucide components
-    { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'User Management', href: '/admin/users', icon: Users },
     { name: 'Agent Management', href: '/admin/agents', icon: Bot }, 
-    { name: 'MCP Marketplace', href: '/admin/marketplace', icon: Store },
+    { name: 'MCP Templates', href: '/admin/marketplace', icon: Store },
+    { name: 'Droplets', href: '/admin/tools', icon: Wrench },
     // Add other admin items here if needed
 ];
 

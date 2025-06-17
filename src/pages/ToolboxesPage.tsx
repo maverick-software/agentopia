@@ -40,7 +40,7 @@ export function ToolboxesPage() {
   // State for per-toolbox actions
   const [actionStates, setActionStates] = useState<Record<string, { isLoading: boolean; error: string | null }>>({});
 
-  const pageTitle = "My Toolboxes";
+  const pageTitle = "Droplet Management";
 
   const fetchUserToolboxes = useCallback(async () => {
     if (!user) return;
@@ -315,7 +315,7 @@ export function ToolboxesPage() {
         </h1>
         <button 
             onClick={() => {
-              if (window.confirm('Create a new toolbox? This will set up a new server environment with a randomly generated name.')) {
+              if (window.confirm('Create a new droplet? This will set up a new server environment with a randomly generated name.')) {
                 handleCreateToolbox();
               }
             }}
@@ -323,7 +323,7 @@ export function ToolboxesPage() {
             disabled={isCreatingToolbox}
         >
           {isCreatingToolbox && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingToolbox ? 'Creating...' : 'New Toolbox'}
+          <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingToolbox ? 'Creating...' : 'New Droplet'}
         </button>
       </div>
 
@@ -371,13 +371,13 @@ export function ToolboxesPage() {
       {!loading && !error && toolboxes.length === 0 && (
         <div className="text-center py-10 border-2 border-dashed border-gray-700 rounded-lg bg-card flex flex-col items-center">
             <ServerOff className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-2 text-lg font-medium text-gray-300">No Toolboxes Found</h3>
+            <h3 className="mt-2 text-lg font-medium text-gray-300">No Droplets Found</h3>
             <p className="mt-1 text-sm text-muted-foreground mb-4">
-                Create your first Toolbox to start managing your AI server environments.
+                Create your first droplet to start managing your AI server environments.
             </p>
             <button 
                 onClick={() => {
-                  if (window.confirm('Create a new toolbox? This will set up a new server environment with a randomly generated name.')) {
+                  if (window.confirm('Create a new droplet? This will set up a new server environment with a randomly generated name.')) {
                     handleCreateToolbox();
                   }
                 }}
@@ -385,7 +385,7 @@ export function ToolboxesPage() {
                 disabled={isCreatingToolbox}
             >
                 {isCreatingToolbox && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingToolbox ? 'Creating...' : 'Create New Toolbox'}
+                <PlusCircle className="mr-2 h-4 w-4" /> {isCreatingToolbox ? 'Creating...' : 'Create New Droplet'}
             </button>
         </div>
       )}
