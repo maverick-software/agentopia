@@ -429,7 +429,6 @@ export class AdminMCPService extends MCPService {
             id,
             name,
             public_ip_address,
-            private_ip_address,
             region_slug,
             size_slug,
             user_id
@@ -482,12 +481,34 @@ export class AdminMCPService extends MCPService {
     await this.validateAdminAccess();
 
     try {
-      const servers = await this.getAllMCPServers();
-      
-      const totalServers = servers.length;
-      const runningServers = servers.filter(s => s.status.state === 'running').length;
-      const stoppedServers = servers.filter(s => s.status.state === 'stopped').length;
-      const errorServers = servers.filter(s => s.status.state === 'error').length;
+      // Try to get deployed servers, but handle cases where they don't have IP addresses yet
+      let totalServers = 0;
+      let runningServers = 0;
+      let stoppedServers = 0;
+      let errorServers = 0;
+
+      try {
+        const servers = await this.getAllMCPServers();
+        totalServers = servers.length;
+        runningServers = servers.filter(s => s.status.state === 'running').length;
+        stoppedServers = servers.filter(s => s.status.state === 'stopped').length;
+        errorServers = servers.filter(s => s.status.state === 'error').length;
+      } catch (serverError) {
+        console.warn('Could not fetch deployed servers for stats (likely due to missing IP addresses):', serverError);
+        
+        // Fallback: Count MCP server instances directly from database
+        const { data: instances, error: instanceError } = await this.supabase
+          .from('account_tool_instances')
+          .select('id, status_on_toolbox')
+          .not('mcp_server_type', 'is', null);
+
+        if (!instanceError && instances) {
+          totalServers = instances.length;
+          runningServers = instances.filter(i => i.status_on_toolbox === 'running').length;
+          stoppedServers = instances.filter(i => ['stopped', 'exited'].includes(i.status_on_toolbox)).length;
+          errorServers = instances.filter(i => ['error_starting', 'error_stopping'].includes(i.status_on_toolbox)).length;
+        }
+      }
 
       // Get connection stats from agent_mcp_connections if available
       const { data: connections } = await this.supabase

@@ -95,7 +95,6 @@ export class MCPService {
             id,
             name,
             public_ip_address,
-            private_ip_address,
             region_slug,
             size_slug,
             user_id
@@ -162,7 +161,7 @@ export class MCPService {
         id: environment.id,
         name: environment.name,
         publicIP: environment.public_ip_address,
-        privateIP: environment.private_ip_address,
+        privateIP: '',
         region: environment.region_slug,
         size: environment.size_slug
       },
@@ -176,7 +175,8 @@ export class MCPService {
    */
   protected buildServerEndpoint(publicIP: string, endpointPath: string = ''): string {
     if (!publicIP) {
-      throw new Error('Server public IP not available');
+      // Return placeholder for servers without IP addresses (provisioning/stopped)
+      return 'http://pending-provisioning:30000';
     }
     
     // Use port 30000 for DTMA deployed containers (not localhost:8000)
@@ -261,7 +261,6 @@ export class MCPService {
             id,
             name,
             public_ip_address,
-            private_ip_address,
             region_slug,
             size_slug,
             user_id

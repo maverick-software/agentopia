@@ -528,7 +528,7 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
               <CardTitle>MCP Templates</CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {loading.templates ? (
                 <div className="text-center py-8">Loading templates...</div>
               ) : (
                 <div className="space-y-4">

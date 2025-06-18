@@ -235,7 +235,9 @@ export class StatusSyncService extends MCPService {
           account_tool_environment:account_tool_environments(
             id,
             name,
-            public_ip_address
+            public_ip_address,
+            region_slug,
+            size_slug
           )
         `)
         .not('mcp_server_type', 'is', null);
@@ -293,7 +295,9 @@ export class StatusSyncService extends MCPService {
           status_on_toolbox,
           last_heartbeat_from_dtma,
           account_tool_environment:account_tool_environments(
-            public_ip_address
+            public_ip_address,
+            region_slug,
+            size_slug
           )
         `)
         .eq('id', serverId)
@@ -1054,7 +1058,6 @@ export class StatusSyncService extends MCPService {
           id,
           name,
           public_ip_address,
-          private_ip_address,
           region_slug,
           size_slug
         )
@@ -1090,7 +1093,6 @@ export class StatusSyncService extends MCPService {
           id,
           name,
           public_ip_address,
-          private_ip_address,
           region_slug,
           size_slug
         )

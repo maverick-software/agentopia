@@ -190,13 +190,13 @@ export class UserMCPService extends MCPService {
           mcp_endpoint_path,
           mcp_server_capabilities,
           mcp_discovery_metadata,
-          account_tool_environment:account_tool_environments(
+          account_tool_environment:account_tool_environments!inner(
             id,
             name,
             public_ip_address,
-            private_ip_address,
             region_slug,
-            size_slug
+            size_slug,
+            user_id
           )
         `)
         .not('mcp_server_type', 'is', null)
@@ -235,13 +235,13 @@ export class UserMCPService extends MCPService {
         mcp_endpoint_path,
         mcp_server_capabilities,
         mcp_discovery_metadata,
-        account_tool_environment:account_tool_environments(
+        account_tool_environment:account_tool_environments!inner(
           id,
           name,
           public_ip_address,
-          private_ip_address,
           region_slug,
-          size_slug
+          size_slug,
+          user_id
         )
       `)
       .eq('id', serverId)
