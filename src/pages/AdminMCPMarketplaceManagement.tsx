@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp, Activity, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp, Activity, AlertCircle, CheckCircle, Clock, Square, Play } from 'lucide-react';
 import { mcpService } from '@/lib/services/mcpService';
 import { AdminMCPService } from '@/lib/services/adminMCPService';
 import { StatusSyncService } from '@/lib/services/statusSyncService';
@@ -377,6 +377,82 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     }
   };
 
+  const [isDeployDialogOpen, setIsDeployDialogOpen] = useState(false);
+  const [availableDroplets, setAvailableDroplets] = useState<Array<{
+    id: string;
+    name: string;
+    publicIP: string;
+    region?: string;
+    size?: string;
+    status: string;
+  }>>([]);
+  const [selectedDropletId, setSelectedDropletId] = useState<string>('');
+
+  // Load available droplets when deployment dialog opens
+  const loadAvailableDroplets = async () => {
+    try {
+      const droplets = await adminMCPService.getAvailableDroplets();
+      setAvailableDroplets(droplets);
+      if (droplets.length > 0) {
+        setSelectedDropletId(droplets[0].id); // Select first droplet by default
+      }
+    } catch (error) {
+      console.error('Failed to load droplets:', error);
+      alert('Failed to load available droplets');
+    }
+  };
+
+  const openDeployDialog = async (template: AdminMCPTemplate) => {
+    setSelectedTemplate(template);
+    await loadAvailableDroplets();
+    setIsDeployDialogOpen(true);
+  };
+
+  const deployTemplate = async () => {
+    if (!selectedTemplate || !selectedDropletId) return;
+
+    try {
+      setLoading(prev => ({ ...prev, deployment: true }));
+      
+      // Deploy using AdminMCPService with selected droplet
+      const deployment = await adminMCPService.deployMCPServer({
+        serverName: `${selectedTemplate.name}-${Date.now()}`, // Unique name
+        serverType: selectedTemplate.id,
+        dockerImage: selectedTemplate.dockerImage,
+        transport: 'http', // Default to HTTP for MCP servers
+        endpointPath: '/mcp',
+        environmentVariables: selectedTemplate.environment || {},
+        capabilities: selectedTemplate.requiredCapabilities || ['tools'],
+        portMappings: [{ containerPort: 8080, hostPort: 30000 }],
+        resourceLimits: {
+          memory: selectedTemplate.resourceRequirements.memory,
+          cpu: selectedTemplate.resourceRequirements.cpu
+        },
+        environmentId: selectedDropletId // Use selected droplet
+      });
+
+      console.log('Deployment initiated:', deployment);
+      alert(`✅ Deployment started! Server "${deployment.serverName}" is being deployed to your selected droplet.`);
+      
+      // Refresh the deployed servers list
+      await loadMCPServers();
+      await loadStats();
+      
+      // Switch to deployed servers tab to see the result
+      setActiveTab('servers');
+      
+      // Close dialog
+      setIsDeployDialogOpen(false);
+      setSelectedTemplate(null);
+      
+    } catch (error) {
+      console.error('Failed to deploy template:', error);
+      alert(`❌ Failed to deploy template: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setLoading(prev => ({ ...prev, deployment: false }));
+    }
+  };
+
   const filteredTemplates = templates.filter(template => {
     const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          template.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -584,6 +660,15 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => openDeployDialog(template)}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Play className="w-4 h-4 mr-1" />
+                          Deploy
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -599,10 +684,101 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="servers" className="space-y-4">
-          {/* TODO: Add servers content */}
-          <div className="text-center py-8 text-muted-foreground">
-            Server management coming soon...
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Deployed MCP Servers</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                MCP servers currently deployed to DigitalOcean droplets
+              </p>
+            </CardHeader>
+            <CardContent>
+              {loading.servers ? (
+                <div className="text-center py-8">Loading deployed servers...</div>
+              ) : servers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Server className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="text-lg font-semibold mb-2">No Deployed Servers</h3>
+                  <p className="text-sm mb-4">
+                    No MCP servers are currently deployed to your droplets. 
+                    Deploy a template to get started.
+                  </p>
+                  <Button onClick={() => setActiveTab('templates')}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Browse Templates
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {servers.map((server) => (
+                    <div
+                      key={server.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold">{server.name}</h3>
+                          <Badge 
+                            variant={server.status.state === 'running' ? 'default' : 'secondary'}
+                            className={server.status.state === 'running' ? 'bg-green-100 text-green-800' : ''}
+                          >
+                            {server.status.state}
+                          </Badge>
+                          <Badge variant="outline">{server.serverType}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Endpoint: {server.endpoint}
+                        </p>
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span>Environment: {server.environment.name}</span>
+                          <span>Region: {server.environment.region}</span>
+                          <span>Health: {server.health.overall}</span>
+                          {server.lastHeartbeat && (
+                            <span>Last seen: {server.lastHeartbeat.toLocaleString()}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedServer(server);
+                            // TODO: Open server details dialog
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {server.status.state === 'running' ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => adminMCPService.stopMCPServer(server.id.toString())}
+                          >
+                            <Square className="w-4 h-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => adminMCPService.startMCPServer(server.id.toString())}
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => adminMCPService.deleteMCPServer(server.id.toString())}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="connections" className="space-y-4">
@@ -756,6 +932,147 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
             <DialogTitle>Add New MCP Template</DialogTitle>
           </DialogHeader>
           <AddTemplateForm onSubmit={addTemplate} onCancel={() => setIsAddDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Deployment Dialog */}
+      <Dialog open={isDeployDialogOpen} onOpenChange={setIsDeployDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Deploy MCP Template</DialogTitle>
+            <DialogDescription>
+              Deploy "{selectedTemplate?.name}" to a DigitalOcean droplet
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Template Information */}
+            {selectedTemplate && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Template Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Name</p>
+                      <p className="text-sm text-muted-foreground">{selectedTemplate.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Category</p>
+                      <p className="text-sm text-muted-foreground">{selectedTemplate.category}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Docker Image</p>
+                      <p className="text-sm text-muted-foreground font-mono">{selectedTemplate.dockerImage}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Resource Requirements</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedTemplate.resourceRequirements.memory} RAM, {selectedTemplate.resourceRequirements.cpu} CPU
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Description</p>
+                    <p className="text-sm text-muted-foreground">{selectedTemplate.description}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Droplet Selection */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Select Target Droplet</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Choose which DigitalOcean droplet to deploy this MCP server to
+                </p>
+              </CardHeader>
+              <CardContent>
+                {availableDroplets.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No active droplets available</p>
+                    <p className="text-xs">Create a droplet first in the Droplet Management section</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Select value={selectedDropletId} onValueChange={setSelectedDropletId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a droplet" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableDroplets.map((droplet) => (
+                          <SelectItem key={droplet.id} value={droplet.id}>
+                            <div className="flex items-center justify-between w-full">
+                              <span>{droplet.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {droplet.region} • {droplet.size}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {/* Selected Droplet Details */}
+                    {selectedDropletId && (
+                      <div className="mt-4 p-4 bg-muted rounded-lg">
+                        {(() => {
+                          const selectedDroplet = availableDroplets.find(d => d.id === selectedDropletId);
+                          return selectedDroplet ? (
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="font-medium">Droplet Name</p>
+                                <p className="text-muted-foreground">{selectedDroplet.name}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium">Public IP</p>
+                                <p className="text-muted-foreground font-mono">{selectedDroplet.publicIP}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium">Region</p>
+                                <p className="text-muted-foreground">{selectedDroplet.region}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium">Size</p>
+                                <p className="text-muted-foreground">{selectedDroplet.size}</p>
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={() => setIsDeployDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              onClick={deployTemplate}
+              disabled={!selectedDropletId || loading.deployment}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {loading.deployment ? (
+                <>
+                  <Clock className="w-4 h-4 mr-2 animate-spin" />
+                  Deploying...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Deploy to Droplet
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

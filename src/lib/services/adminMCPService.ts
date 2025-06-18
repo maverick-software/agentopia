@@ -80,6 +80,9 @@ export interface ToolboxEnvironment {
   name: string;
   publicIP: string;
   status: string;
+  region?: string;
+  size?: string;
+  userId?: string;
 }
 
 export class AdminMCPService extends MCPService {
@@ -146,18 +149,37 @@ export class AdminMCPService extends MCPService {
     const validatedConfig = await this.validateServerConfig(config);
     
     try {
-      // Get admin toolbox environment
-      const adminEnvironment = await this.getAdminToolboxEnvironment();
+      // Get selected droplet environment or fallback to admin default
+      const adminEnvironment = config.environmentId 
+        ? await this.getToolboxEnvironmentById(config.environmentId)
+        : await this.getAdminToolboxEnvironment();
+
+      // Convert to the expected format if using the new method
+      const environmentForDeployment = config.environmentId 
+        ? { 
+            id: adminEnvironment.id, 
+            public_ip_address: (adminEnvironment as ToolboxEnvironment).publicIP || adminEnvironment.public_ip_address, 
+            status: adminEnvironment.status 
+          }
+        : adminEnvironment;
       
       // Deploy via ToolInstanceService
-      const deployment = await this.toolInstanceService.createToolOnToolbox({
-        userId: 'admin-system',
-        accountToolEnvironmentId: adminEnvironment.id,
-        toolCatalogId: '00000000-0000-0000-0000-000000000001', // Generic MCP Server
+      const { data: { user } } = await this.supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Ensure tool catalog entry exists for this MCP template
+      const toolCatalogId = await this.ensureToolCatalogEntry(validatedConfig.serverType, validatedConfig.dockerImage);
+
+      const deployment = await this.toolInstanceService.deployToolToToolbox({
+        userId: user.id,
+        accountToolEnvironmentId: environmentForDeployment.id,
+        toolCatalogId: toolCatalogId, // Use ensured catalog ID
         instanceNameOnToolbox: validatedConfig.serverName,
-        customDockerImage: validatedConfig.dockerImage,
-        environmentVariables: validatedConfig.environmentVariables || {},
-        portMappings: validatedConfig.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
+        baseConfigOverrideJson: {
+          dockerImage: validatedConfig.dockerImage,
+          environmentVariables: validatedConfig.environmentVariables || {},
+          portMappings: validatedConfig.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
+        }
       });
 
       // Update with MCP-specific fields
@@ -184,7 +206,7 @@ export class AdminMCPService extends MCPService {
       // Log admin operation
       await this.logAdminOperation({
         id: crypto.randomUUID(),
-        adminUserId: (await this.supabase.auth.getUser()).data.user!.id,
+        adminUserId: user.id,
         operation: 'deploy',
         serverId: deployment.id,
         serverName: validatedConfig.serverName,
@@ -230,15 +252,18 @@ export class AdminMCPService extends MCPService {
     }
 
     try {
+      const { data: { user } } = await this.supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       await this.toolInstanceService.startToolOnToolbox({
-        userId: 'admin-system',
+        userId: user.id,
         accountToolInstanceId: serverId,
         accountToolEnvironmentId: server.environment.id
       });
 
       await this.logAdminOperation({
         id: crypto.randomUUID(),
-        adminUserId: (await this.supabase.auth.getUser()).data.user!.id,
+        adminUserId: user.id,
         operation: 'start',
         serverId,
         serverName: server.name,
@@ -247,9 +272,10 @@ export class AdminMCPService extends MCPService {
       });
 
     } catch (error) {
+      const { data: { user } } = await this.supabase.auth.getUser();
       await this.logAdminOperation({
         id: crypto.randomUUID(),
-        adminUserId: (await this.supabase.auth.getUser()).data.user!.id,
+        adminUserId: user?.id || 'unknown',
         operation: 'start',
         serverId,
         serverName: server.name,
@@ -274,15 +300,18 @@ export class AdminMCPService extends MCPService {
     }
 
     try {
+      const { data: { user } } = await this.supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       await this.toolInstanceService.stopToolOnToolbox({
-        userId: 'admin-system',
+        userId: user.id,
         accountToolInstanceId: serverId,
         accountToolEnvironmentId: server.environment.id
       });
 
       await this.logAdminOperation({
         id: crypto.randomUUID(),
-        adminUserId: (await this.supabase.auth.getUser()).data.user!.id,
+        adminUserId: user.id,
         operation: 'stop',
         serverId,
         serverName: server.name,
@@ -291,9 +320,10 @@ export class AdminMCPService extends MCPService {
       });
 
     } catch (error) {
+      const { data: { user } } = await this.supabase.auth.getUser();
       await this.logAdminOperation({
         id: crypto.randomUUID(),
-        adminUserId: (await this.supabase.auth.getUser()).data.user!.id,
+        adminUserId: user?.id || 'unknown',
         operation: 'stop',
         serverId,
         serverName: server.name,
@@ -371,7 +401,7 @@ export class AdminMCPService extends MCPService {
       }
 
       // Delete via ToolInstanceService
-      await this.toolInstanceService.deleteToolFromToolbox({
+      await this.toolInstanceService.removeToolFromToolbox({
         userId: 'admin-system',
         accountToolInstanceId: serverId,
         accountToolEnvironmentId: server.environment.id
@@ -460,15 +490,20 @@ export class AdminMCPService extends MCPService {
     }
 
     try {
-      // Get logs via ToolInstanceService
-      const logs = await this.toolInstanceService.getToolInstanceLogs({
-        userId: 'admin-system',
-        accountToolInstanceId: serverId,
-        accountToolEnvironmentId: server.environment.id,
-        lines
+      // Get logs via DTMA API directly since getToolInstanceLogs doesn't exist
+      const response = await fetch(`http://${server.environment.publicIP}:3000/api/logs/${serverId}?lines=${lines}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
       });
 
-      return logs.split('\n').filter(line => line.trim());
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const logs = await response.text();
+      return logs.split('\n').filter((line: string) => line.trim());
     } catch (error) {
       throw new Error(`Failed to fetch logs: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -607,9 +642,9 @@ export class AdminMCPService extends MCPService {
   }
 
   /**
-   * Get admin toolbox environment
+   * Get admin toolbox environment (updated for compatibility)
    */
-  private async getAdminToolboxEnvironment(): Promise<ToolboxEnvironment> {
+  protected async getAdminToolboxEnvironment(): Promise<{ id: any; public_ip_address: any; status: any; }> {
     const { data, error } = await this.supabase
       .from('account_tool_environments')
       .select('id, name, public_ip_address, status')
@@ -623,8 +658,7 @@ export class AdminMCPService extends MCPService {
 
     return {
       id: data.id,
-      name: data.name,
-      publicIP: data.public_ip_address,
+      public_ip_address: data.public_ip_address,
       status: data.status
     };
   }
@@ -670,5 +704,96 @@ export class AdminMCPService extends MCPService {
       capabilities: config.capabilities || ['tools'],
       portMappings: config.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
     };
+  }
+
+  /**
+   * Get all available droplets for MCP deployment
+   */
+  async getAvailableDroplets(): Promise<ToolboxEnvironment[]> {
+    await this.validateAdminAccess();
+
+    const { data, error } = await this.supabase
+      .from('account_tool_environments')
+      .select('id, name, public_ip_address, status, region_slug, size_slug, user_id')
+      .eq('status', 'active')
+      .order('name');
+
+    if (error) {
+      throw new Error(`Failed to fetch available droplets: ${error.message}`);
+    }
+
+    return (data || []).map(env => ({
+      id: env.id,
+      name: env.name,
+      publicIP: env.public_ip_address,
+      status: env.status,
+      region: env.region_slug,
+      size: env.size_slug,
+      userId: env.user_id
+    }));
+  }
+
+  /**
+   * Get admin toolbox environment by ID (for specific droplet selection)
+   */
+  private async getToolboxEnvironmentById(environmentId: string): Promise<ToolboxEnvironment> {
+    const { data, error } = await this.supabase
+      .from('account_tool_environments')
+      .select('id, name, public_ip_address, status, region_slug, size_slug')
+      .eq('id', environmentId)
+      .eq('status', 'active')
+      .single();
+
+    if (error || !data) {
+      throw new Error(`Droplet with ID ${environmentId} not found or not active`);
+    }
+
+    return {
+      id: data.id,
+      name: data.name,
+      publicIP: data.public_ip_address,
+      status: data.status,
+      region: data.region_slug,
+      size: data.size_slug
+    };
+  }
+
+  /**
+   * Ensure tool catalog entry exists for MCP template
+   */
+  private async ensureToolCatalogEntry(templateId: string, dockerImage: string): Promise<string> {
+    // Check if entry already exists
+    const { data: existing } = await this.supabase
+      .from('tool_catalog')
+      .select('id')
+      .eq('id', templateId)
+      .single();
+
+    if (existing) {
+      return templateId; // Entry already exists
+    }
+
+    // Create new tool catalog entry for this MCP template
+    const { data: newEntry, error } = await this.supabase
+      .from('tool_catalog')
+      .insert({
+        id: templateId,
+        name: `MCP Server: ${templateId}`,
+        description: 'MCP Server deployed from template',
+        package_identifier: dockerImage,
+        category: 'mcp-server',
+        version: '1.0.0',
+        is_verified: true,
+        created_by: (await this.supabase.auth.getUser()).data.user!.id
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.warn('Could not create tool catalog entry, using generic one:', error);
+      return '00000000-0000-0000-0000-000000000001'; // Fallback to generic
+    }
+
+    return newEntry.id;
   }
 } 

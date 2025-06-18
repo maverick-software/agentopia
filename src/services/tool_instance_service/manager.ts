@@ -195,8 +195,18 @@ export class ToolInstanceService {
             throw new Error(toolboxError?.message || 'Toolbox not found.');
         }
 
-        // Actual Authorization check (refining placeholder from step 1)
-        if (toolbox.user_id !== options.userId) {
+        // Actual Authorization check (allow admins to deploy to any toolbox)
+        // Check if user is admin
+        const { data: userRoles } = await this.supabase
+            .from('user_roles')
+            .select('roles!inner(name)')
+            .eq('user_id', options.userId)
+            .eq('roles.name', 'admin');
+
+        const isAdmin = userRoles && userRoles.length > 0;
+
+        // Allow access if user owns the toolbox OR user is admin
+        if (toolbox.user_id !== options.userId && !isAdmin) {
             throw new Error('User is not authorized to deploy to this toolbox.');
         }
         // Add check for toolbox status, e.g., must be 'active'
@@ -281,7 +291,17 @@ export class ToolInstanceService {
         
         const toolbox = instance.account_tool_environments as AccountToolEnvironmentRecord;
 
-        if (toolbox.user_id !== userId) {
+        // Check if user is admin (same logic as deployToolToToolbox)
+        const { data: userRoles } = await this.supabase
+            .from('user_roles')
+            .select('roles!inner(name)')
+            .eq('user_id', userId)
+            .eq('roles.name', 'admin');
+
+        const isAdmin = userRoles && userRoles.length > 0;
+
+        // Allow access if user owns the toolbox OR user is admin
+        if (toolbox.user_id !== userId && !isAdmin) {
             throw new Error('User is not authorized to manage this tool instance.');
         }
         if (toolbox.status !== 'active') {
