@@ -124,8 +124,8 @@ export class MCPService {
     const status = this.mapStatusToMCPStatus(record.status_on_toolbox, record.last_heartbeat_from_dtma);
     
     return {
-      // Original MCPServer fields for backward compatibility
-      id: parseInt(record.id) || 0,
+      // Original MCPServer fields for backward compatibility  
+      id: record.id, // Keep UUID as string instead of parsing to integer
       config_id: 0,
       name: record.instance_name_on_toolbox || `MCP Server ${record.id}`,
       endpoint_url: this.buildServerEndpoint(environment.public_ip_address, record.mcp_endpoint_path),

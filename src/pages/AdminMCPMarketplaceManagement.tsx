@@ -417,9 +417,9 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
       // Deploy using AdminMCPService with selected droplet
       const deployment = await adminMCPService.deployMCPServer({
         serverName: `${selectedTemplate.name}-${Date.now()}`, // Unique name
-        serverType: selectedTemplate.id,
+        serverType: 'mcp_server', // ✅ Use valid constraint value instead of template.id
         dockerImage: selectedTemplate.dockerImage,
-        transport: 'http', // Default to HTTP for MCP servers
+        transport: 'stdio', // ✅ Use valid transport type (stdio/sse/websocket)
         endpointPath: '/mcp',
         environmentVariables: selectedTemplate.environment || {},
         capabilities: selectedTemplate.requiredCapabilities || ['tools'],

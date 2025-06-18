@@ -163,24 +163,31 @@ export class AdminMCPService extends MCPService {
           }
         : adminEnvironment;
       
-      // Deploy via ToolInstanceService
+      // Deploy via Supabase Edge Function (which then calls DTMA)
       const { data: { user } } = await this.supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Ensure tool catalog entry exists for this MCP template
-      const toolCatalogId = await this.ensureToolCatalogEntry(validatedConfig.serverType, validatedConfig.dockerImage);
+      // Use the existing generic MCP Server tool catalog entry
+      const toolCatalogId = '00000000-0000-0000-0000-000000000001'; // Generic MCP Server UUID
 
-      const deployment = await this.toolInstanceService.deployToolToToolbox({
-        userId: user.id,
-        accountToolEnvironmentId: environmentForDeployment.id,
-        toolCatalogId: toolCatalogId, // Use ensured catalog ID
-        instanceNameOnToolbox: validatedConfig.serverName,
-        baseConfigOverrideJson: {
-          dockerImage: validatedConfig.dockerImage,
-          environmentVariables: validatedConfig.environmentVariables || {},
-          portMappings: validatedConfig.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
+      // Call the toolbox-tools edge function with the correct path structure
+      const toolboxToolsUrl = `toolbox-tools/${environmentForDeployment.id}/tools`;
+      const { data: deployment, error: deploymentError } = await this.supabase.functions.invoke(toolboxToolsUrl, {
+        method: 'POST',
+        body: {
+          toolCatalogId: toolCatalogId,
+          instanceNameOnToolbox: validatedConfig.serverName,
+          baseConfigOverrideJson: {
+            dockerImage: validatedConfig.dockerImage,
+            environmentVariables: validatedConfig.environmentVariables || {},
+            portMappings: validatedConfig.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
+          }
         }
       });
+
+      if (deploymentError || !deployment) {
+        throw new Error(`Deployment via Edge Function failed: ${deploymentError?.message || 'Unknown error'}`);
+      }
 
       // Update with MCP-specific fields
       const { error: updateError } = await this.supabase
@@ -255,11 +262,15 @@ export class AdminMCPService extends MCPService {
       const { data: { user } } = await this.supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      await this.toolInstanceService.startToolOnToolbox({
-        userId: user.id,
-        accountToolInstanceId: serverId,
-        accountToolEnvironmentId: server.environment.id
+      // Use Edge Function instead of direct service call
+      const startUrl = `toolbox-tools/${server.environment.id}/tools/${serverId}/start`;
+      const { error: startError } = await this.supabase.functions.invoke(startUrl, {
+        method: 'POST'
       });
+
+      if (startError) {
+        throw new Error(`Failed to start server via Edge Function: ${startError.message}`);
+      }
 
       await this.logAdminOperation({
         id: crypto.randomUUID(),
@@ -303,11 +314,15 @@ export class AdminMCPService extends MCPService {
       const { data: { user } } = await this.supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      await this.toolInstanceService.stopToolOnToolbox({
-        userId: user.id,
-        accountToolInstanceId: serverId,
-        accountToolEnvironmentId: server.environment.id
+      // Use Edge Function instead of direct service call
+      const stopUrl = `toolbox-tools/${server.environment.id}/tools/${serverId}/stop`;
+      const { error: stopError } = await this.supabase.functions.invoke(stopUrl, {
+        method: 'POST'
       });
+
+      if (stopError) {
+        throw new Error(`Failed to stop server via Edge Function: ${stopError.message}`);
+      }
 
       await this.logAdminOperation({
         id: crypto.randomUUID(),
@@ -400,12 +415,15 @@ export class AdminMCPService extends MCPService {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      // Delete via ToolInstanceService
-      await this.toolInstanceService.removeToolFromToolbox({
-        userId: 'admin-system',
-        accountToolInstanceId: serverId,
-        accountToolEnvironmentId: server.environment.id
+      // Delete via Edge Function instead of direct service call
+      const deleteUrl = `toolbox-tools/${server.environment.id}/tools/${serverId}`;
+      const { error: deleteError } = await this.supabase.functions.invoke(deleteUrl, {
+        method: 'DELETE'
       });
+
+      if (deleteError) {
+        throw new Error(`Failed to delete server via Edge Function: ${deleteError.message}`);
+      }
 
       await this.logAdminOperation({
         id: crypto.randomUUID(),
@@ -778,12 +796,16 @@ export class AdminMCPService extends MCPService {
       .from('tool_catalog')
       .insert({
         id: templateId,
+        tool_name: `MCP Server: ${templateId}`,
         name: `MCP Server: ${templateId}`,
         description: 'MCP Server deployed from template',
         package_identifier: dockerImage,
+        docker_image_url: dockerImage,
         category: 'mcp-server',
         version: '1.0.0',
-        is_verified: true,
+        is_public: true,
+        status: 'available',
+        packaging_type: 'docker_image',
         created_by: (await this.supabase.auth.getUser()).data.user!.id
       })
       .select('id')
