@@ -351,20 +351,32 @@ serve(async (req: Request) => {
         console.log(`Deploying tool: ${instanceNameOnToolbox} to toolbox ${toolboxId}`);
 
         // Get tool catalog information
+        console.log(`Looking up tool catalog: ${toolCatalogId}`);
         const { data: toolCatalog, error: catalogError } = await supabaseAdminClient
           .from('tool_catalog')
           .select('*')
           .eq('id', toolCatalogId)
           .single();
 
+        console.log('Tool catalog lookup result:', { toolCatalog, catalogError });
+
         if (catalogError || !toolCatalog) {
-          throw new Error(`Tool catalog ${toolCatalogId} not found: ${catalogError?.message}`);
+          console.error(`Tool catalog ${toolCatalogId} not found:`, catalogError);
+          throw new Error(`Tool catalog ${toolCatalogId} not found: ${catalogError?.message || 'No error details'}`);
         }
 
         // Use Docker image from baseConfig or fall back to tool catalog default
+        console.log('Docker image resolution:', {
+          fromBaseConfig: baseConfigOverrideJson?.dockerImage,
+          fromToolCatalog: toolCatalog.docker_image_url,
+          fallback: 'contextprotocol/context7-mcp-server:latest'
+        });
+        
         const dockerImage = baseConfigOverrideJson?.dockerImage || 
                            toolCatalog.docker_image_url || 
                            'contextprotocol/context7-mcp-server:latest'; // Default for MCP servers
+        
+        console.log(`Using Docker image: ${dockerImage}`);
 
         // Create database record first
         const { data: toolInstance, error: createError } = await supabaseAdminClient
@@ -373,11 +385,11 @@ serve(async (req: Request) => {
             account_tool_environment_id: toolboxId,
             tool_catalog_id: toolCatalogId,
             instance_name_on_toolbox: instanceNameOnToolbox,
-            docker_image_url: dockerImage,
             status_on_toolbox: 'deploying',
             mcp_server_type: 'mcp_server',
             mcp_transport_type: 'http',
             mcp_endpoint_path: '/mcp',
+            base_config_override_json: baseConfigOverrideJson || {},
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
