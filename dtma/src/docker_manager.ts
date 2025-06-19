@@ -44,9 +44,7 @@ export async function pullImage(imageName: string): Promise<void> {
       
       // Pipe to null stream to consume data if not piping to stdout
       if (!process.stdout.isTTY) { // Simple check if we're piping progress
-         streamInstance.pipe(new stream.Writable({ 
-           write: (_chunk, _encoding, next) => next() 
-         }));
+         streamInstance.pipe(new stream.Writable({ write: (chunk, encoding, next) => next() }));
       }
     });
   });
@@ -81,6 +79,24 @@ export async function createAndStartContainer(
     return container;
   } catch (error) {
     console.error(`Error creating or starting container "${containerName}":`, error);
+    throw error;
+  }
+}
+
+/**
+ * Starts a stopped Docker container.
+ * @param containerIdOrName - The ID or name of the container to start.
+ * @returns Promise<void>
+ * @throws {Error} If starting fails.
+ */
+export async function startContainer(containerIdOrName: string): Promise<void> {
+  console.log(`Attempting to start container "${containerIdOrName}"...`);
+  try {
+    const container = docker.getContainer(containerIdOrName);
+    await container.start();
+    console.log(`Container "${containerIdOrName}" started.`);
+  } catch (error) {
+    console.error(`Error starting container "${containerIdOrName}":`, error);
     throw error;
   }
 }
@@ -148,10 +164,7 @@ export async function inspectContainer(containerIdOrName: string): Promise<Docke
  * @param filters - Optional filters (e.g., { name: [containerName] }).
  * @returns Promise<Dockerode.ContainerInfo[]>
  */
-export async function listContainers(
-  all: boolean = false, 
-  filters?: { [key: string]: string[] }
-): Promise<Dockerode.ContainerInfo[]> {
+export async function listContainers(all: boolean = false, filters?: { [key: string]: string[] }): Promise<Dockerode.ContainerInfo[]> {
   console.log(`Listing containers (all=${all}, filters=${JSON.stringify(filters)})...`);
   try {
     const options: Dockerode.ContainerListOptions = { all };
@@ -162,56 +175,6 @@ export async function listContainers(
     return containers;
   } catch (error) {
     console.error('Error listing containers:', error);
-    throw error;
-  }
-}
-
-/**
- * Executes a command inside a running container.
- * @param containerIdOrName - The ID or name of the container.
- * @param command - The command to execute as an array (e.g., ['ls', '-la']).
- * @returns Promise<{ output: string; exitCode: number }>
- * @throws {Error} If execution fails.
- */
-export async function executeInContainer(
-  containerIdOrName: string, 
-  command: string[]
-): Promise<{ output: string; exitCode: number }> {
-  console.log(`Executing command in container "${containerIdOrName}": ${command.join(' ')}`);
-  try {
-    const container = docker.getContainer(containerIdOrName);
-    const exec = await container.exec({
-      Cmd: command,
-      AttachStdout: true,
-      AttachStderr: true,
-    });
-    
-    const execStream = await exec.start({ Detach: false });
-    let output = '';
-    
-    return new Promise((resolve, reject) => {
-      execStream.on('data', (chunk: Buffer) => {
-        output += chunk.toString();
-      });
-      
-      execStream.on('end', async () => {
-        try {
-          const inspectResult = await exec.inspect();
-          resolve({
-            output: output.trim(),
-            exitCode: inspectResult.ExitCode || 0
-          });
-        } catch (error) {
-          reject(error);
-        }
-      });
-      
-      execStream.on('error', (error: Error) => {
-        reject(error);
-      });
-    });
-  } catch (error) {
-    console.error(`Error executing command in container "${containerIdOrName}":`, error);
     throw error;
   }
 } 
