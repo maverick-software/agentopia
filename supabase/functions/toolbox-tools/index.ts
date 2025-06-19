@@ -184,13 +184,32 @@ serve(async (req: Request) => {
             console.log('Container not found in DTMA, attempting re-deployment...');
             
             try {
+              // Get tool catalog information to resolve Docker image
+              const { data: toolCatalog, error: catalogError } = await supabaseAdminClient
+                .from('tool_catalog')
+                .select('*')
+                .eq('id', instance.tool_catalog_id)
+                .single();
+
+              if (catalogError || !toolCatalog) {
+                throw new Error(`Failed to lookup tool catalog: ${catalogError?.message || 'Not found'}`);
+              }
+
+              // Resolve Docker image using same logic as deployment
+              const dockerImage = instance.base_config_override_json?.dockerImage || 
+                                 toolCatalog.docker_image_url || 
+                                 'contextprotocol/context7-mcp-server:latest';
+
+              console.log('Re-deployment using Docker image:', dockerImage);
+
               // Re-deploy the container to DTMA
               const redeployResult = await callDTMA('POST', '/tools', toolboxData.public_ip_address, {
-                dockerImageUrl: instance.docker_image_url,
+                dockerImageUrl: dockerImage,
                 instanceNameOnToolbox: instance.instance_name_on_toolbox,
                 accountToolInstanceId: instance.id,
                 baseConfigOverrideJson: {
-                  Env: [],
+                  Env: instance.base_config_override_json?.environmentVariables ? 
+                    Object.entries(instance.base_config_override_json.environmentVariables).map(([k, v]) => `${k}=${v}`) : [],
                   HostConfig: {
                     PortBindings: {
                       "8080/tcp": [{ "HostPort": "30000" }]
@@ -387,7 +406,7 @@ serve(async (req: Request) => {
             instance_name_on_toolbox: instanceNameOnToolbox,
             status_on_toolbox: 'deploying',
             mcp_server_type: 'mcp_server',
-            mcp_transport_type: 'http',
+            mcp_transport_type: 'sse',
             mcp_endpoint_path: '/mcp',
             base_config_override_json: baseConfigOverrideJson || {},
             created_at: new Date().toISOString(),
