@@ -1,0 +1,39 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies
+RUN npm install --production
+
+# Copy server code and required services
+COPY server.js ./
+COPY src/services/internal_api/ ./src/services/internal_api/
+COPY src/services/agent_environment_service/ ./src/services/agent_environment_service/
+COPY src/services/digitalocean_service/ ./src/services/digitalocean_service/
+COPY src/services/tool_instance_service/ ./src/services/tool_instance_service/
+COPY src/lib/supabase.ts ./src/lib/supabase.ts
+COPY src/types/database.types.ts ./src/types/database.types.ts
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S agentopia -u 1001
+
+# Change ownership of the app directory
+RUN chown -R agentopia:nodejs /app
+USER agentopia
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Start server
+CMD ["node", "server.js"] 

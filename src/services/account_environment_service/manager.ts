@@ -66,6 +66,11 @@ interface CreateToolboxUserDataScriptOptions {
     agentopiaApiBaseUrl: string;
     backendToDtmaApiKey: string;
     dtmaDockerImageUrl: string;
+    // NEW: Backend server configuration for containerized deployment
+    backendDockerImageUrl: string;
+    internalApiSecret: string;
+    doApiToken: string;
+    supabaseServiceRoleKey: string;
 }
 
 export class AccountEnvironmentService {
@@ -166,7 +171,40 @@ echo "Checking DTMA container status..."
 docker ps | grep dtma_manager || echo "DTMA container not running!"
 docker logs dtma_manager --tail 20 || echo "Could not get DTMA logs"
 
-echo "--- DTMA Docker Setup Script Finished ---"
+echo "--- Deploying Agentopia Backend Server Container ---"
+BACKEND_CONTAINER_NAME="agentopia_backend"
+
+# Stop and remove existing backend container
+docker stop "\${BACKEND_CONTAINER_NAME}" || true
+docker rm "\${BACKEND_CONTAINER_NAME}" || true
+
+echo "Pulling Agentopia Backend Docker image: ${options.backendDockerImageUrl}..."
+docker pull "${options.backendDockerImageUrl}"
+
+echo "Running Agentopia Backend Server container..."
+docker run -d \
+  --name "\${BACKEND_CONTAINER_NAME}" \
+  --restart always \
+  -p 3000:3000 \
+  --link dtma_manager:dtma \
+  -e PORT=3000 \
+  -e INTERNAL_API_SECRET='${options.internalApiSecret}' \
+  -e BACKEND_TO_DTMA_API_KEY='${options.backendToDtmaApiKey}' \
+  -e DO_API_TOKEN='${options.doApiToken}' \
+  -e SUPABASE_URL='${options.agentopiaApiBaseUrl}' \
+  -e SUPABASE_SERVICE_ROLE_KEY='${options.supabaseServiceRoleKey}' \
+  -e DTMA_URL='http://dtma:30000' \
+  --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+  "${options.backendDockerImageUrl}"
+
+echo "Waiting for backend server to start..."
+sleep 5
+
+echo "Checking backend server status..."
+docker ps | grep agentopia_backend || echo "Backend server container not running!"
+docker logs agentopia_backend --tail 10 || echo "Could not get backend server logs"
+
+echo "--- Complete Docker Setup Finished ---"
 `;
     }
 
@@ -310,9 +348,17 @@ echo "--- DTMA Docker Setup Script Finished ---"
             const agentopiaApiBaseUrl = Deno.env.get('AGENTOPIA_API_URL') || 'http://localhost:54321/functions/v1';
             const backendToDtmaApiKey = Deno.env.get('BACKEND_TO_DTMA_API_KEY');
             const dtmaDockerImageUrl = Deno.env.get('DTMA_DOCKER_IMAGE_URL');
+            const backendDockerImageUrl = Deno.env.get('BACKEND_DOCKER_IMAGE_URL');
+            const internalApiSecret = Deno.env.get('INTERNAL_API_SECRET');
+            const doApiToken = Deno.env.get('DO_API_TOKEN');
+            const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
             if (!backendToDtmaApiKey) throw new Error('BACKEND_TO_DTMA_API_KEY is not configured.');
             if (!dtmaDockerImageUrl) throw new Error('DTMA_DOCKER_IMAGE_URL is not configured.');
+            if (!backendDockerImageUrl) throw new Error('BACKEND_DOCKER_IMAGE_URL is not configured.');
+            if (!internalApiSecret) throw new Error('INTERNAL_API_SECRET is not configured.');
+            if (!doApiToken) throw new Error('DO_API_TOKEN is not configured.');
+            if (!supabaseServiceRoleKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured.');
 
             // 4. Create user-data script
             const userDataScript = this._createToolboxUserDataScript({
@@ -320,6 +366,10 @@ echo "--- DTMA Docker Setup Script Finished ---"
                 agentopiaApiBaseUrl,
                 backendToDtmaApiKey,
                 dtmaDockerImageUrl,
+                backendDockerImageUrl,
+                internalApiSecret,
+                doApiToken,
+                supabaseServiceRoleKey,
             });
 
             // 5. Construct droplet name and tags

@@ -1,8 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import { config } from 'dotenv';
 
-config();
+// Environment variables are set directly in container, no need for dotenv
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3000;
