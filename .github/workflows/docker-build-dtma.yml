@@ -3,8 +3,10 @@ name: Build and Push DTMA Docker Image
 on:
   push:
     branches: [ main ]
+    paths: [ 'dtma/**' ]
   pull_request:
     branches: [ main ]
+    paths: [ 'dtma/**' ]
 
 env:
   REGISTRY: ghcr.io
