@@ -176,11 +176,11 @@ export class AdminMCPService extends MCPService {
         method: 'POST',
         body: {
           toolCatalogId: toolCatalogId,
-          instanceNameOnToolbox: validatedConfig.serverName,
-          baseConfigOverrideJson: {
-            dockerImage: validatedConfig.dockerImage,
-            environmentVariables: validatedConfig.environmentVariables || {},
-            portMappings: validatedConfig.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
+        instanceNameOnToolbox: validatedConfig.serverName,
+        baseConfigOverrideJson: {
+          dockerImage: validatedConfig.dockerImage,
+          environmentVariables: validatedConfig.environmentVariables || {},
+          portMappings: validatedConfig.portMappings || [{ containerPort: 8080, hostPort: 30000 }]
           }
         }
       });

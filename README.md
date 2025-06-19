@@ -213,6 +213,17 @@ Located in `services/`. These are designed for persistent execution on a server 
 ## Known Issues & Refactoring
 
 *   **Missing Logs:** Critical logging across services and functions needs implementation.
+*   **CRITICAL: DTMA Deployment Mismatch (June 19, 2025):** 
+    *   **Issue:** Docker container start/stop operations failing with 404 errors from DTMA API
+    *   **Root Cause:** Deployed DTMA at 167.99.1.222:30000 is missing critical endpoints despite having them in source code
+    *   **Evidence:** 
+        *   Deployed DTMA only exposes: `GET /`, `GET /status`, `GET /tools`, `POST /tools`
+        *   Missing endpoints: `POST /tools/:instanceName/start`, `POST /tools/:instanceName/stop`, `GET /health`
+        *   Both `/dtma/` and `/dtma-agent/` source code contain these endpoints
+        *   Scripts expect `/health` endpoint but deployed version only has `/status`
+    *   **Impact:** Complete MCP server deployment failure affecting all users
+    *   **Status:** Under investigation - deployment/configuration issue rather than missing code
+    *   **Investigation Plan:** Located in `docs/plans/docker_container_deployment_fix/`
 *   **Large Files:** 
     *   Some frontend page components may exceed recommended size limits and could benefit from refactoring (e.g., `src/pages/agents/[agentId]/edit.tsx`, `src/pages/DatastoresPage.tsx` - line counts need re-verification).
     *   The core `supabase/functions/chat/index.ts` function is ~695 lines and should be reviewed for refactoring.
