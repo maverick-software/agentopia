@@ -23,6 +23,7 @@ import {
   StopCircle,
   RotateCcw
 } from 'lucide-react';
+import HealthMonitor from './HealthMonitor';
 
 interface DTMAConsoleProps {
   toolboxId: string;
@@ -307,6 +308,13 @@ export const DTMAConsole: React.FC<DTMAConsoleProps> = ({ toolboxId, dropletIp }
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
+          {/* Health Monitor */}
+          <HealthMonitor 
+            toolboxId={toolboxId}
+            dropletIp={dropletIp}
+            showSSHStatus={true}
+          />
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* DTMA Status */}
             <Card>

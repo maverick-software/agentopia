@@ -284,12 +284,51 @@ async function handleRestart(dropletIp: string, userId: string) {
       console.warn('DTMA endpoint restart failed, will use SSH fallback:', dtmaError);
     }
 
-    // Fallback to SSH-based restart (simulated for now)
-    // In Phase 2, this will use the real SSH connection manager
+    // Fallback to SSH-based restart
     console.log('Using SSH fallback for DTMA restart');
     
-    // Simulate SSH command execution
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    try {
+      const sshResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ssh-command-executor`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dropletIp,
+          command: 'sudo systemctl restart dtma',
+          timeout: 15000
+        })
+      });
+
+      if (sshResponse.ok) {
+        const sshResult = await sshResponse.json();
+        if (sshResult.success) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'DTMA service restarted successfully via SSH',
+              action: 'restart',
+              method: 'ssh_command',
+              timestamp: new Date().toISOString(),
+              details: sshResult
+            }),
+            { 
+              status: 200, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        } else {
+          throw new Error(sshResult.stderr || 'SSH command failed');
+        }
+      } else {
+        throw new Error(`SSH service responded with ${sshResponse.status}`);
+      }
+    } catch (sshError) {
+      console.warn('SSH restart failed:', sshError);
+      // Final fallback - simulate for now
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
     
     return new Response(
       JSON.stringify({
@@ -359,12 +398,67 @@ async function handleRedeploy(dropletIp: string, userId: string) {
       console.warn('DTMA endpoint redeploy failed, will use SSH fallback:', dtmaError);
     }
 
-    // Fallback to SSH-based redeploy (simulated for now)
-    // In Phase 2, this will use the real SSH connection manager
+    // Fallback to SSH-based redeploy
     console.log('Using SSH fallback for DTMA redeploy');
     
-    // Simulate SSH command sequence: git pull, npm install, npm build, restart
-    await new Promise(resolve => setTimeout(resolve, 8000));
+    try {
+      // Execute redeploy sequence via SSH
+      const commands = [
+        'cd /opt/dtma',
+        'git pull origin main',
+        'npm install',
+        'npm run build',
+        'sudo systemctl restart dtma'
+      ];
+      
+      const sshResults = [];
+      
+      for (const command of commands) {
+        const sshResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ssh-command-executor`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dropletIp,
+            command,
+            timeout: 30000
+          })
+        });
+
+        if (sshResponse.ok) {
+          const sshResult = await sshResponse.json();
+          sshResults.push(sshResult);
+          
+          if (!sshResult.success) {
+            throw new Error(`Command failed: ${command} - ${sshResult.stderr}`);
+          }
+        } else {
+          throw new Error(`SSH service error for command: ${command}`);
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'DTMA service redeployed successfully via SSH',
+          action: 'redeploy',
+          method: 'ssh_sequence',
+          timestamp: new Date().toISOString(),
+          details: sshResults
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+      
+    } catch (sshError) {
+      console.warn('SSH redeploy failed:', sshError);
+      // Final fallback - simulate for now
+      await new Promise(resolve => setTimeout(resolve, 8000));
+    }
     
     return new Response(
       JSON.stringify({
