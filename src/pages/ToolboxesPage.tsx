@@ -113,8 +113,8 @@ export function ToolboxesPage() {
   };
 
   // Helper to check if toolbox has been provisioning too long (10 minutes)
-  const isProvisioningTimedOut = (toolboxName: string): boolean => {
-    const startTime = provisioningStartTimes[toolboxName];
+  const isProvisioningTimedOut = (toolboxId: string): boolean => {
+    const startTime = provisioningStartTimes[toolboxId];
     if (!startTime) return false; // Don't show timeout for existing toolboxes on page load
     const elapsed = new Date().getTime() - startTime.getTime();
     return elapsed > 600000; // 10 minutes
@@ -122,27 +122,19 @@ export function ToolboxesPage() {
 
 
 
-  // Friendly animal names for toolboxes
-  const animalNames = [
-    'dolphin', 'eagle', 'tiger', 'wolf', 'lion', 'bear', 'fox', 'hawk', 'shark', 'whale',
-    'falcon', 'panther', 'lynx', 'jaguar', 'cheetah', 'leopard', 'cobra', 'viper', 'python',
-    'raven', 'owl', 'phoenix', 'dragon', 'griffin', 'pegasus', 'unicorn', 'kraken', 'hydra'
-  ];
 
-  // Generate automatic toolbox configuration with friendly names
+
+  // Generate automatic toolbox configuration with proper name from start
   const generateToolboxConfig = (): ProvisionToolboxPayload => {
     const now = new Date();
     
-    // Generate friendly name: animal + random number
-    const randomAnimal = animalNames[Math.floor(Math.random() * animalNames.length)];
-    const randomNumber = Math.floor(Math.random() * 999) + 1;
-    const name = `${randomAnimal}-${randomNumber}`;
-    
-    const description = `${randomAnimal.charAt(0).toUpperCase() + randomAnimal.slice(1)} toolbox created on ${now.toLocaleDateString()}`;
+    // Generate proper structured name exactly like the backend does
+    const toolboxId = crypto.randomUUID();
+    const properName = `toolbox-${user!.id.substring(0, 8)}-${toolboxId.substring(0, 8)}`;
     
     return {
-      name,
-      description,
+      name: properName, // Use the proper structured name from the start
+      description: `Toolbox created on ${now.toLocaleDateString()}`,
       regionSlug: 'nyc1', // Primary region (nyc2 as fallback handled in backend)
       sizeSlug: 's-1vcpu-512mb-10gb' // $4.00/month plan
     };
@@ -152,12 +144,14 @@ export function ToolboxesPage() {
     setProvisioningError(null);
     
     try {
-      // Start the provisioning process
-      await provisionToolbox(payload);
+      // Start the provisioning process - name is already correct from generateToolboxConfig
+      const newToolbox = await provisionToolbox(payload);
       
-      // Refresh the list and start monitoring
-      fetchUserToolboxes();
-      startProvisioningStatusCheck(payload.name);
+      // Add the toolbox to state immediately with proper name
+      setToolboxes(prev => [...prev, newToolbox]);
+      
+      // Start status checking using toolbox ID
+      startProvisioningStatusCheck(newToolbox.id);
       
     } catch (err: any) {
       console.error('Error starting toolbox provisioning:', err);
@@ -183,18 +177,18 @@ export function ToolboxesPage() {
   };
 
   // Function to periodically check provisioning status (simplified)
-  const startProvisioningStatusCheck = (toolboxName: string) => {
+  const startProvisioningStatusCheck = (toolboxId: string) => {
     // Record start time for timeout tracking only
     setProvisioningStartTimes(prev => ({
       ...prev,
-      [toolboxName]: new Date()
+      [toolboxId]: new Date()
     }));
     
     const checkInterval = setInterval(async () => {
       try {
         // Check status without triggering a full page refresh
         const currentToolboxes = await listToolboxes();
-        const newToolbox = currentToolboxes?.find(t => t.name === toolboxName);
+        const newToolbox = currentToolboxes?.find(t => t.id === toolboxId);
         
         if (newToolbox) {
           if (newToolbox.status === 'active') {
@@ -202,7 +196,7 @@ export function ToolboxesPage() {
             clearInterval(checkInterval);
             setProvisioningStartTimes(prev => {
               const updated = { ...prev };
-              delete updated[toolboxName];
+              delete updated[toolboxId];
               return updated;
             });
             // Update the toolboxes state with the new status
@@ -212,12 +206,12 @@ export function ToolboxesPage() {
             clearInterval(checkInterval);
             setProvisioningStartTimes(prev => {
               const updated = { ...prev };
-              delete updated[toolboxName];
+              delete updated[toolboxId];
               return updated;
             });
             // Update the toolboxes state with the new status
             setToolboxes(currentToolboxes || []);
-            setProvisioningError(`Toolbox "${toolboxName}" provisioning failed: ${newToolbox.status}`);
+            setProvisioningError(`Toolbox "${newToolbox.name || newToolbox.id}" provisioning failed: ${newToolbox.status}`);
           }
           // Continue checking if still in progress
         }
@@ -231,7 +225,7 @@ export function ToolboxesPage() {
       clearInterval(checkInterval);
       setProvisioningStartTimes(prev => {
         const updated = { ...prev };
-        delete updated[toolboxName];
+        delete updated[toolboxId];
         return updated;
       });
     }, 600000);
@@ -315,7 +309,7 @@ export function ToolboxesPage() {
         </h1>
         <button 
             onClick={() => {
-              if (window.confirm('Create a new droplet? This will set up a new server environment with a randomly generated name.')) {
+              if (window.confirm('Create a new droplet? This will set up a new server environment.')) {
                 handleCreateToolbox();
               }
             }}
@@ -377,7 +371,7 @@ export function ToolboxesPage() {
             </p>
             <button 
                 onClick={() => {
-                  if (window.confirm('Create a new droplet? This will set up a new server environment with a randomly generated name.')) {
+                  if (window.confirm('Create a new droplet? This will set up a new server environment.')) {
                     handleCreateToolbox();
                   }
                 }}
@@ -401,13 +395,8 @@ export function ToolboxesPage() {
               <div key={toolbox.id} className="bg-card border border-border rounded-lg shadow-lg p-5 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-2">
-                    <h2 className="text-xl font-semibold text-primary truncate" title={toolbox.do_droplet_name || toolbox.name || 'Unnamed Toolbox'}>
-                      {toolbox.do_droplet_name || toolbox.name || 'Unnamed Toolbox'}
-                      {toolbox.do_droplet_name && toolbox.do_droplet_name !== toolbox.name && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Local name: {toolbox.name}
-                        </div>
-                      )}
+                    <h2 className="text-xl font-semibold text-primary truncate" title={toolbox.name || 'Toolbox'}>
+                      {toolbox.name || 'Toolbox'}
                     </h2>
                     <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex items-center ${
                       toolbox.status === 'active' ? 'bg-green-700/30 text-green-300' :
@@ -460,7 +449,7 @@ export function ToolboxesPage() {
                             <div className="text-xs text-blue-300/60">
                               {display.phase}
                             </div>
-                            {toolbox.name && isProvisioningTimedOut(toolbox.name) && (
+                            {isProvisioningTimedOut(toolbox.id) && (
                               <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800/30 rounded text-xs text-yellow-300">
                                 <span className="text-yellow-300">⏱️</span> This is taking longer than usual. You can refresh the status to check progress.
                               </div>
@@ -491,7 +480,7 @@ export function ToolboxesPage() {
                             <div className="text-xs text-blue-300/60">
                               {display.phase}
                             </div>
-                            {toolbox.name && isProvisioningTimedOut(toolbox.name) && (
+                            {isProvisioningTimedOut(toolbox.id) && (
                               <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800/30 rounded text-xs text-yellow-300">
                                 <span className="text-yellow-300">⏱️</span> This is taking longer than usual. You can refresh the status to check progress.
                               </div>

@@ -329,10 +329,14 @@ echo "--- Complete Docker Setup Finished ---"
 
         const imageSlugToUse = options.imageSlug || 'ubuntu-22-04-x64'; // Example default
 
-        // 2. Create initial Toolbox record in DB
+        // 2. Generate proper toolbox name FIRST
+        const toolboxId = crypto.randomUUID(); // Generate UUID for consistent naming
+        const properToolboxName = `toolbox-${userId.substring(0, 8)}-${toolboxId.substring(0, 8)}`;
+
+        // 3. Create initial Toolbox record in DB with proper name
         let toolboxRecord = await this.createToolboxEnvironment(
             userId,
-            options.name,
+            properToolboxName, // Use the proper structured name from the start
             options.regionSlug,
             options.sizeSlug,
             imageSlugToUse,
@@ -340,7 +344,13 @@ echo "--- Complete Docker Setup Finished ---"
             'pending_provision', // Initial status
             options.description
         );
-        const toolboxId = toolboxRecord.id;
+        // Override the auto-generated ID with our pre-generated one for consistency
+        if (toolboxRecord.id !== toolboxId) {
+            // If the database generated a different ID, we need to update our naming
+            const actualToolboxId = toolboxRecord.id;
+            const actualToolboxName = `toolbox-${userId.substring(0, 8)}-${actualToolboxId.substring(0, 8)}`;
+            toolboxRecord = await this.updateToolboxEnvironment(actualToolboxId, { name: actualToolboxName });
+        }
 
         try {
             // 3. Get necessary config for user-data script
@@ -372,12 +382,12 @@ echo "--- Complete Docker Setup Finished ---"
                 supabaseServiceRoleKey,
             });
 
-            // 5. Construct droplet name and tags
-            const dropletName = `toolbox-${userId.substring(0, 8)}-${toolboxId.substring(0, 8)}`;
-            const tags = ['agentopia-toolbox', `user-${userId}`, `toolbox-${toolboxId}`];
+            // 5. Use the name already stored in database and construct tags
+            const dropletName = toolboxRecord.name!; // Use the proper name we already set
+            const tags = ['agentopia-toolbox', `user-${userId}`, `toolbox-${toolboxRecord.id}`];
             
             // 6. Update DB status to 'provisioning'
-            toolboxRecord = await this.updateToolboxEnvironment(toolboxId, { status: 'provisioning' });
+            toolboxRecord = await this.updateToolboxEnvironment(toolboxRecord.id, { status: 'provisioning' });
 
             // 7. Call DigitalOcean service to create droplet
             console.log(`Creating DigitalOcean droplet: ${dropletName}`);
@@ -397,9 +407,10 @@ echo "--- Complete Docker Setup Finished ---"
             console.log(`Droplet ${doDroplet.id} created. Updating DB record.`);
 
             // 8. Update DB with do_droplet_id and actual droplet name
-            toolboxRecord = await this.updateToolboxEnvironment(toolboxId, { 
+            toolboxRecord = await this.updateToolboxEnvironment(toolboxRecord.id, { 
                 do_droplet_id: Number(doDroplet.id), // Ensure it's number as expected by DB schema
                 do_droplet_name: doDroplet.name, // Store the actual name assigned by DigitalOcean
+                // Note: name should already match since we sent the proper name to DO
                 // Status will be updated by polling or first heartbeat
             });
 
@@ -434,16 +445,16 @@ echo "--- Complete Docker Setup Finished ---"
             }
 
             // 10. On success: Update DB with public_ip_address and status 'awaiting_heartbeat'
-            toolboxRecord = await this.updateToolboxEnvironment(toolboxId, {
+            toolboxRecord = await this.updateToolboxEnvironment(toolboxRecord.id, {
                 public_ip_address: publicIpAddress,
                 status: 'awaiting_heartbeat' as AccountToolEnvironmentStatusEnum, // Cast for enum
                 provisioning_error_message: null, // Corrected field name and ensure it's cleared
             });
-            console.log(`Toolbox ${toolboxId} provisioned successfully. Status: awaiting_heartbeat.`);
+            console.log(`Toolbox ${toolboxRecord.id} provisioned successfully. Status: awaiting_heartbeat.`);
 
         } catch (error: any) {
-            console.error(`Error during Toolbox provisioning (${toolboxId}):`, error);
-            await this.updateToolboxEnvironment(toolboxId, {
+            console.error(`Error during Toolbox provisioning (${toolboxRecord.id}):`, error);
+            await this.updateToolboxEnvironment(toolboxRecord.id, {
                 status: 'error_provisioning' as AccountToolEnvironmentStatusEnum, // Cast for enum
                 provisioning_error_message: error.message || 'Unknown provisioning error', // Corrected field name
             }).catch(updateError => console.error('Failed to update Toolbox status to error_provisioning:', updateError));
