@@ -401,8 +401,13 @@ export function ToolboxesPage() {
               <div key={toolbox.id} className="bg-card border border-border rounded-lg shadow-lg p-5 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-2">
-                    <h2 className="text-xl font-semibold text-primary truncate" title={toolbox.name || 'Unnamed Toolbox'}>
-                      {toolbox.name || 'Unnamed Toolbox'}
+                    <h2 className="text-xl font-semibold text-primary truncate" title={toolbox.do_droplet_name || toolbox.name || 'Unnamed Toolbox'}>
+                      {toolbox.do_droplet_name || toolbox.name || 'Unnamed Toolbox'}
+                      {toolbox.do_droplet_name && toolbox.do_droplet_name !== toolbox.name && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Local name: {toolbox.name}
+                        </div>
+                      )}
                     </h2>
                     <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex items-center ${
                       toolbox.status === 'active' ? 'bg-green-700/30 text-green-300' :

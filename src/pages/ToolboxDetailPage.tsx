@@ -116,7 +116,7 @@ export function ToolboxDetailPage() {
       <header className="mb-6">
         <h1 className="text-3xl font-bold flex items-center">
           <Server size={28} className="mr-3 text-indigo-500" /> 
-          {toolbox.name || 'Unnamed Toolbox'}
+          {toolbox.do_droplet_name || toolbox.name || 'Unnamed Toolbox'}
         </h1>
         <p className="text-sm text-muted-foreground">ID: {toolbox.id}</p>
       </header>

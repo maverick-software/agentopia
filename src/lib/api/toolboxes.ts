@@ -24,6 +24,7 @@ export type AccountToolEnvironmentStatus =
 export interface AccountToolEnvironmentRecord {
   id: string;
   name: string | null;
+  do_droplet_name?: string | null; // Actual name assigned by DigitalOcean
   description: string | null;
   status: AccountToolEnvironmentStatus;
   region_slug: string;

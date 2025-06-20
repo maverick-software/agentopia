@@ -9,6 +9,7 @@ export interface AccountEnvironmentRecord {
   id: string; // UUID
   user_id: string; // UUID, FK to auth.users
   do_droplet_id: number | null;
+  do_droplet_name?: string | null; // Actual name assigned by DigitalOcean
   name?: string; // Optional, if we decide to have a DO name separate from a generated one
   ip_address: string | null;
   status: AccountEnvironmentStatus;

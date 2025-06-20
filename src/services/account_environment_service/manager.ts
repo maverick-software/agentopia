@@ -396,9 +396,10 @@ echo "--- Complete Docker Setup Finished ---"
             }
             console.log(`Droplet ${doDroplet.id} created. Updating DB record.`);
 
-            // 8. Update DB with do_droplet_id
+            // 8. Update DB with do_droplet_id and actual droplet name
             toolboxRecord = await this.updateToolboxEnvironment(toolboxId, { 
                 do_droplet_id: Number(doDroplet.id), // Ensure it's number as expected by DB schema
+                do_droplet_name: doDroplet.name, // Store the actual name assigned by DigitalOcean
                 // Status will be updated by polling or first heartbeat
             });
 
@@ -566,11 +567,24 @@ echo "--- Complete Docker Setup Finished ---"
             currentDropletIP = publicNetworks[0].ip_address;
             console.log(`Current droplet IP from DigitalOcean API: ${currentDropletIP}`);
             
-            // Update the stored IP if it's different
+            // Update the stored IP and droplet name if different
+            const updates: any = {};
             if (currentDropletIP !== toolboxRecord.public_ip_address) {
                 console.log(`Updating stored IP from ${toolboxRecord.public_ip_address} to ${currentDropletIP}`);
-                await this.updateToolboxEnvironment(toolboxId, { public_ip_address: currentDropletIP });
+                updates.public_ip_address = currentDropletIP;
                 toolboxRecord.public_ip_address = currentDropletIP; // Update local record
+            }
+            
+            // Sync the actual DigitalOcean droplet name if different
+            if (dropletInfo.name !== toolboxRecord.do_droplet_name) {
+                console.log(`Syncing droplet name from ${toolboxRecord.do_droplet_name} to ${dropletInfo.name}`);
+                updates.do_droplet_name = dropletInfo.name;
+                toolboxRecord.do_droplet_name = dropletInfo.name; // Update local record
+            }
+            
+            // Apply updates if any
+            if (Object.keys(updates).length > 0) {
+                await this.updateToolboxEnvironment(toolboxId, updates);
             }
         } catch (dropletError: any) {
             console.error(`Failed to get current droplet IP for ${toolboxRecord.do_droplet_id}:`, dropletError.message);
