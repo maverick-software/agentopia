@@ -499,31 +499,44 @@ export function ToolboxesPage() {
                     <p className="text-xs text-red-400 bg-red-900/20 p-2 rounded my-2">Action Error: {currentToolboxError}</p>
                   )}
                 </div>
-                <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-end space-x-2">
-                  {/* Show refresh button for all toolboxes except those being deleted */}
-                  {!toolbox.status.includes('deleting') && toolbox.status !== 'deprovisioned' && (
-                    <button 
-                      onClick={() => handleRefreshStatusUI(toolbox.id)}
-                      className="p-2 text-sm bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 rounded-md transition-colors disabled:opacity-50"
-                      disabled={isCurrentToolboxLoading}
-                      title={
-                        toolbox.status.includes('provisioning') || toolbox.status.includes('pending') || toolbox.status.includes('creating')
-                          ? "Check if toolbox setup is complete"
-                          : "Refresh Status"
-                      }
-                    >
-                      {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16} />}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeprovisionUI(toolbox.id)}
-                    className={`p-2 text-sm rounded-md transition-colors disabled:opacity-50 flex items-center bg-red-700/80 hover:bg-red-600/80 text-white'`}
-                    disabled={isCurrentToolboxLoading || toolbox.status.includes('pending') || toolbox.status.includes('deleting') || toolbox.status === 'deprovisioned'}
-                    title='Deprovision Toolbox'
+                <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
+                  {/* Left side - View Details button */}
+                  <Link
+                    to={`/admin/toolboxes/${toolbox.id}`}
+                    className="flex items-center px-3 py-2 text-sm bg-indigo-600/80 hover:bg-indigo-500/80 text-white rounded-md transition-colors"
+                    title="View detailed diagnostics and management options"
                   >
-                    {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin mr-1.5"/> : <Power size={16} className="mr-1.5" />}
-                    Deprovision
-                  </button>
+                    <Eye size={16} className="mr-1.5" />
+                    View Details
+                  </Link>
+                  
+                  {/* Right side - Action buttons */}
+                  <div className="flex items-center space-x-2">
+                    {/* Show refresh button for all toolboxes except those being deleted */}
+                    {!toolbox.status.includes('deleting') && toolbox.status !== 'deprovisioned' && (
+                      <button 
+                        onClick={() => handleRefreshStatusUI(toolbox.id)}
+                        className="p-2 text-sm bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 rounded-md transition-colors disabled:opacity-50"
+                        disabled={isCurrentToolboxLoading}
+                        title={
+                          toolbox.status.includes('provisioning') || toolbox.status.includes('pending') || toolbox.status.includes('creating')
+                            ? "Check if toolbox setup is complete"
+                            : "Refresh Status"
+                        }
+                      >
+                        {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16} />}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeprovisionUI(toolbox.id)}
+                      className={`p-2 text-sm rounded-md transition-colors disabled:opacity-50 flex items-center bg-red-700/80 hover:bg-red-600/80 text-white'`}
+                      disabled={isCurrentToolboxLoading || toolbox.status.includes('pending') || toolbox.status.includes('deleting') || toolbox.status === 'deprovisioned'}
+                      title='Deprovision Toolbox'
+                    >
+                      {isCurrentToolboxLoading && (actionStates[toolbox.id]?.isLoading && !actionStates[toolbox.id]?.error) ? <Loader2 size={16} className="animate-spin mr-1.5"/> : <Power size={16} className="mr-1.5" />}
+                      Deprovision
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

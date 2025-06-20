@@ -9,41 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DTMAConsole } from '@/components/DTMAConsole';
 
-// DTMA connectivity and system status interfaces
-interface DTMAHealthStatus {
-  healthy: boolean;
-  version?: string;
-  uptime?: number;
-  error?: string;
-}
-
-interface DTMASystemStatus {
-  cpu_load_percent?: number;
-  memory?: {
-    total_bytes: number;
-    used_bytes: number;
-    free_bytes: number;
-  };
-  disk?: {
-    total_bytes: number;
-    used_bytes: number;
-    free_bytes: number;
-    mount: string;
-  };
-  uptime?: number;
-}
-
-interface DTMATool {
-  id: string;
-  name: string;
-  status: string;
-  ports?: Array<{
-    private_port: number;
-    public_port: number;
-    type: string;
-  }>;
-}
+// DTMA interfaces moved to DTMAConsole component
 
 // Helper function to get status text/color for tool instances
 const getToolInstanceStatusAppearance = (status: AccountToolInstanceRecord['status_on_toolbox']) => {
@@ -80,13 +48,7 @@ export function ToolboxDetailPage() {
   const [loadingTools, setLoadingTools] = useState(true);
   const [toolsError, setToolsError] = useState<string | null>(null);
 
-  // DTMA Diagnostics State
-  const [dtmaHealth, setDtmaHealth] = useState<DTMAHealthStatus | null>(null);
-  const [dtmaSystemStatus, setDtmaSystemStatus] = useState<DTMASystemStatus | null>(null);
-  const [dtmaTools, setDtmaTools] = useState<DTMATool[]>([]);
-  const [loadingDtma, setLoadingDtma] = useState(false);
-  const [dtmaError, setDtmaError] = useState<string | null>(null);
-  const [lastDtmaCheck, setLastDtmaCheck] = useState<Date | null>(null);
+  // DTMA Diagnostics State - now handled by DTMAConsole component
 
   // Action states
   const [refreshingStatus, setRefreshingStatus] = useState(false);
@@ -123,132 +85,9 @@ export function ToolboxDetailPage() {
     setLoadingTools(false);
   }, [user, toolboxId]);
 
-  // DTMA Connectivity Functions
-  const checkDtmaHealth = useCallback(async (ipAddress: string) => {
-    const dtmaPort = 30000;
-    const dtmaBaseUrl = `http://${ipAddress}:${dtmaPort}`;
-    
-    try {
-      const response = await fetch(`${dtmaBaseUrl}/health`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(5000)
-      });
+  // DTMA Connectivity Functions - moved to DTMAConsole component
 
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          healthy: true,
-          version: data.version,
-          uptime: data.uptime
-        };
-      } else {
-        return {
-          healthy: false,
-          error: `HTTP ${response.status}: ${response.statusText}`
-        };
-      }
-    } catch (error: any) {
-      return {
-        healthy: false,
-        error: error.name === 'TimeoutError' 
-          ? 'Connection timeout - DTMA service may not be running'
-          : `Connection failed: ${error.message}`
-      };
-    }
-  }, []);
-
-  const getDtmaSystemStatus = useCallback(async (ipAddress: string, bearerToken?: string) => {
-    if (!bearerToken) return null;
-    
-    const dtmaPort = 30000;
-    const dtmaBaseUrl = `http://${ipAddress}:${dtmaPort}`;
-    
-    try {
-      const response = await fetch(`${dtmaBaseUrl}/status`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${bearerToken}`
-        },
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (response.ok) {
-        return await response.json();
-      }
-      return null;
-    } catch (error) {
-      console.error('Error fetching DTMA system status:', error);
-      return null;
-    }
-  }, []);
-
-  const getDtmaTools = useCallback(async (ipAddress: string, bearerToken?: string) => {
-    if (!bearerToken) return [];
-    
-    const dtmaPort = 30000;
-    const dtmaBaseUrl = `http://${ipAddress}:${dtmaPort}`;
-    
-    try {
-      const response = await fetch(`${dtmaBaseUrl}/tools`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${bearerToken}`
-        },
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return Array.isArray(data) ? data : [];
-      }
-      return [];
-    } catch (error) {
-      console.error('Error fetching DTMA tools:', error);
-      return [];
-    }
-  }, []);
-
-  const runDtmaDiagnostics = useCallback(async () => {
-    if (!toolbox?.public_ip_address) {
-      setDtmaError('No IP address available for DTMA connectivity test');
-      return;
-    }
-
-    setLoadingDtma(true);
-    setDtmaError(null);
-    setDtmaHealth(null);
-    setDtmaSystemStatus(null);
-    setDtmaTools([]);
-
-    try {
-      // Check health first
-      const healthStatus = await checkDtmaHealth(toolbox.public_ip_address);
-      setDtmaHealth(healthStatus);
-
-      if (healthStatus.healthy && toolbox.dtma_bearer_token) {
-        // Get system status
-        const systemStatus = await getDtmaSystemStatus(toolbox.public_ip_address, toolbox.dtma_bearer_token);
-        if (systemStatus) {
-          setDtmaSystemStatus(systemStatus);
-        }
-
-        // Get tools list
-        const tools = await getDtmaTools(toolbox.public_ip_address, toolbox.dtma_bearer_token);
-        setDtmaTools(tools);
-      }
-
-      setLastDtmaCheck(new Date());
-    } catch (error: any) {
-      setDtmaError(`Diagnostics failed: ${error.message}`);
-    } finally {
-      setLoadingDtma(false);
-    }
-  }, [toolbox, checkDtmaHealth, getDtmaSystemStatus, getDtmaTools]);
+  // DTMA diagnostics now handled by DTMAConsole component
 
   const handleRefreshStatus = useCallback(async () => {
     if (!toolboxId) return;
@@ -279,15 +118,7 @@ export function ToolboxDetailPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatUptime = (seconds: number): string => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    
-    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  };
+  // formatUptime moved to DTMAConsole component
 
   if (loadingToolbox) {
     return (
@@ -539,250 +370,24 @@ export function ToolboxDetailPage() {
         </TabsContent>
 
         <TabsContent value="diagnostics" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-xl flex items-center">
-                    <Activity className="mr-2 h-5 w-5" />
-                    DTMA Connectivity & System Diagnostics
-                  </CardTitle>
-                  <CardDescription>
-                    Test connectivity and monitor system performance of your toolbox
-                  </CardDescription>
+          {toolbox?.public_ip_address ? (
+            <DTMAConsole 
+              toolboxId={toolboxId!} 
+              dropletIp={toolbox.public_ip_address} 
+            />
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Toolbox Not Ready</h3>
+                  <p className="text-muted-foreground">
+                    The toolbox is still being provisioned. DTMA console will be available once the droplet is ready.
+                  </p>
                 </div>
-                <Button 
-                  onClick={runDtmaDiagnostics}
-                  disabled={loadingDtma || !toolbox.public_ip_address}
-                >
-                  {loadingDtma ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Terminal className="mr-2 h-4 w-4" />
-                  )}
-                  Run Diagnostics
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!toolbox.public_ip_address && (
-                <div className="text-yellow-400 bg-yellow-900/20 p-3 rounded-md mb-4">
-                  <p>No IP address available. Toolbox may still be provisioning.</p>
-                </div>
-              )}
-
-              {lastDtmaCheck && (
-                <p className="text-sm text-muted-foreground mb-4">
-                  Last checked: {lastDtmaCheck.toLocaleString()}
-                </p>
-              )}
-
-              {dtmaError && (
-                <div className="text-red-400 bg-red-900/20 p-3 rounded-md mb-4">
-                  <p>{dtmaError}</p>
-                </div>
-              )}
-
-              {loadingDtma && (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  <p className="ml-3 text-muted-foreground">Running diagnostics...</p>
-                </div>
-              )}
-
-              {dtmaHealth && !loadingDtma && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* DTMA Health Status */}
-                  <Card className={dtmaHealth.healthy ? 'border-green-700 bg-green-900/20' : 'border-red-700 bg-red-900/20'}>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center">
-                        {dtmaHealth.healthy ? (
-                          <CheckCircle className="mr-2 h-5 w-5 text-green-400" />
-                        ) : (
-                          <XCircle className="mr-2 h-5 w-5 text-red-400" />
-                        )}
-                        DTMA Service
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>Status:</span>
-                          <Badge variant={dtmaHealth.healthy ? 'default' : 'destructive'}>
-                            {dtmaHealth.healthy ? 'Healthy' : 'Unhealthy'}
-                          </Badge>
-                        </div>
-                        {dtmaHealth.version && (
-                          <div className="flex justify-between">
-                            <span>Version:</span>
-                            <span>{dtmaHealth.version}</span>
-                          </div>
-                        )}
-                        {dtmaHealth.uptime && (
-                          <div className="flex justify-between">
-                            <span>Uptime:</span>
-                            <span>{formatUptime(dtmaHealth.uptime)}</span>
-                          </div>
-                        )}
-                        {dtmaHealth.error && (
-                          <div className="mt-2 p-2 bg-red-800/30 rounded text-red-300 text-xs">
-                            {dtmaHealth.error}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* System Resources */}
-                  {dtmaSystemStatus && (
-                    <>
-                      {dtmaSystemStatus.cpu_load_percent !== undefined && (
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-lg flex items-center">
-                              <Cpu className="mr-2 h-5 w-5 text-blue-400" />
-                              CPU Usage
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold mb-2">
-                              {dtmaSystemStatus.cpu_load_percent.toFixed(1)}%
-                            </div>
-                            <div className="w-full bg-gray-700 rounded-full h-2">
-                              <div 
-                                className={`h-2 rounded-full transition-all ${
-                                  dtmaSystemStatus.cpu_load_percent > 80 ? 'bg-red-500' :
-                                  dtmaSystemStatus.cpu_load_percent > 60 ? 'bg-yellow-500' :
-                                  'bg-green-500'
-                                }`}
-                                style={{ width: `${Math.min(dtmaSystemStatus.cpu_load_percent, 100)}%` }}
-                              />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {dtmaSystemStatus.memory && (
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-lg flex items-center">
-                              <MemoryStick className="mr-2 h-5 w-5 text-purple-400" />
-                              Memory Usage
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-sm space-y-2">
-                              <div className="flex justify-between">
-                                <span>Used:</span>
-                                <span>{formatBytes(dtmaSystemStatus.memory.used_bytes)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Total:</span>
-                                <span>{formatBytes(dtmaSystemStatus.memory.total_bytes)}</span>
-                              </div>
-                              <div className="w-full bg-gray-700 rounded-full h-2">
-                                <div 
-                                  className="h-2 bg-purple-500 rounded-full transition-all"
-                                  style={{ 
-                                    width: `${(dtmaSystemStatus.memory.used_bytes / dtmaSystemStatus.memory.total_bytes) * 100}%` 
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {dtmaSystemStatus.disk && (
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-lg flex items-center">
-                              <HardDrive className="mr-2 h-5 w-5 text-orange-400" />
-                              Disk Usage
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-sm space-y-2">
-                              <div className="flex justify-between">
-                                <span>Used:</span>
-                                <span>{formatBytes(dtmaSystemStatus.disk.used_bytes)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Total:</span>
-                                <span>{formatBytes(dtmaSystemStatus.disk.total_bytes)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Mount:</span>
-                                <span className="font-mono">{dtmaSystemStatus.disk.mount}</span>
-                              </div>
-                              <div className="w-full bg-gray-700 rounded-full h-2">
-                                <div 
-                                  className="h-2 bg-orange-500 rounded-full transition-all"
-                                  style={{ 
-                                    width: `${(dtmaSystemStatus.disk.used_bytes / dtmaSystemStatus.disk.total_bytes) * 100}%` 
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* DTMA Tools List */}
-              {dtmaTools.length > 0 && (
-                <Card className="mt-6">
-                  <CardHeader>
-                    <CardTitle className="text-lg">DTMA Managed Tools</CardTitle>
-                    <CardDescription>
-                      Tools currently managed by the DTMA service
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID</TableHead>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Ports</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {dtmaTools.map((tool) => (
-                          <TableRow key={tool.id}>
-                            <TableCell className="font-mono text-sm">{tool.id}</TableCell>
-                            <TableCell className="font-medium">{tool.name}</TableCell>
-                            <TableCell>
-                              <Badge variant={tool.status === 'running' ? 'default' : 'secondary'}>
-                                {tool.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {tool.ports && tool.ports.length > 0 ? (
-                                <div className="space-y-1">
-                                  {tool.ports.map((port, idx) => (
-                                    <div key={idx} className="text-xs font-mono">
-                                      {port.private_port} → {port.public_port} ({port.type})
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">None</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="actions" className="space-y-6">

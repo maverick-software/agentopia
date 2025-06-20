@@ -125,6 +125,92 @@ app.get('/health', (req: Request, res: Response) => {
   res.status(200).send('OK');
 });
 
+// Enhanced status endpoint with system metrics (for console)
+app.get('/status', async (req: Request, res: Response) => {
+  try {
+    const systemStatus = await getSystemStatus();
+    const toolStatuses = await getToolStatuses();
+    
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: dtmaVersion,
+      service: 'DTMA',
+      environment: {
+        hasAuthToken: !!process.env.DTMA_BEARER_TOKEN,
+        hasApiKey: !!process.env.BACKEND_TO_DTMA_API_KEY,
+        hasApiBaseUrl: !!process.env.AGENTOPIA_API_BASE_URL,
+        port: PORT.toString()
+      },
+      tool_instances: toolStatuses,
+      system_metrics: systemStatus // Add system metrics for console
+    });
+  } catch (error: any) {
+    console.error('Status endpoint error:', error);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message || 'Failed to get status'
+    });
+  }
+});
+
+// System metrics endpoint (for console)
+app.get('/system', async (req: Request, res: Response) => {
+  try {
+    const systemStatus = await getSystemStatus();
+    res.status(200).json(systemStatus);
+  } catch (error: any) {
+    console.error('System metrics error:', error);
+    res.status(500).json({
+      error: 'Failed to get system metrics',
+      details: error.message
+    });
+  }
+});
+
+// DTMA service management endpoints
+app.post('/restart', (req: Request, res: Response) => {
+  console.log('DTMA restart requested via API');
+  res.status(200).json({
+    success: true,
+    message: 'DTMA restart initiated',
+    timestamp: new Date().toISOString()
+  });
+  
+  // Graceful restart after sending response
+  setTimeout(() => {
+    console.log('Performing graceful restart...');
+    process.exit(0); // systemd will restart the service
+  }, 1000);
+});
+
+app.post('/redeploy', (req: Request, res: Response) => {
+  console.log('DTMA redeploy requested via API');
+  res.status(200).json({
+    success: true,
+    message: 'DTMA redeploy initiated - requires external automation',
+    timestamp: new Date().toISOString()
+  });
+  
+  // Note: Actual redeployment would need to be handled by external scripts
+  // This endpoint just acknowledges the request
+});
+
+// Console logs endpoint (basic implementation)
+app.get('/logs', (req: Request, res: Response) => {
+  // In a production environment, you might want to read from log files
+  // For now, return a simple message
+  res.status(200).json({
+    logs: [
+      `${new Date().toISOString()}: DTMA service running on port ${PORT}`,
+      `${new Date().toISOString()}: Version ${dtmaVersion}`,
+      `${new Date().toISOString()}: Heartbeat interval: ${HEARTBEAT_INTERVAL_MS}ms`
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Apply authentication middleware to all routes below this point
 // Or apply specifically to tool routes
 // app.use(authenticateDtmaRequest); 
