@@ -4,7 +4,6 @@
 import { MCPService, EnhancedMCPServer, ConnectionTest } from './mcpService';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
-import { IntelligentDropletSelector, ResourceRequirements, DropletSelectionResult } from './intelligentDropletSelector';
 
 export interface MCPServerDeploymentConfig {
   serverName: string;
@@ -87,11 +86,8 @@ export interface ToolboxEnvironment {
 }
 
 export class AdminMCPService extends MCPService {
-  private intelligentDropletSelector: IntelligentDropletSelector;
-
   constructor(supabaseClient?: SupabaseClient) {
     super(supabaseClient);
-    this.intelligentDropletSelector = new IntelligentDropletSelector();
   }
 
   /**
@@ -248,112 +244,6 @@ export class AdminMCPService extends MCPService {
       });
 
       throw new Error(`Deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * One-click intelligent MCP deployment with automatic droplet selection
-   */
-  async oneClickDeploy(templateId: string): Promise<MCPServerDeployment> {
-    await this.validateAdminAccess();
-    
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    try {
-      // 1. Load template with smart defaults
-      const template = await this.getTemplateWithDefaults(templateId);
-      
-      // 2. Convert template to resource requirements
-      const requirements = this.templateToResourceRequirements(template);
-      
-      // 3. Intelligent droplet selection
-      const dropletResult = await this.intelligentDropletSelector
-        .selectOptimalDroplet(user.id, requirements);
-      
-      // 4. Auto-provision if needed or use selected droplet
-      const dropletId = dropletResult.autoProvisionRecommendation 
-        ? await this.autoProvisionDroplet(dropletResult.autoProvisionRecommendation, user.id)
-        : dropletResult.selectedDropletId;
-
-      if (!dropletId) {
-        throw new Error('No suitable droplet found and auto-provisioning failed');
-      }
-      
-      // 5. Deploy with existing infrastructure using optimal droplet
-      const deploymentConfig: MCPServerDeploymentConfig = {
-        serverName: `${template.tool_name}-${Date.now()}`,
-        serverType: 'mcp_server',
-        dockerImage: template.docker_image,
-        transport: 'http',
-        endpointPath: '/mcp',
-        environmentVariables: template.mcp_server_metadata?.environmentVariables || {},
-        capabilities: ['tools', 'resources'],
-        resourceLimits: this.getResourceLimitsFromHint(template.mcp_server_metadata?.resourceHint),
-        environmentId: dropletId
-      };
-
-      return await this.deployMCPServer(deploymentConfig);
-
-    } catch (error) {
-      console.error('One-click deployment failed:', error);
-      throw new Error(`One-click deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Get template with smart defaults
-   */
-  private async getTemplateWithDefaults(templateId: string) {
-    const { data: template, error } = await this.supabase
-      .from('tool_catalog')
-      .select('*')
-      .eq('id', templateId)
-      .eq('is_mcp_server', true)
-      .single();
-
-    if (error || !template) {
-      throw new Error(`Template not found: ${templateId}`);
-    }
-
-    return template;
-  }
-
-  /**
-   * Convert template to resource requirements
-   */
-  private templateToResourceRequirements(template: any): ResourceRequirements {
-    const resourceHint = template.mcp_server_metadata?.resourceHint || 'medium';
-    
-    return {
-      cpu: resourceHint as 'light' | 'medium' | 'heavy',
-      memory: resourceHint as 'light' | 'medium' | 'heavy',
-      network: 'medium',
-      storage: 'standard',
-      expectedLoad: 'production'
-    };
-  }
-
-  /**
-   * Auto-provision a new droplet based on recommendation
-   */
-  private async autoProvisionDroplet(recommendation: any, userId: string): Promise<string> {
-    // This would integrate with your existing droplet provisioning logic
-    // For now, we'll throw an error to indicate this needs implementation
-    throw new Error('Auto-provisioning not yet implemented - please select an existing droplet');
-  }
-
-  /**
-   * Get resource limits from resource hint
-   */
-  private getResourceLimitsFromHint(resourceHint?: string) {
-    switch (resourceHint) {
-      case 'light':
-        return { memory: '512m', cpu: '0.5' };
-      case 'heavy':
-        return { memory: '2g', cpu: '2' };
-      default:
-        return { memory: '1g', cpu: '1' };
     }
   }
 

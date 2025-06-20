@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 // import { supabase } from '../lib/supabase'; // Supabase client is now used via the API module
 import { useAuth } from '../contexts/AuthContext';
-import { Server, Power, Loader2, CheckCircle, XCircle, RefreshCw, ServerOff, PlusCircle, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Server, Power, Loader2, CheckCircle, XCircle, RefreshCw, ServerOff, PlusCircle, ExternalLink, Eye } from 'lucide-react';
 import { ProvisionToolboxPayload } from '../components/ToolboxModal';
 import {
   listToolboxes,

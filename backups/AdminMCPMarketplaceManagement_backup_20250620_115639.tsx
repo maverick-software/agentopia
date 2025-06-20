@@ -8,14 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp, Activity, AlertCircle, CheckCircle, Clock, Square, Play, Zap } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Shield, Users, Server, TrendingUp, Activity, AlertCircle, CheckCircle, Clock, Square, Play } from 'lucide-react';
 import { mcpService } from '@/lib/services/mcpService';
 import { AdminMCPService } from '@/lib/services/adminMCPService';
 import { StatusSyncService } from '@/lib/services/statusSyncService';
 import { MCPServerTemplate, MCPServerCategory } from '@/lib/mcp/ui-types';
 import { EnhancedMCPServer, MCPServerStatus } from '@/lib/services/mcpService';
 import { AgentMCPConnection } from '@/lib/services/userMCPService';
-import { OneClickMCPDeployment } from '@/components/mcp/OneClickMCPDeployment';
 
 // Extend the MCPServerTemplate interface for admin view
 interface AdminMCPTemplate extends MCPServerTemplate {
@@ -196,10 +195,6 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  
-  // One-click deployment state
-  const [oneClickTemplate, setOneClickTemplate] = useState<AdminMCPTemplate | null>(null);
-  const [isOneClickDialogOpen, setIsOneClickDialogOpen] = useState(false);
 
   // New MCP server management state
   const [servers, setServers] = useState<EnhancedMCPServer[]>([]);
@@ -458,26 +453,6 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
     }
   };
 
-  // One-click deployment handlers
-  const handleOneClickDeploy = (template: AdminMCPTemplate) => {
-    setOneClickTemplate(template);
-    setIsOneClickDialogOpen(true);
-  };
-
-  const handleDeploymentComplete = (deployment: any) => {
-    console.log('Deployment completed:', deployment);
-    setIsOneClickDialogOpen(false);
-    setOneClickTemplate(null);
-    // Refresh servers list to show the new deployment
-    loadMCPServers();
-  };
-
-  const handleDeploymentError = (error: string) => {
-    console.error('Deployment failed:', error);
-    // Error is already handled by the OneClickMCPDeployment component
-    // We could add additional error handling here if needed
-  };
-
   const filteredTemplates = templates.filter(template => {
     const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          template.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -688,19 +663,11 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => handleOneClickDeploy(template)}
-                          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                        >
-                          <Zap className="w-4 h-4 mr-1" />
-                          One-Click Deploy
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
                           onClick={() => openDeployDialog(template)}
+                          className="bg-blue-600 hover:bg-blue-700"
                         >
                           <Play className="w-4 h-4 mr-1" />
-                          Manual Deploy
+                          Deploy
                         </Button>
                       </div>
                     </div>
@@ -1106,40 +1073,6 @@ const AdminMCPMarketplaceManagement: React.FC = () => {
               )}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* One-Click Deployment Dialog */}
-      <Dialog open={isOneClickDialogOpen} onOpenChange={setIsOneClickDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>One-Click Deployment</DialogTitle>
-            <DialogDescription>
-              Automatically deploy "{oneClickTemplate?.name}" with intelligent droplet selection
-            </DialogDescription>
-          </DialogHeader>
-          
-          {oneClickTemplate && (
-            <OneClickMCPDeployment
-              template={{
-                id: oneClickTemplate.id,
-                tool_name: oneClickTemplate.name,
-                display_name: oneClickTemplate.name,
-                description: oneClickTemplate.description,
-                docker_image: oneClickTemplate.dockerImage,
-                category: oneClickTemplate.category,
-                mcp_server_metadata: {
-                  resourceHint: 'medium',
-                  version: oneClickTemplate.version,
-                  author: oneClickTemplate.author,
-                  tags: oneClickTemplate.tags
-                }
-              }}
-              onDeploymentComplete={handleDeploymentComplete}
-              onDeploymentError={handleDeploymentError}
-              className="border-0 shadow-none p-0"
-            />
-          )}
         </DialogContent>
       </Dialog>
     </div>
