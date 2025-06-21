@@ -108,29 +108,57 @@ serve(async (req: Request) => {
     const userId = user.id;
     console.log('Authenticated user:', userId);
 
-    // Parse URL path
+    // Parse URL path and/or request body for toolbox ID
     const url = new URL(req.url);
     const pathSegments = url.pathname.split('/').filter(Boolean);
     console.log('Path segments:', pathSegments);
     
-    // Expected path: /toolbox-tools/{toolboxId}/tools/...
+    // Try to get toolbox ID from URL path first (REST-style: /toolbox-tools/{toolboxId}/tools/...)
     const basePathIndex = pathSegments.indexOf('toolbox-tools');
     const relevantPathSegments = basePathIndex !== -1 ? pathSegments.slice(basePathIndex + 1) : [];
     console.log('Relevant segments:', relevantPathSegments);
 
-    if (relevantPathSegments.length < 2 || relevantPathSegments[1] !== 'tools') {
-        console.error('Invalid path structure. Expected /toolbox-tools/{toolboxId}/tools/...');
+    let toolboxId: string;
+    let toolPathSegments: string[] = [];
+
+    let requestBody: any = null;
+    let isRestStylePath = false;
+
+    // Check if we have REST-style path with toolbox ID
+    if (relevantPathSegments.length >= 2 && relevantPathSegments[1] === 'tools') {
+      toolboxId = relevantPathSegments[0];
+      toolPathSegments = relevantPathSegments.slice(2);
+      isRestStylePath = true;
+      console.log('Toolbox ID from URL path:', toolboxId);
+    } else {
+      // Fallback: Get toolbox ID from request body (for supabase.functions.invoke calls)
+      try {
+        requestBody = await req.json();
+        if (requestBody.toolboxId) {
+          toolboxId = requestBody.toolboxId;
+          console.log('Toolbox ID from request body:', toolboxId);
+        } else {
+          console.error('No toolbox ID found in URL path or request body');
+          return new Response(JSON.stringify({ 
+            error: 'Toolbox ID required either in URL path (/toolbox-tools/{toolboxId}/tools) or request body',
+            received_path: relevantPathSegments,
+            received_body: requestBody
+          }), { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+            status: 400 
+          });
+        }
+      } catch (parseError) {
+        console.error('Failed to parse request body for toolbox ID');
         return new Response(JSON.stringify({ 
-          error: 'Invalid path structure. Expected /toolbox-tools/{toolboxId}/tools/...',
-          received: relevantPathSegments 
+          error: 'Invalid request: toolbox ID required in URL path or JSON body',
+          received_path: relevantPathSegments
         }), { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
           status: 400 
         });
+      }
     }
-    
-    const toolboxId = relevantPathSegments[0];
-    console.log('Toolbox ID:', toolboxId);
 
     // Verify user owns the toolbox (simplified check)
     const { data: toolboxData, error: toolboxError } = await supabaseAdminClient
@@ -148,13 +176,33 @@ serve(async (req: Request) => {
     }
     console.log(`User ${userId} authorized for toolbox ${toolboxId}`);
 
-    const toolPathSegments = relevantPathSegments.slice(2); // Segments after /toolbox-tools/{toolboxId}/tools
-
     // --- ROUTING LOGIC ---
     if (req.method === 'GET') {
       return await handleListToolInstances(toolboxData);
     } else if (req.method === 'POST') {
-      const body = await req.json();
+      // Use already parsed request body or parse it if this was a REST-style path
+      let body;
+      if (requestBody) {
+        // Body was already parsed to get toolbox ID
+        body = requestBody;
+      } else if (isRestStylePath) {
+        // Body wasn't parsed yet for REST-style path
+        try {
+          body = await req.json();
+        } catch (parseError) {
+          console.error('Failed to parse request body for action:', parseError);
+          return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      } else {
+        return new Response(JSON.stringify({ error: 'No request body available' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       const { action, instanceId } = body;
 
       switch (action) {
