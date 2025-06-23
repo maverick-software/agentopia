@@ -582,7 +582,10 @@ export class CollectiveHealthMonitor extends EventEmitter {
    */
   getServerHealth(instanceName: string): HealthCheckResult | null {
     const history = this.healthHistory.get(instanceName);
-    return history && history.length > 0 ? history[history.length - 1] : null;
+    if (!history || history.length === 0) {
+      return null;
+    }
+    return history[history.length - 1];
   }
 
   /**
