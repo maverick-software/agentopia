@@ -24,7 +24,7 @@ export const CreateTeamPage = lazy(() => import('../pages/CreateTeamPage.tsx').t
 export const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage.tsx').then(module => ({ default: module.TeamDetailsPage })));
 export const EditTeamPage = lazy(() => import('../pages/EditTeamPage.tsx').then(module => ({ default: module.EditTeamPage })));
 export const SettingsPage = lazy(() => import('../pages/SettingsPage.tsx').then(module => ({ default: module.Settings })));
-export const ToolboxesPage = lazy(() => import('../pages/ToolboxesPage').then(module => ({ default: module.ToolboxesPage })));
+
 export const MonitoringPage = lazy(() => import('../pages/MonitoringPage.tsx').then(module => ({ default: module.Monitoring })));
 export const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement.tsx').then(module => ({ default: module.AdminUserManagement })));
 export const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement.tsx').then(module => ({ default: module.AdminAgentManagement })));
@@ -42,7 +42,7 @@ export const WorkspaceSettingsPage = lazy(() => import('../pages/WorkspaceSettin
 // export const DatasetStorePage = lazy(() => import('../pages/DatasetStorePage.tsx'));
 // export const NotFoundPage = lazy(() => import('../pages/NotFoundPage.tsx')); 
 
-export const ToolboxDetailPage = lazy(() => import('../pages/ToolboxDetailPage').then(module => ({ default: module.ToolboxDetailPage })));
+
 
 // MCP Server Management Pages
 export const MCPServersPage = lazy(() => import('../pages/mcp/MCPServersPage').then(module => ({ default: module.MCPServersPage })));

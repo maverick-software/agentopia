@@ -42,8 +42,7 @@ import {
     WorkspacesListPage, // Added WorkspacesListPage
     CreateWorkspacePage,
     WorkspaceSettingsPage,
-    ToolboxesPage,
-    ToolboxDetailPage,
+
     // AgentStorePage, // Commented out
     // DatasetStorePage, // Commented out
     // NotFoundPage, // Commented out
@@ -107,8 +106,6 @@ export const appRoutes: RouteConfig[] = [
       { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/marketplace', element: AdminMCPMarketplaceManagement, protection: 'admin', layout: false }, // Add marketplace management
-      { path: '/admin/tools', element: ToolboxesPage, protection: 'admin', layout: false }, // Droplet management moved to admin
-      { path: '/admin/toolboxes/:toolboxId', element: ToolboxDetailPage, protection: 'admin', layout: false }, // Toolbox details moved to admin
     ]
   },
 
