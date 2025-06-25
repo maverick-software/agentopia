@@ -32,15 +32,8 @@ interface NavItem {
 // Updated navigation structure with nesting
 const navItems: NavItem[] = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { 
-    to: '/agents', // Parent link
-    icon: Users, 
-    label: 'Agents',
-    children: [
-      { to: '/agents', icon: Users, label: 'View Agents' },
-      { to: '/memory', icon: MemoryStick, label: 'Memory' },
-    ]
-  },
+  { to: '/agents', icon: Users, label: 'Agents' },
+  { to: '/memory', icon: MemoryStick, label: 'Memory' },
   { to: '/teams', icon: Building2, label: 'Teams' },
   { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },

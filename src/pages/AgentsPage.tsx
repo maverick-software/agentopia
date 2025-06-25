@@ -35,6 +35,7 @@ export function AgentsPage() {
       return;
     }
     console.log(`Fetching agents... Attempt ${currentAttempt}`);
+    console.log(`DEBUG: User ID: ${user.id}`);
 
     try {
       setError(null);
@@ -43,6 +44,7 @@ export function AgentsPage() {
 
       const isConnected = await isSupabaseConnected();
       if (!isConnected) throw new Error('Unable to connect to the database.');
+      console.log('DEBUG: Supabase connection successful');
 
       const { data, error: fetchError } = await supabase
         .from('agents')
@@ -50,13 +52,17 @@ export function AgentsPage() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
+      console.log('DEBUG: Supabase query result:', { data, error: fetchError });
+      console.log('DEBUG: Number of agents found:', data?.length || 0);
+
       if (fetchError) throw fetchError;
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      console.log('DEBUG: Setting agents and loading state');
       setAgents(data || []);
       setLoading(false);
       setIsRetrying(false);
       if (isInitialCall) totalFetchAttempts.current = 0;
+      console.log('DEBUG: Loading state set to false');
 
     } catch (err: any) {
       console.error('Error fetching agents:', err);
@@ -87,6 +93,24 @@ export function AgentsPage() {
       setIsRetrying(false);
     }
   }, [user, fetchAgents]);
+
+  // Debug effect to monitor loading state
+  useEffect(() => {
+    console.log('DEBUG: Loading state changed to:', loading);
+  }, [loading]);
+
+  // Force loading to false if we have agents but loading is still true
+  useEffect(() => {
+    if (agents.length > 0 && loading) {
+      console.log('DEBUG: Forcing loading to false - we have agents but loading is still true');
+      setLoading(false);
+    }
+  }, [agents.length, loading]);
+
+  // Debug useEffect to monitor loading state changes
+  useEffect(() => {
+    console.log('DEBUG: Loading state changed to:', loading);
+  }, [loading]);
 
   const toggleAgentStatus = useCallback(async (id: string, currentStatus: boolean) => {
     try {
@@ -134,75 +158,86 @@ export function AgentsPage() {
   }, [user?.id, isDeleting]);
 
   const renderedAgents = useMemo(() => {
-    if (!agents.length) return null;
+    console.log('DEBUG: renderedAgents useMemo called');
+    console.log('DEBUG: agents array:', agents);
+    console.log('DEBUG: agents.length:', agents.length);
+    
+    if (!agents.length) {
+      console.log('DEBUG: No agents to render - returning null');
+      return null;
+    }
 
-    return agents.map((agent, index) => (
-      <div
-        key={agent.id}
-        className="bg-gray-800 rounded-lg p-6 space-y-4 opacity-0 animate-fade-in"
-        style={{
-          animationDelay: `${index * 100}ms`,
-          animationFillMode: 'forwards'
-        }}
-      >
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-xl font-semibold">{agent.name}</h3>
-            <p className="text-gray-400 text-sm mt-1">{agent.description}</p>
-          </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => navigate(`/agents/${agent.id}/chat`)}
-              className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-            >
-              <MessageSquare className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => toggleAgentStatus(agent.id, agent.active)}
-              className={`p-2 rounded-md transition-colors ${
-                agent.active ? 'text-green-400 hover:text-green-500' : 'text-gray-400 hover:text-gray-300'
-              }`}
-              title={agent.active ? 'Deactivate agent' : 'Activate agent'}
-            >
-              <Power className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => navigate(`/agents/${agent.id}`)}
-              className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-              title="Edit agent"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => setShowDeleteConfirm(agent.id)}
-              className="p-2 text-gray-400 hover:text-red-400 rounded-md transition-colors"
-              title="Delete agent"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        
-        <div className="pt-4 border-t border-gray-700">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Personality:</span>
-            <span className="text-gray-300">{agent.personality}</span>
-          </div>
-          {agent.discord_channel && (
-            <div className="flex justify-between text-sm mt-2">
-              <span className="text-gray-400">Discord Channel:</span>
-              <span className="text-gray-300">#{agent.discord_channel}</span>
+    console.log('DEBUG: Rendering agents...');
+    return agents.map((agent, index) => {
+      console.log(`DEBUG: Rendering agent ${index}:`, agent);
+      return (
+        <div
+          key={agent.id}
+          className="bg-gray-800 rounded-lg p-6 space-y-4 opacity-0 animate-fade-in"
+          style={{
+            animationDelay: `${index * 100}ms`,
+            animationFillMode: 'forwards'
+          }}
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-xl font-semibold">{agent.name}</h3>
+              <p className="text-gray-400 text-sm mt-1">{agent.description}</p>
             </div>
-          )}
-          <div className="flex justify-between text-sm mt-2">
-            <span className="text-gray-400">Status:</span>
-            <span className={agent.active ? 'text-green-400' : 'text-gray-400'}>
-              {agent.active ? 'Active' : 'Inactive'}
-            </span>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => navigate(`/agents/${agent.id}/chat`)}
+                className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+              >
+                <MessageSquare className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => toggleAgentStatus(agent.id, agent.active ?? false)}
+                className={`p-2 rounded-md transition-colors ${
+                  agent.active ? 'text-green-400 hover:text-green-500' : 'text-gray-400 hover:text-gray-300'
+                }`}
+                title={agent.active ? 'Deactivate agent' : 'Activate agent'}
+              >
+                <Power className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => navigate(`/agents/${agent.id}`)}
+                className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                title="Edit agent"
+              >
+                <Settings className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(agent.id)}
+                className="p-2 text-gray-400 hover:text-red-400 rounded-md transition-colors"
+                title="Delete agent"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="pt-4 border-t border-gray-700">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Personality:</span>
+              <span className="text-gray-300">{agent.personality}</span>
+            </div>
+            {agent.discord_channel && (
+              <div className="flex justify-between text-sm mt-2">
+                <span className="text-gray-400">Discord Channel:</span>
+                <span className="text-gray-300">#{agent.discord_channel}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm mt-2">
+              <span className="text-gray-400">Status:</span>
+              <span className={agent.active ? 'text-green-400' : 'text-gray-400'}>
+                {agent.active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    ));
+      );
+    });
   }, [agents, navigate, toggleAgentStatus]);
 
   if (!user) {
@@ -212,6 +247,11 @@ export function AgentsPage() {
       </div>
     );
   }
+
+  console.log('DEBUG: Main render - user exists');
+  console.log('DEBUG: loading:', loading);
+  console.log('DEBUG: agents.length:', agents.length);
+  console.log('DEBUG: renderedAgents:', renderedAgents);
 
   return (
     <div className="space-y-6 p-6">
