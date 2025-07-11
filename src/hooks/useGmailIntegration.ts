@@ -1,0 +1,497 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+
+// Types
+export interface GmailConnection {
+  id: string;
+  external_username: string;
+  scopes_granted: string[];
+  connection_status: 'active' | 'error' | 'expired';
+  connection_metadata: {
+    user_name: string;
+    user_picture: string;
+    last_connected: string;
+  };
+  configuration: {
+    require_confirmation_for_send: boolean;
+    allow_delete_operations: boolean;
+    restrict_to_specific_labels: string[];
+  };
+}
+
+export interface AgentGmailPermission {
+  id: string;
+  agent_id: string;
+  granted_scopes: string[];
+  is_active: boolean;
+  granted_at: string;
+  usage_limits: {
+    max_emails_per_day: number;
+    max_api_calls_per_hour: number;
+  };
+}
+
+export interface GmailOperationLog {
+  id: string;
+  agent_id: string;
+  operation_type: string;
+  operation_params: any;
+  operation_result: any;
+  status: 'success' | 'error' | 'unauthorized';
+  error_message?: string;
+  quota_consumed: number;
+  execution_time_ms: number;
+  created_at: string;
+}
+
+export interface EmailMessage {
+  to: string;
+  subject: string;
+  body: string;
+  html?: string;
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    contentType: string;
+  }>;
+}
+
+// Hook for managing Gmail OAuth connections
+export function useGmailConnection() {
+  const { user } = useAuth();
+  const [connection, setConnection] = useState<GmailConnection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchConnection = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_user_gmail_connection',
+        { p_user_id: user.id }
+      );
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      if (data && data.length > 0) {
+        setConnection({
+          id: data[0].connection_id,
+          external_username: data[0].external_username,
+          scopes_granted: data[0].scopes_granted,
+          connection_status: data[0].connection_status,
+          connection_metadata: data[0].connection_metadata || {},
+          configuration: data[0].configuration || {}
+        });
+      } else {
+        setConnection(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch Gmail connection');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initiateOAuth = async (): Promise<void> => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.access_token) {
+      throw new Error('No authenticated session');
+    }
+
+    const redirectUri = `${window.location.origin}/integrations/gmail/callback`;
+    
+    // Call the edge function to get the OAuth URL
+    const response = await supabase.functions.invoke('gmail-oauth-initiate', {
+      body: {
+        redirect_uri: redirectUri
+      },
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`
+      }
+    });
+
+    if (response.error) {
+      // Check if this is a configuration error with detailed instructions
+      if (response.data?.details) {
+        console.error('Gmail OAuth Configuration Required:\n', response.data.details);
+        throw new Error('Gmail OAuth is not configured. Please contact your administrator to set up Google OAuth credentials.');
+      }
+      throw new Error(response.error.message || 'Failed to initiate OAuth flow');
+    }
+
+    const { auth_url, state } = response.data;
+    
+    // Store state for later use in callback
+    sessionStorage.setItem('gmail_oauth_state', state);
+    
+    // Open OAuth flow in popup
+    const popup = window.open(
+      auth_url,
+      'gmail-oauth',
+      'width=600,height=700,scrollbars=yes,resizable=yes'
+    );
+
+    // Listen for popup completion
+    return new Promise((resolve, reject) => {
+      const checkClosed = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(checkClosed);
+          // Check if connection was successful by refetching
+          fetchConnection().then(() => {
+            if (connection) {
+              resolve();
+            } else {
+              reject(new Error('OAuth flow was cancelled or failed'));
+            }
+          });
+        }
+      }, 1000);
+
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        clearInterval(checkClosed);
+        popup?.close();
+        reject(new Error('OAuth flow timed out'));
+      }, 300000);
+    });
+  };
+
+  const handleOAuthCallback = async (code: string, state: string): Promise<void> => {
+    const storedState = sessionStorage.getItem('gmail_oauth_state');
+    if (!storedState || storedState !== state) {
+      throw new Error('Invalid state parameter');
+    }
+
+    // Extract code verifier from state
+    const stateData = JSON.parse(atob(state));
+    const codeVerifier = stateData.code_verifier;
+
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.access_token) {
+      throw new Error('No authenticated session');
+    }
+
+    const response = await supabase.functions.invoke('gmail-oauth', {
+      body: {
+        code,
+        state,
+        redirect_uri: `${window.location.origin}/integrations/gmail/callback`,
+        code_verifier: codeVerifier
+      },
+      headers: {
+        Authorization: `Bearer ${session.session.access_token}`
+      }
+    });
+
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to complete OAuth flow');
+    }
+
+    // Clean up
+    sessionStorage.removeItem('gmail_oauth_state');
+    
+    // Refresh connection data
+    await fetchConnection();
+  };
+
+  const disconnectGmail = async (): Promise<void> => {
+    if (!connection) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_oauth_connections')
+        .update({ connection_status: 'disconnected' })
+        .eq('id', connection.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setConnection(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect Gmail');
+      throw err;
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchConnection();
+    }
+  }, [user]);
+
+  return {
+    connection,
+    loading,
+    error,
+    initiateOAuth,
+    handleOAuthCallback,
+    disconnectGmail,
+    refetch: fetchConnection
+  };
+}
+
+// Hook for managing agent Gmail permissions
+export function useAgentGmailPermissions(agentId?: string) {
+  const { user } = useAuth();
+  const [permissions, setPermissions] = useState<AgentGmailPermission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPermissions = async () => {
+    if (!user || !agentId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
+        .from('agent_oauth_permissions')
+        .select(`
+          *,
+          user_oauth_connections!inner(
+            external_username,
+            oauth_provider_id,
+            oauth_providers!inner(name)
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+        .eq('user_oauth_connections.user_id', user.id);
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      setPermissions(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch agent permissions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const grantPermissions = async (
+    connectionId: string,
+    scopes: string[],
+    usageLimits?: { max_emails_per_day?: number; max_api_calls_per_hour?: number }
+  ): Promise<void> => {
+    if (!user || !agentId) {
+      throw new Error('User or agent not available');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('agent_oauth_permissions')
+        .upsert({
+          agent_id: agentId,
+          user_oauth_connection_id: connectionId,
+          granted_scopes: scopes,
+          is_active: true,
+          granted_by: user.id,
+          usage_limits: {
+            max_emails_per_day: usageLimits?.max_emails_per_day || 100,
+            max_api_calls_per_hour: usageLimits?.max_api_calls_per_hour || 500,
+          }
+        });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      await fetchPermissions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to grant permissions');
+      throw err;
+    }
+  };
+
+  const revokePermissions = async (permissionId: string): Promise<void> => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('agent_oauth_permissions')
+        .update({
+          is_active: false,
+          revoked_at: new Date().toISOString(),
+          revoked_by: user.id
+        })
+        .eq('id', permissionId);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      await fetchPermissions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke permissions');
+      throw err;
+    }
+  };
+
+  useEffect(() => {
+    if (user && agentId) {
+      fetchPermissions();
+    }
+  }, [user, agentId]);
+
+  return {
+    permissions,
+    loading,
+    error,
+    grantPermissions,
+    revokePermissions,
+    refetch: fetchPermissions
+  };
+}
+
+// Hook for Gmail operations
+export function useGmailOperations(agentId?: string) {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const executeOperation = async (action: string, parameters: any): Promise<any> => {
+    if (!user || !agentId) {
+      throw new Error('User or agent not available');
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error('No authenticated session');
+      }
+
+      const response = await supabase.functions.invoke('gmail-api', {
+        body: {
+          agent_id: agentId,
+          action,
+          parameters
+        },
+        headers: {
+          Authorization: `Bearer ${session.session.access_token}`
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || `Failed to execute ${action}`);
+      }
+
+      return response.data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : `Failed to execute ${action}`;
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendEmail = async (message: EmailMessage): Promise<any> => {
+    return executeOperation('send_email', message);
+  };
+
+  const readEmails = async (options?: {
+    query?: string;
+    max_results?: number;
+    label_ids?: string[];
+  }): Promise<any> => {
+    return executeOperation('read_emails', options || {});
+  };
+
+  const searchEmails = async (query: string, options?: {
+    labels?: string[];
+    max_results?: number;
+  }): Promise<any> => {
+    return executeOperation('search_emails', { query, ...options });
+  };
+
+  const manageLabels = async (action: string, params: {
+    label_name?: string;
+    label_id?: string;
+    message_ids?: string[];
+  }): Promise<any> => {
+    return executeOperation('manage_labels', { action, ...params });
+  };
+
+  return {
+    loading,
+    error,
+    sendEmail,
+    readEmails,
+    searchEmails,
+    manageLabels,
+    executeOperation
+  };
+}
+
+// Hook for Gmail operation logs
+export function useGmailOperationLogs(agentId?: string, limit = 50) {
+  const { user } = useAuth();
+  const [logs, setLogs] = useState<GmailOperationLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchLogs = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      let query = supabase
+        .from('gmail_operation_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (agentId) {
+        query = query.eq('agent_id', agentId);
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      setLogs(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch operation logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchLogs();
+    }
+  }, [user, agentId, limit]);
+
+  return {
+    logs,
+    loading,
+    error,
+    fetchLogs,
+    clearLogs: () => setLogs([])
+  };
+} 

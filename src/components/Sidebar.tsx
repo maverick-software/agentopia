@@ -38,6 +38,7 @@ const navItems: NavItem[] = [
   { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/integrations', icon: Server, label: 'Integrations' },
   {
     to: '/settings', 
     icon: Settings, 

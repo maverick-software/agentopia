@@ -42,6 +42,7 @@ import {
     WorkspacesListPage, // Added WorkspacesListPage
     CreateWorkspacePage,
     WorkspaceSettingsPage,
+    IntegrationsPage, // Added IntegrationsPage
 
     // AgentStorePage, // Commented out
     // DatasetStorePage, // Commented out
@@ -55,6 +56,7 @@ import {
 // Manually import the new non-lazy pages
 import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
+import { GmailCallbackPage } from '../pages/integrations/GmailCallbackPage';
 // Import DashboardPage directly for debugging
 import { DashboardPage } from '../pages/DashboardPage';
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
@@ -85,10 +87,12 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces/:roomId', element: WorkspacePage, protection: 'protected', layout: false },
   { path: '/workspaces/:roomId/settings', element: WorkspaceSettingsPage, protection: 'protected', layout: false },
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: false },
+  { path: '/integrations', element: IntegrationsPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
+  { path: '/integrations/gmail/callback', element: GmailCallbackPage, protection: 'public', layout: false },
   // { path: 'agent-store', element: AgentStorePage, protection: 'protected', layout: true }, // Commented out
   // { path: 'dataset-store', element: DatasetStorePage, protection: 'protected', layout: true }, // Commented out
   

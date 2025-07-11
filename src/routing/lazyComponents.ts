@@ -11,7 +11,7 @@ export const RegisterPage = lazy(() => import('../pages/RegisterPage').then(modu
 // hooks/data fetching within DashboardPage when loaded lazily.
 // export const DashboardPage = lazy(() => import('../pages/DashboardPage')); 
 
-export const AgentsPage = lazy(() => import('../pages/AgentsPage.tsx').then(module => ({ default: module.AgentsPage })));
+export const AgentsPage = lazy(() => import('../pages/AgentsPage').then(module => ({ default: module.AgentsPage })));
 // Note: AgentEditPage is currently directly imported in AppRouter.tsx
 // export const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })));
 export const AgentEditPage = lazy(() => import('../pages/agents/[agentId]/edit'));
@@ -51,3 +51,6 @@ export const MCPDeployPage = lazy(() => import('../pages/mcp/MCPDeployPage').the
 export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConfigPage').then(module => ({ default: module.MCPServerConfigPage }))); 
 
 export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 
+
+// Add IntegrationsPage
+export const IntegrationsPage = lazy(() => import('../pages/IntegrationsPage').then(module => ({ default: module.IntegrationsPage }))); 

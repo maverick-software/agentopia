@@ -81,3 +81,25 @@ docs/context/ai_context_2025-04-30.md
 
 # Investor Relations - Exclude all investor relations documents from Git
 docs/investor_relations/
+
+# Gmail API Credentials and OAuth files
+**/client_secret*.json
+**/credentials*.json
+**/token*.json
+**/*oauth*.json
+**/google-credentials.json
+**/gmail-credentials.json
+
+# Google OAuth configuration files
+docs/setup/configure_google_oauth_credentials.md
+
+# Any files containing API keys or secrets
+**/*secret*.txt
+**/*key*.txt
+**/*token*.txt
+
+# Temporary credential files
+*.pem
+*.key
+*.cert
+*.crt

@@ -2,14 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* Dark Mode Theme (Primary Theme) */
+    --background: 215 28% 9%;        /* Dark bluish-gray background */
+    --foreground: 210 20% 98%;       /* Light text color with blue tint */
+    --card: 217 25% 12%;             /* Card background - slightly lighter than base */
+    --card-foreground: 210 20% 98%;  /* Card text color */
+    --popover: 217 25% 12%;          /* Popover background */
+    --popover-foreground: 210 20% 98%; /* Popover text */
+    --primary: 210 20% 98%;          /* Primary elements color (white with blue tint) */
+    --primary-foreground: 215 28% 9%; /* Text on primary elements */
+    --secondary: 217 19% 20%;        /* Secondary elements color (medium bluish-gray) */
+    --secondary-foreground: 210 20% 98%; /* Text on secondary elements */
+    --muted: 217 19% 20%;            /* Muted elements (subtle background) */
+    --muted-foreground: 210 15% 70%; /* Muted text color */
+    --accent: 217 19% 20%;           /* Accent elements */
+    --accent-foreground: 210 20% 98%; /* Text on accent elements */
+    --destructive: 0 62.8% 30.6%;    /* Destructive/error color (red) */
+    --destructive-foreground: 210 20% 98%; /* Text on destructive elements */
+    --border: 217 19% 20%;           /* Border color */
+    --input: 217 19% 20%;            /* Input field background */
+    --ring: 210 16% 83.1%;           /* Focus ring color */
+
+    /* Chart Colors for Data Visualization */
+    --chart-1: 220 70% 50%;          /* Blue */
+    --chart-2: 160 60% 45%;          /* Green */
+    --chart-3: 30 80% 55%;           /* Orange */
+    --chart-4: 280 65% 60%;          /* Purple */
+    --chart-5: 340 75% 55%;          /* Pink */
+  }
+
+  .dark {
+    --background: 215 28% 9%;
+    --foreground: 210 20% 98%;
+    --card: 217 25% 12%;
+    --card-foreground: 210 20% 98%;
+    --popover: 217 25% 12%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 20% 98%;
+    --primary-foreground: 215 28% 9%;
+    --secondary: 217 19% 20%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 217 19% 20%;
+    --muted-foreground: 210 15% 70%;
+    --accent: 217 19% 20%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 217 19% 20%;
+    --input: 217 19% 20%;
+    --ring: 210 16% 83.1%;
+  }
+}
+
 :root {
   font-family: 'Poppins', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,6 +77,8 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 #root {

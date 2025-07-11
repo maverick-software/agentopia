@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, ChangeEvent } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSupabaseClient } from '../../../hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext'; 
 import { Button } from '@/components/ui/button';
 import { 
     Loader2, ArrowLeft, Save, Database, Wrench, 
     Edit, Settings, PencilLine, ImagePlus, Power,
-    Info
+    Info, Plus, Globe
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { AgentFormInstructions } from '@/components/agent-edit/AgentFormInstructions';
@@ -45,6 +45,7 @@ import {
 
 const AgentEditPage = () => {
     const { agentId } = useParams<{ agentId: string }>();
+    const navigate = useNavigate();
     const supabase = useSupabaseClient();
     const { user } = useAuth();
 
@@ -609,6 +610,38 @@ const AgentEditPage = () => {
                                     <AlertDescription className="inline">Checking tool environment status...</AlertDescription>
                                 </Alert>
                             )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>Integrations</CardTitle>
+                                <CardDescription>Connect external services and tools</CardDescription>
+                            </div>
+                            <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => navigate('/integrations')}
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Integration
+                            </Button>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-center py-6 text-muted-foreground">
+                                <Globe className="h-10 w-10 mx-auto opacity-50 mb-2" />
+                                <p>No integrations configured</p>
+                                <p className="text-xs mt-1">Add credentials and assign tools to this agent</p>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="mt-4"
+                                    onClick={() => navigate('/integrations')}
+                                >
+                                    Browse Integrations
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
 

@@ -173,28 +173,24 @@ export function AgentsPage() {
       return (
         <div
           key={agent.id}
-          className="bg-gray-800 rounded-lg p-6 space-y-4 opacity-0 animate-fade-in"
-          style={{
-            animationDelay: `${index * 100}ms`,
-            animationFillMode: 'forwards'
-          }}
+          className="bg-[hsl(217,25%,12%)] rounded-lg p-6 space-y-4 transition-colors duration-200 hover:bg-[hsl(217,25%,14%)] border-0 shadow-none outline-none"
         >
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="text-xl font-semibold">{agent.name}</h3>
-              <p className="text-gray-400 text-sm mt-1">{agent.description}</p>
+              <h3 className="text-xl font-semibold text-[hsl(210,20%,98%)]">{agent.name}</h3>
+              <p className="text-[hsl(210,15%,70%)] text-sm mt-1">{agent.description}</p>
             </div>
             <div className="flex space-x-2">
               <button
                 onClick={() => navigate(`/agents/${agent.id}/chat`)}
-                className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                className="p-2 rounded-md text-[hsl(210,15%,70%)] hover:text-[hsl(210,20%,98%)] hover:bg-[hsl(217,19%,20%)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[hsl(210,16%,83.1%)] focus:ring-inset"
               >
                 <MessageSquare className="h-5 w-5" />
               </button>
               <button
                 onClick={() => toggleAgentStatus(agent.id, agent.active ?? false)}
-                className={`p-2 rounded-md transition-colors ${
-                  agent.active ? 'text-green-400 hover:text-green-500' : 'text-gray-400 hover:text-gray-300'
+                className={`p-2 rounded-md transition-colors duration-200 ${
+                  agent.active ? 'text-[hsl(160,60%,45%)] hover:text-[hsl(160,60%,55%)]' : 'text-[hsl(210,15%,70%)] hover:text-[hsl(210,20%,98%)]'
                 }`}
                 title={agent.active ? 'Deactivate agent' : 'Activate agent'}
               >
@@ -202,14 +198,14 @@ export function AgentsPage() {
               </button>
               <button
                 onClick={() => navigate(`/agents/${agent.id}`)}
-                className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                className="p-2 rounded-md text-[hsl(210,15%,70%)] hover:text-[hsl(210,20%,98%)] hover:bg-[hsl(217,19%,20%)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[hsl(210,16%,83.1%)] focus:ring-inset"
                 title="Edit agent"
               >
                 <Settings className="h-5 w-5" />
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(agent.id)}
-                className="p-2 text-gray-400 hover:text-red-400 rounded-md transition-colors"
+                className="p-2 text-[hsl(210,15%,70%)] hover:text-[hsl(0,62.8%,30.6%)] rounded-md transition-colors duration-200"
                 title="Delete agent"
               >
                 <Trash2 className="w-5 h-5" />
@@ -217,20 +213,20 @@ export function AgentsPage() {
             </div>
           </div>
           
-          <div className="pt-4 border-t border-gray-700">
+          <div className="pt-4 border-t border-[hsl(217,19%,20%)]">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Personality:</span>
-              <span className="text-gray-300">{agent.personality}</span>
+              <span className="text-[hsl(210,15%,70%)]">Personality:</span>
+              <span className="text-[hsl(210,20%,98%)]">{agent.personality}</span>
             </div>
             {agent.discord_channel && (
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-gray-400">Discord Channel:</span>
-                <span className="text-gray-300">#{agent.discord_channel}</span>
+                <span className="text-[hsl(210,15%,70%)]">Discord Channel:</span>
+                <span className="text-[hsl(210,20%,98%)]">#{agent.discord_channel}</span>
               </div>
             )}
             <div className="flex justify-between text-sm mt-2">
-              <span className="text-gray-400">Status:</span>
-              <span className={agent.active ? 'text-green-400' : 'text-gray-400'}>
+              <span className="text-[hsl(210,15%,70%)]">Status:</span>
+              <span className={agent.active ? 'text-[hsl(160,60%,45%)]' : 'text-[hsl(210,15%,70%)]'}>
                 {agent.active ? 'Active' : 'Inactive'}
               </span>
             </div>
@@ -243,7 +239,7 @@ export function AgentsPage() {
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Please sign in to view your agents.</div>
+        <div className="text-[hsl(210,15%,70%)]">Please sign in to view your agents.</div>
       </div>
     );
   }
@@ -256,10 +252,10 @@ export function AgentsPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">AI Agents</h1>
+        <h1 className="text-3xl font-bold text-[hsl(210,20%,98%)]">AI Agents</h1>
         <button
           onClick={() => navigate('/agents/new')}
-          className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          className="flex items-center px-4 py-2 bg-[hsl(220,70%,50%)] text-[hsl(210,20%,98%)] rounded-md hover:bg-[hsl(220,70%,45%)] transition-colors duration-200 font-medium h-11"
         >
           <Plus className="w-5 h-5 mr-2" />
           Create Agent
@@ -267,12 +263,12 @@ export function AgentsPage() {
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center justify-between">
+        <div className="bg-[hsl(0,62.8%,30.6%)]/10 border border-[hsl(0,62.8%,30.6%)] text-[hsl(0,62.8%,60.6%)] p-4 rounded-md flex items-center justify-between">
           <span>{error}</span>
           <button
             onClick={() => fetchAgents(true)}
             disabled={isRetrying || loading}
-            className="flex items-center px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center px-4 py-2 bg-[hsl(0,62.8%,30.6%)]/20 hover:bg-[hsl(0,62.8%,30.6%)]/30 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isRetrying ? 'animate-spin' : ''}`} />
             {isRetrying ? 'Retrying...' : 'Try Again'}
@@ -285,20 +281,20 @@ export function AgentsPage() {
           {[...Array(3)].map((_, i) => (
             <div 
               key={i} 
-              className="bg-gray-800 rounded-lg p-6 space-y-4 animate-pulse"
+              className="bg-[hsl(217,25%,12%)] rounded-lg p-6 space-y-4 animate-pulse border-0 shadow-none outline-none"
             >
-              <div className="h-6 bg-gray-700 rounded w-3/4"></div>
-              <div className="h-4 bg-gray-700 rounded w-1/2"></div>
-              <div className="pt-4 border-t border-gray-700 space-y-2">
-                <div className="h-4 bg-gray-700 rounded w-full"></div>
-                <div className="h-4 bg-gray-700 rounded w-2/3"></div>
+              <div className="h-6 bg-[hsl(217,19%,20%)] rounded w-3/4"></div>
+              <div className="h-4 bg-[hsl(217,19%,20%)] rounded w-1/2"></div>
+              <div className="pt-4 border-t border-[hsl(217,19%,20%)] space-y-2">
+                <div className="h-4 bg-[hsl(217,19%,20%)] rounded w-full"></div>
+                <div className="h-4 bg-[hsl(217,19%,20%)] rounded w-2/3"></div>
               </div>
             </div>
           ))}
         </div>
       ) : agents.length === 0 ? (
-        <div className="bg-gray-800 rounded-lg p-8 text-center">
-          <p className="text-gray-400">No agents found. Create your first agent to get started!</p>
+        <div className="bg-[hsl(217,25%,12%)] rounded-lg p-8 text-center border-0 shadow-none outline-none">
+          <p className="text-[hsl(210,15%,70%)]">No agents found. Create your first agent to get started!</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -309,22 +305,22 @@ export function AgentsPage() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Delete Agent</h2>
-            <p className="text-gray-300 mb-6">
+          <div className="bg-[hsl(217,25%,12%)] rounded-lg p-6 w-full max-w-md border-0 shadow-none outline-none">
+            <h2 className="text-2xl font-bold mb-4 text-[hsl(210,20%,98%)]">Delete Agent</h2>
+            <p className="text-[hsl(210,20%,98%)] mb-6">
               Are you sure you want to delete this agent? This action cannot be undone.
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                className="px-4 py-2 text-[hsl(210,20%,98%)] hover:text-[hsl(210,20%,98%)]/80 transition-colors duration-200"
                 disabled={isDeleting}
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteAgent(showDeleteConfirm)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-[hsl(0,62.8%,30.6%)] text-[hsl(210,20%,98%)] rounded-md hover:bg-[hsl(0,62.8%,25.6%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 disabled={isDeleting}
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}
