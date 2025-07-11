@@ -112,35 +112,10 @@ serve(async (req) => {
       scope: tokens.scope,
     }
 
-    // Encrypt access token
-    const { data: encryptedAccessToken, error: accessTokenError } = await supabase.rpc(
-      'vault_encrypt',
-      {
-        secret: tokens.access_token,
-        key_id: 'gmail_oauth_tokens'
-      }
-    )
-
-    if (accessTokenError) {
-      throw new Error(`Failed to encrypt access token: ${accessTokenError.message}`)
-    }
-
-    // Encrypt refresh token if present
-    let encryptedRefreshToken = null
-    if (tokens.refresh_token) {
-      const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
-        'vault_encrypt',
-        {
-          secret: tokens.refresh_token,
-          key_id: 'gmail_oauth_tokens'
-        }
-      )
-
-      if (refreshTokenError) {
-        throw new Error(`Failed to encrypt refresh token: ${refreshTokenError.message}`)
-      }
-      encryptedRefreshToken = refreshTokenData
-    }
+    // For now, we'll store tokens directly without vault encryption
+    // TODO: Implement vault encryption later
+    const encryptedAccessToken = tokens.access_token
+    const encryptedRefreshToken = tokens.refresh_token
 
     // Check if user already has a Gmail connection
     const { data: existingConnection } = await supabase
