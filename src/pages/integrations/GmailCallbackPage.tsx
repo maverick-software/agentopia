@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
@@ -11,9 +11,16 @@ export function GmailCallbackPage() {
   const { handleOAuthCallback } = useGmailConnection();
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
   const [error, setError] = useState<string | null>(null);
+  const isProcessingRef = useRef(false);
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Prevent multiple executions
+      if (isProcessingRef.current) {
+        return;
+      }
+      isProcessingRef.current = true;
+
       try {
         const code = searchParams.get('code');
         const state = searchParams.get('state');

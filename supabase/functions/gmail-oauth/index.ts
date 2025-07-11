@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { code, state, redirect_uri } = await req.json()
+    const { code, state, redirect_uri, code_verifier } = await req.json()
     
     if (!code) {
       throw new Error('Authorization code is required')
@@ -42,19 +42,27 @@ serve(async (req) => {
     const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
 
+    // Build token exchange parameters
+    const tokenParams: any = {
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: code,
+      redirect_uri: redirect_uri,
+    }
+
+    // Add code_verifier if using PKCE
+    if (code_verifier) {
+      tokenParams.code_verifier = code_verifier
+    }
+
     // Exchange authorization code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: clientId,
-        client_secret: clientSecret,
-        code: code,
-        redirect_uri: redirect_uri,
-      }),
+      body: new URLSearchParams(tokenParams),
     })
 
     if (!tokenResponse.ok) {
@@ -112,8 +120,8 @@ serve(async (req) => {
       scope: tokens.scope,
     }
 
-    // For now, we'll store tokens directly without vault encryption
-    // TODO: Implement vault encryption later
+    // For now, we'll store tokens directly without encryption
+    // TODO: Implement proper encryption later
     const encryptedAccessToken = tokens.access_token
     const encryptedRefreshToken = tokens.refresh_token
 
