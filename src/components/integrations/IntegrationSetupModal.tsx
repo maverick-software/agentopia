@@ -80,20 +80,9 @@ export function IntegrationSetupModal({
     try {
       // Handle Gmail OAuth specifically
       if (integration.name === 'Gmail') {
-        // Check if user already has a Gmail connection
-        if (gmailConnection && gmailConnection.connection_status === 'active') {
-          // User already has Gmail connected, just show success
-          setSuccessMessage(`Using your existing Gmail connection (${gmailConnection.external_username})`);
-          setSuccess(true);
-          
-          setTimeout(() => {
-            onComplete();
-          }, 1500);
-        } else {
-          // Initiate Gmail OAuth flow
-          await gmailInitiateOAuth();
-          // The OAuth flow will redirect the user, so we don't need to do anything else here
-        }
+        // Always initiate Gmail OAuth flow to allow multiple accounts
+        await gmailInitiateOAuth();
+        // The OAuth flow will redirect the user, so we don't need to do anything else here
       } else {
         // For other integrations, simulate OAuth flow
         await new Promise(resolve => setTimeout(resolve, 2000));

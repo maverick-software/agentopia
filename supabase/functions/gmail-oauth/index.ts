@@ -161,12 +161,13 @@ serve(async (req) => {
       vaultRefreshTokenId = refreshTokenSecret
     }
 
-    // Check if user already has a Gmail connection
+    // Check if user already has a connection with this email
     const { data: existingConnection } = await supabase
       .from('user_oauth_connections')
       .select('id')
       .eq('user_id', user.id)
       .eq('oauth_provider_id', oauthProvider.id)
+      .eq('external_username', userInfo.email)
       .single()
 
     let connectionId: string
@@ -178,6 +179,7 @@ serve(async (req) => {
         .update({
           external_user_id: userInfo.id,
           external_username: userInfo.email,
+          connection_name: userInfo.email, // Use email as connection name
           scopes_granted: tokens.scope.split(' '),
           vault_access_token_id: vaultAccessTokenId,
           vault_refresh_token_id: vaultRefreshTokenId,
@@ -208,6 +210,7 @@ serve(async (req) => {
           oauth_provider_id: oauthProvider.id,
           external_user_id: userInfo.id,
           external_username: userInfo.email,
+          connection_name: userInfo.email, // Use email as connection name
           scopes_granted: tokens.scope.split(' '),
           vault_access_token_id: vaultAccessTokenId,
           vault_refresh_token_id: vaultRefreshTokenId,

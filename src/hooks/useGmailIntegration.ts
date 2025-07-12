@@ -60,11 +60,11 @@ export interface EmailMessage {
 // Hook for managing Gmail OAuth connections
 export function useGmailConnection() {
   const { user } = useAuth();
-  const [connection, setConnection] = useState<GmailConnection | null>(null);
+  const [connections, setConnections] = useState<GmailConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchConnection = async () => {
+  const fetchConnections = async () => {
     if (!user) return;
 
     try {
@@ -72,7 +72,7 @@ export function useGmailConnection() {
       setError(null);
 
       const { data, error: fetchError } = await supabase.rpc(
-        'get_user_gmail_connection',
+        'get_user_gmail_connections',
         { p_user_id: user.id }
       );
 
@@ -81,19 +81,19 @@ export function useGmailConnection() {
       }
 
       if (data && data.length > 0) {
-        setConnection({
-          id: data[0].connection_id,
-          external_username: data[0].external_username,
-          scopes_granted: data[0].scopes_granted,
-          connection_status: data[0].connection_status,
-          connection_metadata: data[0].connection_metadata || {},
-          configuration: data[0].configuration || {}
-        });
+        setConnections(data.map((conn: any) => ({
+          id: conn.connection_id,
+          external_username: conn.external_username,
+          scopes_granted: conn.scopes_granted,
+          connection_status: conn.connection_status,
+          connection_metadata: conn.connection_metadata || {},
+          configuration: conn.configuration || {}
+        })));
       } else {
-        setConnection(null);
+        setConnections([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch Gmail connection');
+      setError(err instanceof Error ? err.message : 'Failed to fetch Gmail connections');
     } finally {
       setLoading(false);
     }
@@ -148,8 +148,8 @@ export function useGmailConnection() {
         if (popup?.closed) {
           clearInterval(checkClosed);
           // Check if connection was successful by refetching
-          fetchConnection().then(() => {
-            if (connection) {
+          fetchConnections().then(() => {
+            if (connections.length > 0) {
               resolve();
             } else {
               reject(new Error('OAuth flow was cancelled or failed'));
@@ -201,24 +201,23 @@ export function useGmailConnection() {
     // Clean up
     sessionStorage.removeItem('gmail_oauth_state');
     
-    // Refresh connection data
-    await fetchConnection();
+    // Refresh connections data
+    await fetchConnections();
   };
 
-  const disconnectGmail = async (): Promise<void> => {
-    if (!connection) return;
-
+  const disconnectGmail = async (connectionId: string): Promise<void> => {
     try {
       const { error } = await supabase
         .from('user_oauth_connections')
         .update({ connection_status: 'disconnected' })
-        .eq('id', connection.id);
+        .eq('id', connectionId);
 
       if (error) {
         throw new Error(error.message);
       }
 
-      setConnection(null);
+      // Refresh connections
+      await fetchConnections();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to disconnect Gmail');
       throw err;
@@ -227,18 +226,19 @@ export function useGmailConnection() {
 
   useEffect(() => {
     if (user) {
-      fetchConnection();
+      fetchConnections();
     }
   }, [user]);
 
   return {
-    connection,
+    connections,
+    connection: connections.length > 0 ? connections[0] : null, // For backward compatibility
     loading,
     error,
     initiateOAuth,
     handleOAuthCallback,
     disconnectGmail,
-    refetch: fetchConnection
+    refetch: fetchConnections
   };
 }
 

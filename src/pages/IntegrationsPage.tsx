@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useIntegrationCategories, useIntegrationsByCategory, useUserIntegrations } from '@/hooks/useIntegrations';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
+import { useGmailConnection } from '@/hooks/useGmailIntegration';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -79,6 +80,12 @@ export function IntegrationsPage() {
     selectedCategory === 'all' ? undefined : selectedCategory
   );
   const { userIntegrations, loading: userIntegrationsLoading } = useUserIntegrations();
+  const { connections: gmailConnections } = useGmailConnection();
+
+  // Override integration status - only Gmail is available
+  const getEffectiveStatus = (integration: any) => {
+    return integration.name === 'Gmail' ? 'available' : 'coming_soon';
+  };
 
   const getIconComponent = (iconName: string) => {
     switch (iconName) {
@@ -202,20 +209,33 @@ export function IntegrationsPage() {
                 const userStatus = getUserIntegrationStatus(integration.id);
                 const isConnected = userStatus === 'connected';
                 const statusIcon = getConnectionStatusIcon(userStatus);
+                const effectiveStatus = getEffectiveStatus(integration);
+                const isComingSoon = effectiveStatus === 'coming_soon';
                 
                 return (
-                  <Card key={integration.id} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors">
+                  <Card 
+                    key={integration.id} 
+                    className={`bg-gray-900 border-gray-800 transition-colors ${
+                      isComingSoon ? 'opacity-60' : 'hover:border-gray-700'
+                    }`}
+                  >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-gray-800 rounded-lg">
-                            <IconComponent className="h-5 w-5 text-blue-400" />
+                          <div className={`p-2 rounded-lg ${
+                            isComingSoon ? 'bg-gray-800/50' : 'bg-gray-800'
+                          }`}>
+                            <IconComponent className={`h-5 w-5 ${
+                              isComingSoon ? 'text-gray-500' : 'text-blue-400'
+                            }`} />
                           </div>
                           <div>
-                            <CardTitle className="text-lg font-semibold text-white">
+                            <CardTitle className={`text-lg font-semibold ${
+                              isComingSoon ? 'text-gray-400' : 'text-white'
+                            }`}>
                               {integration.name}
                             </CardTitle>
-                            {integration.is_popular && (
+                            {integration.is_popular && !isComingSoon && (
                               <Badge variant="secondary" className="mt-1 text-xs">
                                 Popular
                               </Badge>
@@ -223,28 +243,35 @@ export function IntegrationsPage() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {statusIcon}
-                          <Badge className={getStatusColor(integration.status)}>
-                            {getStatusText(integration.status)}
+                          {!isComingSoon && statusIcon}
+                          <Badge className={getStatusColor(effectiveStatus)}>
+                            {getStatusText(effectiveStatus)}
                           </Badge>
                         </div>
                       </div>
                     </CardHeader>
                     
                     <CardContent className="space-y-4">
-                      <p className="text-sm text-gray-400 line-clamp-3">
+                      <p className={`text-sm line-clamp-3 ${
+                        isComingSoon ? 'text-gray-500' : 'text-gray-400'
+                      }`}>
                         {integration.description}
                       </p>
                       
-                      {isConnected && (
+                      {isConnected && !isComingSoon && (
                         <div className="flex items-center space-x-2 text-sm text-green-400">
                           <Check className="h-4 w-4" />
-                          <span>Connected</span>
+                          <span>
+                            Connected
+                            {integration.name === 'Gmail' && gmailConnections.length > 1 && 
+                              ` (${gmailConnections.length} accounts)`
+                            }
+                          </span>
                         </div>
                       )}
                       
                       <div className="flex items-center space-x-2">
-                        {isConnected ? (
+                        {isConnected && !isComingSoon ? (
                           <>
                             <Button 
                               variant="outline" 
@@ -266,16 +293,22 @@ export function IntegrationsPage() {
                         ) : (
                           <Button 
                             onClick={() => handleAddCredentials(integration)}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                            disabled={integration.status === 'coming_soon'}
+                            className={`w-full ${
+                              isComingSoon 
+                                ? 'bg-gray-700 hover:bg-gray-700 text-gray-500 cursor-not-allowed' 
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                            }`}
+                            disabled={isComingSoon}
                           >
                             <Plus className="h-4 w-4 mr-2" />
-                            Add Credentials
+                            {isComingSoon ? 'Coming Soon' : 
+                              integration.name === 'Gmail' && isConnected ? 'Add Another Account' : 'Add Credentials'
+                            }
                           </Button>
                         )}
                       </div>
                       
-                      {integration.documentation_url && (
+                      {integration.documentation_url && !isComingSoon && (
                         <div className="pt-2 border-t border-gray-800">
                           <a 
                             href={integration.documentation_url}
