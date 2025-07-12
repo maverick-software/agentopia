@@ -4,24 +4,22 @@ import { useSupabaseClient } from '../../../hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext'; 
 import { Button } from '@/components/ui/button';
 import { 
-    Loader2, ArrowLeft, Save, Database, Wrench, 
-    Edit, Settings, PencilLine, ImagePlus, Power,
-    Info, Plus, Globe
+    Loader2, ArrowLeft, Save, Database, 
+    Edit, Settings, PencilLine, ImagePlus,
+    Plus, Globe
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { AgentFormInstructions } from '@/components/agent-edit/AgentFormInstructions';
-import { AgentDiscordSettings } from '@/components/agent-edit/AgentDiscordSettings';
 import { AgentDatastoreSelector } from '@/components/agent-edit/AgentDatastoreSelector';
 import type { Agent } from '@/types/index';
-import type { AgentDiscordConnection, Datastore } from '@/types';
-import { useAgentDiscordConnection_refactored } from '@/hooks/useAgentDiscordConnection_refactored';
+import type { Datastore } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
+import { AgentIntegrationAssignment } from '@/components/agent-edit/AgentIntegrationAssignment';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,36 +34,11 @@ import {
     DialogClose
 } from "@/components/ui/dialog";
 
-// Import actual API functions
-import {
-    activateAgentToolEnvironment,
-    deactivateAgentToolEnvironment,
-    // getAgentToolEnvironmentStatus // Not actively used if status fetched with agent
-} from '@/lib/api/toolEnvironments'; // Assuming this path
-
 const AgentEditPage = () => {
     const { agentId } = useParams<{ agentId: string }>();
     const navigate = useNavigate();
     const supabase = useSupabaseClient();
     const { user } = useAuth();
-
-    const {
-        connection: discordConnection,
-        hasCredentials,
-        workerStatus,
-        allGuilds,
-        isActivating: discordIsActivating,
-        isDeactivating: discordIsDeactivating,
-        isGeneratingInvite,
-        isSavingToken,
-        loading: discordLoading,
-        error: discordError,
-        updateConnectionField,
-        saveDiscordBotToken,
-        activate: activateDiscord,
-        deactivate: deactivateDiscord,
-        generateInviteLink,
-    } = useAgentDiscordConnection_refactored(agentId);
 
     const [agentData, setAgentData] = useState<Partial<Agent> | null>(null);
     const [loading, setLoading] = useState(true);
@@ -79,12 +52,6 @@ const AgentEditPage = () => {
     const [showDatastoreModal, setShowDatastoreModal] = useState(false);
     const [showProfileImageModal, setShowProfileImageModal] = useState(false);
 
-    // State for Tool Environment
-    type ToolEnvStatus = 'inactive' | 'activating' | 'active' | 'deactivating' | 'error' | 'unknown';
-    const [toolEnvStatus, setToolEnvStatus] = useState<ToolEnvStatus>('unknown'); // Start with unknown until fetched
-    const [toolEnvMessage, setToolEnvMessage] = useState<string | null>(null);
-    const [dropletIp, setDropletIp] = useState<string | null>(null);
-
     const [personalityTemplates, setPersonalityTemplates] = useState<any[]>([
         { id: 'helpful', name: 'Helpful', description: 'Friendly and eager to assist' },
         { id: 'professional', name: 'Professional', description: 'Formal and business-oriented' },
@@ -95,7 +62,6 @@ const AgentEditPage = () => {
         if (!agentId || !user) {
             setLoading(false); 
             if (agentData !== null) setAgentData(null);
-            setToolEnvStatus('inactive'); // Default if no agent/user
             return; 
         }
 
@@ -104,14 +70,11 @@ const AgentEditPage = () => {
             setError(null);
             setAgentData(null); 
             setAvailableDatastores([]);
-            setToolEnvStatus('unknown'); // Reset while loading
-            setDropletIp(null);
-            setToolEnvMessage(null);
 
             try {
                 const { data: agent, error: agentError } = await supabase
                     .from('agents')
-                    .select(`*, agent_datastores(datastore_id), agent_droplets(status, ip_address)`)
+                    .select(`*, agent_datastores(datastore_id)`)
                     .eq('id', agentId)
                     .eq('user_id', user.id)
                     .single();
@@ -121,38 +84,9 @@ const AgentEditPage = () => {
 
                 setAgentData(agent);
 
-                const dropletInfo = (agent as any).agent_droplets?.[0];
-                if (dropletInfo) {
-                    switch (dropletInfo.status) {
-                        case 'active':
-                            setToolEnvStatus('active');
-                            setDropletIp(dropletInfo.ip_address);
-                            break;
-                        case 'creating':
-                        case 'pending_creation':
-                            setToolEnvStatus('activating');
-                            break;
-                        case 'deleting':
-                        case 'pending_deletion':
-                            setToolEnvStatus('deactivating');
-                            break;
-                        case 'error_creation':
-                        case 'error_deletion':
-                        case 'unresponsive':
-                            setToolEnvStatus('error');
-                            setToolEnvMessage(`Droplet is in '${dropletInfo.status}' state.`);
-                            break;
-                        default:
-                            setToolEnvStatus('inactive');
-                            break;
-                    }
-                } else {
-                    setToolEnvStatus('inactive');
-                }
-
                 const { data: stores, error: dsError } = await supabase
                     .from('datastores')
-                    .select('id, name, type')
+                    .select('*')
                     .eq('user_id', user.id);
                 if (dsError) console.error("Error fetching datastores:", dsError);
                 else setAvailableDatastores(stores || []);
@@ -161,8 +95,6 @@ const AgentEditPage = () => {
                 console.error("[AgentEditPage] Error fetching data:", err);
                 setError(err.message);
                 setAgentData(null);
-                setToolEnvStatus('error');
-                setToolEnvMessage("Failed to load agent or tool environment data.");
             } finally {
                 setLoading(false);
             }
@@ -495,123 +427,6 @@ const AgentEditPage = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <Card>
-                        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle>Discord Connection</CardTitle>
-                                <CardDescription>Configure Discord integration</CardDescription>
-                            </div>
-                            <div className="flex items-center">
-                                <Button 
-                                    variant={agentData?.active ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => handleDiscordBotActiveSwitchChange(!agentData?.active, 'active')}
-                                    className={`${
-                                        agentData?.active 
-                                            ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
-                                            : "text-muted-foreground"
-                                    }`}
-                                >
-                                    <Power className="mr-2 h-4 w-4" />
-                                    Bot {agentData?.active ? "Active" : "Inactive"}
-                                </Button>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            {discordError && (
-                                <div className="text-sm text-destructive mb-3">
-                                    Discord Error: {discordError}
-                                </div>
-                            )}
-                            
-                            <AgentDiscordSettings
-                                connection={discordConnection}
-                                hasCredentials={hasCredentials}
-                                workerStatus={workerStatus || 'inactive'}
-                                allGuilds={allGuilds}
-                                isActivating={discordIsActivating} 
-                                isDeactivating={discordIsDeactivating}
-                                isGeneratingInvite={isGeneratingInvite}
-                                isSavingToken={isSavingToken}
-                                discordLoading={discordLoading}
-                                discordError={discordError}
-                                onConnectionChange={updateConnectionField}
-                                saveDiscordBotToken={saveDiscordBotToken}
-                                activate={activateDiscord} 
-                                deactivate={deactivateDiscord}
-                                generateInviteLink={generateInviteLink}
-                            />
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle>Tools & Dedicated Environment</CardTitle>
-                            <CardDescription>Manage dedicated environment and tools for this agent.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between p-2 rounded-md bg-muted/10 hover:bg-muted/20">
-                                <Label htmlFor="tool-env-switch" className="font-medium">
-                                    Dedicated Tool Environment
-                                </Label>
-                                <Switch
-                                    id="tool-env-switch"
-                                    checked={toolEnvStatus === 'active' || toolEnvStatus === 'activating'}
-                                    onCheckedChange={handleToolEnvironmentToggle}
-                                    disabled={toolEnvStatus === 'activating' || toolEnvStatus === 'deactivating'}
-                                />
-                            </div>
-                            
-                            {(toolEnvStatus === 'activating' || toolEnvStatus === 'deactivating') && (
-                                <Alert variant="default" className={`border-opacity-50 text-sm ${toolEnvStatus === 'activating' ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-400' : 'bg-orange-500/10 border-orange-500 text-orange-700 dark:text-orange-400'}`}>
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2 inline-block" />
-                                    <AlertDescription className="inline">
-                                        {toolEnvStatus === 'activating' ? 'Activating environment... Please wait.' : 'Deactivating environment...'}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                            {toolEnvStatus === 'active' && (
-                                <Alert variant="default" className="bg-green-500/10 border-green-500/50 text-green-700 dark:text-green-500 text-sm">
-                                    <Power className="h-4 w-4 mr-2 inline-block" />
-                                    <AlertDescription className="inline">
-                                        Environment Active. {dropletIp && `IP: ${dropletIp}`}
-                                        {toolEnvMessage && toolEnvMessage !== 'Activation initiated.' && toolEnvMessage !== 'Activated successfully!' && <span className="block text-xs opacity-80 pt-1">{toolEnvMessage}</span>}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                            {toolEnvStatus === 'inactive' && toolEnvMessage && toolEnvMessage !== 'Deactivation initiated.' && (
-                                <Alert variant="default" className="text-sm">
-                                    <Info className="h-4 w-4 mr-2 inline-block" />
-                                    <AlertDescription className="inline">{toolEnvMessage}</AlertDescription>
-                                </Alert>
-                            )}
-                            {toolEnvStatus === 'error' && toolEnvMessage && (
-                                <Alert variant="destructive" className="text-sm">
-                                    <AlertTitle>Error</AlertTitle>
-                                    <AlertDescription>{toolEnvMessage}</AlertDescription>
-                                </Alert>
-                            )}
-
-                            {toolEnvStatus === 'active' && (
-                                <div className="pt-4 mt-2 border-t border-border">
-                                    <p className="text-sm text-muted-foreground mb-3">Manage installed tools on the droplet:</p>
-                                    <div className="text-center py-4 text-muted-foreground bg-muted/20 rounded-md">
-                                        <Wrench className="h-8 w-8 mx-auto opacity-40 mb-2" />
-                                        <p className="text-xs">Tool management coming soon.</p>
-                                    </div>
-                                </div>
-                            )}
-                            {(toolEnvStatus === 'inactive' || toolEnvStatus === 'unknown') && !toolEnvMessage && (
-                                 <p className="text-sm text-muted-foreground text-center py-3">Activate the dedicated environment to manage and run agent-specific tools.</p>
-                            )}
-                             {toolEnvStatus === 'unknown' && (
-                                <Alert variant="default" className="text-sm">
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2 inline-block" />
-                                    <AlertDescription className="inline">Checking tool environment status...</AlertDescription>
-                                </Alert>
-                            )}
-                        </CardContent>
-                    </Card>
 
                     <Card>
                         <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -644,6 +459,9 @@ const AgentEditPage = () => {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Integrations Card */}
+                    <AgentIntegrationAssignment agentId={agentId!} />
 
                     <Card>
                         <CardHeader className="pb-3">
