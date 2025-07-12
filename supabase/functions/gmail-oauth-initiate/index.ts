@@ -95,7 +95,7 @@ serve(async (req) => {
       response_type: 'code',
       client_id: clientId,
       redirect_uri: redirect_uri,
-      scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send',
+      scope: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
       access_type: 'offline',
       prompt: 'consent',
       code_challenge: codeChallenge,
