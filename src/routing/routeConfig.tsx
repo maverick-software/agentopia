@@ -43,6 +43,7 @@ import {
     CreateWorkspacePage,
     WorkspaceSettingsPage,
     IntegrationsPage, // Added IntegrationsPage
+    CredentialsPage, // Added CredentialsPage
 
     // AgentStorePage, // Commented out
     // DatasetStorePage, // Commented out
@@ -88,6 +89,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces/:roomId/settings', element: WorkspaceSettingsPage, protection: 'protected', layout: false },
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: false },
   { path: '/integrations', element: IntegrationsPage, protection: 'protected', layout: true },
+  { path: '/credentials', element: CredentialsPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },

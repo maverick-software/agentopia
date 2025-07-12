@@ -54,3 +54,6 @@ export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMC
 
 // Add IntegrationsPage
 export const IntegrationsPage = lazy(() => import('../pages/IntegrationsPage').then(module => ({ default: module.IntegrationsPage }))); 
+
+// Add CredentialsPage
+export const CredentialsPage = lazy(() => import('../pages/CredentialsPage').then(module => ({ default: module.CredentialsPage }))); 

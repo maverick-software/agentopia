@@ -7,7 +7,7 @@ import {
   Wrench, GitBranch, FolderKanban, Folder,
   Building2,
   User as UserIcon,
-  Server, Store
+  Server, Store, Key
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
   { to: '/integrations', icon: Server, label: 'Integrations' },
+  { to: '/credentials', icon: Key, label: 'Credentials' },
   {
     to: '/settings', 
     icon: Settings, 
