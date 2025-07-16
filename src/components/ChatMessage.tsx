@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Clipboard, Check } from 'lucide-react';
-import type { Message } from '../types';
+import { Clipboard, Check, Settings, Wrench } from 'lucide-react';
+import type { Message, ToolCall } from '../types';
 import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
+import ToolCallIndicator from './ToolCallIndicator';
 
 interface ChatMessageProps {
   message: Message;
@@ -109,6 +110,29 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
         message.role === 'user' ? 'justify-end ml-auto max-w-[85%]' : 'justify-start mr-auto max-w-[85%]'
       }`}
     >
+      <div className="flex flex-col space-y-2 w-full">
+        {/* Tool calls display - shown above the message */}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <div className="space-y-2">
+            {message.toolCalls.map((toolCall, index) => (
+              <ToolCallIndicator
+                key={toolCall.id || `tool-${index}`}
+                toolCall={{
+                  tool_name: toolCall.tool_name,
+                  tool_provider: toolCall.tool_provider,
+                  parameters: toolCall.parameters,
+                  status: toolCall.status,
+                  execution_time_ms: toolCall.execution_time_ms,
+                  error_message: toolCall.error_message,
+                  result: toolCall.result,
+                  created_at: toolCall.created_at,
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Main message content */}
       <div
         className={`relative group rounded-lg p-3 text-sm break-words shadow-md ${
           message.role === 'user'
@@ -116,22 +140,28 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
             : 'bg-secondary text-secondary-foreground'
         }`}
       >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
         {message.role === 'assistant' && (
-          <p className="text-xs font-medium text-muted-foreground mb-1">{agentDisplayName}</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs font-medium text-muted-foreground">{agentDisplayName}</p>
+                  {message.isToolResponse && (
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">
+                      <Wrench className="w-3 h-3" />
+                      <span>Tool Response</span>
+                    </div>
+                  )}
+                </div>
         )}
         <div className="break-words">
           {formattedContent}
         </div>
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-muted-foreground opacity-80">
-            {message.timestamp instanceof Date 
-              ? message.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-              : '--:--'}
-          </p>
+            </div>
+            
           {message.role === 'assistant' && (
             <button
               onClick={handleCopy}
-              className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded opacity-50 group-hover:opacity-100"
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded opacity-50 group-hover:opacity-100 ml-2"
               title="Copy response"
             >
               {isCopied ? (
@@ -141,8 +171,27 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
               )}
             </button>
           )}
+          </div>
+          
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground opacity-80">
+                {message.timestamp instanceof Date 
+                  ? message.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                  : '--:--'}
+              </p>
+              {message.toolCalls && message.toolCalls.length > 0 && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Settings className="w-3 h-3" />
+                  <span>{message.toolCalls.length} tool{message.toolCalls.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 });
+
+export default ChatMessage;

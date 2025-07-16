@@ -33,6 +33,7 @@ import {
     DialogTrigger,
     DialogClose
 } from "@/components/ui/dialog";
+import { AgentGmailPermissions } from '@/components/agent-edit/AgentGmailPermissions';
 
 const AgentEditPage = () => {
     const { agentId } = useParams<{ agentId: string }>();
@@ -473,6 +474,27 @@ const AgentEditPage = () => {
                                 <Settings className="h-10 w-10 mx-auto opacity-50 mb-2" />
                                 <p>Advanced settings coming soon</p>
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Gmail Integration Card */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="flex items-center">
+                                <Globe className="h-5 w-5 mr-2" />
+                                Gmail Integration
+                            </CardTitle>
+                            <CardDescription>
+                                Connect your Gmail account and configure permissions for this agent
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {agentData.id && user && (
+                                <AgentGmailPermissions
+                                    agentId={agentData.id}
+                                    userId={user.id}
+                                />
+                            )}
                         </CardContent>
                     </Card>
                 </div>

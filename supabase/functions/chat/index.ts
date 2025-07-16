@@ -19,6 +19,7 @@ import {
   createErrorResponse, 
   createSuccessResponse 
 } from './auth_handler.ts';
+import { FunctionCallingManager, OpenAIFunction, OpenAIToolCall, processFunctionCalls } from './function_calling.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -153,22 +154,20 @@ async function handleAgentMessage(
 
       // Add agent identity and personality
       if (agent.name) {
-        contextBuilder.addSystemInstruction(`You are ${agent.name}, an AI agent.`);
+        contextBuilder.addSystemInstruction(`You are ${agent.name}, a helpful AI assistant with access to a suite of tools. You are not just a language model; you can perform actions on behalf of the user when they ask you to.`);
         if (agent.personality) {
-          contextBuilder.addSystemInstruction(`Your personality: ${agent.personality}`);
+          contextBuilder.addSystemInstruction(`Your personality: ${agent.personality}. Always maintain this persona.`);
         }
-      }
-
-      // Add workspace context
-      if (workspaceDetails) {
-        contextBuilder.addWorkspaceContext(workspaceDetails);
       }
 
       // Add assistant instructions
       if (agent.assistant_instructions) {
-        contextBuilder.addAssistantInstruction(agent.assistant_instructions);
+        contextBuilder.addAssistantInstruction(`Follow these instructions carefully: ${agent.assistant_instructions}`);
       }
-
+      
+      // Add a directive to use tools
+      contextBuilder.addSystemInstruction("When a user asks you to perform an action that corresponds to one of your available tools, you must use that tool. Do not refuse or claim you are unable to perform the action. If you have the tool, use it.");
+      
       // Add vector search results if available
       if (vectorContextStr) {
         contextBuilder.addVectorMemories(vectorContextStr);
@@ -189,16 +188,89 @@ async function handleAgentMessage(
       const messages = contextBuilder.buildContext();
 
       console.log(`[chat] Final context built - ${messages.length} messages, approximately ${contextBuilder.getTotalTokenCount()} tokens`);
+      
+      // Add a "thinking" step log
+      console.log('[ReAct] Thinking: Does the user want me to use a tool? Reviewing available tools and user request.');
 
-  // Get Response from LLM
+  // Initialize function calling manager
+      const functionCallingManager = new FunctionCallingManager(supabaseClient);
+      
+      // Get available tools for the agent
+      const availableTools = await functionCallingManager.getAvailableTools(agentId, userId);
+      console.log(`[chat] Found ${availableTools.length} available tools for agent ${agentId}`);
+      console.log(`[chat] Available tools:`, availableTools.map(t => t.name));
+
+  // Get Response from LLM with function calling
       const completion = await openai.chat.completions.create({
         model: 'gpt-4',
         messages,
         temperature: 0.7,
+        tools: availableTools.length > 0 ? availableTools.map(tool => ({
+          type: 'function',
+          function: tool,
+        })) : undefined,
+        tool_choice: availableTools.length > 0 ? 'auto' : undefined,
       });
 
+  // Handle function calls if present
+      let completionContent = completion.choices[0].message.content;
+      const toolCalls = completion.choices[0].message.tool_calls;
+
+      if (toolCalls && toolCalls.length > 0) {
+        console.log(`[chat] Agent requested ${toolCalls.length} function calls`);
+        
+        // Execute function calls
+        const functionResults = await Promise.all(
+          toolCalls.map(async (toolCall: OpenAIToolCall) => {
+            const functionName = toolCall.function.name;
+            const parameters = JSON.parse(toolCall.function.arguments);
+            
+            console.log(`[chat] Executing function ${functionName} with parameters:`, parameters);
+            
+            return await functionCallingManager.executeFunction(
+              agentId,
+              userId,
+              functionName,
+              parameters
+            );
+          })
+        );
+
+        // Format function responses
+        const functionResponses = processFunctionCalls(toolCalls, functionResults, functionCallingManager);
+        
+        // Create follow-up messages for OpenAI
+        const followUpMessages = [
+          ...messages,
+          {
+            role: 'assistant',
+            content: completionContent,
+            tool_calls: toolCalls,
+          },
+          ...functionResponses.map(response => ({
+            role: 'tool',
+            tool_call_id: response.tool_call_id,
+            content: response.content,
+          })),
+        ];
+
+        console.log(`[chat] Making follow-up request with function results`);
+        
+        // Get final response with function results
+        const followUpCompletion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: followUpMessages,
+          temperature: 0.7,
+        });
+
+        completionContent = followUpCompletion.choices[0].message.content;
+        
+        console.log(`[chat] Function calls completed. Final response generated.`);
+      } else {
+        console.log(`[chat] No function calls requested by agent`);
+      }
+
   // Extract assistant response
-      const completionContent = completion.choices[0].message.content;
 
       // Save agent response in the database
   const saveResult = await saveAgentResponse(channelId, completionContent, agentId, supabaseClient);

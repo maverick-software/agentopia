@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'react-hot-toast';
 
 // Types
 export interface GmailConnection {
@@ -291,28 +292,33 @@ export function useAgentGmailPermissions(agentId?: string) {
       throw new Error('User or agent not available');
     }
 
+    const toastId = toast.loading('Granting permissions...');
+
     try {
+      // Use the correct column names as per the latest schema
       const { error } = await supabase
         .from('agent_oauth_permissions')
         .upsert({
           agent_id: agentId,
           user_oauth_connection_id: connectionId,
-          granted_scopes: scopes,
+          granted_by_user_id: user.id, // Corrected from granted_by
+          allowed_scopes: scopes,      // Corrected from granted_scopes
+          permission_level: 'custom',  // Set a valid permission level
           is_active: true,
-          granted_by: user.id,
-          usage_limits: {
-            max_emails_per_day: usageLimits?.max_emails_per_day || 100,
-            max_api_calls_per_hour: usageLimits?.max_api_calls_per_hour || 500,
-          }
+        }, {
+          onConflict: 'agent_id, user_oauth_connection_id'
         });
 
       if (error) {
-        throw new Error(error.message);
+        throw error;
       }
 
+      toast.success('Permissions granted successfully!', { id: toastId });
       await fetchPermissions();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to grant permissions');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to grant permissions';
+      console.error('Error granting permissions:', errorMessage);
+      toast.error(errorMessage, { id: toastId });
       throw err;
     }
   };
