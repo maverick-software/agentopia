@@ -27,6 +27,7 @@ export function AgentChatPage() {
   const MAX_FETCH_ATTEMPTS = 5;
   const isMounted = useRef(true); // Track mount status for async operations
   const fetchInProgress = useRef(false); // Ref to track if a fetch is already in progress
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
@@ -204,6 +205,43 @@ export function AgentChatPage() {
     }
   }, [messages, scrollToBottom]);
 
+  // Effect to fetch chat history
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!agentId || !user?.id) return;
+
+      setIsHistoryLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('sender_agent_id', agentId)
+          .or(`sender_user_id.eq.${user.id},receiver_user_id.eq.${user.id}`) // Adjust based on your schema for DMs
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        if (data) {
+          const formattedMessages: Message[] = data.map((msg: any) => ({
+            role: msg.sender_agent_id ? 'assistant' : 'user',
+            content: msg.content,
+            timestamp: new Date(msg.created_at),
+            agentId: msg.sender_agent_id,
+            userId: msg.sender_user_id,
+          }));
+          setMessages(formattedMessages);
+        }
+      } catch (err) {
+        console.error("Failed to fetch chat history:", err);
+        setError("Could not load chat history.");
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, [agentId, user?.id]);
+
 
   // Submit Message Handler - Remains largely the same, uses useCallback
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -359,57 +397,43 @@ export function AgentChatPage() {
 
 
   return (
-    <div className="flex flex-col flex-1 h-full max-w-4xl w-full mx-auto p-6">
-      {/* Display chat-related errors separately */}
-      {error && agent && ( // Only show chat errors if agent loaded successfully
-        <div className="mb-4">
-          <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-300 hover:text-red-100">&times;</button>
-          </div>
-        </div>
-      )}
-
-      <div
-        className={`flex-1 overflow-y-auto mb-4 pr-2 ${ // Added pr-2 for scrollbar spacing
-          messages.length === 0 ? 'flex flex-col items-center justify-center' : 'space-y-4'
-        }`}
-      >
-        {/* Only show agent name header if messages are empty AND agent exists */}
-        {messages.length === 0 && agent ? (
-          <div className="text-center">
-            <h2 className="text-3xl font-semibold text-gray-400">{agent.name}</h2>
-            {/* Optional: Display agent description or system prompt */}
-            {/* <p className="text-sm text-gray-500 mt-1">{agent.description || 'Start chatting...'}</p> */}
+    <div className="flex flex-col flex-1 h-full max-w-4xl w-full mx-auto">
+      {/* Header can go here if needed */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {isHistoryLoading ? (
+           <div className="flex h-full items-center justify-center">
+             <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+           </div>
+        ) : messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <p>No messages yet. Send the first one!</p>
           </div>
         ) : (
           messages.map((message, index) => (
             <ChatMessage 
               key={`${message.role}-${index}-${message.timestamp.toISOString()}`} 
               message={message} 
-              members={[]} 
             />
           ))
         )}
-        {/* Removed the general loading spinner here, handled above */}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="sticky bottom-0 bg-gray-900 pt-2 pb-2">
+      <div className="bg-background border-t p-4">
         <form onSubmit={handleSubmit} className="flex space-x-4 items-center">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={agent ? `Message ${agent.name}...` : "Loading agent..."}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-            disabled={sending || !agent} // Disable if sending or agent not loaded
+            className="flex-1 bg-muted border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            disabled={sending || !agent}
             aria-label="Chat message input"
           />
           <button
             type="submit"
-            className="bg-indigo-600 text-white rounded-lg px-4 h-12 flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500"
-            disabled={sending || !agent || !input.trim()} // Disable if sending, no agent, or input empty
+            className="bg-primary text-primary-foreground rounded-lg px-4 h-12 flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-ring"
+            disabled={sending || !agent || !input.trim()}
             aria-label="Send message"
           >
             {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}

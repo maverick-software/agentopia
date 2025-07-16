@@ -81,7 +81,7 @@ export const AgentGmailPermissions: React.FC<{ agentId: string; }> = ({ agentId 
               <CheckCircle className="h-5 w-5" />
               <p className="font-medium">Full Access Granted</p>
             </div>
-            <Button onClick={handleRevoke} variant="destructive" disabled={isProcessing}>
+            <Button onClick={() => { console.log('Revoke button clicked'); handleRevoke(); }} variant="destructive" disabled={isProcessing}>
               <Trash2 className="mr-2 h-4 w-4" /> Revoke Access
             </Button>
           </div>
@@ -91,7 +91,7 @@ export const AgentGmailPermissions: React.FC<{ agentId: string; }> = ({ agentId 
               <XCircle className="h-5 w-5" />
               <p>No permissions granted.</p>
             </div>
-            <Button onClick={handleGrant} disabled={isProcessing || !connection}>
+            <Button onClick={() => { console.log('Grant button clicked'); handleGrant(); }} disabled={isProcessing || !connection}>
               <Shield className="mr-2 h-4 w-4" /> Grant Full Access
             </Button>
           </div>
