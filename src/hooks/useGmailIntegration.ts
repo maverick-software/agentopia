@@ -24,7 +24,7 @@ export interface GmailConnection {
 export interface AgentGmailPermission {
   id: string;
   agent_id: string;
-  granted_scopes: string[];
+  allowed_scopes: string[];
   is_active: boolean;
   granted_at: string;
   usage_limits: {
@@ -333,8 +333,7 @@ export function useAgentGmailPermissions(agentId?: string) {
         .from('agent_oauth_permissions')
         .update({
           is_active: false,
-          revoked_at: new Date().toISOString(),
-          revoked_by: user.id
+          updated_at: new Date().toISOString()
         })
         .eq('id', permissionId);
 

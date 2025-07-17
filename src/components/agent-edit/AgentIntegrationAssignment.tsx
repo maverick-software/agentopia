@@ -63,13 +63,19 @@ export function AgentIntegrationAssignment({ agentId }: AgentIntegrationAssignme
   const fetchAgentPermissions = async () => {
     try {
       setLoading(true);
+      console.log('[Integration] Fetching permissions for agent:', agentId);
       
       // Fetch existing permissions for this agent using RPC function
       const { data, error } = await supabase.rpc('get_agent_integration_permissions', {
         p_agent_id: agentId
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Integration] RPC error:', error);
+        throw error;
+      }
+
+      console.log('[Integration] Raw permissions data:', data);
 
       const formattedPermissions = data?.map((perm: any) => ({
         id: perm.permission_id,
@@ -85,10 +91,12 @@ export function AgentIntegrationAssignment({ agentId }: AgentIntegrationAssignme
         }
       })) || [];
 
+      console.log('[Integration] Formatted permissions:', formattedPermissions);
       setPermissions(formattedPermissions);
     } catch (error) {
-      console.error('Error fetching agent permissions:', error);
-      toast.error('Failed to load integration permissions');
+      console.error('[Integration] Error fetching agent permissions:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load integration permissions';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -102,6 +110,7 @@ export function AgentIntegrationAssignment({ agentId }: AgentIntegrationAssignme
 
     try {
       setSaving(true);
+      console.log('[Integration] Granting permission:', { agentId, selectedConnectionId, selectedScopes });
 
       const { data, error } = await supabase.rpc('grant_agent_integration_permission', {
         p_agent_id: agentId,
@@ -110,14 +119,20 @@ export function AgentIntegrationAssignment({ agentId }: AgentIntegrationAssignme
         p_permission_level: 'custom'
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Integration] RPC error:', error);
+        throw error;
+      }
 
+      console.log('[Integration] Permission granted successfully:', data);
       toast.success('Integration permission granted successfully');
       setSelectedConnectionId('');
+      setSelectedScopes(DEFAULT_GMAIL_SCOPES);
       fetchAgentPermissions();
     } catch (error) {
-      console.error('Error granting permission:', error);
-      toast.error('Failed to grant integration permission');
+      console.error('[Integration] Error granting permission:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to grant integration permission';
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -125,28 +140,48 @@ export function AgentIntegrationAssignment({ agentId }: AgentIntegrationAssignme
 
   const handleRevokePermission = async (permissionId: string) => {
     try {
+      console.log('[Integration] Revoking permission:', permissionId);
+      
       const { data, error } = await supabase.rpc('revoke_agent_integration_permission', {
         p_permission_id: permissionId
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Integration] RPC error:', error);
+        throw error;
+      }
 
+      console.log('[Integration] Permission revoked successfully:', data);
       toast.success('Integration permission revoked');
       fetchAgentPermissions();
     } catch (error) {
-      console.error('Error revoking permission:', error);
-      toast.error('Failed to revoke integration permission');
+      console.error('[Integration] Error revoking permission:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to revoke integration permission';
+      toast.error(errorMessage);
     }
   };
 
   const handleTogglePermission = async (permissionId: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('agent_oauth_permissions')
-        .update({ is_active: isActive })
-        .eq('id', permissionId);
+      if (isActive) {
+        // If enabling, we don't need to do anything special since the permission already exists
+        const { error } = await supabase
+          .from('agent_oauth_permissions')
+          .update({ 
+            is_active: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', permissionId);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        // If disabling, use the revoke function for consistency
+        const { data, error } = await supabase.rpc('revoke_agent_integration_permission', {
+          p_permission_id: permissionId
+        });
+
+        if (error) throw error;
+      }
 
       toast.success(`Integration ${isActive ? 'enabled' : 'disabled'}`);
       fetchAgentPermissions();

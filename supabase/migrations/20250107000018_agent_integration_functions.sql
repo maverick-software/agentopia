@@ -40,6 +40,7 @@ AS $$
     INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
     WHERE aop.agent_id = p_agent_id
     AND uoc.user_id = auth.uid()
+    AND aop.is_active = true
     ORDER BY aop.granted_at DESC;
 $$;
 
