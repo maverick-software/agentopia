@@ -215,8 +215,7 @@ export function AgentChatPage() {
         const { data, error } = await supabase
           .from('chat_messages')
           .select('*')
-          .eq('sender_agent_id', agentId)
-          .or(`sender_user_id.eq.${user.id},receiver_user_id.eq.${user.id}`) // Adjust based on your schema for DMs
+          .or(`sender_agent_id.eq.${agentId},sender_user_id.eq.${user.id}`)
           .order('created_at', { ascending: true });
 
         if (error) throw error;
