@@ -37,9 +37,11 @@ serve(async (req) => {
   try {
     const { action, params, agent_id } = await req.json()
     console.log('Gmail API request:', { action, agent_id })
+    console.log('Params received:', JSON.stringify(params, null, 2))
 
     // Validate required parameters
     if (!action || !params || !agent_id) {
+      console.error('Missing parameters:', { action: !!action, params: !!params, agent_id: !!agent_id })
       throw new Error('Missing required parameters: action, params, and agent_id are required')
     }
 
@@ -188,55 +190,79 @@ serve(async (req) => {
     }
 
     // Check if token needs refresh
-    const tokenExpiresAt = new Date(connection.token_expires_at)
+    const tokenExpiresAtValue = connection.token_expires_at
     const now = new Date()
     
     let currentAccessToken = accessToken
     
-    if (tokenExpiresAt < now) {
-      // Token expired, refresh it
-      const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          client_id: Deno.env.get('GMAIL_CLIENT_ID')!,
-          client_secret: Deno.env.get('GMAIL_CLIENT_SECRET')!,
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token'
+    // Log the token expiry check
+    if (tokenExpiresAtValue) {
+      const tokenExpiresAt = new Date(tokenExpiresAtValue)
+      if (!isNaN(tokenExpiresAt.getTime())) {
+        console.log('Token expiry check:', {
+          tokenExpiresAt: tokenExpiresAt.toISOString(),
+          now: now.toISOString(),
+          needsRefresh: tokenExpiresAt < now
         })
-      })
+        
+        if (tokenExpiresAt < now) {
+          // Token expired, refresh it
+          console.log('Token expired, refreshing...')
+          const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              client_id: Deno.env.get('GMAIL_CLIENT_ID')!,
+              client_secret: Deno.env.get('GMAIL_CLIENT_SECRET')!,
+              refresh_token: refreshToken,
+              grant_type: 'refresh_token'
+            })
+          })
 
-      if (!refreshResponse.ok) {
-        throw new Error('Failed to refresh Gmail access token')
+          if (!refreshResponse.ok) {
+            throw new Error('Failed to refresh Gmail access token')
+          }
+
+          const tokenData = await refreshResponse.json()
+          currentAccessToken = tokenData.access_token
+
+          // Update the connection with new token (stored as plain text for now)
+          const newExpiresAt = new Date()
+          newExpiresAt.setSeconds(newExpiresAt.getSeconds() + tokenData.expires_in)
+
+          await supabase
+            .from('user_oauth_connections')
+            .update({
+              vault_access_token_id: tokenData.access_token,
+              token_expires_at: newExpiresAt.toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', connection.connection_id)
+
+          console.log('Token refreshed successfully')
+        }
+      } else {
+        console.log('Token expiry check: Invalid token_expires_at value')
       }
-
-      const tokenData = await refreshResponse.json()
-      currentAccessToken = tokenData.access_token
-
-      // Update the connection with new token (stored as plain text for now)
-      const newExpiresAt = new Date()
-      newExpiresAt.setSeconds(newExpiresAt.getSeconds() + tokenData.expires_in)
-
-      await supabase
-        .from('user_oauth_connections')
-        .update({
-          vault_access_token_id: currentAccessToken,
-          token_expires_at: newExpiresAt.toISOString()
-        })
-        .eq('id', connection.connection_id)
+    } else {
+      console.log('Token expiry check: No token_expires_at value, assuming token is valid')
     }
 
-    // Execute Gmail operation
-    const startTime = Date.now()
+    // Execute the requested action
     let result: any
     let quotaConsumed = 0
+    const startTime = Date.now()
 
+    console.log(`Executing action: ${action}`)
+    
     try {
       switch (action) {
         case 'send_email':
+          console.log('Calling sendEmail with params:', params)
           result = await sendEmail(currentAccessToken, params as EmailMessage)
+          console.log('sendEmail result:', result)
           quotaConsumed = 100 // Sending emails costs 100 quota units
           break
         
@@ -336,6 +362,15 @@ function getRequiredScopes(action: string): string[] {
 // Gmail API Operations
 
 async function sendEmail(accessToken: string, message: EmailMessage): Promise<any> {
+  console.log('[sendEmail] Starting email send process')
+  console.log('[sendEmail] Message details:', {
+    to: message.to,
+    subject: message.subject,
+    hasBody: !!message.body,
+    hasHtml: !!message.html,
+    attachmentCount: message.attachments?.length || 0
+  })
+
   // Create RFC 2822 email format
   const boundary = `boundary_${Date.now()}`
   let email = ''
@@ -374,6 +409,7 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     .replace(/\//g, '_')
     .replace(/=+$/, '')
 
+  console.log('[sendEmail] Making request to Gmail API')
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
@@ -383,6 +419,12 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     body: JSON.stringify({
       raw: encodedEmail
     }),
+  })
+
+  console.log('[sendEmail] Gmail API response:', {
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok
   })
 
   if (!response.ok) {
@@ -418,7 +460,9 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     }
   }
 
-  return await response.json()
+  const result = await response.json()
+  console.log('[sendEmail] Email sent successfully:', result)
+  return result
 }
 
 async function readEmails(accessToken: string, parameters: any): Promise<any> {
