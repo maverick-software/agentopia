@@ -84,44 +84,68 @@ serve(async (req) => {
     const connection = gmailConnection[0]
 
     // Check if tokens are stored as vault IDs (UUIDs) or plain text
+    // Gmail OAuth tokens are typically longer than UUIDs and contain special characters
     const looksLikeUUID = (str: string) => {
-      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+      // A UUID is exactly 36 characters and matches the pattern
+      return str.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
     }
 
     let accessToken: string
     let refreshToken: string
 
     // Handle access token
-    if (looksLikeUUID(connection.vault_access_token_id)) {
-      // It's a vault ID, decrypt it
-      const { data: accessTokenData, error: accessTokenError } = await supabase.rpc(
-        'get_secret',
-        { secret_id: connection.vault_access_token_id }
-      )
+    if (connection.vault_access_token_id && looksLikeUUID(connection.vault_access_token_id)) {
+      // It's a vault ID, try to decrypt it
+      console.log('Access token appears to be a vault ID, attempting decryption...')
+      try {
+        const { data: accessTokenData, error: accessTokenError } = await supabase.rpc(
+          'get_secret',
+          { secret_id: connection.vault_access_token_id }
+        )
 
-      if (accessTokenError || !accessTokenData || accessTokenData.length === 0) {
-        throw new Error('Failed to decrypt Gmail access token')
+        if (accessTokenError || !accessTokenData || accessTokenData.length === 0) {
+          console.error('Failed to decrypt access token from vault, falling back to direct value')
+          // Fall back to using the value directly
+          accessToken = connection.vault_access_token_id
+        } else {
+          accessToken = accessTokenData[0].key
+        }
+      } catch (error) {
+        console.error('Error decrypting access token:', error)
+        // Fall back to using the value directly
+        accessToken = connection.vault_access_token_id
       }
-      accessToken = accessTokenData[0].key
     } else {
       // It's stored as plain text
+      console.log('Access token stored as plain text')
       accessToken = connection.vault_access_token_id
     }
 
     // Handle refresh token
-    if (looksLikeUUID(connection.vault_refresh_token_id)) {
-      // It's a vault ID, decrypt it
-      const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
-        'get_secret',
-        { secret_id: connection.vault_refresh_token_id }
-      )
+    if (connection.vault_refresh_token_id && looksLikeUUID(connection.vault_refresh_token_id)) {
+      // It's a vault ID, try to decrypt it
+      console.log('Refresh token appears to be a vault ID, attempting decryption...')
+      try {
+        const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
+          'get_secret',
+          { secret_id: connection.vault_refresh_token_id }
+        )
 
-      if (refreshTokenError || !refreshTokenData || refreshTokenData.length === 0) {
-        throw new Error('Failed to decrypt Gmail refresh token')
+        if (refreshTokenError || !refreshTokenData || refreshTokenData.length === 0) {
+          console.error('Failed to decrypt refresh token from vault, falling back to direct value')
+          // Fall back to using the value directly
+          refreshToken = connection.vault_refresh_token_id
+        } else {
+          refreshToken = refreshTokenData[0].key
+        }
+      } catch (error) {
+        console.error('Error decrypting refresh token:', error)
+        // Fall back to using the value directly
+        refreshToken = connection.vault_refresh_token_id
       }
-      refreshToken = refreshTokenData[0].key
     } else {
       // It's stored as plain text
+      console.log('Refresh token stored as plain text')
       refreshToken = connection.vault_refresh_token_id
     }
 
