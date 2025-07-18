@@ -3,68 +3,49 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+);
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing environment variables');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const USER_ID = '3f966af2-72a1-41bc-8fac-400b8002664b';
-
-async function checkActualTokenValues() {
-  console.log('Checking actual token values\n');
-  console.log('===========================\n');
-
-  try {
-    // Get the raw connection data
-    const { data: connection, error } = await supabase
-      .from('user_oauth_connections')
-      .select('vault_access_token_id, vault_refresh_token_id')
-      .eq('user_id', USER_ID)
-      .single();
-
-    if (error) {
-      console.error('Error fetching connection:', error);
-      return;
-    }
-
-    console.log('Raw vault field values:');
-    console.log('- vault_access_token_id:', connection.vault_access_token_id);
-    console.log('- vault_refresh_token_id:', connection.vault_refresh_token_id);
+async function checkTokenValues() {
+  console.log('Checking actual token values in database...\n');
+  
+  // Check the actual token values
+  const { data: connections, error: connError } = await supabase
+    .from('user_oauth_connections')
+    .select('id, vault_access_token_id, vault_refresh_token_id, connection_status, external_username')
+    .eq('connection_status', 'active');
     
-    // Check if they look like OAuth tokens (longer strings with dots) or UUIDs
-    const accessTokenValue = connection.vault_access_token_id;
-    const refreshTokenValue = connection.vault_refresh_token_id;
-    
-    console.log('\nToken analysis:');
-    console.log('- Access token looks like UUID:', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(accessTokenValue));
-    console.log('- Access token looks like OAuth token:', accessTokenValue && accessTokenValue.includes('.'));
-    console.log('- Access token length:', accessTokenValue?.length);
-    
-    console.log('\n- Refresh token looks like UUID:', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(refreshTokenValue));
-    console.log('- Refresh token looks like OAuth token:', refreshTokenValue && refreshTokenValue.includes('1//'));
-    console.log('- Refresh token length:', refreshTokenValue?.length);
-
-    // Check the vault.secrets table directly
-    console.log('\nChecking vault.secrets table...');
-    const { data: vaultSecrets, error: vaultError } = await supabase
-      .from('vault.secrets')
-      .select('id, name')
-      .or(`id.eq.${accessTokenValue},id.eq.${refreshTokenValue}`);
-
-    if (vaultError) {
-      console.log('Cannot access vault.secrets table (expected - requires special permissions)');
-    } else {
-      console.log('Found vault secrets:', vaultSecrets);
-    }
-
-  } catch (err) {
-    console.error('Error:', err);
+  if (connError) {
+    console.error('Error fetching connections:', connError);
+    return;
   }
+    
+  if (connections && connections.length > 0) {
+    const conn = connections[0];
+    console.log('Connection ID:', conn.id);
+    console.log('External username:', conn.external_username);
+    console.log('Connection status:', conn.connection_status);
+    console.log('\nToken values:');
+    console.log('Access token ID:', conn.vault_access_token_id);
+    console.log('Refresh token ID:', conn.vault_refresh_token_id);
+    
+    // Check if they're UUIDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    console.log('\nAccess token is UUID:', uuidRegex.test(conn.vault_access_token_id));
+    console.log('Refresh token is UUID:', uuidRegex.test(conn.vault_refresh_token_id));
+    
+    // If they're UUIDs, try to get from vault
+    if (uuidRegex.test(conn.vault_access_token_id)) {
+      console.log('\nTokens appear to be vault IDs. The gmail-api function needs to decrypt them.');
+      console.log('This means we need the vault system to be properly configured.');
+    } else {
+      console.log('\nTokens appear to be stored directly (not UUIDs).');
+    }
+  }
+  
+  process.exit(0);
 }
 
-checkActualTokenValues(); 
+checkTokenValues().catch(console.error); 

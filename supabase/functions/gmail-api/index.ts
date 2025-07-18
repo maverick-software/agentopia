@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -25,29 +29,36 @@ interface EmailMessage {
 }
 
 serve(async (req) => {
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const requestData: GmailAPIRequest = await req.json()
-    const { agent_id, action, parameters } = requestData
-    
-    if (!agent_id || !action) {
-      throw new Error('agent_id and action are required')
+    const { action, params, agent_id } = await req.json()
+    console.log('Gmail API request:', { action, agent_id })
+
+    // Validate required parameters
+    if (!action || !params || !agent_id) {
+      throw new Error('Missing required parameters: action, params, and agent_id are required')
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    // Get current user from JWT
+    // Create a Supabase client with the auth context
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      throw new Error('No authorization header provided')
+      throw new Error('Missing Authorization header')
     }
 
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    })
+
+    // Create a service role client for vault access
+    const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     )
@@ -87,7 +98,7 @@ serve(async (req) => {
     // Gmail OAuth tokens are typically longer than UUIDs and contain special characters
     const looksLikeUUID = (str: string) => {
       // A UUID is exactly 36 characters and matches the pattern
-      return str.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+      return str && str.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
     }
 
     let accessToken: string
@@ -95,25 +106,28 @@ serve(async (req) => {
 
     // Handle access token
     if (connection.vault_access_token_id && looksLikeUUID(connection.vault_access_token_id)) {
-      // It's a vault ID, try to decrypt it
+      // It's a vault ID, try to decrypt it using service role
       console.log('Access token appears to be a vault ID, attempting decryption...')
       try {
-        const { data: accessTokenData, error: accessTokenError } = await supabase.rpc(
+        const { data: accessTokenData, error: accessTokenError } = await supabaseServiceRole.rpc(
           'get_secret',
           { secret_id: connection.vault_access_token_id }
         )
 
-        if (accessTokenError || !accessTokenData || accessTokenData.length === 0) {
-          console.error('Failed to decrypt access token from vault, falling back to direct value')
-          // Fall back to using the value directly
-          accessToken = connection.vault_access_token_id
-        } else {
-          accessToken = accessTokenData[0].key
+        if (accessTokenError) {
+          console.error('Access token decryption error:', accessTokenError)
+          throw new Error(`Failed to decrypt access token: ${accessTokenError.message}`)
         }
+
+        if (!accessTokenData || accessTokenData.length === 0) {
+          throw new Error('Access token decryption returned empty data')
+        }
+
+        accessToken = accessTokenData[0].key
+        console.log('Access token decrypted successfully')
       } catch (error) {
         console.error('Error decrypting access token:', error)
-        // Fall back to using the value directly
-        accessToken = connection.vault_access_token_id
+        throw new Error(`Failed to decrypt Gmail access token: ${error.message}`)
       }
     } else {
       // It's stored as plain text
@@ -123,25 +137,28 @@ serve(async (req) => {
 
     // Handle refresh token
     if (connection.vault_refresh_token_id && looksLikeUUID(connection.vault_refresh_token_id)) {
-      // It's a vault ID, try to decrypt it
+      // It's a vault ID, try to decrypt it using service role
       console.log('Refresh token appears to be a vault ID, attempting decryption...')
       try {
-        const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
+        const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole.rpc(
           'get_secret',
           { secret_id: connection.vault_refresh_token_id }
         )
 
-        if (refreshTokenError || !refreshTokenData || refreshTokenData.length === 0) {
-          console.error('Failed to decrypt refresh token from vault, falling back to direct value')
-          // Fall back to using the value directly
-          refreshToken = connection.vault_refresh_token_id
-        } else {
-          refreshToken = refreshTokenData[0].key
+        if (refreshTokenError) {
+          console.error('Refresh token decryption error:', refreshTokenError)
+          throw new Error(`Failed to decrypt refresh token: ${refreshTokenError.message}`)
         }
+
+        if (!refreshTokenData || refreshTokenData.length === 0) {
+          throw new Error('Refresh token decryption returned empty data')
+        }
+
+        refreshToken = refreshTokenData[0].key
+        console.log('Refresh token decrypted successfully')
       } catch (error) {
         console.error('Error decrypting refresh token:', error)
-        // Fall back to using the value directly
-        refreshToken = connection.vault_refresh_token_id
+        throw new Error(`Failed to decrypt Gmail refresh token: ${error.message}`)
       }
     } else {
       // It's stored as plain text
@@ -198,22 +215,22 @@ serve(async (req) => {
     try {
       switch (action) {
         case 'send_email':
-          result = await sendEmail(currentAccessToken, parameters as EmailMessage)
+          result = await sendEmail(currentAccessToken, params as EmailMessage)
           quotaConsumed = 100 // Sending emails costs 100 quota units
           break
         
         case 'read_emails':
-          result = await readEmails(currentAccessToken, parameters)
-          quotaConsumed = 5 * (parameters.max_results || 50) // 5 units per message
+          result = await readEmails(currentAccessToken, params)
+          quotaConsumed = 5 * (params.max_results || 50) // 5 units per message
           break
         
         case 'search_emails':
-          result = await searchEmails(currentAccessToken, parameters)
-          quotaConsumed = 5 * (parameters.max_results || 50)
+          result = await searchEmails(currentAccessToken, params)
+          quotaConsumed = 5 * (params.max_results || 50)
           break
         
         case 'manage_labels':
-          result = await manageLabels(currentAccessToken, parameters)
+          result = await manageLabels(currentAccessToken, params)
           quotaConsumed = 5 // Label operations cost 5 units
           break
         
@@ -228,7 +245,7 @@ serve(async (req) => {
         p_agent_id: agent_id,
         p_user_id: user.id,
         p_operation_type: action,
-        p_operation_params: parameters,
+        p_operation_params: params,
         p_operation_result: result,
         p_status: 'success',
         p_quota_consumed: quotaConsumed,
@@ -256,7 +273,7 @@ serve(async (req) => {
         p_agent_id: agent_id,
         p_user_id: user.id,
         p_operation_type: action,
-        p_operation_params: parameters,
+        p_operation_params: params,
         p_operation_result: null,
         p_status: 'error',
         p_error_message: operationError.message,
