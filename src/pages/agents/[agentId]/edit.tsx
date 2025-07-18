@@ -32,6 +32,7 @@ import {
     DialogTrigger,
     DialogClose
 } from "@/components/ui/dialog";
+import { ToolExecutionHistory } from '@/components/ToolExecutionHistory';
 
 
 const AgentEditPage = () => {
@@ -381,6 +382,22 @@ const AgentEditPage = () => {
                         title="Tools"
                         description="Connect external tools and services to this agent"
                     />
+
+                    {/* Tool Execution History */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Tool Execution History</CardTitle>
+                            <CardDescription>View recent tool executions and their results</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ToolExecutionHistory 
+                                agentId={agentId!}
+                                showFilters={true}
+                                showExport={true}
+                                maxItems={50}
+                            />
+                        </CardContent>
+                    </Card>
 
                     <Card>
                         <CardHeader className="pb-3">

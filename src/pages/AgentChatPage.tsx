@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
 import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
+import { ToolExecutionLogger } from '../components/ToolExecutionLogger';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
 
@@ -518,6 +519,14 @@ export function AgentChatPage() {
             }}
           />
         )}
+        
+        {/* Tool Execution Logger */}
+        <ToolExecutionLogger
+          isExecuting={aiState === 'executing_tool'}
+          currentTool={currentTool?.toolName}
+          className="mt-4"
+          autoScroll={true}
+        />
         
         <div ref={messagesEndRef} />
       </div>

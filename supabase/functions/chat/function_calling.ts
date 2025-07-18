@@ -346,6 +346,11 @@ export class FunctionCallingManager {
         throw new Error(error.message);
       }
 
+      // Check if the response indicates an error
+      if (data && !data.success && data.error) {
+        throw new Error(data.error);
+      }
+
       // Log the operation
       await this.logGmailOperation(agentId, userId, toolName, parameters, data, 'success', Date.now() - startTime);
 
@@ -470,8 +475,32 @@ export class FunctionCallingManager {
       
       return formattedResult;
     } else {
-      // Format error result
-      return `❌ Error executing ${functionName}: ${result.error || 'Unknown error'}`;
+      // Format error result with details
+      let errorMessage = `❌ Failed to execute ${functionName}\n\n`;
+      errorMessage += `**Error Details:**\n`;
+      errorMessage += `• Error: ${result.error || 'Unknown error'}\n`;
+      
+      if (result.metadata?.execution_time_ms) {
+        errorMessage += `• Execution time: ${result.metadata.execution_time_ms}ms\n`;
+      }
+      
+      errorMessage += `\n**What you can try:**\n`;
+      
+      // Add specific guidance based on the error
+      if (result.error?.includes('Failed to send email')) {
+        errorMessage += `• Check that the recipient email address is valid\n`;
+        errorMessage += `• Verify your Gmail account has sending permissions enabled\n`;
+        errorMessage += `• Ensure you're not hitting Gmail's sending limits\n`;
+      } else if (result.error?.includes('permissions')) {
+        errorMessage += `• Verify your Gmail account is properly connected\n`;
+        errorMessage += `• Check that necessary permissions were granted during OAuth\n`;
+        errorMessage += `• Try reconnecting your Gmail account in Integrations\n`;
+      } else if (result.error?.includes('token') || result.error?.includes('expired')) {
+        errorMessage += `• Your Gmail authentication may have expired\n`;
+        errorMessage += `• Please reconnect your Gmail account in Integrations\n`;
+      }
+      
+      return errorMessage;
     }
   }
 }

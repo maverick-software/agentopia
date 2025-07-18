@@ -270,6 +270,32 @@ Several utility scripts help diagnose and test the tool use infrastructure:
 * **`scripts/diagnose_gmail_tools.js <agent_id>`**: Detailed diagnostics for a specific agent's Gmail tool availability
 * **`scripts/check_oauth_schema.js`**: Verifies the database schema for OAuth tables
 * **`scripts/test_gmail_tools_availability.js`**: End-to-end test of Gmail tool availability
+* **`scripts/view_gmail_logs.js <agent_id> [limit]`**: View detailed Gmail operation logs
+
+### Tool Execution Visibility
+
+Agentopia provides comprehensive visibility into tool executions:
+
+1. **Real-time Console Logs** (`src/components/ToolExecutionLogger.tsx`)
+   - Live execution logs displayed in chat interface
+   - Color-coded log levels with millisecond timestamps
+   - Copy/download functionality for debugging
+
+2. **Enhanced Error Messages** 
+   - Detailed error descriptions with specific troubleshooting steps
+   - Context-aware guidance based on error type
+   - Execution timing information
+
+3. **Tool Execution History** (`src/components/ToolExecutionHistory.tsx`)
+   - Complete audit trail of all tool executions
+   - Filter by tool, provider, status
+   - Export to CSV for analysis
+   - Integrated into agent edit page
+
+4. **Visual Status Indicators** (`src/components/ToolExecutionStatusIndicator.tsx`)
+   - Real-time progress tracking
+   - Step-by-step execution status
+   - Provider-specific icons and animations
 
 ### Common Issues and Solutions
 

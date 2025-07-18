@@ -261,8 +261,36 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
   })
 
   if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to send email: ${error}`)
+    const errorText = await response.text()
+    let errorDetails = ''
+    
+    try {
+      const errorJson = JSON.parse(errorText)
+      if (errorJson.error) {
+        errorDetails = errorJson.error.message || errorJson.error.code || errorText
+      } else {
+        errorDetails = errorText
+      }
+    } catch {
+      errorDetails = errorText
+    }
+    
+    console.error('Gmail API error response:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorDetails
+    })
+    
+    // Provide user-friendly error messages
+    if (response.status === 401) {
+      throw new Error('Gmail authentication failed. Please reconnect your Gmail account.')
+    } else if (response.status === 403) {
+      throw new Error('Permission denied. Please ensure you granted email sending permissions.')
+    } else if (response.status === 400) {
+      throw new Error(`Invalid email format: ${errorDetails}`)
+    } else {
+      throw new Error(`Failed to send email: ${errorDetails}`)
+    }
   }
 
   return await response.json()
