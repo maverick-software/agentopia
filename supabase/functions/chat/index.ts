@@ -185,7 +185,7 @@ async function handleAgentMessage(
       contextBuilder.setUserInput(userMessageContent);
 
       // Build the final context
-      const messages = contextBuilder.buildContext();
+      let messages = contextBuilder.buildContext();
 
       console.log(`[chat] Final context built - ${messages.length} messages, approximately ${contextBuilder.getTotalTokenCount()} tokens`);
       
@@ -199,6 +199,15 @@ async function handleAgentMessage(
       const availableTools = await functionCallingManager.getAvailableTools(agentId, userId);
       console.log(`[chat] Found ${availableTools.length} available tools for agent ${agentId}`);
       console.log(`[chat] Available tools:`, availableTools.map(t => t.name));
+      
+      // Add available tool names to the context to ensure AI uses correct names
+      if (availableTools.length > 0) {
+        const toolInfo = availableTools.map(t => `• ${t.name}: ${t.description}`).join('\n');
+        contextBuilder.addSystemInstruction(`\nYou have access to the following tools:\n${toolInfo}\n\nIMPORTANT: When calling tools, use the EXACT tool names as listed above. For example, to send an email, use "send_email" not "gmail_send_message".`);
+        
+        // Rebuild messages after adding tool info
+        messages = contextBuilder.buildContext();
+      }
 
   // Get Response from LLM with function calling
       const completion = await openai.chat.completions.create({

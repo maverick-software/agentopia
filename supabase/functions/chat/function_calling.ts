@@ -50,7 +50,7 @@ export interface MCPToolResult {
 export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
   send_email: {
     name: 'send_email',
-    description: 'When a user asks to send an email, use this tool. You have the capability to send emails on their behalf.',
+    description: 'Send an email through Gmail. Use this exact tool name "send_email" when the user asks to send an email.',
     parameters: {
       type: 'object',
       properties: {
