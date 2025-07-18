@@ -199,10 +199,10 @@ serve(async (req) => {
 // Helper function to get required scopes for each action
 function getRequiredScopes(action: string): string[] {
   const scopeMap: Record<string, string[]> = {
-    'send_email': ['gmail.send'],
-    'read_emails': ['gmail.readonly'],
-    'search_emails': ['gmail.readonly'],
-    'manage_labels': ['gmail.labels'],
+    'send_email': ['https://www.googleapis.com/auth/gmail.send'],
+    'read_emails': ['https://www.googleapis.com/auth/gmail.readonly'],
+    'search_emails': ['https://www.googleapis.com/auth/gmail.readonly'],
+    'manage_labels': ['https://www.googleapis.com/auth/gmail.labels'],
   }
   
   return scopeMap[action] || []

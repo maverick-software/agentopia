@@ -114,17 +114,30 @@ export class MCPToolRegistry {
     const startTime = Date.now();
     
     try {
+      // Correct any wrong tool names before execution
+      const toolNameCorrections: Record<string, string> = {
+        'gmail_send_message': 'send_email',
+        'gmail_send': 'send_email',
+        'gmail_read_messages': 'read_emails',
+        'gmail_search': 'search_emails',
+        'gmail_search_messages': 'search_emails',
+        'gmail_email_actions': 'email_actions',
+      };
+      
+      const correctedToolName = toolNameCorrections[request.tool_name] || request.tool_name;
+      const correctedRequest = { ...request, tool_name: correctedToolName };
+      
       // Validate tool exists
-      const availableTools = await this.getAvailableTools(request.agent_id, request.user_id);
-      const tool = availableTools.find(t => t.name === request.tool_name && t.provider === request.tool_provider);
+      const availableTools = await this.getAvailableTools(correctedRequest.agent_id, correctedRequest.user_id);
+      const tool = availableTools.find(t => t.name === correctedRequest.tool_name && t.provider === correctedRequest.tool_provider);
       
       if (!tool) {
         return {
           success: false,
-          error: `Tool ${request.tool_name} not found or not available for this agent`,
+          error: `Tool ${correctedRequest.tool_name} not found or not available for this agent`,
           metadata: {
             execution_time_ms: Date.now() - startTime,
-            provider: request.tool_provider,
+            provider: correctedRequest.tool_provider,
           }
         };
       }
@@ -132,13 +145,13 @@ export class MCPToolRegistry {
       // Route to appropriate provider
       let result: MCPToolResult;
       
-      switch (request.tool_provider) {
+      switch (correctedRequest.tool_provider) {
         case 'gmail':
           result = await gmailMCPTools.executeTool({
-            agentId: request.agent_id,
-            userId: request.user_id,
-            tool: request.tool_name,
-            parameters: request.parameters,
+            agentId: correctedRequest.agent_id,
+            userId: correctedRequest.user_id,
+            tool: correctedRequest.tool_name,
+            parameters: correctedRequest.parameters,
           });
           break;
         
@@ -150,16 +163,16 @@ export class MCPToolRegistry {
         default:
           return {
             success: false,
-            error: `Unknown tool provider: ${request.tool_provider}`,
+            error: `Unknown tool provider: ${correctedRequest.tool_provider}`,
             metadata: {
               execution_time_ms: Date.now() - startTime,
-              provider: request.tool_provider,
+              provider: correctedRequest.tool_provider,
             }
           };
       }
 
       // Log tool execution
-      await this.logToolExecution(request, result, Date.now() - startTime);
+      await this.logToolExecution(correctedRequest, result, Date.now() - startTime);
 
       return {
         success: result.success,
@@ -169,7 +182,7 @@ export class MCPToolRegistry {
           execution_time_ms: Date.now() - startTime,
           quota_consumed: result.metadata?.quota_consumed,
           tool_version: tool.version,
-          provider: request.tool_provider,
+          provider: correctedRequest.tool_provider,
         }
       };
 
@@ -290,12 +303,24 @@ export class MCPToolRegistry {
    */
   private async logToolExecution(request: ToolExecutionRequest, result: MCPToolResult, executionTime: number): Promise<void> {
     try {
+      // Correct any wrong tool names before logging
+      const toolNameCorrections: Record<string, string> = {
+        'gmail_send_message': 'send_email',
+        'gmail_send': 'send_email',
+        'gmail_read_messages': 'read_emails',
+        'gmail_search': 'search_emails',
+        'gmail_search_messages': 'search_emails',
+        'gmail_email_actions': 'email_actions',
+      };
+      
+      const correctedToolName = toolNameCorrections[request.tool_name] || request.tool_name;
+      
       await supabase
         .from('tool_execution_logs')
         .insert({
           agent_id: request.agent_id,
           user_id: request.user_id,
-          tool_name: request.tool_name,
+          tool_name: correctedToolName,
           tool_provider: request.tool_provider,
           parameters: request.parameters,
           result_data: result.data,
