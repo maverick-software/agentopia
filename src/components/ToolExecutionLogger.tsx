@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { useParams } from 'react-router-dom';
 
 interface LogEntry {
   id: string;
@@ -49,8 +51,12 @@ export const ToolExecutionLogger: React.FC<ToolExecutionLoggerProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { agentId } = useParams<{ agentId: string }>();
+  const lastFetchedIdRef = useRef<string | null>(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -59,7 +65,112 @@ export const ToolExecutionLogger: React.FC<ToolExecutionLoggerProps> = ({
     }
   }, [logs, autoScroll]);
 
-  // Subscribe to tool execution events
+  // Fetch logs from database
+  const fetchLogs = async (isInitialLoad = false) => {
+    if (!agentId) return;
+
+    try {
+      if (isInitialLoad) {
+        setIsLoading(true);
+      }
+
+      // Query recent tool execution logs for this agent
+      let query = supabase
+        .from('tool_execution_logs')
+        .select('*')
+        .eq('agent_id', agentId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // If we have a last fetched ID, only get newer logs
+      if (lastFetchedIdRef.current && !isInitialLoad) {
+        query = query.gt('created_at', new Date(Date.now() - 30000).toISOString()); // Last 30 seconds
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching tool execution logs:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Convert database logs to LogEntry format
+        const newLogs: LogEntry[] = data.map(log => ({
+          id: log.id,
+          timestamp: new Date(log.created_at),
+          level: log.status === 'success' ? 'success' : 
+                 log.status === 'error' ? 'error' : 
+                 'info',
+          message: log.error_message || `${log.tool_name} ${log.status}`,
+          details: {
+            parameters: log.input_parameters,
+            result: log.output_result,
+            duration: log.execution_time_ms,
+            error: log.error_message
+          },
+          toolName: log.tool_name,
+          phase: log.status === 'pending' ? 'init' :
+                 log.status === 'executing' ? 'execution' :
+                 log.status === 'success' ? 'result' :
+                 'error'
+        }));
+
+        if (isInitialLoad) {
+          setLogs(newLogs.reverse()); // Show oldest first
+        } else {
+          // Only add truly new logs
+          const existingIds = new Set(logs.map(l => l.id));
+          const uniqueNewLogs = newLogs.filter(log => !existingIds.has(log.id));
+          if (uniqueNewLogs.length > 0) {
+            setLogs(prev => [...prev, ...uniqueNewLogs.reverse()]);
+          }
+        }
+
+        // Update last fetched ID
+        if (data.length > 0) {
+          lastFetchedIdRef.current = data[0].id;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+    } finally {
+      if (isInitialLoad) {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    fetchLogs(true);
+  }, [agentId]);
+
+  // Poll for updates when executing
+  useEffect(() => {
+    if (isExecuting) {
+      // Start polling every 2 seconds
+      pollIntervalRef.current = setInterval(() => {
+        fetchLogs(false);
+      }, 2000);
+    } else {
+      // Stop polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      // Do one final fetch after execution stops
+      setTimeout(() => fetchLogs(false), 1000);
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [isExecuting, agentId]);
+
+  // Subscribe to tool execution events (keep for backward compatibility)
   useEffect(() => {
     const handleToolLog = (event: CustomEvent<LogEntry>) => {
       setLogs(prev => [...prev, {
@@ -77,14 +188,25 @@ export const ToolExecutionLogger: React.FC<ToolExecutionLoggerProps> = ({
   // Add initial log when execution starts
   useEffect(() => {
     if (isExecuting && currentTool) {
-      setLogs([{
+      const initLog: LogEntry = {
         id: `init-${Date.now()}`,
         timestamp: new Date(),
         level: 'info',
         message: `Starting ${currentTool} execution...`,
         toolName: currentTool,
         phase: 'init'
-      }]);
+      };
+      
+      // Check if we already have this log
+      const hasInitLog = logs.some(log => 
+        log.phase === 'init' && 
+        log.toolName === currentTool &&
+        (Date.now() - log.timestamp.getTime()) < 5000 // Within last 5 seconds
+      );
+      
+      if (!hasInitLog) {
+        setLogs(prev => [...prev, initLog]);
+      }
     }
   }, [isExecuting, currentTool]);
 
@@ -158,9 +280,15 @@ export const ToolExecutionLogger: React.FC<ToolExecutionLoggerProps> = ({
 
   const clearLogs = () => {
     setLogs([]);
+    lastFetchedIdRef.current = null;
   };
 
-  if (!isExecuting && logs.length === 0) {
+  // Show component if executing, loading, or has logs from the last 5 minutes
+  const hasRecentLogs = logs.some(log => 
+    (Date.now() - log.timestamp.getTime()) < 5 * 60 * 1000 // 5 minutes
+  );
+  
+  if (!isExecuting && !isLoading && !hasRecentLogs) {
     return null;
   }
 
@@ -175,7 +303,7 @@ export const ToolExecutionLogger: React.FC<ToolExecutionLoggerProps> = ({
               {currentTool}
             </Badge>
           )}
-          {isExecuting && (
+          {(isExecuting || isLoading) && (
             <Loader2 className="w-3 h-3 animate-spin ml-2" />
           )}
         </div>
@@ -241,7 +369,11 @@ export const ToolExecutionLogger: React.FC<ToolExecutionLoggerProps> = ({
           style={{ maxHeight: isFullscreen ? 'calc(100vh - 200px)' : maxHeight }}
         >
           <div className="p-3 space-y-1">
-            {logs.length === 0 ? (
+            {isLoading && logs.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">
+                Loading logs...
+              </div>
+            ) : logs.length === 0 ? (
               <div className="text-gray-500 text-center py-4">
                 No logs yet...
               </div>

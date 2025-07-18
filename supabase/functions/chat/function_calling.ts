@@ -174,7 +174,10 @@ export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
  * Function Calling Manager
  */
 export class FunctionCallingManager {
-  constructor(private supabaseClient: SupabaseClient) {}
+  constructor(
+    private supabaseClient: SupabaseClient,
+    private authToken: string = ''
+  ) {}
 
   /**
    * Get available tools for an agent in OpenAI function calling format
@@ -332,7 +335,7 @@ export class FunctionCallingManager {
         };
       }
 
-      // Call Gmail API via Supabase Edge Function
+      // Call Gmail API via Supabase Edge Function with auth token
       const { data, error } = await this.supabaseClient.functions.invoke('gmail-api', {
         body: {
           action: toolName,
@@ -340,6 +343,9 @@ export class FunctionCallingManager {
           user_id: userId,
           parameters,
         },
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`
+        }
       });
 
       if (error) {

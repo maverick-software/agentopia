@@ -1069,3 +1069,4 @@ node scripts/check_oauth_schema.js
 The Agentopia Agent Tool Use Protocol provides a comprehensive, secure, and extensible framework for enabling AI agents to interact with external services. By combining OpenAI's function calling with MCP-inspired design principles and robust permission management, the system ensures that agents can perform useful actions while maintaining user control and security.
 
 This protocol serves as the foundation for turning AI agents from passive responders into active assistants capable of taking real-world actions on behalf of users, all while maintaining the highest standards of security, privacy, and user control.
+ 

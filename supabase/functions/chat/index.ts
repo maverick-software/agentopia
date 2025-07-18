@@ -111,13 +111,15 @@ async function handleUserOnlyMessage(
  * @param userId - ID of the user sending the message
  * @param channelId - Channel where message was sent
  * @param workspaceId - ID of the workspace
+ * @param authToken - JWT auth token for calling other functions
  */
 async function handleAgentMessage(
   agentId: string,
   userMessageContent: string,
   userId: string,
     channelId: string | null, 
-  workspaceId: string | undefined
+  workspaceId: string | undefined,
+  authToken: string
 ): Promise<Response> {
   console.log(`Handling message for agent: ${agentId} in workspace: ${workspaceId} channel: ${channelId}`);
 
@@ -192,8 +194,8 @@ async function handleAgentMessage(
       // Add a "thinking" step log
       console.log('[ReAct] Thinking: Does the user want me to use a tool? Reviewing available tools and user request.');
 
-  // Initialize function calling manager
-      const functionCallingManager = new FunctionCallingManager(supabaseClient);
+  // Initialize function calling manager with auth token
+      const functionCallingManager = new FunctionCallingManager(supabaseClient, authToken);
       
       // Get available tools for the agent
       const availableTools = await functionCallingManager.getAvailableTools(agentId, userId);
@@ -309,6 +311,9 @@ Deno.serve(async (req) => {
       return createErrorResponse(authResult.error!, authResult.statusCode!);
     }
     const userId = authResult.userId!;
+    
+    // Extract the auth token for passing to other functions
+    const authToken = req.headers.get('Authorization')?.replace('Bearer ', '') || '';
 
     // Rate Limiting
     if (!checkRateLimit(limiter)) {
@@ -330,10 +335,10 @@ Deno.serve(async (req) => {
     // Route to appropriate handler based on target
     if (!targetAgentId) {
       // Handle User-Only Message
-      return await handleUserOnlyMessage(channelId, userMessageContent, userId, workspaceId);
+      return await handleUserOnlyMessage(channelId || null, userMessageContent, userId, workspaceId);
     } else {
       // Handle Message Targeting an Agent
-      return await handleAgentMessage(targetAgentId, userMessageContent, userId, channelId, workspaceId);
+      return await handleAgentMessage(targetAgentId, userMessageContent, userId, channelId || null, workspaceId, authToken);
     }
 
   } catch (error) {
