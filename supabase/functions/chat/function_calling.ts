@@ -50,7 +50,7 @@ export interface MCPToolResult {
 export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
   send_email: {
     name: 'send_email',
-    description: 'Send an email through Gmail. Use this exact tool name "send_email" when the user asks to send an email.',
+    description: 'Send an email through Gmail. THIS TOOL IS CALLED "send_email" - USE EXACTLY "send_email" AS THE FUNCTION NAME. DO NOT USE "gmail_send_message" OR ANY OTHER NAME. The function name must be exactly "send_email" with no prefix or suffix.',
     parameters: {
       type: 'object',
       properties: {

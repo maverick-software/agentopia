@@ -55,10 +55,40 @@ export function CredentialsPage() {
   const handleRefreshToken = async (connectionId: string) => {
     try {
       setRefreshing(connectionId);
-      // TODO: Implement token refresh logic
-      console.log('Token refresh not yet implemented');
+      console.log('Starting token refresh for connection:', connectionId);
+      
+      // Find the connection details
+      const connection = connections.find(c => c.connection_id === connectionId);
+      if (!connection) {
+        throw new Error('Connection not found');
+      }
+
+      console.log('Refreshing token for:', connection.provider_name);
+
+      // Use the dedicated oauth-refresh function
+      const { data, error } = await supabase.functions.invoke('oauth-refresh', {
+        body: {
+          connection_id: connectionId
+        }
+      });
+
+      if (error) {
+        console.error('OAuth refresh error:', error);
+        throw error;
+      }
+
+      console.log('Token refresh response:', data);
+
+      // Refresh the connections list to show updated expiry
+      await fetchConnections();
+      
+      // Show success message
+      const message = `Token refreshed successfully! New expiry: ${data?.expires_at ? new Date(data.expires_at).toLocaleString() : 'Unknown'}`;
+      console.log(message);
+      alert(message);
     } catch (error) {
       console.error('Error refreshing token:', error);
+      alert(`Error refreshing token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setRefreshing(null);
     }
