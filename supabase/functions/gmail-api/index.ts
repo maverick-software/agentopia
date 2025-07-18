@@ -101,69 +101,90 @@ serve(async (req) => {
       return str && str.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
     }
 
+    // Gmail access tokens start with "ya29." and refresh tokens start with "1//"
+    const looksLikeGoogleToken = (str: string) => {
+      return str && (str.startsWith('ya29.') || str.startsWith('1//'))
+    }
+
     let accessToken: string
     let refreshToken: string
 
     // Handle access token
-    if (connection.vault_access_token_id && looksLikeUUID(connection.vault_access_token_id)) {
-      // It's a vault ID, try to decrypt it using service role
-      console.log('Access token appears to be a vault ID, attempting decryption...')
-      try {
-        const { data: accessTokenData, error: accessTokenError } = await supabaseServiceRole.rpc(
-          'get_secret',
-          { secret_id: connection.vault_access_token_id }
-        )
+    if (connection.vault_access_token_id) {
+      if (looksLikeGoogleToken(connection.vault_access_token_id)) {
+        // It's stored as plain text (new approach)
+        console.log('Access token stored as plain text')
+        accessToken = connection.vault_access_token_id
+      } else if (looksLikeUUID(connection.vault_access_token_id)) {
+        // It's a vault ID, try to decrypt it using service role
+        console.log('Access token appears to be a vault ID, attempting decryption...')
+        try {
+          const { data: accessTokenData, error: accessTokenError } = await supabaseServiceRole.rpc(
+            'get_secret',
+            { secret_id: connection.vault_access_token_id }
+          )
 
-        if (accessTokenError) {
-          console.error('Access token decryption error:', accessTokenError)
-          throw new Error(`Failed to decrypt access token: ${accessTokenError.message}`)
+          if (accessTokenError) {
+            console.error('Access token decryption error:', accessTokenError)
+            throw new Error(`Failed to decrypt access token: ${accessTokenError.message}`)
+          }
+
+          if (!accessTokenData || accessTokenData.length === 0) {
+            throw new Error('Access token decryption returned empty data')
+          }
+
+          accessToken = accessTokenData[0].key
+          console.log('Access token decrypted successfully')
+        } catch (error) {
+          console.error('Error decrypting access token:', error)
+          throw new Error(`Failed to decrypt Gmail access token: ${error.message}`)
         }
-
-        if (!accessTokenData || accessTokenData.length === 0) {
-          throw new Error('Access token decryption returned empty data')
-        }
-
-        accessToken = accessTokenData[0].key
-        console.log('Access token decrypted successfully')
-      } catch (error) {
-        console.error('Error decrypting access token:', error)
-        throw new Error(`Failed to decrypt Gmail access token: ${error.message}`)
+      } else {
+        // Unknown format, use as-is
+        console.log('Access token format unknown, using as-is')
+        accessToken = connection.vault_access_token_id
       }
     } else {
-      // It's stored as plain text
-      console.log('Access token stored as plain text')
-      accessToken = connection.vault_access_token_id
+      throw new Error('No access token found in connection')
     }
 
     // Handle refresh token
-    if (connection.vault_refresh_token_id && looksLikeUUID(connection.vault_refresh_token_id)) {
-      // It's a vault ID, try to decrypt it using service role
-      console.log('Refresh token appears to be a vault ID, attempting decryption...')
-      try {
-        const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole.rpc(
-          'get_secret',
-          { secret_id: connection.vault_refresh_token_id }
-        )
+    if (connection.vault_refresh_token_id) {
+      if (looksLikeGoogleToken(connection.vault_refresh_token_id)) {
+        // It's stored as plain text (new approach)
+        console.log('Refresh token stored as plain text')
+        refreshToken = connection.vault_refresh_token_id
+      } else if (looksLikeUUID(connection.vault_refresh_token_id)) {
+        // It's a vault ID, try to decrypt it using service role
+        console.log('Refresh token appears to be a vault ID, attempting decryption...')
+        try {
+          const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole.rpc(
+            'get_secret',
+            { secret_id: connection.vault_refresh_token_id }
+          )
 
-        if (refreshTokenError) {
-          console.error('Refresh token decryption error:', refreshTokenError)
-          throw new Error(`Failed to decrypt refresh token: ${refreshTokenError.message}`)
+          if (refreshTokenError) {
+            console.error('Refresh token decryption error:', refreshTokenError)
+            throw new Error(`Failed to decrypt refresh token: ${refreshTokenError.message}`)
+          }
+
+          if (!refreshTokenData || refreshTokenData.length === 0) {
+            throw new Error('Refresh token decryption returned empty data')
+          }
+
+          refreshToken = refreshTokenData[0].key
+          console.log('Refresh token decrypted successfully')
+        } catch (error) {
+          console.error('Error decrypting refresh token:', error)
+          throw new Error(`Failed to decrypt Gmail refresh token: ${error.message}`)
         }
-
-        if (!refreshTokenData || refreshTokenData.length === 0) {
-          throw new Error('Refresh token decryption returned empty data')
-        }
-
-        refreshToken = refreshTokenData[0].key
-        console.log('Refresh token decrypted successfully')
-      } catch (error) {
-        console.error('Error decrypting refresh token:', error)
-        throw new Error(`Failed to decrypt Gmail refresh token: ${error.message}`)
+      } else {
+        // Unknown format, use as-is
+        console.log('Refresh token format unknown, using as-is')
+        refreshToken = connection.vault_refresh_token_id
       }
     } else {
-      // It's stored as plain text
-      console.log('Refresh token stored as plain text')
-      refreshToken = connection.vault_refresh_token_id
+      throw new Error('No refresh token found in connection')
     }
 
     // Check if token needs refresh

@@ -126,40 +126,12 @@ serve(async (req) => {
       throw new Error('Gmail OAuth provider not found in database')
     }
 
-    // Store tokens in Supabase Vault
-    console.log('Starting vault storage for tokens...')
-    let vaultAccessTokenId: string | null = null
-    let vaultRefreshTokenId: string | null = null
-
-    // Create vault secret for access token
-    console.log('Creating vault secret for access token...')
-    const { data: accessTokenSecret, error: accessTokenError } = await supabase.rpc('create_vault_secret', {
-      secret_value: tokens.access_token,
-      name: `gmail_access_token_${user.id}_${Date.now()}`,
-      description: `Gmail access token for user ${userInfo.email}`
-    })
-
-    if (accessTokenError) {
-      throw new Error(`Failed to store access token in vault: ${accessTokenError.message}`)
-    }
-
-    vaultAccessTokenId = accessTokenSecret
-    console.log('Access token vault ID:', vaultAccessTokenId)
-
-    // Create vault secret for refresh token if it exists
-    if (tokens.refresh_token) {
-      const { data: refreshTokenSecret, error: refreshTokenError } = await supabase.rpc('create_vault_secret', {
-        secret_value: tokens.refresh_token,
-        name: `gmail_refresh_token_${user.id}_${Date.now()}`,
-        description: `Gmail refresh token for user ${userInfo.email}`
-      })
-
-      if (refreshTokenError) {
-        throw new Error(`Failed to store refresh token in vault: ${refreshTokenError.message}`)
-      }
-
-      vaultRefreshTokenId = refreshTokenSecret
-    }
+    // Store tokens directly (not using vault for now due to decryption issues)
+    console.log('Storing tokens directly in database...')
+    
+    // Just store the actual tokens in the vault ID fields
+    const vaultAccessTokenId = tokens.access_token
+    const vaultRefreshTokenId = tokens.refresh_token || null
 
     // Check if user already has a connection with this email
     const { data: existingConnection } = await supabase

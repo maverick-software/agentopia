@@ -340,8 +340,7 @@ export class FunctionCallingManager {
         body: {
           action: toolName,
           agent_id: agentId,
-          user_id: userId,
-          parameters,
+          params: parameters,  // Changed from 'parameters' to 'params'
         },
         headers: {
           'Authorization': `Bearer ${this.authToken}`
