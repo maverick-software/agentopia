@@ -73,7 +73,7 @@ serve(async (req) => {
 
     // Get user's Gmail connection and decrypt tokens
     const { data: gmailConnection, error: connectionError } = await supabase.rpc(
-      'get_user_gmail_connection',
+      'get_gmail_connection_with_tokens',
       { p_user_id: user.id }
     )
 
