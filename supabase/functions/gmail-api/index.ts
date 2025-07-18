@@ -83,27 +83,47 @@ serve(async (req) => {
 
     const connection = gmailConnection[0]
 
-    // Decrypt tokens from vault
-    const { data: accessTokenData, error: accessTokenError } = await supabase.rpc(
-      'get_secret',
-      { secret_id: connection.vault_access_token_id }
-    )
-
-    if (accessTokenError || !accessTokenData || accessTokenData.length === 0) {
-      throw new Error('Failed to decrypt Gmail access token')
+    // Check if tokens are stored as vault IDs (UUIDs) or plain text
+    const looksLikeUUID = (str: string) => {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
     }
 
-    const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
-      'get_secret',
-      { secret_id: connection.vault_refresh_token_id }
-    )
+    let accessToken: string
+    let refreshToken: string
 
-    if (refreshTokenError || !refreshTokenData || refreshTokenData.length === 0) {
-      throw new Error('Failed to decrypt Gmail refresh token')
+    // Handle access token
+    if (looksLikeUUID(connection.vault_access_token_id)) {
+      // It's a vault ID, decrypt it
+      const { data: accessTokenData, error: accessTokenError } = await supabase.rpc(
+        'get_secret',
+        { secret_id: connection.vault_access_token_id }
+      )
+
+      if (accessTokenError || !accessTokenData || accessTokenData.length === 0) {
+        throw new Error('Failed to decrypt Gmail access token')
+      }
+      accessToken = accessTokenData[0].key
+    } else {
+      // It's stored as plain text
+      accessToken = connection.vault_access_token_id
     }
 
-    let accessToken = accessTokenData[0].key
-    let refreshToken = refreshTokenData[0].key
+    // Handle refresh token
+    if (looksLikeUUID(connection.vault_refresh_token_id)) {
+      // It's a vault ID, decrypt it
+      const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
+        'get_secret',
+        { secret_id: connection.vault_refresh_token_id }
+      )
+
+      if (refreshTokenError || !refreshTokenData || refreshTokenData.length === 0) {
+        throw new Error('Failed to decrypt Gmail refresh token')
+      }
+      refreshToken = refreshTokenData[0].key
+    } else {
+      // It's stored as plain text
+      refreshToken = connection.vault_refresh_token_id
+    }
 
     // Check if token needs refresh
     const tokenExpiresAt = new Date(connection.token_expires_at)
@@ -133,29 +153,17 @@ serve(async (req) => {
       const tokenData = await refreshResponse.json()
       currentAccessToken = tokenData.access_token
 
-      // Store new access token in vault
-      const { data: newTokenVaultId, error: vaultError } = await supabase.rpc('create_vault_secret', {
-        secret_value: currentAccessToken,
-        name: `gmail_access_token_${user.id}_${Date.now()}`,
-        description: `Refreshed Gmail access token`
-      })
+      // Update the connection with new token (stored as plain text for now)
+      const newExpiresAt = new Date()
+      newExpiresAt.setSeconds(newExpiresAt.getSeconds() + tokenData.expires_in)
 
-      if (vaultError || !newTokenVaultId) {
-        console.error('Failed to store refreshed token in vault:', vaultError)
-        // Continue with the new token even if vault storage fails
-      } else {
-        // Update the connection with new token vault ID and expiry
-        const newExpiresAt = new Date()
-        newExpiresAt.setSeconds(newExpiresAt.getSeconds() + tokenData.expires_in)
-
-        await supabase
-          .from('user_oauth_connections')
-          .update({
-            vault_access_token_id: newTokenVaultId,
-            token_expires_at: newExpiresAt.toISOString()
-          })
-          .eq('id', connection.connection_id)
-      }
+      await supabase
+        .from('user_oauth_connections')
+        .update({
+          vault_access_token_id: currentAccessToken,
+          token_expires_at: newExpiresAt.toISOString()
+        })
+        .eq('id', connection.connection_id)
     }
 
     // Execute Gmail operation
