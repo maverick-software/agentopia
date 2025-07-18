@@ -83,24 +83,79 @@ serve(async (req) => {
 
     const connection = gmailConnection[0]
 
-    // Decrypt access token
-    const { data: accessToken, error: decryptError } = await supabase.rpc(
-      'vault_decrypt',
-      { vault_id: connection.vault_access_token_id }
+    // Decrypt tokens from vault
+    const { data: accessTokenData, error: accessTokenError } = await supabase.rpc(
+      'get_secret',
+      { secret_id: connection.vault_access_token_id }
     )
 
-    if (decryptError || !accessToken) {
+    if (accessTokenError || !accessTokenData || accessTokenData.length === 0) {
       throw new Error('Failed to decrypt Gmail access token')
     }
+
+    const { data: refreshTokenData, error: refreshTokenError } = await supabase.rpc(
+      'get_secret',
+      { secret_id: connection.vault_refresh_token_id }
+    )
+
+    if (refreshTokenError || !refreshTokenData || refreshTokenData.length === 0) {
+      throw new Error('Failed to decrypt Gmail refresh token')
+    }
+
+    let accessToken = accessTokenData[0].key
+    let refreshToken = refreshTokenData[0].key
 
     // Check if token needs refresh
     const tokenExpiresAt = new Date(connection.token_expires_at)
     const now = new Date()
     
     let currentAccessToken = accessToken
-    if (tokenExpiresAt <= now) {
-      // Token has expired, refresh it
-      currentAccessToken = await refreshGmailToken(supabase, connection, user.id)
+    
+    if (tokenExpiresAt < now) {
+      // Token expired, refresh it
+      const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: Deno.env.get('GMAIL_CLIENT_ID')!,
+          client_secret: Deno.env.get('GMAIL_CLIENT_SECRET')!,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token'
+        })
+      })
+
+      if (!refreshResponse.ok) {
+        throw new Error('Failed to refresh Gmail access token')
+      }
+
+      const tokenData = await refreshResponse.json()
+      currentAccessToken = tokenData.access_token
+
+      // Store new access token in vault
+      const { data: newTokenVaultId, error: vaultError } = await supabase.rpc('create_vault_secret', {
+        secret_value: currentAccessToken,
+        name: `gmail_access_token_${user.id}_${Date.now()}`,
+        description: `Refreshed Gmail access token`
+      })
+
+      if (vaultError || !newTokenVaultId) {
+        console.error('Failed to store refreshed token in vault:', vaultError)
+        // Continue with the new token even if vault storage fails
+      } else {
+        // Update the connection with new token vault ID and expiry
+        const newExpiresAt = new Date()
+        newExpiresAt.setSeconds(newExpiresAt.getSeconds() + tokenData.expires_in)
+
+        await supabase
+          .from('user_oauth_connections')
+          .update({
+            vault_access_token_id: newTokenVaultId,
+            token_expires_at: newExpiresAt.toISOString()
+          })
+          .eq('id', connection.connection_id)
+      }
     }
 
     // Execute Gmail operation
