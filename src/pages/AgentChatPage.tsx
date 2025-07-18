@@ -86,7 +86,7 @@ export function AgentChatPage() {
     if (mightUseTool) {
       // Phase 4: Tool execution
       updateAIState('executing_tool', {
-        toolName: 'gmail_send_message',
+        toolName: 'send_email',
         provider: 'gmail',
         status: 'executing',
         startTime: new Date(),
