@@ -16,6 +16,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 - [Design System](#design-system)
 - [Database Schema](#database-schema)
 - [Supabase Functions](#supabase-functions)
+- [Tool Use Infrastructure](#tool-use-infrastructure)
 - [Backend Services](#backend-services)
 - [Core Workflows](#core-workflows)
 - [Known Issues & Refactoring](#known-issues--refactoring)
@@ -195,6 +196,103 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   `discord-interaction-handler`: Handles incoming webhooks from Discord for slash commands (like `/activate`) and autocomplete.
 *   `manage-discord-worker`: Provides an endpoint for the frontend to request starting/stopping specific agent Discord workers via the `worker-manager` service.
 *   `register-agent-commands`: Registers necessary Discord slash commands for agents.
+
+## Tool Use Infrastructure
+
+Agentopia implements a sophisticated tool use system that allows agents to perform actions on behalf of users through various integrations (e.g., Gmail, Slack, GitHub). This system leverages OpenAI's function calling capabilities combined with a permissions-based architecture.
+
+### Architecture Overview
+
+1. **Tool Definition**: Tools are defined with OpenAI function schemas that specify parameters, descriptions, and required OAuth scopes
+2. **Permission System**: Fine-grained permissions control which agents can use which tools based on user-granted OAuth scopes
+3. **Tool Execution**: When agents request tool use, the system validates permissions, executes the tool, and returns results
+4. **Integration Support**: Currently supports Gmail with extensible architecture for additional providers
+
+### Database Schema for Tool Use
+
+Key tables involved in the tool use infrastructure:
+
+* **`oauth_providers`**: Stores OAuth provider configurations (e.g., Gmail, Slack)
+* **`user_oauth_connections`**: Links users to their OAuth connections with encrypted tokens
+* **`agent_oauth_permissions`**: Controls which agents have access to which OAuth scopes
+  * `agent_id`: The agent granted permissions
+  * `user_oauth_connection_id`: The OAuth connection to use
+  * `allowed_scopes`: JSONB array of granted OAuth scopes (e.g., `["https://www.googleapis.com/auth/gmail.send"]`)
+  * `is_active`: Whether the permission grant is currently active
+
+### RPC Functions
+
+The system uses PostgreSQL functions to manage tool availability:
+
+* **`get_gmail_tools(p_agent_id, p_user_id)`**: Returns available Gmail tools based on granted permissions
+* **`validate_agent_gmail_permissions(p_agent_id, p_user_id, p_required_scopes[])`**: Validates if an agent has required scopes
+
+### Tool Execution Flow
+
+1. **User grants OAuth permissions**: User connects their Gmail/other accounts via OAuth flow
+2. **User assigns permissions to agent**: Through the AgentEdit UI, users grant specific OAuth scopes to agents
+3. **Agent receives user message**: When a user asks an agent to perform an action (e.g., "send an email")
+4. **Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()`
+5. **Tools are passed to OpenAI**: Available tools are included in the OpenAI API call as function definitions
+6. **Agent requests tool use**: OpenAI returns tool calls in its response
+7. **System validates and executes**: The system validates permissions and executes the requested tools
+8. **Results returned to agent**: Tool execution results are sent back to OpenAI for final response
+
+### Gmail Integration Example
+
+The Gmail integration demonstrates the complete tool use flow:
+
+```javascript
+// Tool definition (from function_calling.ts)
+const GMAIL_MCP_TOOLS = {
+  send_email: {
+    name: 'send_email',
+    description: 'When a user asks to send an email, use this tool.',
+    parameters: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject line' },
+        body: { type: 'string', description: 'Email body content' }
+      },
+      required: ['to', 'subject', 'body']
+    },
+    required_scopes: ['https://www.googleapis.com/auth/gmail.send']
+  }
+}
+```
+
+### Testing and Diagnostics
+
+Several utility scripts help diagnose and test the tool use infrastructure:
+
+* **`scripts/find_gmail_agents.js`**: Lists all agents with Gmail permissions
+* **`scripts/diagnose_gmail_tools.js <agent_id>`**: Detailed diagnostics for a specific agent's Gmail tool availability
+* **`scripts/check_oauth_schema.js`**: Verifies the database schema for OAuth tables
+* **`scripts/test_gmail_tools_availability.js`**: End-to-end test of Gmail tool availability
+
+### Common Issues and Solutions
+
+1. **"I don't have the required Gmail permissions" error**:
+   - Usually indicates the `get_gmail_tools` RPC function is returning empty
+   - Check that `allowed_scopes` column exists (not `granted_scopes`)
+   - Verify the agent_oauth_permissions record exists and is active
+   - Run `scripts/diagnose_gmail_tools.js <agent_id>` for detailed diagnostics
+
+2. **Tools not appearing in chat**:
+   - Ensure the OAuth connection is active in `user_oauth_connections`
+   - Verify the `oauth_providers` table has the correct provider entry
+   - Check chat function logs for tool availability count
+
+### Extending the System
+
+To add new tool providers:
+
+1. Add provider to `oauth_providers` table
+2. Implement OAuth flow in `supabase/functions/[provider]-oauth`
+3. Define tools in `function_calling.ts` following the `GMAIL_MCP_TOOLS` pattern
+4. Add execution logic in `FunctionCallingManager`
+5. Create provider-specific API handler in `supabase/functions/[provider]-api`
 
 ## Backend Services
 
