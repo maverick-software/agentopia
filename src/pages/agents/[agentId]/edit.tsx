@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, ChangeEvent } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useSupabaseClient } from '../../../hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext'; 
 import { Button } from '@/components/ui/button';
 import { 
     Loader2, ArrowLeft, Save, Database, 
-    Edit, Settings, PencilLine, ImagePlus,
-    Plus
+    Edit, Settings, PencilLine, ImagePlus, Check
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { AgentFormInstructions } from '@/components/agent-edit/AgentFormInstructions';
@@ -19,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
-import { AgentIntegrationAssignment } from '@/components/agent-edit/AgentIntegrationAssignment';
+import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -37,19 +36,29 @@ import {
 
 const AgentEditPage = () => {
     const { agentId } = useParams<{ agentId: string }>();
-    const navigate = useNavigate();
     const supabase = useSupabaseClient();
     const { user } = useAuth();
 
     const [agentData, setAgentData] = useState<Partial<Agent> | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [availableDatastores, setAvailableDatastores] = useState<Datastore[]>([]); 
     const [selectedVectorStore, setSelectedVectorStore] = useState<string | undefined>(undefined);
     const [selectedKnowledgeStore, setSelectedKnowledgeStore] = useState<string | undefined>(undefined);
     
     const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+
+    // Clear save success state after 3 seconds
+    useEffect(() => {
+        if (saveSuccess) {
+            const timer = setTimeout(() => {
+                setSaveSuccess(false);
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [saveSuccess]);
     const [showDatastoreModal, setShowDatastoreModal] = useState(false);
     const [showProfileImageModal, setShowProfileImageModal] = useState(false);
 
@@ -138,6 +147,10 @@ const AgentEditPage = () => {
         }
         setSaving(true);
         setError(null);
+        
+        // Start minimum delay timer
+        const minDelayPromise = new Promise(resolve => setTimeout(resolve, 800));
+        
         try {
             const updatePayload: Partial<Agent> = {
                 name: agentData.name || undefined,
@@ -149,82 +162,31 @@ const AgentEditPage = () => {
                 avatar_url: agentData.avatar_url,
             };
 
-            const { error: updateError } = await supabase
+            const savePromise = supabase
                 .from('agents')
                 .update(updatePayload)
                 .eq('id', agentId)
                 .eq('user_id', user.id);
 
+            // Wait for both the save operation and minimum delay
+            const [{ error: updateError }] = await Promise.all([savePromise, minDelayPromise]);
+
             if (updateError) throw updateError;
 
             toast.success('Agent saved successfully!');
+            setSaveSuccess(true);
         } catch (err: any) {
             console.error("Save failed:", err);
             setError(`Save failed: ${err.message}`);
             toast.error(`Save failed: ${err.message}`);
+            // Still wait for minimum delay even on error to avoid jarring UI
+            await minDelayPromise;
         } finally {
             setSaving(false);
         }
     };
 
-    const handleToolEnvironmentToggle = async (activate: boolean) => {
-        if (!agentId) {
-            toast.error("Agent ID is missing. Cannot manage tool environment.");
-            return;
-        }
 
-        setToolEnvMessage(null);
-        // const originalStatus = toolEnvStatus; // Keep for potential revert logic
-        // const originalIp = dropletIp;
-
-        if (activate) {
-            setToolEnvStatus('activating');
-            setDropletIp(null);
-            toast.promise(
-                activateAgentToolEnvironment(agentId), // Using imported function
-                {
-                    loading: 'Activating tool environment...',
-                    success: (result: any) => {
-                        // Assuming result.data contains { status: string, ip_address?: string }
-                        // The Edge function might return the current status from the DB or DO
-                        if (result.data?.status === 'active') {
-                            setToolEnvStatus('active');
-                            setDropletIp(result.data?.ip_address || null);
-                        } else {
-                            // If not immediately active, remain in 'activating' for polling or next status update
-                            setToolEnvStatus('activating'); 
-                        }
-                        setToolEnvMessage(result.message || 'Activation initiated.');
-                        return result.message || 'Activation initiated successfully!';
-                    },
-                    error: (err: any) => {
-                        setToolEnvStatus('error');
-                        setToolEnvMessage(err.message || 'Failed to activate tool environment.');
-                        return err.message || 'Failed to activate tool environment.';
-                    },
-                }
-            );
-        } else {
-            setToolEnvStatus('deactivating');
-            toast.promise(
-                deactivateAgentToolEnvironment(agentId), // Using imported function
-                {
-                    loading: 'Deactivating tool environment...',
-                    success: (result: any) => {
-                        setToolEnvStatus('inactive');
-                        setDropletIp(null);
-                        setToolEnvMessage(result.message || 'Deactivation initiated.');
-                        return result.message || 'Deactivation initiated successfully!';
-                    },
-                    error: (err: any) => {
-                        setToolEnvStatus('error');
-                        setToolEnvMessage(err.message || 'Failed to deactivate tool environment.');
-                        return err.message || 'Failed to deactivate tool environment.';
-                    },
-                }
-            );
-        }
-    };
     
     const getStatusBadge = () => {
         if (!agentData) return null;
@@ -282,13 +244,15 @@ const AgentEditPage = () => {
                 >
                     {saving ? (
                         <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
+                    ) : saveSuccess ? (
+                        <><Check className="mr-2 h-4 w-4" />Saved!</>
                     ) : (
                         <><Save className="mr-2 h-4 w-4" />Save Agent</>
                     )}
                 </Button>
             </div>
 
-            {error && !toolEnvMessage && (
+            {error && (
                 <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -348,34 +312,7 @@ const AgentEditPage = () => {
                                 />
                             </div>
                     
-                            <div className="space-y-2">
-                                <Label htmlFor="agentPersonality">Personality</Label>
-                                <Select 
-                                    name="personality"
-                                    value={agentData.personality || ''} 
-                                    onValueChange={(value) => handleSelectChange(value)}
-                                >
-                                    <SelectTrigger id="agentPersonality">
-                                        <SelectValue placeholder="Select a personality template" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {personalityTemplates.map(template => (
-                                            <SelectItem key={template.id} value={template.id}>
-                                                {template.name} - {template.description}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            
-                            <Button 
-                                variant="outline" 
-                                onClick={() => setShowInstructionsModal(true)}
-                                className="w-full mt-2"
-                            >
-                                <PencilLine className="h-4 w-4 mr-2" />
-                                Edit Instructions
-                            </Button>
+
                         </CardContent>
                     </Card>
 
@@ -429,51 +366,56 @@ const AgentEditPage = () => {
 
                 <div className="space-y-6">
 
-                    <Card>
-                        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle>Integrations</CardTitle>
-                                <CardDescription>Connect external services and tools</CardDescription>
-                            </div>
-                            <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => navigate('/integrations')}
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Integration
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-center py-6 text-muted-foreground">
-                                <Settings className="h-10 w-10 mx-auto opacity-50 mb-2" />
-                                <p>No integrations configured</p>
-                                <p className="text-xs mt-1">Add credentials and assign tools to this agent</p>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="mt-4"
-                                    onClick={() => navigate('/integrations')}
-                                >
-                                    Browse Integrations
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    {/* Channels (Communication) */}
+                    <AgentIntegrationsManager 
+                        agentId={agentId!} 
+                        category="channel"
+                        title="Channels"
+                        description="Connect communication channels to this agent"
+                    />
 
-                    {/* Integrations Card */}
-                    <AgentIntegrationAssignment agentId={agentId!} />
+                    {/* Tools */}
+                    <AgentIntegrationsManager 
+                        agentId={agentId!} 
+                        category="tool"
+                        title="Tools"
+                        description="Connect external tools and services to this agent"
+                    />
 
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle>Agent Settings</CardTitle>
-                            <CardDescription>Configure advanced agent options</CardDescription>
+                            <CardDescription>Configure personality and behavior options</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-center py-6 text-muted-foreground">
-                                <Settings className="h-10 w-10 mx-auto opacity-50 mb-2" />
-                                <p>Advanced settings coming soon</p>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="agentPersonality">Personality</Label>
+                                <Select 
+                                    name="personality"
+                                    value={agentData.personality || ''} 
+                                    onValueChange={(value) => handleSelectChange(value)}
+                                >
+                                    <SelectTrigger id="agentPersonality">
+                                        <SelectValue placeholder="Select a personality template" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {personalityTemplates.map(template => (
+                                            <SelectItem key={template.id} value={template.id}>
+                                                {template.name} - {template.description}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
+                            
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setShowInstructionsModal(true)}
+                                className="w-full"
+                            >
+                                <PencilLine className="h-4 w-4 mr-2" />
+                                Edit Instructions
+                            </Button>
                         </CardContent>
                     </Card>
 
@@ -489,6 +431,8 @@ const AgentEditPage = () => {
                 >
                     {saving ? (
                         <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
+                    ) : saveSuccess ? (
+                        <><Check className="mr-2 h-4 w-4" />Saved!</>
                     ) : (
                         <><Save className="mr-2 h-4 w-4" />Save Agent</>
                     )}

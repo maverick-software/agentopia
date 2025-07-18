@@ -4,6 +4,7 @@ import { Send, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { ChatMessage } from '../components/ChatMessage';
+import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
 
@@ -21,6 +22,11 @@ export function AgentChatPage() {
   const [loading, setLoading] = useState(true); // Start loading true
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // AI State tracking
+  const [aiState, setAiState] = useState<AIState | null>(null);
+  const [currentTool, setCurrentTool] = useState<ToolExecutionStatus | null>(null);
+  const [showAIIndicator, setShowAIIndicator] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchAgentAttempts = useRef(0);
@@ -34,6 +40,70 @@ export function AgentChatPage() {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, []);
+
+  // AI State Management Functions
+  const startAIProcessing = useCallback(() => {
+    setShowAIIndicator(true);
+    setAiState('thinking');
+    setCurrentTool(null);
+  }, []);
+
+  const updateAIState = useCallback((newState: AIState, toolInfo?: Partial<ToolExecutionStatus>) => {
+    setAiState(newState);
+    if (toolInfo) {
+      setCurrentTool(prev => ({ ...prev, ...toolInfo } as ToolExecutionStatus));
+    }
+  }, []);
+
+  const completeAIProcessing = useCallback((success: boolean = true) => {
+    setAiState(success ? 'completed' : 'failed');
+    // The AIThinkingIndicator will auto-hide after 3 seconds
+    setTimeout(() => {
+      setShowAIIndicator(false);
+      setAiState(null);
+      setCurrentTool(null);
+    }, 3500);
+  }, []);
+
+  // Simulate AI processing phases
+  const simulateAIProcessing = useCallback(async () => {
+    // Phase 1: Thinking
+    updateAIState('thinking');
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    // Phase 2: Analyzing tools
+    updateAIState('analyzing_tools');
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    // Phase 3: Check if we might execute a tool (simulate tool detection)
+    const mightUseTool = input.toLowerCase().includes('send') || 
+                         input.toLowerCase().includes('email') ||
+                         input.toLowerCase().includes('gmail') ||
+                         input.toLowerCase().includes('read') ||
+                         input.toLowerCase().includes('check');
+
+    if (mightUseTool) {
+      // Phase 4: Tool execution
+      updateAIState('executing_tool', {
+        toolName: 'gmail_send_message',
+        provider: 'gmail',
+        status: 'executing',
+        startTime: new Date(),
+      });
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Phase 5: Processing results
+      updateAIState('processing_results', {
+        status: 'completed',
+        endTime: new Date(),
+      });
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
+    // Phase 6: Generating response
+    updateAIState('generating_response');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }, [input, updateAIState]);
 
   // Effect to handle component unmount for async operations
   useEffect(() => {
@@ -242,7 +312,7 @@ export function AgentChatPage() {
   }, [agentId, user?.id]);
 
 
-  // Submit Message Handler - Remains largely the same, uses useCallback
+  // Submit Message Handler - Enhanced with AI state tracking
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !agent || sending || !user?.id) return; // Added user?.id check
@@ -260,12 +330,20 @@ export function AgentChatPage() {
     try {
       setSending(true);
       setError(null);
+      
+      // Start AI processing indicator
+      startAIProcessing();
+      
+      const inputContent = input.trim();
       setInput('');
 
       // Add user message immediately for responsiveness
       setMessages(prev => [...prev, userMessage]);
       // Scroll after adding user message
       requestAnimationFrame(scrollToBottom);
+
+      // Run AI processing simulation in parallel with actual request
+      const processingPromise = simulateAIProcessing();
 
 
       // Get the current session and access token
@@ -277,19 +355,23 @@ export function AgentChatPage() {
 
       const requestBody = {
         agentId: agent.id,
-        message: userMessage.content
+        message: inputContent
       };
       // console.log("Sending chat request body:", requestBody); // Cleaned log
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal, // Use the local abort controller's signal
-      });
+      // Wait for both the API response and the processing simulation
+      const [response] = await Promise.all([
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal, // Use the local abort controller's signal
+        }),
+        processingPromise
+      ]);
 
       if (response.status === 401) {
           throw new Error('Authentication failed. Please log in again.');
@@ -307,6 +389,9 @@ export function AgentChatPage() {
           console.error('Invalid response format from chat API:', responseData);
           throw new Error('Received an invalid response format from the chat service.');
       }
+
+      // Complete AI processing successfully
+      completeAIProcessing(true);
 
       const assistantMessage: Message = {
         role: 'assistant',
@@ -326,10 +411,14 @@ export function AgentChatPage() {
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('[handleSubmit] Chat request cancelled.');
+        // Complete AI processing as failed
+        completeAIProcessing(false);
         // If aborted, remove the optimistic user message if needed (depends on desired UX)
         // setMessages(prev => prev.filter(msg => msg !== userMessage));
       } else {
         console.error('Error submitting chat message:', err);
+        // Complete AI processing as failed
+        completeAIProcessing(false);
         if (isMounted.current) {
              setError(`Failed to send message: ${err.message}. Please try again.`);
              // Remove the optimistic user message on error
@@ -347,7 +436,7 @@ export function AgentChatPage() {
       }
     }
   // Dependencies for chat submission
-  }, [input, agent, sending, user?.id, scrollToBottom]); // Added user?.id and scrollToBottom
+  }, [input, agent, sending, user?.id, scrollToBottom, startAIProcessing, simulateAIProcessing, completeAIProcessing]); // Added AI processing functions
 
 
   // Render logic below
@@ -415,6 +504,21 @@ export function AgentChatPage() {
             />
           ))
         )}
+        
+        {/* AI Thinking Indicator */}
+        {showAIIndicator && aiState && (
+          <AIThinkingIndicator
+            state={aiState}
+            currentTool={currentTool || undefined}
+            agentName={agent?.name || 'Agent'}
+            onComplete={() => {
+              setShowAIIndicator(false);
+              setAiState(null);
+              setCurrentTool(null);
+            }}
+          />
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
 
