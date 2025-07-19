@@ -84,113 +84,79 @@ serve(async (req) => {
       throw new Error('Agent does not have required permissions for this Gmail operation')
     }
 
-    // Get user's Gmail connection and decrypt tokens
-    const { data: gmailConnection, error: connectionError } = await supabase.rpc(
-      'get_gmail_connection_with_tokens',
-      { p_user_id: user.id }
-    )
-
-    if (connectionError || !gmailConnection || gmailConnection.length === 0) {
-      throw new Error('No active Gmail connection found')
+    // Get user's Gmail tokens using secure vault retrieval
+    console.log('Retrieving Gmail tokens from secure vault storage...')
+    
+    interface TokenData {
+      record_id: string;
+      access_token: string;
+      refresh_token: string;
+      expires_at: string;
+      scopes_granted: any;
+      created_at: string;
     }
+    
+    let tokenData: TokenData
+    let legacyConnectionId: string | null = null
+    
+    try {
+      const { data: secureTokens, error: tokenError } = await supabase.rpc(
+        'get_oauth_token',
+        { p_user_id: user.id, p_provider: 'gmail' }
+      )
 
-    const connection = gmailConnection[0]
-
-    // Check if tokens are stored as vault IDs (UUIDs) or plain text
-    // Gmail OAuth tokens are typically longer than UUIDs and contain special characters
-    const looksLikeUUID = (str: string) => {
-      // A UUID is exactly 36 characters and matches the pattern
-      return str && str.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
-    }
-
-    // Gmail access tokens start with "ya29." and refresh tokens start with "1//"
-    const looksLikeGoogleToken = (str: string) => {
-      return str && (str.startsWith('ya29.') || str.startsWith('1//'))
-    }
-
-    let accessToken: string
-    let refreshToken: string
-
-    // Handle access token
-    if (connection.vault_access_token_id) {
-      if (looksLikeGoogleToken(connection.vault_access_token_id)) {
-        // It's stored as plain text (new approach)
-        console.log('Access token stored as plain text')
-        accessToken = connection.vault_access_token_id
-      } else if (looksLikeUUID(connection.vault_access_token_id)) {
-        // It's a vault ID, try to decrypt it using service role
-        console.log('Access token appears to be a vault ID, attempting decryption...')
-        try {
-          const { data: accessTokenData, error: accessTokenError } = await supabaseServiceRole.rpc(
-            'get_secret',
-            { secret_id: connection.vault_access_token_id }
-          )
-
-          if (accessTokenError) {
-            console.error('Access token decryption error:', accessTokenError)
-            throw new Error(`Failed to decrypt access token: ${accessTokenError.message}`)
-          }
-
-          if (!accessTokenData || accessTokenData.length === 0) {
-            throw new Error('Access token decryption returned empty data')
-          }
-
-          accessToken = accessTokenData[0].key
-          console.log('Access token decrypted successfully')
-        } catch (error) {
-          console.error('Error decrypting access token:', error)
-          throw new Error(`Failed to decrypt Gmail access token: ${error.message}`)
-        }
-      } else {
-        // Unknown format, use as-is
-        console.log('Access token format unknown, using as-is')
-        accessToken = connection.vault_access_token_id
+      if (tokenError) {
+        console.error('Secure token retrieval error:', tokenError)
+        throw new Error(`Failed to retrieve OAuth tokens: ${tokenError.message}`)
       }
-    } else {
-      throw new Error('No access token found in connection')
+
+      if (!secureTokens || secureTokens.length === 0) {
+        throw new Error('No active Gmail tokens found in secure storage')
+      }
+
+      tokenData = secureTokens[0]
+      console.log('Gmail tokens retrieved securely from vault')
+
+    } catch (vaultError) {
+      console.warn('Vault token retrieval failed, falling back to legacy storage:', vaultError)
+      
+      // Fallback to legacy connection table for existing tokens
+      const { data: gmailConnection, error: connectionError } = await supabase.rpc(
+        'get_gmail_connection_with_tokens',
+        { p_user_id: user.id }
+      )
+
+      if (connectionError || !gmailConnection || gmailConnection.length === 0) {
+        throw new Error('No active Gmail connection found in either secure or legacy storage')
+      }
+
+      const connection = gmailConnection[0]
+      legacyConnectionId = connection.connection_id
+      
+      // Convert legacy format to secure format for consistency
+      tokenData = {
+        record_id: connection.connection_id,
+        access_token: connection.vault_access_token_id,
+        refresh_token: connection.vault_refresh_token_id,
+        expires_at: connection.token_expires_at,
+        scopes_granted: connection.scopes_granted,
+        created_at: connection.created_at
+      }
     }
 
-    // Handle refresh token
-    if (connection.vault_refresh_token_id) {
-      if (looksLikeGoogleToken(connection.vault_refresh_token_id)) {
-        // It's stored as plain text (new approach)
-        console.log('Refresh token stored as plain text')
-        refreshToken = connection.vault_refresh_token_id
-      } else if (looksLikeUUID(connection.vault_refresh_token_id)) {
-        // It's a vault ID, try to decrypt it using service role
-        console.log('Refresh token appears to be a vault ID, attempting decryption...')
-        try {
-          const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole.rpc(
-            'get_secret',
-            { secret_id: connection.vault_refresh_token_id }
-          )
+    let accessToken: string = tokenData.access_token
+    let refreshToken: string = tokenData.refresh_token
 
-          if (refreshTokenError) {
-            console.error('Refresh token decryption error:', refreshTokenError)
-            throw new Error(`Failed to decrypt refresh token: ${refreshTokenError.message}`)
-          }
+    if (!accessToken) {
+      throw new Error('No access token found')
+    }
 
-          if (!refreshTokenData || refreshTokenData.length === 0) {
-            throw new Error('Refresh token decryption returned empty data')
-          }
-
-          refreshToken = refreshTokenData[0].key
-          console.log('Refresh token decrypted successfully')
-        } catch (error) {
-          console.error('Error decrypting refresh token:', error)
-          throw new Error(`Failed to decrypt Gmail refresh token: ${error.message}`)
-        }
-      } else {
-        // Unknown format, use as-is
-        console.log('Refresh token format unknown, using as-is')
-        refreshToken = connection.vault_refresh_token_id
-      }
-    } else {
-      throw new Error('No refresh token found in connection')
+    if (!refreshToken) {
+      throw new Error('No refresh token found')
     }
 
     // Check if token needs refresh
-    const tokenExpiresAtValue = connection.token_expires_at
+    const tokenExpiresAtValue = tokenData.expires_at
     const now = new Date()
     
     let currentAccessToken = accessToken
@@ -225,23 +191,38 @@ serve(async (req) => {
             throw new Error('Failed to refresh Gmail access token')
           }
 
-          const tokenData = await refreshResponse.json()
-          currentAccessToken = tokenData.access_token
+          const newTokenData: any = await refreshResponse.json()
+          currentAccessToken = newTokenData.access_token
 
-          // Update the connection with new token (stored as plain text for now)
-          const newExpiresAt = new Date()
-          newExpiresAt.setSeconds(newExpiresAt.getSeconds() + tokenData.expires_in)
-
-          await supabase
-            .from('user_oauth_connections')
-            .update({
-              vault_access_token_id: tokenData.access_token,
-              token_expires_at: newExpiresAt.toISOString(),
-              updated_at: new Date().toISOString()
+          // Update tokens using secure storage
+          const newExpiresAt = new Date(Date.now() + (newTokenData.expires_in * 1000)).toISOString()
+          
+          try {
+            // Use the secure update function
+            await supabase.rpc('update_oauth_token', {
+              p_user_id: user.id,
+              p_provider: 'gmail',
+              p_new_access_token: newTokenData.access_token,
+              p_new_refresh_token: newTokenData.refresh_token || null,
+              p_new_expires_at: newExpiresAt
             })
-            .eq('id', connection.connection_id)
-
-          console.log('Token refreshed successfully')
+            console.log('Token refreshed and stored securely')
+          } catch (updateError) {
+            console.warn('Secure token update failed, falling back to legacy storage:', updateError)
+            
+            // Fallback to legacy storage update if we have the connection ID
+            if (legacyConnectionId) {
+              await supabase
+                .from('user_oauth_connections')
+                .update({
+                  vault_access_token_id: newTokenData.access_token,
+                  token_expires_at: newExpiresAt,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', legacyConnectionId)
+              console.log('Token refreshed using legacy storage')
+            }
+          }
         }
       } else {
         console.log('Token expiry check: Invalid token_expires_at value')

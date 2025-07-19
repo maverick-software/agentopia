@@ -126,14 +126,29 @@ serve(async (req) => {
       throw new Error('Gmail OAuth provider not found in database')
     }
 
-    // Store tokens directly (not using vault for now due to decryption issues)
-    console.log('Storing tokens directly in database...')
+    // Store tokens securely using Supabase Vault
+    console.log('Storing tokens securely in Vault...')
     
-    // Just store the actual tokens in the vault ID fields
-    const vaultAccessTokenId = tokens.access_token
-    const vaultRefreshTokenId = tokens.refresh_token || null
+    const scopesGranted = tokens.scope.split(' ')
 
-    // Check if user already has a connection with this email
+    // Use the new secure token storage function
+    const { data: tokenRecordId, error: storeError } = await supabase.rpc('store_oauth_token', {
+      p_user_id: user.id,
+      p_provider: 'gmail',
+      p_access_token: tokens.access_token,
+      p_refresh_token: tokens.refresh_token || null,
+      p_expires_in: tokens.expires_in, // Pass integer seconds directly
+      p_scopes_granted: scopesGranted
+    })
+
+    if (storeError) {
+      console.error('Token storage error:', storeError)
+      throw new Error(`Failed to store OAuth tokens: ${storeError.message}`)
+    }
+
+    console.log('OAuth tokens stored securely with record ID:', tokenRecordId)
+
+    // Check if user already has a connection with this email in the old table
     const { data: existingConnection } = await supabase
       .from('user_oauth_connections')
       .select('id')
@@ -145,22 +160,27 @@ serve(async (req) => {
     let connectionId: string
 
     if (existingConnection) {
-      // Update existing connection
+      // Update existing connection - clear the old plain text token fields
       const { data: updatedConnection, error: updateError } = await supabase
         .from('user_oauth_connections')
         .update({
           external_user_id: userInfo.id,
           external_username: userInfo.email,
           connection_name: userInfo.email, // Use email as connection name
-          scopes_granted: tokens.scope.split(' '),
-          vault_access_token_id: vaultAccessTokenId,
-          vault_refresh_token_id: vaultRefreshTokenId,
-          token_expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
+          scopes_granted: scopesGranted,
+          // Clear old plain text storage
+          vault_access_token_id: null,
+          vault_refresh_token_id: null,
+          encrypted_access_token: null,
+          encrypted_refresh_token: null,
+          token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
           connection_status: 'active',
           connection_metadata: {
             user_name: userInfo.name,
             user_picture: userInfo.picture,
             last_connected: new Date().toISOString(),
+            // Reference to the secure token storage
+            secure_token_record_id: tokenRecordId,
           },
           updated_at: new Date().toISOString(),
         })
@@ -174,7 +194,7 @@ serve(async (req) => {
 
       connectionId = updatedConnection.id
     } else {
-      // Create new connection
+      // Create new connection - don't store tokens in this table anymore
       const { data: newConnection, error: insertError } = await supabase
         .from('user_oauth_connections')
         .insert({
@@ -183,15 +203,20 @@ serve(async (req) => {
           external_user_id: userInfo.id,
           external_username: userInfo.email,
           connection_name: userInfo.email, // Use email as connection name
-          scopes_granted: tokens.scope.split(' '),
-          vault_access_token_id: vaultAccessTokenId,
-          vault_refresh_token_id: vaultRefreshTokenId,
-          token_expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
+          scopes_granted: scopesGranted,
+          // Don't store tokens in this table - use secure storage
+          vault_access_token_id: null,
+          vault_refresh_token_id: null,
+          encrypted_access_token: null,
+          encrypted_refresh_token: null,
+          token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
           connection_status: 'active',
           connection_metadata: {
             user_name: userInfo.name,
             user_picture: userInfo.picture,
             first_connected: new Date().toISOString(),
+            // Reference to the secure token storage
+            secure_token_record_id: tokenRecordId,
           },
         })
         .select('id')

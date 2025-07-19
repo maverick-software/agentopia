@@ -181,6 +181,15 @@ CREATE TYPE "public"."droplet_status_enum" AS ENUM (
 ALTER TYPE "public"."droplet_status_enum" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."integration_agent_classification_enum" AS ENUM (
+    'tool',
+    'channel'
+);
+
+
+ALTER TYPE "public"."integration_agent_classification_enum" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."integration_connection_status_enum" AS ENUM (
     'connected',
     'disconnected',
@@ -479,6 +488,103 @@ $$;
 ALTER FUNCTION "public"."get_gmail_connection_by_id"("p_connection_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_id" "uuid") RETURNS TABLE("connection_id" "uuid", "external_username" "text", "scopes_granted" "jsonb", "connection_status" "text", "vault_access_token_id" "text", "vault_refresh_token_id" "text", "connection_metadata" "jsonb", "configuration" "jsonb")
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+    SELECT 
+        uoc.id AS connection_id,
+        uoc.external_username,
+        uoc.scopes_granted,
+        uoc.connection_status,
+        uoc.vault_access_token_id,
+        uoc.vault_refresh_token_id,
+        uoc.connection_metadata,
+        '{}'::jsonb as configuration
+    FROM user_oauth_connections uoc
+    WHERE uoc.user_id = p_user_id
+    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND uoc.connection_status = 'active'
+    LIMIT 1;
+$$;
+
+
+ALTER FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_id" "uuid") IS 'Get Gmail connection with vault token IDs for edge function use';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."get_gmail_tools"("p_agent_id" "uuid", "p_user_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    v_allowed_scopes JSONB;
+    v_tools JSONB = '[]'::jsonb;
+    v_has_send BOOLEAN = FALSE;
+    v_has_read BOOLEAN = FALSE;
+    v_has_modify BOOLEAN = FALSE;
+BEGIN
+    -- Get allowed scopes for agent (using correct column name)
+    SELECT aop.allowed_scopes INTO v_allowed_scopes
+    FROM agent_oauth_permissions aop
+    JOIN user_oauth_connections uoc ON uoc.id = aop.user_oauth_connection_id
+    JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    WHERE aop.agent_id = p_agent_id
+    AND uoc.user_id = p_user_id
+    AND op.name = 'gmail'
+    AND aop.is_active = true;
+    
+    -- Check if agent has permissions
+    IF v_allowed_scopes IS NULL THEN
+        RETURN v_tools;
+    END IF;
+    
+    -- Check which scopes are granted
+    v_has_send := v_allowed_scopes ? 'https://www.googleapis.com/auth/gmail.send';
+    v_has_read := v_allowed_scopes ? 'https://www.googleapis.com/auth/gmail.readonly';
+    v_has_modify := v_allowed_scopes ? 'https://www.googleapis.com/auth/gmail.modify';
+    
+    -- Build tools array based on granted scopes
+    IF v_has_send THEN
+        v_tools := v_tools || jsonb_build_object(
+            'name', 'send_email',
+            'description', 'Send an email through Gmail',
+            'scopes', ARRAY['https://www.googleapis.com/auth/gmail.send']
+        );
+    END IF;
+    
+    IF v_has_read THEN
+        v_tools := v_tools || jsonb_build_object(
+            'name', 'read_emails',
+            'description', 'Read emails from Gmail',
+            'scopes', ARRAY['https://www.googleapis.com/auth/gmail.readonly']
+        );
+        
+        v_tools := v_tools || jsonb_build_object(
+            'name', 'search_emails',
+            'description', 'Search emails in Gmail',
+            'scopes', ARRAY['https://www.googleapis.com/auth/gmail.readonly']
+        );
+    END IF;
+    
+    IF v_has_modify THEN
+        v_tools := v_tools || jsonb_build_object(
+            'name', 'email_actions',
+            'description', 'Perform actions on emails (mark read, archive, etc)',
+            'scopes', ARRAY['https://www.googleapis.com/auth/gmail.modify']
+        );
+    END IF;
+    
+    RETURN v_tools;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_gmail_tools"("p_agent_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_integration_categories_with_counts"("p_user_id" "uuid" DEFAULT NULL::"uuid") RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "icon_name" "text", "display_order" integer, "total_integrations" bigint, "available_integrations" bigint, "user_connected_integrations" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -595,6 +701,46 @@ $$;
 
 
 ALTER FUNCTION "public"."get_room_members"("p_room_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_secret"("secret_name" "text") RETURNS TABLE("key" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT decrypted_secret AS key
+    FROM vault.decrypted_secrets
+    WHERE name = secret_name;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_secret"("secret_name" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."get_secret"("secret_name" "text") IS 'Retrieve a decrypted secret from vault by name';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."get_secret"("secret_id" "uuid") RETURNS TABLE("key" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT decrypted_secret AS key
+    FROM vault.decrypted_secrets
+    WHERE id = secret_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_secret"("secret_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."get_secret"("secret_id" "uuid") IS 'Retrieve a decrypted secret from vault by ID';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."get_team_id_for_channel"("p_channel_id" "uuid") RETURNS "uuid"
@@ -1572,6 +1718,19 @@ $$;
 ALTER FUNCTION "public"."update_oauth_providers_updated_at"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."update_tool_execution_logs_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_tool_execution_logs_updated_at"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."update_updated_at_column"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
@@ -1638,11 +1797,11 @@ CREATE OR REPLACE FUNCTION "public"."validate_agent_gmail_permissions"("p_agent_
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
 DECLARE
-    v_granted_scopes JSONB;
+    v_allowed_scopes JSONB;
     v_scope TEXT;
 BEGIN
-    -- Get granted scopes for agent
-    SELECT aop.granted_scopes INTO v_granted_scopes
+    -- Get allowed scopes for agent (using correct column name)
+    SELECT aop.allowed_scopes INTO v_allowed_scopes
     FROM agent_oauth_permissions aop
     JOIN user_oauth_connections uoc ON uoc.id = aop.user_oauth_connection_id
     WHERE aop.agent_id = p_agent_id
@@ -1651,14 +1810,14 @@ BEGIN
     AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail');
     
     -- Check if agent has permissions
-    IF v_granted_scopes IS NULL THEN
+    IF v_allowed_scopes IS NULL THEN
         RETURN FALSE;
     END IF;
     
     -- Validate each required scope
     FOREACH v_scope IN ARRAY p_required_scopes
     LOOP
-        IF NOT (v_granted_scopes ? v_scope) THEN
+        IF NOT (v_allowed_scopes ? v_scope) THEN
             RETURN FALSE;
         END IF;
     END LOOP;
@@ -2114,6 +2273,25 @@ COMMENT ON COLUMN "public"."datastores"."max_results" IS 'Maximum number of resu
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."gmail_operation_logs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "agent_id" "uuid" NOT NULL,
+    "operation_type" "text" NOT NULL,
+    "operation_params" "jsonb",
+    "operation_result" "jsonb",
+    "status" "text" NOT NULL,
+    "error_message" "text",
+    "quota_consumed" integer DEFAULT 0,
+    "execution_time_ms" integer,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "gmail_operation_logs_status_check" CHECK (("status" = ANY (ARRAY['success'::"text", 'error'::"text", 'unauthorized'::"text"])))
+);
+
+
+ALTER TABLE "public"."gmail_operation_logs" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."integration_categories" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
@@ -2144,11 +2322,16 @@ CREATE TABLE IF NOT EXISTS "public"."integrations" (
     "display_order" integer DEFAULT 0,
     "is_active" boolean DEFAULT true,
     "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "agent_classification" "public"."integration_agent_classification_enum" DEFAULT 'tool'::"public"."integration_agent_classification_enum" NOT NULL
 );
 
 
 ALTER TABLE "public"."integrations" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."integrations"."agent_classification" IS 'Classification for agent usage: tool (functional/utility) or channel (communication)';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."oauth_providers" (
@@ -2469,6 +2652,30 @@ COMMENT ON COLUMN "public"."tool_catalog"."created_by" IS 'The user who created 
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."tool_execution_logs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "agent_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "tool_name" "text" NOT NULL,
+    "tool_provider" "text" NOT NULL,
+    "parameters" "jsonb",
+    "result_data" "jsonb",
+    "success" boolean DEFAULT false NOT NULL,
+    "error_message" "text",
+    "execution_time_ms" integer,
+    "quota_consumed" integer DEFAULT 0,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."tool_execution_logs" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."tool_execution_logs" IS 'Logs all tool executions by agents for audit and debugging purposes';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."user_integrations" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -2496,8 +2703,8 @@ CREATE TABLE IF NOT EXISTS "public"."user_oauth_connections" (
     "external_username" "text",
     "scopes_granted" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
     "connection_name" "text" NOT NULL,
-    "vault_access_token_id" "uuid",
-    "vault_refresh_token_id" "uuid",
+    "vault_access_token_id" "text",
+    "vault_refresh_token_id" "text",
     "token_expires_at" timestamp with time zone,
     "last_token_refresh" timestamp with time zone,
     "connection_status" "text" DEFAULT 'active'::"text" NOT NULL,
@@ -2515,6 +2722,14 @@ ALTER TABLE "public"."user_oauth_connections" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."user_oauth_connections" IS 'User-specific OAuth provider connections with credential storage';
+
+
+
+COMMENT ON COLUMN "public"."user_oauth_connections"."vault_access_token_id" IS 'Stores access token directly or vault ID reference';
+
+
+
+COMMENT ON COLUMN "public"."user_oauth_connections"."vault_refresh_token_id" IS 'Stores refresh token directly or vault ID reference';
 
 
 
@@ -2766,6 +2981,11 @@ ALTER TABLE ONLY "public"."datastores"
 
 
 
+ALTER TABLE ONLY "public"."gmail_operation_logs"
+    ADD CONSTRAINT "gmail_operation_logs_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."integration_categories"
     ADD CONSTRAINT "integration_categories_name_key" UNIQUE ("name");
 
@@ -2773,6 +2993,11 @@ ALTER TABLE ONLY "public"."integration_categories"
 
 ALTER TABLE ONLY "public"."integration_categories"
     ADD CONSTRAINT "integration_categories_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."integrations"
+    ADD CONSTRAINT "integrations_name_unique" UNIQUE ("name");
 
 
 
@@ -2888,6 +3113,11 @@ ALTER TABLE ONLY "public"."tool_catalog"
 
 ALTER TABLE ONLY "public"."tool_catalog"
     ADD CONSTRAINT "tool_catalog_tool_name_key" UNIQUE ("tool_name");
+
+
+
+ALTER TABLE ONLY "public"."tool_execution_logs"
+    ADD CONSTRAINT "tool_execution_logs_pkey" PRIMARY KEY ("id");
 
 
 
@@ -3144,6 +3374,26 @@ CREATE INDEX "idx_datastores_user_id" ON "public"."datastores" USING "btree" ("u
 
 
 
+CREATE INDEX "idx_gmail_operation_logs_agent_id" ON "public"."gmail_operation_logs" USING "btree" ("agent_id");
+
+
+
+CREATE INDEX "idx_gmail_operation_logs_created_at" ON "public"."gmail_operation_logs" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_gmail_operation_logs_status" ON "public"."gmail_operation_logs" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_gmail_operation_logs_user_id" ON "public"."gmail_operation_logs" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_integrations_agent_classification" ON "public"."integrations" USING "btree" ("agent_classification");
+
+
+
 CREATE INDEX "idx_integrations_category_id" ON "public"."integrations" USING "btree" ("category_id");
 
 
@@ -3233,6 +3483,22 @@ CREATE INDEX "idx_tool_catalog_name" ON "public"."tool_catalog" USING "btree" ("
 
 
 CREATE INDEX "idx_tool_catalog_status" ON "public"."tool_catalog" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_tool_execution_logs_agent_id" ON "public"."tool_execution_logs" USING "btree" ("agent_id");
+
+
+
+CREATE INDEX "idx_tool_execution_logs_created_at" ON "public"."tool_execution_logs" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_tool_execution_logs_tool_provider" ON "public"."tool_execution_logs" USING "btree" ("tool_provider");
+
+
+
+CREATE INDEX "idx_tool_execution_logs_user_id" ON "public"."tool_execution_logs" USING "btree" ("user_id");
 
 
 
@@ -3396,6 +3662,10 @@ CREATE OR REPLACE TRIGGER "update_oauth_providers_updated_at" BEFORE UPDATE ON "
 
 
 
+CREATE OR REPLACE TRIGGER "update_tool_execution_logs_updated_at" BEFORE UPDATE ON "public"."tool_execution_logs" FOR EACH ROW EXECUTE FUNCTION "public"."update_tool_execution_logs_updated_at"();
+
+
+
 CREATE OR REPLACE TRIGGER "update_user_oauth_connections_updated_at" BEFORE UPDATE ON "public"."user_oauth_connections" FOR EACH ROW EXECUTE FUNCTION "public"."update_user_oauth_connections_updated_at"();
 
 
@@ -3525,6 +3795,16 @@ ALTER TABLE ONLY "public"."datastores"
 
 
 
+ALTER TABLE ONLY "public"."gmail_operation_logs"
+    ADD CONSTRAINT "gmail_operation_logs_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."gmail_operation_logs"
+    ADD CONSTRAINT "gmail_operation_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."integrations"
     ADD CONSTRAINT "integrations_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "public"."integration_categories"("id") ON DELETE CASCADE;
 
@@ -3602,6 +3882,16 @@ ALTER TABLE ONLY "public"."teams"
 
 ALTER TABLE ONLY "public"."tool_catalog"
     ADD CONSTRAINT "tool_catalog_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."tool_execution_logs"
+    ADD CONSTRAINT "tool_execution_logs_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."tool_execution_logs"
+    ADD CONSTRAINT "tool_execution_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 
 
@@ -3933,11 +4223,11 @@ CREATE POLICY "Disallow updates to chat messages" ON "public"."chat_messages" FO
 
 
 
-CREATE POLICY "Integration categories are readable by authenticated users" ON "public"."integration_categories" FOR SELECT TO "authenticated" USING (true);
+CREATE POLICY "Integration categories are readable by everyone" ON "public"."integration_categories" FOR SELECT USING (true);
 
 
 
-CREATE POLICY "Integrations are readable by authenticated users" ON "public"."integrations" FOR SELECT TO "authenticated" USING (true);
+CREATE POLICY "Integrations are readable by everyone" ON "public"."integrations" FOR SELECT USING (true);
 
 
 
@@ -3974,6 +4264,22 @@ CREATE POLICY "Organization owners can update their organizations" ON "public"."
 
 
 CREATE POLICY "Service role can manage all SSH keys" ON "public"."user_ssh_keys" USING (("auth"."role"() = 'service_role'::"text"));
+
+
+
+CREATE POLICY "Service role can manage all tool execution logs" ON "public"."tool_execution_logs" USING (("auth"."role"() = 'service_role'::"text"));
+
+
+
+CREATE POLICY "Service role full access to integration_categories" ON "public"."integration_categories" TO "service_role" USING (true);
+
+
+
+CREATE POLICY "Service role full access to integrations" ON "public"."integrations" TO "service_role" USING (true);
+
+
+
+CREATE POLICY "Service role has full access to gmail operation logs" ON "public"."gmail_operation_logs" TO "service_role" USING (true) WITH CHECK (true);
 
 
 
@@ -4030,6 +4336,10 @@ CREATE POLICY "Users can delete their own OAuth connections" ON "public"."user_o
 
 
 CREATE POLICY "Users can insert own SSH keys" ON "public"."user_ssh_keys" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can insert own gmail operation logs" ON "public"."gmail_operation_logs" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -4145,11 +4455,19 @@ CREATE POLICY "Users can view own SSH keys" ON "public"."user_ssh_keys" FOR SELE
 
 
 
+CREATE POLICY "Users can view own gmail operation logs" ON "public"."gmail_operation_logs" FOR SELECT TO "authenticated" USING (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Users can view their own OAuth connections" ON "public"."user_oauth_connections" FOR SELECT TO "authenticated" USING (("user_id" = "auth"."uid"()));
 
 
 
 CREATE POLICY "Users can view their own profile" ON "public"."profiles" FOR SELECT TO "authenticated" USING (("auth"."uid"() = "id"));
+
+
+
+CREATE POLICY "Users can view their own tool execution logs" ON "public"."tool_execution_logs" FOR SELECT USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -4189,6 +4507,9 @@ ALTER TABLE "public"."chat_messages" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."datastores" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."gmail_operation_logs" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."integration_categories" ENABLE ROW LEVEL SECURITY;
 
 
@@ -4223,6 +4544,9 @@ ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."tool_catalog" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."tool_execution_logs" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."user_integrations" ENABLE ROW LEVEL SECURITY;
@@ -4804,6 +5128,18 @@ GRANT ALL ON FUNCTION "public"."get_gmail_connection_by_id"("p_connection_id" "u
 
 
 
+GRANT ALL ON FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_gmail_tools"("p_agent_id" "uuid", "p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_gmail_tools"("p_agent_id" "uuid", "p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_gmail_tools"("p_agent_id" "uuid", "p_user_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_integration_categories_with_counts"("p_user_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_integration_categories_with_counts"("p_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_integration_categories_with_counts"("p_user_id" "uuid") TO "service_role";
@@ -4831,6 +5167,18 @@ GRANT ALL ON FUNCTION "public"."get_room_id_for_channel"("p_channel_id" "uuid") 
 GRANT ALL ON FUNCTION "public"."get_room_members"("p_room_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_room_members"("p_room_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_room_members"("p_room_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_secret"("secret_name" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_secret"("secret_name" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_secret"("secret_name" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_secret"("secret_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_secret"("secret_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_secret"("secret_id" "uuid") TO "service_role";
 
 
 
@@ -5413,6 +5761,12 @@ GRANT ALL ON FUNCTION "public"."update_oauth_providers_updated_at"() TO "service
 
 
 
+GRANT ALL ON FUNCTION "public"."update_tool_execution_logs_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_tool_execution_logs_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_tool_execution_logs_updated_at"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "anon";
 GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
@@ -5710,6 +6064,12 @@ GRANT ALL ON TABLE "public"."datastores" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."gmail_operation_logs" TO "anon";
+GRANT ALL ON TABLE "public"."gmail_operation_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."gmail_operation_logs" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."integration_categories" TO "anon";
 GRANT ALL ON TABLE "public"."integration_categories" TO "authenticated";
 GRANT ALL ON TABLE "public"."integration_categories" TO "service_role";
@@ -5779,6 +6139,12 @@ GRANT ALL ON TABLE "public"."teams" TO "service_role";
 GRANT ALL ON TABLE "public"."tool_catalog" TO "anon";
 GRANT ALL ON TABLE "public"."tool_catalog" TO "authenticated";
 GRANT ALL ON TABLE "public"."tool_catalog" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."tool_execution_logs" TO "anon";
+GRANT ALL ON TABLE "public"."tool_execution_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."tool_execution_logs" TO "service_role";
 
 
 

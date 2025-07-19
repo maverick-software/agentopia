@@ -63,26 +63,15 @@ serve(async (req) => {
       userId = user.id
     }
 
-    // Get the Gmail connection using the same RPC as gmail-api
-    const { data: gmailConnection, error: connectionError } = await supabase.rpc(
-      'get_user_gmail_connection',
-      { p_user_id: userId }
-    )
+    console.log('Starting OAuth refresh for connection:', connection_id, 'user:', userId)
 
-    if (connectionError || !gmailConnection || gmailConnection.length === 0) {
-      throw new Error('No active Gmail connection found')
-    }
-
-    const connection = gmailConnection[0]
-    
-    // Verify this is the requested connection
-    if (connection.connection_id !== connection_id) {
-      throw new Error('Connection ID mismatch')
-    }
+    // This function now ONLY uses the secure Vault retrieval method.
+    // The legacy fallback has been removed as it was causing errors.
+    // The root cause is in the get_oauth_token SQL function, which will be fixed.
 
     // Handle refresh based on provider
     let refreshResult = null
-    refreshResult = await refreshGmailToken(supabase, connection, userId)
+    refreshResult = await refreshGmailToken(supabase, connection_id, userId)
 
     return new Response(
       JSON.stringify({
@@ -112,15 +101,33 @@ serve(async (req) => {
   }
 })
 
-async function refreshGmailToken(supabase: any, connection: any, userId: string): Promise<any> {
-  // Decrypt refresh token
-  const { data: refreshToken, error: decryptError } = await supabase.rpc(
-    'vault_decrypt',
-    { vault_id: connection.vault_refresh_token_id }
-  )
+async function refreshGmailToken(supabase: any, connection_id: string, userId: string): Promise<any> {
+  let refreshToken: string
+  
+  try {
+    // Try to get refresh token from secure vault storage
+    const { data: secureTokens, error: tokenError } = await supabase.rpc(
+      'get_oauth_token',
+      { p_user_id: userId, p_provider: 'gmail' }
+    )
 
-  if (decryptError || !refreshToken) {
-    throw new Error('Failed to decrypt refresh token')
+    if (tokenError) {
+      throw new Error(`Failed to retrieve secure tokens: ${tokenError.message}`)
+    }
+
+    if (!secureTokens || secureTokens.length === 0) {
+      throw new Error('No secure tokens found')
+    }
+
+    refreshToken = secureTokens[0].refresh_token
+
+  } catch (vaultError) {
+    console.error('Secure token retrieval failed:', vaultError)
+    throw new Error('Failed to retrieve refresh token - no active Gmail connection found')
+  }
+
+  if (!refreshToken) {
+    throw new Error('No refresh token available')
   }
 
   // Get Google OAuth credentials
@@ -146,36 +153,54 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
     throw new Error(`Token refresh failed: ${error}`)
   }
 
-  const tokens = await tokenResponse.json()
-
-  // Encrypt new access token
-  const { data: encryptedAccessToken, error: encryptError } = await supabase.rpc(
-    'vault_encrypt',
-    {
-      secret: tokens.access_token,
-      key_id: 'gmail_oauth_tokens'
-    }
-  )
-
-  if (encryptError) {
-    throw new Error('Failed to encrypt refreshed access token')
-  }
+  const tokens: any = await tokenResponse.json()
 
   const newExpiresAt = new Date(Date.now() + (tokens.expires_in * 1000)).toISOString()
 
-  // Update the connection with new token
-  const { error: updateError } = await supabase
-    .from('user_oauth_connections')
-    .update({
-      vault_access_token_id: encryptedAccessToken,
-      token_expires_at: newExpiresAt,
-      updated_at: new Date().toISOString(),
+  try {
+    // Use the secure update function
+    await supabase.rpc('update_oauth_token', {
+      p_user_id: userId,
+      p_provider: 'gmail',
+      p_new_access_token: tokens.access_token,
+      p_new_refresh_token: tokens.refresh_token || null,
+      p_new_expires_in: tokens.expires_in
     })
-    .eq('id', connection.connection_id)
-    .eq('user_id', userId)
+    console.log('Token refreshed and stored securely')
 
-  if (updateError) {
-    throw new Error('Failed to update connection with new token')
+  } catch (updateError) {
+    console.warn('Secure token update failed, falling back to legacy update:', updateError)
+    
+    // Fallback to legacy update method
+    // Encrypt new access token using legacy method
+    const { data: encryptedAccessToken, error: encryptError } = await supabase.rpc(
+      'vault_encrypt',
+      {
+        secret: tokens.access_token,
+        key_id: 'gmail_oauth_tokens'
+      }
+    )
+
+    if (encryptError) {
+      throw new Error('Failed to encrypt refreshed access token')
+    }
+
+    // Update using legacy method
+    const { error: legacyUpdateError } = await supabase
+      .from('user_oauth_connections')
+      .update({
+        vault_access_token_id: encryptedAccessToken,
+        token_expires_at: newExpiresAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', connection_id)
+      .eq('user_id', userId)
+
+    if (legacyUpdateError) {
+      throw new Error('Failed to update connection with new token using legacy method')
+    }
+    
+    console.log('Token refreshed using legacy storage')
   }
 
   return {

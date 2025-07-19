@@ -1,0 +1,167 @@
+# SUPABASE VAULT ENCRYPTION AND STORAGE PROTOCOL
+
+## VERSION
+- Version: 2.0
+- Updated: 2025-07-19
+- Classification: Premium+ Security Protocol
+- Purpose: Production-grade Supabase Vault implementation for OAuth tokens and sensitive data
+
+## INTRODUCTION
+
+This protocol establishes enterprise-grade best practices for implementing Supabase Vault encryption, storage, decryption, and retrieval of OAuth tokens, API keys, and sensitive data. It addresses the common pitfall of storing tokens as plain text and provides a secure, production-ready approach using the integrated Supabase Vault.
+
+**KEY LEARNING**: Supabase Vault is an **integration**, not an extension that needs to be created. The primary task is to verify its availability and then use its functions correctly.
+
+## CORE SECURITY PRINCIPLES
+
+### 1. ENCRYPTION FOUNDATION
+- **NEVER** store sensitive data as plain text.
+- Use Supabase Vault's Authenticated Encryption with Associated Data (AEAD) based on `libsodium`.
+- Implement proper key management by storing secret IDs, not the secrets themselves.
+- Ensure all cryptographic operations are server-side only via `SECURITY DEFINER` functions.
+
+### 2. VAULT INFRASTRUCTURE SECURITY
+- Vault uses Transparent Column Encryption (TCE) with AES-256 equivalent security.
+- Encryption keys are managed by Supabase's secured backend systems and are never stored alongside the data.
+- Authenticated encryption prevents tampering and forgery.
+- Access to the `vault.decrypted_secrets` view is the primary way to securely access decrypted data at query time.
+
+## IMPLEMENTATION ARCHITECTURE
+
+### PHASE 1: VAULT SETUP AND VERIFICATION
+
+#### 1.1 Verify Vault Integration
+Instead of creating the extension, we must verify that the Vault integration is enabled and functional in the Supabase project.
+
+```sql
+-- Migration Step 1: Verify Vault integration is working
+DO $$
+DECLARE
+    test_secret_id UUID;
+BEGIN
+    -- Test vault functionality using the correct function signature
+    test_secret_id := vault.create_secret('test_secret_value', 'test_vault_functionality', 'Test secret for vault verification');
+    
+    -- Clean up the test secret immediately
+    DELETE FROM vault.secrets WHERE id = test_secret_id;
+    
+    RAISE NOTICE 'Vault integration verified and functional';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Vault test failed with error: %', SQLERRM;
+    RAISE NOTICE 'Please ensure the Vault integration is enabled in your Supabase project dashboard.';
+END $$;
+```
+
+#### 1.2 Create Secure Metadata Table
+Create a table to store references (UUIDs) to the secrets in the vault, not the secrets themselves.
+
+```sql
+-- Migration Step 2: Create a secure metadata table for OAuth tokens
+CREATE TABLE IF NOT EXISTS public.user_oauth_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    provider TEXT NOT NULL,
+    vault_access_token_id UUID NOT NULL,
+    vault_refresh_token_id UUID,
+    expires_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    -- other metadata fields...
+);
+
+-- Add comments for clarity
+COMMENT ON TABLE public.user_oauth_tokens IS 'Secure OAuth token storage metadata using Supabase Vault references';
+COMMENT ON COLUMN public.user_oauth_tokens.vault_access_token_id IS 'Reference to encrypted access token in vault.secrets';
+```
+
+### PHASE 2: SECURE WRAPPER FUNCTIONS
+
+Create a set of `SECURITY DEFINER` functions to manage the entire lifecycle of a secret. This is the **only** way application code should interact with the Vault.
+
+#### 2.1 Token Storage Function
+This function encrypts tokens and stores their UUIDs in our metadata table.
+
+```sql
+-- stores a new token, revoking any previous ones for the same user/provider
+CREATE OR REPLACE FUNCTION public.store_oauth_token(...)
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_access_token_id UUID;
+BEGIN
+  -- ... (revoke old tokens) ...
+
+  -- Store access token in vault
+  SELECT vault.create_secret(p_access_token, ...)
+  INTO v_access_token_id;
+  
+  -- ... (store refresh token if provided) ...
+
+  -- Insert the new UUIDs into user_oauth_tokens
+  INSERT INTO public.user_oauth_tokens (vault_access_token_id, ...)
+  VALUES (v_access_token_id, ...);
+  
+  RETURN ...;
+END;
+$$;
+```
+
+#### 2.2 Token Retrieval Function
+This function retrieves the secret IDs from our metadata table and joins them with the `vault.decrypted_secrets` view to get the plain text token at query time.
+
+```sql
+-- retrieves and decrypts the active token for a user/provider
+CREATE OR REPLACE FUNCTION public.get_oauth_token(...)
+RETURNS TABLE(...) LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- ... (find the active token record in user_oauth_tokens) ...
+
+  -- Return decrypted tokens by selecting from the view
+  RETURN QUERY
+  SELECT
+    (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE id = v_token_record.vault_access_token_id),
+    ...
+  ;
+END;
+$$;
+```
+
+### PHASE 3: TOKEN LIFECYCLE MANAGEMENT
+
+Implement functions for updating, revoking, and cleaning up tokens to complete the security model.
+
+- **`update_oauth_token()`**: Handles token refresh logic by creating new secrets and deleting the old ones.
+- **`revoke_oauth_token()`**: Marks metadata records as revoked and securely deletes the corresponding secrets from the vault.
+- **`cleanup_expired_oauth_tokens()`**: A maintenance function to periodically remove expired and revoked tokens.
+
+## COMMON PITFALLS AND SOLUTIONS
+
+### PITFALL 1: Assuming Vault is an Extension to be Created
+**PROBLEM**: Running `CREATE EXTENSION vault` fails because Vault is an integration provided by Supabase, not a standard Postgres extension you can install yourself.
+**SOLUTION**: Verify Vault is enabled in the Supabase Dashboard under `Project Settings -> Integrations`. Use a test block in your migration to confirm it's working before proceeding.
+
+### PITFALL 2: Incorrect Function Calls
+**PROBLEM**: Calling `vault.create_secret(...)` as if it were an assignment (`:=`) instead of using `SELECT ... INTO ...`.
+```sql
+-- WRONG - This will fail
+v_access_token_id := vault.create_secret(...);
+```
+**SOLUTION**: Use the correct `SELECT ... INTO ...` syntax for assigning the result of the function call to a variable in PL/pgSQL.
+```sql
+-- CORRECT - Use SELECT INTO
+SELECT vault.create_secret(...)
+INTO v_access_token_id;
+```
+
+---
+
+**IMPORTANT SECURITY NOTES:**
+1.  **Service Role Key is Paramount**: Never expose the `service_role` key in client-side code. All Vault operations must be proxied through secure edge functions or database functions.
+2.  **Validate All Inputs**: Rigorously validate all parameters in your wrapper functions.
+3.  **Use `SECURITY DEFINER`**: All wrapper functions must use `SECURITY DEFINER` to access the `vault` schema.
+4.  **Least Privilege**: Grant `EXECUTE` permissions on these wrapper functions only to the `service_role`. No other role should have direct access.
+5.  **Regularly Monitor**: Keep an eye on Vault access patterns and logs for any anomalies.
+
+This protocol should be reviewed and updated annually or when significant changes are made to the Supabase platform or your security requirements.
+description:
+globs:
+alwaysApply: false
+---
