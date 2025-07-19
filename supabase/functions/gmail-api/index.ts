@@ -84,154 +84,24 @@ serve(async (req) => {
       throw new Error('Agent does not have required permissions for this Gmail operation')
     }
 
-    // Get user's Gmail tokens using secure vault retrieval
-    console.log('Retrieving Gmail tokens from secure vault storage...')
-    
-    interface TokenData {
-      record_id: string;
-      access_token: string;
-      refresh_token: string;
-      expires_at: string;
-      scopes_granted: any;
-      created_at: string;
-    }
-    
-    let tokenData: TokenData
-    let legacyConnectionId: string | null = null
-    
-    try {
-      const { data: secureTokens, error: tokenError } = await supabase.rpc(
-        'get_oauth_token',
-        { p_user_id: user.id, p_provider: 'gmail' }
-      )
+    // Get user's Gmail access token directly from the Vault via RPC
+    const accessTokenName = `gmail_access_token_${user.id}`;
 
-      if (tokenError) {
-        console.error('Secure token retrieval error:', tokenError)
-        throw new Error(`Failed to retrieve OAuth tokens: ${tokenError.message}`)
-      }
+    const { data: secrets, error: rpcError } = await supabaseServiceRole
+      .rpc('get_vault_secrets_by_names', {
+        p_secret_names: [accessTokenName]
+      });
 
-      if (!secureTokens || secureTokens.length === 0) {
-        throw new Error('No active Gmail tokens found in secure storage')
-      }
-
-      tokenData = secureTokens[0]
-      console.log('Gmail tokens retrieved securely from vault')
-
-    } catch (vaultError) {
-      console.warn('Vault token retrieval failed, falling back to legacy storage:', vaultError)
-      
-      // Fallback to legacy connection table for existing tokens
-      const { data: gmailConnection, error: connectionError } = await supabase.rpc(
-        'get_gmail_connection_with_tokens',
-        { p_user_id: user.id }
-      )
-
-      if (connectionError || !gmailConnection || gmailConnection.length === 0) {
-        throw new Error('No active Gmail connection found in either secure or legacy storage')
-      }
-
-      const connection = gmailConnection[0]
-      legacyConnectionId = connection.connection_id
-      
-      // Convert legacy format to secure format for consistency
-      tokenData = {
-        record_id: connection.connection_id,
-        access_token: connection.vault_access_token_id,
-        refresh_token: connection.vault_refresh_token_id,
-        expires_at: connection.token_expires_at,
-        scopes_granted: connection.scopes_granted,
-        created_at: connection.created_at
-      }
+    if (rpcError || !secrets || secrets.length === 0) {
+      throw new Error(`Failed to retrieve access token from Vault: ${rpcError?.message || 'Not found'}`);
     }
 
-    let accessToken: string = tokenData.access_token
-    let refreshToken: string = tokenData.refresh_token
-
+    const accessToken = secrets[0].decrypted_secret;
     if (!accessToken) {
-      throw new Error('No access token found')
+      throw new Error('Access token is empty in Vault.');
     }
 
-    if (!refreshToken) {
-      throw new Error('No refresh token found')
-    }
-
-    // Check if token needs refresh
-    const tokenExpiresAtValue = tokenData.expires_at
-    const now = new Date()
-    
-    let currentAccessToken = accessToken
-    
-    // Log the token expiry check
-    if (tokenExpiresAtValue) {
-      const tokenExpiresAt = new Date(tokenExpiresAtValue)
-      if (!isNaN(tokenExpiresAt.getTime())) {
-        console.log('Token expiry check:', {
-          tokenExpiresAt: tokenExpiresAt.toISOString(),
-          now: now.toISOString(),
-          needsRefresh: tokenExpiresAt < now
-        })
-        
-        if (tokenExpiresAt < now) {
-          // Token expired, refresh it
-          console.log('Token expired, refreshing...')
-          const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-              client_id: Deno.env.get('GMAIL_CLIENT_ID')!,
-              client_secret: Deno.env.get('GMAIL_CLIENT_SECRET')!,
-              refresh_token: refreshToken,
-              grant_type: 'refresh_token'
-            })
-          })
-
-          if (!refreshResponse.ok) {
-            throw new Error('Failed to refresh Gmail access token')
-          }
-
-          const newTokenData: any = await refreshResponse.json()
-          currentAccessToken = newTokenData.access_token
-
-          // Update tokens using secure storage
-          const newExpiresAt = new Date(Date.now() + (newTokenData.expires_in * 1000)).toISOString()
-          
-          try {
-            // Use the secure update function
-            await supabase.rpc('update_oauth_token', {
-              p_user_id: user.id,
-              p_provider: 'gmail',
-              p_new_access_token: newTokenData.access_token,
-              p_new_refresh_token: newTokenData.refresh_token || null,
-              p_new_expires_at: newExpiresAt
-            })
-            console.log('Token refreshed and stored securely')
-          } catch (updateError) {
-            console.warn('Secure token update failed, falling back to legacy storage:', updateError)
-            
-            // Fallback to legacy storage update if we have the connection ID
-            if (legacyConnectionId) {
-              await supabase
-                .from('user_oauth_connections')
-                .update({
-                  vault_access_token_id: newTokenData.access_token,
-                  token_expires_at: newExpiresAt,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', legacyConnectionId)
-              console.log('Token refreshed using legacy storage')
-            }
-          }
-        }
-      } else {
-        console.log('Token expiry check: Invalid token_expires_at value')
-      }
-    } else {
-      console.log('Token expiry check: No token_expires_at value, assuming token is valid')
-    }
-
-    // Execute the requested action
+    // Execute the requested Gmail API action
     let result: any
     let quotaConsumed = 0
     const startTime = Date.now()
@@ -242,23 +112,23 @@ serve(async (req) => {
       switch (action) {
         case 'send_email':
           console.log('Calling sendEmail with params:', params)
-          result = await sendEmail(currentAccessToken, params as EmailMessage)
+          result = await sendEmail(accessToken, params as EmailMessage)
           console.log('sendEmail result:', result)
           quotaConsumed = 100 // Sending emails costs 100 quota units
           break
         
         case 'read_emails':
-          result = await readEmails(currentAccessToken, params)
+          result = await readEmails(accessToken, params)
           quotaConsumed = 5 * (params.max_results || 50) // 5 units per message
           break
         
         case 'search_emails':
-          result = await searchEmails(currentAccessToken, params)
+          result = await searchEmails(accessToken, params)
           quotaConsumed = 5 * (params.max_results || 50)
           break
         
         case 'manage_labels':
-          result = await manageLabels(currentAccessToken, params)
+          result = await manageLabels(accessToken, params)
           quotaConsumed = 5 // Label operations cost 5 units
           break
         

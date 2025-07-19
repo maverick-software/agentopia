@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +21,65 @@ interface UserInfo {
   id: string;
 }
 
+// Helper function to create or update secrets in the Vault
+async function createOrUpdateVaultSecrets(
+  supabase: SupabaseClient,
+  userId: string,
+  tokens: OAuthTokenResponse
+) {
+  const accessTokenName = `gmail_access_token_${userId}`;
+  const refreshTokenName = `gmail_refresh_token_${userId}`;
+  const description = `Gmail OAuth tokens for user ${userId}`;
+
+  // Check if secrets already exist by name using the new RPC function
+  const { data: existingSecrets, error: rpcError } = await supabase
+    .rpc('get_vault_secrets_by_names', {
+      p_secret_names: [accessTokenName, refreshTokenName]
+    });
+
+  if (rpcError) {
+    throw new Error(`Failed to check for existing secrets via RPC: ${rpcError.message}`);
+  }
+
+  const existingAccessToken = existingSecrets.find(s => s.name === accessTokenName);
+  const existingRefreshToken = existingSecrets.find(s => s.name === refreshTokenName);
+
+  // Update or create access token
+  if (existingAccessToken) {
+    const { error } = await supabase.rpc('update_vault_secret', {
+      p_secret_id: existingAccessToken.id,
+      p_new_secret: tokens.access_token,
+    });
+    if (error) throw new Error(`Failed to update access token: ${error.message}`);
+  } else {
+    const { error } = await supabase.rpc('create_vault_secret', {
+      p_secret: tokens.access_token,
+      p_name: accessTokenName,
+      p_description: description,
+    });
+    if (error) throw new Error(`Failed to create access token: ${error.message}`);
+  }
+
+  // Update or create refresh token if it exists
+  if (tokens.refresh_token) {
+    if (existingRefreshToken) {
+      const { error } = await supabase.rpc('update_vault_secret', {
+        p_secret_id: existingRefreshToken.id,
+        p_new_secret: tokens.refresh_token,
+      });
+      if (error) throw new Error(`Failed to update refresh token: ${error.message}`);
+    } else {
+      const { error } = await supabase.rpc('create_vault_secret', {
+        p_secret: tokens.refresh_token,
+        p_name: refreshTokenName,
+        p_description: description,
+      });
+      if (error) throw new Error(`Failed to create refresh token: ${error.message}`);
+    }
+  }
+}
+
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -33,16 +92,13 @@ serve(async (req) => {
       throw new Error('Authorization code is required')
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get Google OAuth credentials from environment
     const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!
     const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
 
-    // Build token exchange parameters
     const tokenParams: any = {
       grant_type: 'authorization_code',
       client_id: clientId,
@@ -51,12 +107,10 @@ serve(async (req) => {
       redirect_uri: redirect_uri,
     }
 
-    // Add code_verifier if using PKCE
     if (code_verifier) {
       tokenParams.code_verifier = code_verifier
     }
 
-    // Exchange authorization code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
@@ -72,7 +126,6 @@ serve(async (req) => {
 
     const tokens: OAuthTokenResponse = await tokenResponse.json()
 
-    // Get user information from Google
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v1/userinfo', {
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
@@ -81,17 +134,11 @@ serve(async (req) => {
 
     if (!userInfoResponse.ok) {
       const errorText = await userInfoResponse.text()
-      console.error('User info fetch failed:', {
-        status: userInfoResponse.status,
-        statusText: userInfoResponse.statusText,
-        error: errorText
-      })
       throw new Error(`Failed to fetch user information: ${userInfoResponse.status} - ${errorText}`)
     }
 
     const userInfo: UserInfo = await userInfoResponse.json()
 
-    // Get current user from JWT
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       throw new Error('No authorization header provided')
@@ -105,7 +152,9 @@ serve(async (req) => {
       throw new Error('Invalid or expired token')
     }
 
-    // Get Gmail OAuth provider ID
+    await createOrUpdateVaultSecrets(supabase, user.id, tokens);
+    console.log('OAuth tokens stored securely in Vault.');
+
     const { data: oauthProvider, error: providerError } = await supabase
       .from('oauth_providers')
       .select('id')
@@ -113,127 +162,45 @@ serve(async (req) => {
       .single()
 
     if (providerError) {
-      console.error('OAuth provider query error:', {
-        error: providerError,
-        message: providerError.message,
-        details: providerError.details,
-        hint: providerError.hint
-      })
       throw new Error(`Gmail OAuth provider query failed: ${providerError.message}`)
     }
-
     if (!oauthProvider) {
       throw new Error('Gmail OAuth provider not found in database')
     }
 
-    // Store tokens securely using Supabase Vault
-    console.log('Storing tokens securely in Vault...')
+    const scopesGranted = tokens.scope.split(' ');
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
     
-    const scopesGranted = tokens.scope.split(' ')
-
-    // Use the new secure token storage function
-    const { data: tokenRecordId, error: storeError } = await supabase.rpc('store_oauth_token', {
-      p_user_id: user.id,
-      p_provider: 'gmail',
-      p_access_token: tokens.access_token,
-      p_refresh_token: tokens.refresh_token || null,
-      p_expires_in: tokens.expires_in, // Pass integer seconds directly
-      p_scopes_granted: scopesGranted
-    })
-
-    if (storeError) {
-      console.error('Token storage error:', storeError)
-      throw new Error(`Failed to store OAuth tokens: ${storeError.message}`)
-    }
-
-    console.log('OAuth tokens stored securely with record ID:', tokenRecordId)
-
-    // Check if user already has a connection with this email in the old table
-    const { data: existingConnection } = await supabase
+    const { data: connection, error: upsertError } = await supabase
       .from('user_oauth_connections')
+      .upsert({
+        user_id: user.id,
+        oauth_provider_id: oauthProvider.id,
+        external_username: userInfo.email,
+        connection_name: userInfo.email,
+        external_user_id: userInfo.id,
+        scopes_granted: scopesGranted,
+        token_expires_at: expiresAt,
+        connection_status: 'active',
+        connection_metadata: {
+          user_name: userInfo.name,
+          user_picture: userInfo.picture,
+          last_connected: new Date().toISOString(),
+        },
+      }, {
+        onConflict: 'user_id, oauth_provider_id, external_username',
+      })
       .select('id')
-      .eq('user_id', user.id)
-      .eq('oauth_provider_id', oauthProvider.id)
-      .eq('external_username', userInfo.email)
-      .single()
+      .single();
 
-    let connectionId: string
-
-    if (existingConnection) {
-      // Update existing connection - clear the old plain text token fields
-      const { data: updatedConnection, error: updateError } = await supabase
-        .from('user_oauth_connections')
-        .update({
-          external_user_id: userInfo.id,
-          external_username: userInfo.email,
-          connection_name: userInfo.email, // Use email as connection name
-          scopes_granted: scopesGranted,
-          // Clear old plain text storage
-          vault_access_token_id: null,
-          vault_refresh_token_id: null,
-          encrypted_access_token: null,
-          encrypted_refresh_token: null,
-          token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-          connection_status: 'active',
-          connection_metadata: {
-            user_name: userInfo.name,
-            user_picture: userInfo.picture,
-            last_connected: new Date().toISOString(),
-            // Reference to the secure token storage
-            secure_token_record_id: tokenRecordId,
-          },
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingConnection.id)
-        .select('id')
-        .single()
-
-      if (updateError) {
-        throw new Error(`Failed to update OAuth connection: ${updateError.message}`)
-      }
-
-      connectionId = updatedConnection.id
-    } else {
-      // Create new connection - don't store tokens in this table anymore
-      const { data: newConnection, error: insertError } = await supabase
-        .from('user_oauth_connections')
-        .insert({
-          user_id: user.id,
-          oauth_provider_id: oauthProvider.id,
-          external_user_id: userInfo.id,
-          external_username: userInfo.email,
-          connection_name: userInfo.email, // Use email as connection name
-          scopes_granted: scopesGranted,
-          // Don't store tokens in this table - use secure storage
-          vault_access_token_id: null,
-          vault_refresh_token_id: null,
-          encrypted_access_token: null,
-          encrypted_refresh_token: null,
-          token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-          connection_status: 'active',
-          connection_metadata: {
-            user_name: userInfo.name,
-            user_picture: userInfo.picture,
-            first_connected: new Date().toISOString(),
-            // Reference to the secure token storage
-            secure_token_record_id: tokenRecordId,
-          },
-        })
-        .select('id')
-        .single()
-
-      if (insertError) {
-        throw new Error(`Failed to create OAuth connection: ${insertError.message}`)
-      }
-
-      connectionId = newConnection.id
+    if (upsertError) {
+      throw new Error(`Failed to upsert OAuth connection: ${upsertError.message}`);
     }
 
-    // Create or update Gmail configuration
     const { error: configError } = await supabase
       .from('gmail_configurations')
       .upsert({
-        user_oauth_connection_id: connectionId,
+        user_oauth_connection_id: connection.id,
         security_settings: {
           require_confirmation_for_send: true,
           allow_delete_operations: false,
@@ -243,36 +210,29 @@ serve(async (req) => {
           max_requests_per_minute: 100,
           batch_size: 10,
         },
-      })
+      }, {
+        onConflict: 'user_oauth_connection_id',
+      });
 
     if (configError) {
-      console.error('Failed to create Gmail configuration:', {
-        error: configError,
-        message: configError.message,
-        details: configError.details,
-        hint: configError.hint,
-        code: configError.code
-      })
-      // Don't fail the request for configuration errors
+      console.error('Failed to create/update Gmail configuration:', configError);
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        connection_id: connectionId,
+        connection_id: connection.id,
         user_email: userInfo.email,
-        scopes: tokens.scope.split(' '),
-        expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
+        scopes: scopesGranted,
+        expires_at: expiresAt,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       }
     )
-
   } catch (error) {
     console.error('Gmail OAuth error:', error)
-    
     return new Response(
       JSON.stringify({
         success: false,
