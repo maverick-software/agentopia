@@ -111,13 +111,15 @@ async function handleUserOnlyMessage(
  * @param userId - ID of the user sending the message
  * @param channelId - Channel where message was sent
  * @param workspaceId - ID of the workspace
+ * @param authToken - JWT auth token for calling other functions
  */
 async function handleAgentMessage(
   agentId: string,
   userMessageContent: string,
   userId: string,
     channelId: string | null, 
-  workspaceId: string | undefined
+  workspaceId: string | undefined,
+  authToken: string
 ): Promise<Response> {
   console.log(`Handling message for agent: ${agentId} in workspace: ${workspaceId} channel: ${channelId}`);
 
@@ -185,20 +187,32 @@ async function handleAgentMessage(
       contextBuilder.setUserInput(userMessageContent);
 
       // Build the final context
-      const messages = contextBuilder.buildContext();
+      let messages = contextBuilder.buildContext();
 
       console.log(`[chat] Final context built - ${messages.length} messages, approximately ${contextBuilder.getTotalTokenCount()} tokens`);
       
       // Add a "thinking" step log
       console.log('[ReAct] Thinking: Does the user want me to use a tool? Reviewing available tools and user request.');
 
-  // Initialize function calling manager
-      const functionCallingManager = new FunctionCallingManager(supabaseClient);
+  // Initialize function calling manager with auth token
+      const functionCallingManager = new FunctionCallingManager(supabaseClient, authToken);
       
       // Get available tools for the agent
       const availableTools = await functionCallingManager.getAvailableTools(agentId, userId);
       console.log(`[chat] Found ${availableTools.length} available tools for agent ${agentId}`);
       console.log(`[chat] Available tools:`, availableTools.map(t => t.name));
+      
+      // Add available tool names to the context to ensure AI uses correct names
+      if (availableTools.length > 0) {
+        const toolInfo = availableTools.map(t => `• ${t.name}: ${t.description}`).join('\n');
+        contextBuilder.addSystemInstruction(`\nYou have access to the following tools:\n${toolInfo}\n\nCRITICAL INSTRUCTION - READ CAREFULLY:\nYou MUST use the EXACT tool names as listed above. The function names are case-sensitive and must match exactly.\n\nFor Gmail operations:\n- To send an email, the function name is EXACTLY "send_email" (NOT "gmail_send_message", NOT "gmail_send", NOT anything else)\n- To read emails, the function name is EXACTLY "read_emails"\n- To search emails, the function name is EXACTLY "search_emails"\n\nIMPORTANT: The function "gmail_send_message" DOES NOT EXIST and will fail. You must use "send_email" instead.\n\nWhen calling a function, use this exact format:\n{"name": "send_email", "arguments": {...}}\n\nDO NOT use any prefix like "gmail_" before the function names.`);
+        
+        // Add another reminder right before the user message
+        contextBuilder.addSystemInstruction(`FINAL REMINDER: When sending an email, call the function "send_email". The function "gmail_send_message" does not exist and will cause an error.`);
+        
+        // Rebuild messages after adding tool info
+        messages = contextBuilder.buildContext();
+      }
 
   // Get Response from LLM with function calling
       const completion = await openai.chat.completions.create({
@@ -219,9 +233,37 @@ async function handleAgentMessage(
       if (toolCalls && toolCalls.length > 0) {
         console.log(`[chat] Agent requested ${toolCalls.length} function calls`);
         
-        // Execute function calls
+        // Correct any wrong tool names
+        const correctedToolCalls = toolCalls.map((toolCall: OpenAIToolCall) => {
+          let functionName = toolCall.function.name;
+          
+          // Map incorrect Gmail tool names to correct ones
+          const toolNameCorrections: Record<string, string> = {
+            'gmail_send_message': 'send_email',
+            'gmail_send': 'send_email',
+            'gmail_read_messages': 'read_emails',
+            'gmail_search': 'search_emails',
+            'gmail_search_messages': 'search_emails',
+            'gmail_email_actions': 'email_actions',
+          };
+          
+          if (toolNameCorrections[functionName]) {
+            console.log(`[chat] CORRECTING TOOL NAME: "${functionName}" -> "${toolNameCorrections[functionName]}"`);
+            functionName = toolNameCorrections[functionName];
+          }
+          
+          return {
+            ...toolCall,
+            function: {
+              ...toolCall.function,
+              name: functionName
+            }
+          };
+        });
+        
+        // Execute function calls with corrected names
         const functionResults = await Promise.all(
-          toolCalls.map(async (toolCall: OpenAIToolCall) => {
+          correctedToolCalls.map(async (toolCall: OpenAIToolCall) => {
             const functionName = toolCall.function.name;
             const parameters = JSON.parse(toolCall.function.arguments);
             
@@ -236,8 +278,8 @@ async function handleAgentMessage(
           })
         );
 
-        // Format function responses
-        const functionResponses = processFunctionCalls(toolCalls, functionResults, functionCallingManager);
+        // Format function responses (use corrected tool calls)
+        const functionResponses = processFunctionCalls(correctedToolCalls, functionResults, functionCallingManager);
         
         // Create follow-up messages for OpenAI
         const followUpMessages = [
@@ -300,6 +342,9 @@ Deno.serve(async (req) => {
       return createErrorResponse(authResult.error!, authResult.statusCode!);
     }
     const userId = authResult.userId!;
+    
+    // Extract the auth token for passing to other functions
+    const authToken = req.headers.get('Authorization')?.replace('Bearer ', '') || '';
 
     // Rate Limiting
     if (!checkRateLimit(limiter)) {
@@ -321,10 +366,10 @@ Deno.serve(async (req) => {
     // Route to appropriate handler based on target
     if (!targetAgentId) {
       // Handle User-Only Message
-      return await handleUserOnlyMessage(channelId, userMessageContent, userId, workspaceId);
+      return await handleUserOnlyMessage(channelId || null, userMessageContent, userId, workspaceId);
     } else {
       // Handle Message Targeting an Agent
-      return await handleAgentMessage(targetAgentId, userMessageContent, userId, channelId, workspaceId);
+      return await handleAgentMessage(targetAgentId, userMessageContent, userId, channelId || null, workspaceId, authToken);
     }
 
   } catch (error) {

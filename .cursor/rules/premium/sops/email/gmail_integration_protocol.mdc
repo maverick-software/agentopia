@@ -1,0 +1,117 @@
+# Gmail Integration Protocol
+
+This document outlines the complete architecture and methodology for integrating Gmail capabilities into Agentopia agents, allowing them to read, search, and send emails on behalf of a user.
+
+## 1. High-Level Architecture
+
+The integration follows a secure, multi-step flow that ensures agent actions are properly authenticated and authorized.
+
+```mermaid
+graph TD
+    A[User in Chat UI] -- "Send email to..." --> B(Chat Edge Function);
+    B -- 1. Identifies intent to use a tool --> C{FunctionCallingManager};
+    C -- 2. Checks permissions --> D[DB: agent_oauth_permissions];
+    C -- 3. Invokes tool --> E(gmail-api Edge Function);
+    E -- 4. Retrieves token --> F[DB: user_oauth_connections];
+    E -- 5. Checks token expiry --> G{Refresh Token?};
+    G -- Yes --> H(Google OAuth API);
+    H -- New Token --> E;
+    G -- No --> I;
+    E -- Use Token --> I(Google Gmail API);
+    I -- Email Sent --> E;
+    E -- Result --> C;
+    C -- Formatted Result --> B;
+    B -- "Okay, email sent!" --> A;
+```
+
+## 2. Database Schema
+
+The following tables are critical for the integration.
+
+### `oauth_providers`
+Stores static configuration for different OAuth providers.
+- `id` (UUID): Primary key.
+- `name` (TEXT): The unique internal name (e.g., 'gmail').
+- `display_name` (TEXT): The user-facing name (e.g., 'Gmail').
+- `... (auth_url, token_url, etc.)`
+
+### `user_oauth_connections`
+Stores a user's specific, authenticated connection to a provider.
+- `id` (UUID): Primary key.
+- `user_id` (UUID): Foreign key to `auth.users`.
+- `oauth_provider_id` (UUID): Foreign key to `oauth_providers`.
+- `vault_access_token_id` (TEXT): Stores the raw OAuth access token.
+- `vault_refresh_token_id` (TEXT): Stores the raw OAuth refresh token.
+- `token_expires_at` (TIMESTAMPTZ): The timestamp when the access token expires.
+- `connection_status` (TEXT): The status of the connection (e.g., 'active', 'revoked').
+- **Key Decision**: The `vault_*_id` columns were migrated from `UUID` to `TEXT` to store tokens directly, bypassing the problematic Supabase Vault implementation which was causing decryption errors.
+
+### `agent_oauth_permissions`
+Grants a specific agent permission to use one of the user's OAuth connections.
+- `id` (UUID): Primary key.
+- `agent_id` (UUID): The agent being granted permission.
+- `user_oauth_connection_id` (UUID): The specific user connection the agent can use.
+- `allowed_scopes` (JSONB): An array of scopes the agent is permitted to use (e.g., `['https://www.googleapis.com/auth/gmail.send']`).
+
+## 3. Authentication Flow (OAuth 2.0)
+
+This flow is handled by the `gmail-oauth` edge function and is triggered when a user connects their Gmail account for the first time.
+
+- **Endpoint**: `/functions/v1/gmail-oauth`
+- **Process**:
+    1.  **Code Exchange**: Receives an authorization `code` from Google after user consent.
+    2.  **Token Request**: Exchanges the `code` for an `access_token` and `refresh_token` by calling Google's token endpoint.
+    3.  **Direct Token Storage**: Stores the raw `access_token` and `refresh_token` strings directly into the `vault_access_token_id` and `vault_refresh_token_id` text fields of the `user_oauth_connections` table.
+    4.  **Record Creation**: Creates or updates the connection record with the new tokens and expiry date.
+
+## 4. Tool Usage & Agent Interaction Flow
+
+This flow describes what happens when a user asks an agent to perform a Gmail action.
+
+### `chat` Edge Function (`function_calling.ts`)
+- **Core Component**: `FunctionCallingManager`
+- **Process**:
+    1.  **Tool Discovery**: When a message is received, `getAvailableTools` is called. It queries `agent_oauth_permissions` and `user_oauth_connections` to determine which Gmail tools the agent is authorized to use for the current user based on granted scopes.
+    2.  **Context Injection**: The available tool definitions (name, description, parameters) are injected into the system prompt for the LLM. The prompt includes **critical instructions** for the model to use the *exact* function name (e.g., `send_email`).
+    3.  **LLM Call**: The LLM processes the user's request and the tool context, and decides to make a `tool_call`.
+    4.  **Tool Name Correction**: A hardcoded mapping corrects common LLM naming mistakes (e.g., `gmail_send_message` is automatically corrected to `send_email`) to improve reliability.
+    5.  **Execution Routing**: `executeFunction` identifies that `send_email` is a Gmail tool and routes the call to `executeGmailTool`.
+
+### `executeGmailTool` Method
+This method invokes the `gmail-api` edge function, passing the `action` name, `agent_id`, and the `params` (e.g., to, subject, body) for the action. It also forwards the user's authorization token for security.
+
+## 5. Gmail API Interaction & Refresh Tokens
+
+### `gmail-api` Edge Function
+- **Endpoint**: `/functions/v1/gmail-api`
+- **Purpose**: A secure proxy that handles all direct communication with the Google Gmail API.
+- **Process**:
+    1.  **Authentication & Validation**: Validates the user's JWT and checks that all required parameters (`action`, `params`, `agent_id`) are present.
+    2.  **Token Retrieval**: Fetches the `access_token`, `refresh_token`, and `token_expires_at` from the `user_oauth_connections` table.
+    3.  **Refresh Token Logic**:
+        - It robustly checks if `token_expires_at` has a valid, non-null value.
+        - If the token is expired, it uses the `refresh_token` to request a new `access_token` from `https://oauth2.googleapis.com/token`.
+        - It then updates the `user_oauth_connections` record with the new token and its expiry date.
+    4.  **API Execution**: It uses the valid `access_token` to make the final API call to Google. For example, it calls the `.../messages/send` endpoint to send an email.
+    5.  **Response Handling**: It returns a structured success or error response to the calling `chat` function.
+
+## 6. Gmail Tool Definitions
+
+The following tools are defined in `supabase/functions/chat/function_calling.ts`.
+
+-   **`send_email`**:
+    -   **Description**: Sends an email. Includes explicit instructions in the description to use the exact function name.
+    -   **Parameters**: `to`, `subject`, `body`, `html` (optional), `attachments` (optional).
+    -   **Required Scope**: `https://www.googleapis.com/auth/gmail.send`
+-   **`read_emails`**:
+    -   **Description**: Reads emails from the user's inbox based on a query.
+    -   **Parameters**: `query`, `max_results`.
+    -   **Required Scope**: `https://www.googleapis.com/auth/gmail.readonly`
+-   **`search_emails`**:
+    -   **Description**: Searches for emails matching a query.
+    -   **Parameters**: `query`, `max_results`.
+    -   **Required Scope**: `https://www.googleapis.com/auth/gmail.readonly`
+description:
+globs:
+alwaysApply: false
+---

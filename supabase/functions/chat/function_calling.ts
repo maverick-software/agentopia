@@ -50,7 +50,7 @@ export interface MCPToolResult {
 export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
   send_email: {
     name: 'send_email',
-    description: 'When a user asks to send an email, use this tool. You have the capability to send emails on their behalf.',
+    description: 'Send an email through Gmail. THIS TOOL IS CALLED "send_email" - USE EXACTLY "send_email" AS THE FUNCTION NAME. DO NOT USE "gmail_send_message" OR ANY OTHER NAME. The function name must be exactly "send_email" with no prefix or suffix.',
     parameters: {
       type: 'object',
       properties: {
@@ -174,7 +174,10 @@ export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
  * Function Calling Manager
  */
 export class FunctionCallingManager {
-  constructor(private supabaseClient: SupabaseClient) {}
+  constructor(
+    private supabaseClient: SupabaseClient,
+    private authToken: string = ''
+  ) {}
 
   /**
    * Get available tools for an agent in OpenAI function calling format
@@ -332,18 +335,25 @@ export class FunctionCallingManager {
         };
       }
 
-      // Call Gmail API via Supabase Edge Function
+      // Call Gmail API via Supabase Edge Function with auth token
       const { data, error } = await this.supabaseClient.functions.invoke('gmail-api', {
         body: {
           action: toolName,
           agent_id: agentId,
-          user_id: userId,
-          parameters,
+          params: parameters,  // Changed from 'parameters' to 'params'
         },
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`
+        }
       });
 
       if (error) {
         throw new Error(error.message);
+      }
+
+      // Check if the response indicates an error
+      if (data && !data.success && data.error) {
+        throw new Error(data.error);
       }
 
       // Log the operation
@@ -470,8 +480,32 @@ export class FunctionCallingManager {
       
       return formattedResult;
     } else {
-      // Format error result
-      return `❌ Error executing ${functionName}: ${result.error || 'Unknown error'}`;
+      // Format error result with details
+      let errorMessage = `❌ Failed to execute ${functionName}\n\n`;
+      errorMessage += `**Error Details:**\n`;
+      errorMessage += `• Error: ${result.error || 'Unknown error'}\n`;
+      
+      if (result.metadata?.execution_time_ms) {
+        errorMessage += `• Execution time: ${result.metadata.execution_time_ms}ms\n`;
+      }
+      
+      errorMessage += `\n**What you can try:**\n`;
+      
+      // Add specific guidance based on the error
+      if (result.error?.includes('Failed to send email')) {
+        errorMessage += `• Check that the recipient email address is valid\n`;
+        errorMessage += `• Verify your Gmail account has sending permissions enabled\n`;
+        errorMessage += `• Ensure you're not hitting Gmail's sending limits\n`;
+      } else if (result.error?.includes('permissions')) {
+        errorMessage += `• Verify your Gmail account is properly connected\n`;
+        errorMessage += `• Check that necessary permissions were granted during OAuth\n`;
+        errorMessage += `• Try reconnecting your Gmail account in Integrations\n`;
+      } else if (result.error?.includes('token') || result.error?.includes('expired')) {
+        errorMessage += `• Your Gmail authentication may have expired\n`;
+        errorMessage += `• Please reconnect your Gmail account in Integrations\n`;
+      }
+      
+      return errorMessage;
     }
   }
 }

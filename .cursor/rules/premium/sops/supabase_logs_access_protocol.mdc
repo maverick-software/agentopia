@@ -1,0 +1,350 @@
+# SUPABASE LOGS ACCESS PROTOCOL
+
+## VERSION
+- Version: 2.0
+- Updated: 2025-07-19
+- Classification: Premium SOP (Standard Operating Procedure)
+- Purpose: Comprehensive guide for accessing Supabase logs via Dashboard, CLI, and programmatic methods
+- Reference: [Official Supabase Logs Documentation](https://supabase.com/docs/guides/telemetry/logs)
+
+## INTRODUCTION
+
+This protocol establishes standardized procedures for accessing and analyzing Supabase logs across different access methods. The Supabase Platform includes a comprehensive Logs Explorer that allows log tracing and debugging, with log retention based on your project's pricing plan.
+
+## LOG ACCESS METHODS
+
+### METHOD 1: SUPABASE DASHBOARD - LOGS EXPLORER (PRIMARY METHOD)
+
+The Logs Explorer is the most comprehensive method for accessing Supabase logs, providing SQL-based querying with BigQuery support.
+
+#### 1.1 Product-Specific Logs
+Navigate to your Supabase Dashboard → **Logs** section to access different log sources:
+
+**API Logs**: Network requests and responses for REST and GraphQL APIs
+- Shows all network requests/responses 
+- Includes Read Replica filtering if enabled
+- Contains Cloudflare metadata under `metadata.request.cf.*` fields
+- Strict allowlist of request/response headers for security
+
+**Edge Functions Logs**: Two separate log sources
+- `function_edge_logs`: Network logs for edge functions (requests/responses)
+- `function_logs`: Internal function logs (console outputs, errors, execution details)
+
+**Postgres Logs**: Database activity and query execution
+- Requires pgAudit extension configuration for query logging
+- Shows statements executed by connected applications
+- RAISE messages (INFO, NOTICE, WARNING, LOG) appear here
+
+**Auth Logs** (`auth_logs`): Authentication and authorization activity
+- GoTrue server logs
+- Login attempts, token operations, user management
+
+**Storage Logs** (`storage_logs`): Object storage operations
+- File uploads, retrievals, and storage operations
+
+**Realtime Logs** (`realtime_logs`): WebSocket connections and real-time subscriptions
+- Client connection information
+- Requires `log_level: 'info'` configuration to enable connection logging
+
+#### 1.2 Logs Explorer Interface
+1. **Navigate to Logs**: Dashboard → Logs → Logs Explorer
+2. **Select Source**: Use Sources dropdown (edge_logs, function_logs, postgres_logs, etc.)
+3. **Use Templates**: Pre-built query templates available in Templates tab
+4. **SQL Querying**: Full BigQuery SQL support for advanced filtering
+5. **Time Filtering**: Always include timestamp filters for performance
+6. **Export Options**: Download matching log events as spreadsheet
+
+### METHOD 2: LOGS EXPLORER SQL QUERYING
+
+The Logs Explorer uses BigQuery and supports all available SQL functions and operators.
+
+#### 2.1 Basic Query Structure
+```sql
+-- Basic function logs query
+SELECT 
+  DATETIME(timestamp) as time,
+  event_message,
+  metadata
+FROM function_logs 
+WHERE timestamp >= '2025-01-19 00:00:00'
+ORDER BY timestamp DESC
+LIMIT 100;
+```
+
+#### 2.2 Advanced Querying with Unnesting
+```sql
+-- Query edge logs with nested metadata
+SELECT 
+  DATETIME(timestamp) as time,
+  request.method,
+  response.status_code,
+  header.cf_ipcountry
+FROM edge_logs as t
+  CROSS JOIN UNNEST(t.metadata) as metadata
+  CROSS JOIN UNNEST(metadata.request) as request  
+  CROSS JOIN UNNEST(metadata.response) as response
+  CROSS JOIN UNNEST(request.headers) as header
+WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+  AND response.status_code >= 400
+ORDER BY timestamp DESC;
+```
+
+#### 2.3 Function-Specific Error Queries
+```sql
+-- Find oauth-refresh function errors
+SELECT 
+  DATETIME(timestamp) as time,
+  event_message,
+  metadata
+FROM function_logs
+WHERE event_message LIKE '%oauth-refresh%'
+  AND event_message LIKE '%ERROR%'
+  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+ORDER BY timestamp DESC;
+
+-- Function execution network logs
+SELECT 
+  DATETIME(timestamp) as time,
+  request.method,
+  request.path, 
+  response.status_code
+FROM function_edge_logs as t
+  CROSS JOIN UNNEST(t.metadata) as metadata
+  CROSS JOIN UNNEST(metadata.request) as request
+  CROSS JOIN UNNEST(metadata.response) as response  
+WHERE request.path LIKE '%oauth-refresh%'
+  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+ORDER BY timestamp DESC;
+```
+
+### METHOD 3: POSTGRES QUERY LOGGING CONFIGURATION
+
+Enable detailed Postgres query logging for debugging database function calls.
+
+#### 3.1 Enable pgAudit Extension
+```sql
+-- Enable pgAudit extension
+CREATE EXTENSION IF NOT EXISTS pgaudit;
+```
+
+#### 3.2 Configure Query Logging
+```sql
+-- Temporary single-session config (for testing)
+SET pgaudit.log = 'function, write, ddl';
+
+-- Permanent config for postgres role (requires fast reboot)
+ALTER ROLE postgres SET pgaudit.log TO 'function, write, ddl';
+
+-- For API-related logs (PostgREST traffic)
+ALTER ROLE authenticator SET pgaudit.log TO 'write';
+
+-- Adjust log level if needed
+ALTER ROLE postgres SET pgaudit.log_level TO 'info';
+
+-- Reset configuration
+ALTER ROLE postgres RESET pgaudit.log;
+```
+
+#### 3.3 Manual Log Messages
+```sql
+-- Use RAISE statements in functions for custom logging
+RAISE INFO 'OAuth token storage attempt for user %', user_id;
+RAISE NOTICE 'Secure token retrieval failed, falling back to legacy';
+RAISE WARNING 'Token expiry check failed: %', error_message;
+RAISE LOG 'Function execution completed successfully';
+```
+
+**Note**: Only messages at or above your logging level are shown. Check with `SHOW log_min_messages;`
+
+### METHOD 4: REALTIME LOGGING CONFIGURATION
+
+Enable connection logging for Realtime WebSocket debugging.
+
+```javascript
+import { createClient } from '@supabase/supabase-js'
+
+const options = {
+  realtime: {
+    params: {
+      log_level: 'info', // Enables connection logging
+    },
+  },
+}
+
+const supabase = createClient(
+  'https://your-project.supabase.co', 
+  'your-anon-key', 
+  options
+)
+```
+
+### METHOD 5: CLI ACCESS (LIMITED)
+
+The Supabase CLI has limited direct log access, but provides database querying capabilities.
+
+#### 5.1 Database Performance Queries
+```powershell
+# Monitor function execution statistics
+supabase db shell --command "SELECT schemaname, funcname, calls, total_time, self_time FROM pg_stat_user_functions WHERE schemaname = 'public' ORDER BY total_time DESC LIMIT 10;"
+
+# Check active connections
+supabase db shell --command "SELECT datname, usename, application_name, client_addr, backend_start FROM pg_stat_activity WHERE state = 'active';"
+
+# Monitor slow queries (requires pg_stat_statements)
+supabase db shell --command "SELECT query, total_time, calls, mean_time FROM pg_stat_statements WHERE mean_time > 1000 ORDER BY mean_time DESC LIMIT 10;"
+```
+
+## LOGS EXPLORER BEST PRACTICES
+
+### 4.1 Query Performance Optimization
+
+**ALWAYS Include Timestamp Filters**:
+```sql
+-- ✅ Good - Includes timestamp filter
+WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+
+-- ❌ Bad - No timestamp filter (will scan entire log history)
+WHERE event_message LIKE '%error%'
+```
+
+**Select Individual Values, Not Large Objects**:
+```sql
+-- ✅ Good - Select specific values
+SELECT 
+  DATETIME(timestamp),
+  r.method,
+  r.path
+FROM edge_logs as t
+  CROSS JOIN UNNEST(t.metadata) as m
+  CROSS JOIN UNNEST(m.request) as r;
+
+-- ❌ Bad - Selects entire metadata object
+SELECT 
+  DATETIME(timestamp),
+  m as metadata  -- Contains many nested keys
+FROM edge_logs as t
+  CROSS JOIN UNNEST(t.metadata) as m;
+```
+
+**Use LIMIT for Large Queries**:
+```sql
+-- Maximum 1000 rows per query, optimize with LIMIT
+SELECT * FROM function_logs 
+WHERE timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+ORDER BY timestamp DESC
+LIMIT 50; -- Reduce further for faster results
+```
+
+### 4.2 Debugging OAuth Issues - Systematic Approach
+
+1. **Check Function Edge Logs** (network requests to oauth-refresh):
+```sql
+SELECT DATETIME(timestamp), request.method, response.status_code, response.headers
+FROM function_edge_logs as t
+  CROSS JOIN UNNEST(t.metadata) as metadata
+  CROSS JOIN UNNEST(metadata.request) as request
+  CROSS JOIN UNNEST(metadata.response) as response
+WHERE request.path LIKE '%oauth-refresh%'
+  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR);
+```
+
+2. **Check Function Internal Logs** (console.log, errors):
+```sql
+SELECT DATETIME(timestamp), event_message
+FROM function_logs
+WHERE event_message LIKE '%oauth%'
+  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+ORDER BY timestamp DESC;
+```
+
+3. **Check Database Function Logs** (if pgAudit enabled):
+```sql
+SELECT DATETIME(timestamp), event_message
+FROM postgres_logs
+WHERE event_message LIKE '%get_oauth_token%' 
+   OR event_message LIKE '%store_oauth_token%'
+   AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR);
+```
+
+### 4.3 Common Error Patterns in Logs
+
+**Function Errors**:
+- `"Error: No valid token found for user X and provider gmail"`
+- `"Failed to retrieve secure tokens"`
+- `"function get_oauth_token(uuid, text) does not exist"`
+
+**Network/API Errors**:
+- `status_code: 400, 500` in edge logs
+- `"Edge Function returned a non-2xx status code"`
+
+**Database Errors**:
+- `"relation does not exist"`
+- `"permission denied for function"`
+- `"function execution failed"`
+
+## WHEN TO REQUEST USER DASHBOARD ACCESS
+
+### 5.1 Scenarios Requiring Dashboard Access
+- **Real-time Analysis**: Dashboard provides live log streaming
+- **Complex SQL Queries**: Need to use Logs Explorer for advanced filtering
+- **Cross-Service Correlation**: Analyze logs across multiple services simultaneously
+- **Visual Timeline**: Dashboard shows chronological log events with metadata
+- **Export Requirements**: Need to download logs as spreadsheet
+
+### 5.2 Specific Information to Request
+
+```markdown
+Please check the Supabase Dashboard Logs Explorer:
+
+**For OAuth Refresh Issues**:
+1. Go to Dashboard → Logs → Logs Explorer
+2. Select "Function Logs" from Sources dropdown
+3. Run this query to find oauth-refresh errors:
+
+```sql
+SELECT DATETIME(timestamp), event_message
+FROM function_logs
+WHERE event_message LIKE '%oauth%'
+  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+ORDER BY timestamp DESC LIMIT 20;
+```
+
+4. Also check "Function Edge Logs" for HTTP status codes:
+
+```sql
+SELECT DATETIME(timestamp), request.path, response.status_code
+FROM function_edge_logs as t
+  CROSS JOIN UNNEST(t.metadata) as metadata
+  CROSS JOIN UNNEST(metadata.request) as request
+  CROSS JOIN UNNEST(metadata.response) as response
+WHERE request.path LIKE '%oauth-refresh%'
+  AND timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR);
+```
+
+**Please share**:
+- Exact error messages with timestamps
+- HTTP status codes from edge logs
+- Any stack traces or detailed error info
+```
+
+## AVAILABLE LOG SOURCES
+
+Based on the [official Supabase documentation](https://supabase.com/docs/guides/telemetry/logs), these log sources are available:
+
+- **`edge_logs`**: Edge network logs with Cloudflare metadata
+- **`function_edge_logs`**: Edge network logs specifically for edge functions
+- **`function_logs`**: Function internal logs (console outputs, errors)
+- **`postgres_logs`**: Database logs and executed statements
+- **`auth_logs`**: GoTrue authentication/authorization activity  
+- **`storage_logs`**: Storage server object operations
+- **`realtime_logs`**: Realtime server connection information
+
+## SECURITY AND RETENTION NOTES
+
+- **Log Retention**: Based on your project's pricing plan
+- **PII Protection**: Never log Personal Identifiable Information in User-Agent headers
+- **Header Filtering**: Only specific request/response headers are logged for security
+- **Access Control**: Dashboard access requires appropriate project permissions
+- **Data Protection**: Follow data protection laws when analyzing logs
+
+This protocol incorporates all official Supabase logging capabilities and should be the authoritative guide for log access procedures.

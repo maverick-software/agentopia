@@ -7,6 +7,7 @@ import {
   Bot, // Using Bot icon for Agent Management
   Store, // Add Store icon for marketplace
   Wrench, // Add Wrench icon for Tools
+  Settings, // Add Settings icon for Integration Management
   PanelLeftClose, 
   PanelRightClose 
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'User Management', href: '/admin/users', icon: Users },
     { name: 'Agent Management', href: '/admin/agents', icon: Bot }, 
+    { name: 'Integration Management', href: '/admin/integrations', icon: Settings },
     { name: 'MCP Templates', href: '/admin/marketplace', icon: Store },
     { name: 'Droplets', href: '/admin/tools', icon: Wrench },
     // Add other admin items here if needed

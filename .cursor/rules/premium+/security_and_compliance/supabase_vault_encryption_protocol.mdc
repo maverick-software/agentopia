@@ -1,0 +1,641 @@
+# SUPABASE VAULT ENCRYPTION AND STORAGE PROTOCOL
+
+## VERSION
+- Version: 1.0
+- Created: 2025-01-19
+- Classification: Premium+ Security Protocol
+- Purpose: Production-grade Supabase Vault implementation for OAuth tokens and sensitive data
+
+## INTRODUCTION
+
+This protocol establishes enterprise-grade best practices for implementing Supabase Vault encryption, storage, decryption, and retrieval of OAuth tokens, API keys, and sensitive data. It addresses the common pitfall of storing tokens as plain text in database fields and provides a secure, production-ready approach.
+
+## CORE SECURITY PRINCIPLES
+
+### 1. ENCRYPTION FOUNDATION
+- **NEVER** store sensitive data as plain text
+- Use Supabase Vault's Authenticated Encryption with Associated Data (AEAD) based on libsodium
+- Implement proper key management separate from encrypted data
+- Ensure all cryptographic operations are server-side only
+
+### 2. VAULT INFRASTRUCTURE SECURITY
+- Vault uses Transparent Column Encryption (TCE) with AES-256 equivalent security
+- Encryption keys are managed by Supabase's secured backend systems
+- Keys are NEVER stored alongside encrypted data in the database
+- Authenticated encryption prevents tampering and forgery
+
+## IMPLEMENTATION ARCHITECTURE
+
+### PHASE 1: VAULT SETUP AND INITIALIZATION
+
+#### 1.1 Enable Vault Extension
+```sql
+-- Enable the Vault extension in your Supabase project
+CREATE EXTENSION IF NOT EXISTS vault WITH SCHEMA vault;
+
+-- Verify vault tables are created
+SELECT * FROM vault.secrets LIMIT 1;
+SELECT * FROM vault.decrypted_secrets LIMIT 1;
+```
+
+#### 1.2 Database Schema Security
+```sql
+-- Enable Row Level Security on vault tables (should be enabled by default)
+ALTER TABLE vault.secrets ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for secure access
+CREATE POLICY "Service role can manage secrets" ON vault.secrets
+  FOR ALL TO service_role
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+-- Restrict access to decrypted view
+REVOKE ALL ON vault.decrypted_secrets FROM PUBLIC;
+GRANT SELECT ON vault.decrypted_secrets TO service_role;
+```
+
+### PHASE 2: SECURE WRAPPER FUNCTIONS
+
+#### 2.1 OAuth Token Storage Function
+```sql
+CREATE OR REPLACE FUNCTION public.store_oauth_token(
+  p_user_id UUID,
+  p_provider TEXT,
+  p_access_token TEXT,
+  p_refresh_token TEXT DEFAULT NULL,
+  p_expires_at TIMESTAMPTZ DEFAULT NULL
+) RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+  v_access_token_id UUID;
+  v_refresh_token_id UUID;
+  v_secret_name TEXT;
+BEGIN
+  -- Validate service role access
+  IF current_setting('role') != 'service_role' THEN
+    RAISE EXCEPTION 'Unauthorized: This function requires service role access';
+  END IF;
+
+  -- Validate inputs
+  IF p_user_id IS NULL OR p_provider IS NULL OR p_access_token IS NULL THEN
+    RAISE EXCEPTION 'Missing required parameters';
+  END IF;
+
+  -- Store access token
+  v_secret_name := format('oauth_access_%s_%s_%s', p_provider, p_user_id, extract(epoch from now()));
+  v_access_token_id := vault.create_secret(
+    p_access_token,
+    v_secret_name,
+    format('OAuth access token for user %s provider %s', p_user_id, p_provider)
+  );
+
+  -- Store refresh token if provided
+  IF p_refresh_token IS NOT NULL THEN
+    v_secret_name := format('oauth_refresh_%s_%s_%s', p_provider, p_user_id, extract(epoch from now()));
+    v_refresh_token_id := vault.create_secret(
+      p_refresh_token,
+      v_secret_name,
+      format('OAuth refresh token for user %s provider %s', p_user_id, p_provider)
+    );
+  END IF;
+
+  -- Store token metadata in application table
+  INSERT INTO user_oauth_tokens (
+    user_id,
+    provider,
+    vault_access_token_id,
+    vault_refresh_token_id,
+    expires_at,
+    created_at
+  ) VALUES (
+    p_user_id,
+    p_provider,
+    v_access_token_id,
+    v_refresh_token_id,
+    p_expires_at,
+    now()
+  );
+
+  RETURN v_access_token_id;
+END;
+$$;
+```
+
+#### 2.2 Token Retrieval Function
+```sql
+CREATE OR REPLACE FUNCTION public.get_oauth_token(
+  p_user_id UUID,
+  p_provider TEXT
+) RETURNS TABLE(
+  access_token TEXT,
+  refresh_token TEXT,
+  expires_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+  v_token_record RECORD;
+BEGIN
+  -- Validate service role access
+  IF current_setting('role') != 'service_role' THEN
+    RAISE EXCEPTION 'Unauthorized: This function requires service role access';
+  END IF;
+
+  -- Get token metadata
+  SELECT 
+    vault_access_token_id,
+    vault_refresh_token_id,
+    expires_at
+  INTO v_token_record
+  FROM user_oauth_tokens
+  WHERE user_id = p_user_id AND provider = p_provider
+    AND revoked_at IS NULL
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No valid token found for user % and provider %', p_user_id, p_provider;
+  END IF;
+
+  -- Return decrypted tokens
+  RETURN QUERY
+  SELECT
+    (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE id = v_token_record.vault_access_token_id),
+    (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE id = v_token_record.vault_refresh_token_id),
+    v_token_record.expires_at;
+END;
+$$;
+```
+
+#### 2.3 Token Revocation Function
+```sql
+CREATE OR REPLACE FUNCTION public.revoke_oauth_token(
+  p_user_id UUID,
+  p_provider TEXT
+) RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+  v_token_ids UUID[];
+BEGIN
+  -- Validate service role access
+  IF current_setting('role') != 'service_role' THEN
+    RAISE EXCEPTION 'Unauthorized: This function requires service role access';
+  END IF;
+
+  -- Get vault secret IDs to delete
+  SELECT ARRAY[vault_access_token_id, vault_refresh_token_id]
+  INTO v_token_ids
+  FROM user_oauth_tokens
+  WHERE user_id = p_user_id AND provider = p_provider
+    AND revoked_at IS NULL;
+
+  IF v_token_ids IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- Mark as revoked in metadata table
+  UPDATE user_oauth_tokens
+  SET revoked_at = now()
+  WHERE user_id = p_user_id AND provider = p_provider
+    AND revoked_at IS NULL;
+
+  -- Delete from vault (secure erasure)
+  DELETE FROM vault.secrets 
+  WHERE id = ANY(v_token_ids);
+
+  RETURN TRUE;
+END;
+$$;
+```
+
+### PHASE 3: APPLICATION INTEGRATION
+
+#### 3.1 Supabase Client Setup
+```typescript
+// server-side only configuration
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseServiceRole = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // Service role key - NEVER expose to client
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
+```
+
+#### 3.2 Token Storage Implementation
+```typescript
+export async function storeOAuthTokens({
+  userId,
+  provider,
+  accessToken,
+  refreshToken,
+  expiresAt
+}: {
+  userId: string
+  provider: string
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: Date
+}) {
+  try {
+    const { data, error } = await supabaseServiceRole.rpc('store_oauth_token', {
+      p_user_id: userId,
+      p_provider: provider,
+      p_access_token: accessToken,
+      p_refresh_token: refreshToken || null,
+      p_expires_at: expiresAt?.toISOString() || null
+    })
+
+    if (error) {
+      throw new Error(`Failed to store OAuth tokens: ${error.message}`)
+    }
+
+    return { success: true, secretId: data }
+  } catch (error) {
+    console.error('OAuth token storage error:', error)
+    throw error
+  }
+}
+```
+
+#### 3.3 Token Retrieval Implementation
+```typescript
+export async function getOAuthTokens(userId: string, provider: string) {
+  try {
+    const { data, error } = await supabaseServiceRole.rpc('get_oauth_token', {
+      p_user_id: userId,
+      p_provider: provider
+    })
+
+    if (error) {
+      throw new Error(`Failed to retrieve OAuth tokens: ${error.message}`)
+    }
+
+    if (!data || data.length === 0) {
+      return null
+    }
+
+    const token = data[0]
+    return {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token,
+      expiresAt: token.expires_at ? new Date(token.expires_at) : null
+    }
+  } catch (error) {
+    console.error('OAuth token retrieval error:', error)
+    throw error
+  }
+}
+```
+
+### PHASE 4: SECURITY HARDENING
+
+#### 4.1 Row Level Security Policies
+```sql
+-- Create metadata table with RLS
+CREATE TABLE IF NOT EXISTS public.user_oauth_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL,
+  provider TEXT NOT NULL,
+  vault_access_token_id UUID NOT NULL,
+  vault_refresh_token_id UUID,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  revoked_at TIMESTAMPTZ,
+  UNIQUE(user_id, provider, created_at)
+);
+
+ALTER TABLE public.user_oauth_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Only service role can access token metadata
+CREATE POLICY "Service role token access" ON public.user_oauth_tokens
+  FOR ALL TO service_role
+  USING (TRUE)
+  WITH CHECK (TRUE);
+
+-- No other roles should access this table
+CREATE POLICY "Block all other access" ON public.user_oauth_tokens
+  FOR ALL TO PUBLIC
+  USING (FALSE);
+```
+
+#### 4.2 Function Security
+```sql
+-- Revoke public access to vault functions
+REVOKE ALL ON FUNCTION public.store_oauth_token FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_oauth_token FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.revoke_oauth_token FROM PUBLIC;
+
+-- Grant execute only to service role
+GRANT EXECUTE ON FUNCTION public.store_oauth_token TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_oauth_token TO service_role;
+GRANT EXECUTE ON FUNCTION public.revoke_oauth_token TO service_role;
+```
+
+#### 4.3 Audit Logging
+```sql
+CREATE TABLE IF NOT EXISTS public.vault_audit_log (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID,
+  action TEXT NOT NULL,
+  provider TEXT,
+  secret_id UUID,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Add audit logging to functions
+CREATE OR REPLACE FUNCTION private.audit_vault_access(
+  p_user_id UUID,
+  p_action TEXT,
+  p_provider TEXT DEFAULT NULL,
+  p_secret_id UUID DEFAULT NULL
+) RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO public.vault_audit_log (
+    user_id, action, provider, secret_id, ip_address, user_agent
+  ) VALUES (
+    p_user_id,
+    p_action,
+    p_provider,
+    p_secret_id,
+    inet_client_addr(),
+    current_setting('request.headers', TRUE)::JSON->>'user-agent'
+  );
+END;
+$$;
+```
+
+## OPERATIONAL SECURITY
+
+### TOKEN LIFECYCLE MANAGEMENT
+
+#### 1. Token Rotation Strategy
+```typescript
+export async function rotateOAuthTokens(userId: string, provider: string) {
+  // 1. Retrieve current refresh token
+  const currentTokens = await getOAuthTokens(userId, provider)
+  
+  if (!currentTokens?.refreshToken) {
+    throw new Error('No refresh token available for rotation')
+  }
+
+  // 2. Use refresh token to get new access token
+  const newTokens = await refreshAccessToken(provider, currentTokens.refreshToken)
+
+  // 3. Store new tokens (this automatically handles old token cleanup)
+  await storeOAuthTokens({
+    userId,
+    provider,
+    accessToken: newTokens.accessToken,
+    refreshToken: newTokens.refreshToken,
+    expiresAt: newTokens.expiresAt
+  })
+
+  // 4. Revoke old tokens
+  await revokeOAuthToken(userId, provider)
+}
+```
+
+#### 2. Automatic Cleanup
+```sql
+-- Schedule cleanup of expired tokens
+CREATE OR REPLACE FUNCTION public.cleanup_expired_tokens()
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  cleanup_count INTEGER;
+BEGIN
+  -- Get expired token IDs
+  WITH expired_tokens AS (
+    SELECT vault_access_token_id, vault_refresh_token_id
+    FROM user_oauth_tokens
+    WHERE expires_at < now() - INTERVAL '1 day'
+      AND revoked_at IS NULL
+  )
+  -- Delete from vault
+  DELETE FROM vault.secrets
+  WHERE id IN (
+    SELECT vault_access_token_id FROM expired_tokens
+    UNION
+    SELECT vault_refresh_token_id FROM expired_tokens
+    WHERE vault_refresh_token_id IS NOT NULL
+  );
+
+  GET DIAGNOSTICS cleanup_count = ROW_COUNT;
+
+  -- Mark as revoked
+  UPDATE user_oauth_tokens
+  SET revoked_at = now()
+  WHERE expires_at < now() - INTERVAL '1 day'
+    AND revoked_at IS NULL;
+
+  RETURN cleanup_count;
+END;
+$$;
+```
+
+### MONITORING AND ALERTING
+
+#### 1. Vault Health Monitoring
+```sql
+-- Create monitoring views
+CREATE OR REPLACE VIEW public.vault_health_metrics AS
+SELECT
+  COUNT(*) as total_secrets,
+  COUNT(*) FILTER (WHERE created_at > now() - INTERVAL '24 hours') as secrets_created_24h,
+  COUNT(*) FILTER (WHERE updated_at > now() - INTERVAL '24 hours') as secrets_updated_24h,
+  AVG(EXTRACT(EPOCH FROM (now() - created_at))) as avg_secret_age_seconds
+FROM vault.secrets;
+```
+
+#### 2. Security Alerts
+```typescript
+export async function monitorVaultSecurity() {
+  // Check for unusual access patterns
+  const suspiciousActivity = await supabaseServiceRole
+    .from('vault_audit_log')
+    .select('*')
+    .gte('created_at', new Date(Date.now() - 3600000).toISOString()) // Last hour
+    .in('action', ['UNAUTHORIZED_ACCESS', 'BULK_RETRIEVAL'])
+
+  if (suspiciousActivity.data && suspiciousActivity.data.length > 0) {
+    await sendSecurityAlert('Suspicious vault activity detected', suspiciousActivity.data)
+  }
+}
+```
+
+## COMMON PITFALLS AND SOLUTIONS
+
+### PITFALL 1: Plain Text Storage
+**PROBLEM**: Storing OAuth tokens as plain text in database fields
+```sql
+-- WRONG - Never do this
+ALTER TABLE user_oauth_connections 
+ADD COLUMN access_token TEXT,
+ADD COLUMN refresh_token TEXT;
+```
+
+**SOLUTION**: Use Vault-backed storage with proper encryption
+```sql
+-- CORRECT - Use vault secret IDs
+ALTER TABLE user_oauth_connections 
+ADD COLUMN vault_access_token_id UUID,
+ADD COLUMN vault_refresh_token_id UUID;
+```
+
+### PITFALL 2: Client-Side Vault Access
+**PROBLEM**: Attempting to access vault secrets from client-side code
+**SOLUTION**: Always use server-side functions with service role authentication
+
+### PITFALL 3: Missing Token Rotation
+**PROBLEM**: Storing tokens without expiration or rotation strategy
+**SOLUTION**: Implement automatic token rotation and cleanup procedures
+
+### PITFALL 4: Insufficient Access Control
+**PROBLEM**: Allowing public access to vault functions
+**SOLUTION**: Use RLS policies and restrict function execution to service role only
+
+## COMPLIANCE AND SECURITY STANDARDS
+
+### 1. GDPR Compliance
+- Implement secure token deletion for user data requests
+- Maintain audit trails for data access
+- Ensure vault secrets are properly encrypted at rest
+
+### 2. SOC 2 Type II
+- Document all vault access procedures
+- Implement proper monitoring and alerting
+- Maintain separation of duties for secret management
+
+### 3. HIPAA Compliance (if applicable)
+- Encrypt all PHI-related tokens using vault
+- Implement proper access controls
+- Maintain detailed audit logs
+
+## TESTING AND VALIDATION
+
+### 1. Security Testing
+```typescript
+describe('Vault Security Tests', () => {
+  test('should reject unauthorized access', async () => {
+    // Attempt to access with anon role
+    const anonClient = createClient(url, anonKey)
+    
+    await expect(
+      anonClient.rpc('get_oauth_token', { p_user_id: 'test', p_provider: 'test' })
+    ).rejects.toThrow('Unauthorized')
+  })
+
+  test('should encrypt tokens properly', async () => {
+    // Store a test token
+    await storeOAuthTokens({
+      userId: 'test-user',
+      provider: 'test-provider',
+      accessToken: 'sensitive-token-value'
+    })
+
+    // Verify it's encrypted in the database
+    const { data } = await supabaseServiceRole
+      .from('vault.secrets')
+      .select('secret')
+      .limit(1)
+
+    expect(data[0].secret).not.toContain('sensitive-token-value')
+  })
+})
+```
+
+### 2. Performance Testing
+```typescript
+test('vault operations performance', async () => {
+  const startTime = performance.now()
+  
+  await storeOAuthTokens({
+    userId: 'perf-test',
+    provider: 'test',
+    accessToken: 'test-token'
+  })
+  
+  const stored = await getOAuthTokens('perf-test', 'test')
+  
+  const endTime = performance.now()
+  expect(endTime - startTime).toBeLessThan(1000) // Should complete in under 1 second
+})
+```
+
+## DEPLOYMENT CHECKLIST
+
+### Pre-Production
+- [ ] Vault extension enabled
+- [ ] All wrapper functions deployed
+- [ ] RLS policies configured
+- [ ] Audit logging implemented
+- [ ] Security tests passing
+
+### Production
+- [ ] Service role key secured
+- [ ] Monitoring and alerting configured
+- [ ] Token rotation scheduled
+- [ ] Backup and recovery procedures documented
+- [ ] Incident response plan prepared
+
+### Post-Production
+- [ ] Regular security audits scheduled
+- [ ] Performance monitoring active
+- [ ] Cleanup procedures automated
+- [ ] Compliance reporting configured
+
+## MAINTENANCE AND UPDATES
+
+### Monthly Tasks
+- Review vault health metrics
+- Audit token usage patterns
+- Update security policies if needed
+- Test backup and recovery procedures
+
+### Quarterly Tasks
+- Security audit of vault implementation
+- Performance optimization review
+- Update documentation and procedures
+- Review and update compliance measures
+
+### Annual Tasks
+- Comprehensive security assessment
+- Vault encryption key rotation (if supported)
+- Update security training materials
+- Review and update incident response procedures
+
+---
+
+**IMPORTANT SECURITY NOTES:**
+1. Never store the service role key in client-accessible code
+2. Always validate inputs in wrapper functions
+3. Implement proper error handling that doesn't leak sensitive information
+4. Use environment variables for all sensitive configuration
+5. Regularly monitor vault access patterns for anomalies
+6. Maintain up-to-date backups of vault metadata (not the encrypted secrets themselves)
+
+This protocol should be reviewed and updated annually or when significant changes are made to the Supabase platform or your security requirements.
+description:
+globs:
+alwaysApply: false
+---

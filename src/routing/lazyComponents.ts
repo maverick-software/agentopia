@@ -51,6 +51,7 @@ export const MCPDeployPage = lazy(() => import('../pages/mcp/MCPDeployPage').the
 export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConfigPage').then(module => ({ default: module.MCPServerConfigPage }))); 
 
 export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 
+export const AdminIntegrationManagement = lazy(() => import('../pages/AdminIntegrationManagement').then(module => ({ default: module.AdminIntegrationManagement })));
 
 // Add IntegrationsPage
 export const IntegrationsPage = lazy(() => import('../pages/IntegrationsPage').then(module => ({ default: module.IntegrationsPage }))); 

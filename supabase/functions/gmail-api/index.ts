@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -25,29 +29,38 @@ interface EmailMessage {
 }
 
 serve(async (req) => {
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const requestData: GmailAPIRequest = await req.json()
-    const { agent_id, action, parameters } = requestData
-    
-    if (!agent_id || !action) {
-      throw new Error('agent_id and action are required')
+    const { action, params, agent_id } = await req.json()
+    console.log('Gmail API request:', { action, agent_id })
+    console.log('Params received:', JSON.stringify(params, null, 2))
+
+    // Validate required parameters
+    if (!action || !params || !agent_id) {
+      console.error('Missing parameters:', { action: !!action, params: !!params, agent_id: !!agent_id })
+      throw new Error('Missing required parameters: action, params, and agent_id are required')
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    // Get current user from JWT
+    // Create a Supabase client with the auth context
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      throw new Error('No authorization header provided')
+      throw new Error('Missing Authorization header')
     }
 
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    })
+
+    // Create a service role client for vault access
+    const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     )
@@ -71,62 +84,51 @@ serve(async (req) => {
       throw new Error('Agent does not have required permissions for this Gmail operation')
     }
 
-    // Get user's Gmail connection and decrypt tokens
-    const { data: gmailConnection, error: connectionError } = await supabase.rpc(
-      'get_user_gmail_connection',
-      { p_user_id: user.id }
-    )
+    // Get user's Gmail access token directly from the Vault via RPC
+    const accessTokenName = `gmail_access_token_${user.id}`;
 
-    if (connectionError || !gmailConnection || gmailConnection.length === 0) {
-      throw new Error('No active Gmail connection found')
+    const { data: secrets, error: rpcError } = await supabaseServiceRole
+      .rpc('get_vault_secrets_by_names', {
+        p_secret_names: [accessTokenName]
+      });
+
+    if (rpcError || !secrets || secrets.length === 0) {
+      throw new Error(`Failed to retrieve access token from Vault: ${rpcError?.message || 'Not found'}`);
     }
 
-    const connection = gmailConnection[0]
-
-    // Decrypt access token
-    const { data: accessToken, error: decryptError } = await supabase.rpc(
-      'vault_decrypt',
-      { vault_id: connection.vault_access_token_id }
-    )
-
-    if (decryptError || !accessToken) {
-      throw new Error('Failed to decrypt Gmail access token')
+    const accessToken = secrets[0].decrypted_secret;
+    if (!accessToken) {
+      throw new Error('Access token is empty in Vault.');
     }
 
-    // Check if token needs refresh
-    const tokenExpiresAt = new Date(connection.token_expires_at)
-    const now = new Date()
-    
-    let currentAccessToken = accessToken
-    if (tokenExpiresAt <= now) {
-      // Token has expired, refresh it
-      currentAccessToken = await refreshGmailToken(supabase, connection, user.id)
-    }
-
-    // Execute Gmail operation
-    const startTime = Date.now()
+    // Execute the requested Gmail API action
     let result: any
     let quotaConsumed = 0
+    const startTime = Date.now()
 
+    console.log(`Executing action: ${action}`)
+    
     try {
       switch (action) {
         case 'send_email':
-          result = await sendEmail(currentAccessToken, parameters as EmailMessage)
+          console.log('Calling sendEmail with params:', params)
+          result = await sendEmail(accessToken, params as EmailMessage)
+          console.log('sendEmail result:', result)
           quotaConsumed = 100 // Sending emails costs 100 quota units
           break
         
         case 'read_emails':
-          result = await readEmails(currentAccessToken, parameters)
-          quotaConsumed = 5 * (parameters.max_results || 50) // 5 units per message
+          result = await readEmails(accessToken, params)
+          quotaConsumed = 5 * (params.max_results || 50) // 5 units per message
           break
         
         case 'search_emails':
-          result = await searchEmails(currentAccessToken, parameters)
-          quotaConsumed = 5 * (parameters.max_results || 50)
+          result = await searchEmails(accessToken, params)
+          quotaConsumed = 5 * (params.max_results || 50)
           break
         
         case 'manage_labels':
-          result = await manageLabels(currentAccessToken, parameters)
+          result = await manageLabels(accessToken, params)
           quotaConsumed = 5 // Label operations cost 5 units
           break
         
@@ -141,7 +143,7 @@ serve(async (req) => {
         p_agent_id: agent_id,
         p_user_id: user.id,
         p_operation_type: action,
-        p_operation_params: parameters,
+        p_operation_params: params,
         p_operation_result: result,
         p_status: 'success',
         p_quota_consumed: quotaConsumed,
@@ -169,7 +171,7 @@ serve(async (req) => {
         p_agent_id: agent_id,
         p_user_id: user.id,
         p_operation_type: action,
-        p_operation_params: parameters,
+        p_operation_params: params,
         p_operation_result: null,
         p_status: 'error',
         p_error_message: operationError.message,
@@ -199,10 +201,10 @@ serve(async (req) => {
 // Helper function to get required scopes for each action
 function getRequiredScopes(action: string): string[] {
   const scopeMap: Record<string, string[]> = {
-    'send_email': ['gmail.send'],
-    'read_emails': ['gmail.readonly'],
-    'search_emails': ['gmail.readonly'],
-    'manage_labels': ['gmail.labels'],
+    'send_email': ['https://www.googleapis.com/auth/gmail.send'],
+    'read_emails': ['https://www.googleapis.com/auth/gmail.readonly'],
+    'search_emails': ['https://www.googleapis.com/auth/gmail.readonly'],
+    'manage_labels': ['https://www.googleapis.com/auth/gmail.labels'],
   }
   
   return scopeMap[action] || []
@@ -211,6 +213,15 @@ function getRequiredScopes(action: string): string[] {
 // Gmail API Operations
 
 async function sendEmail(accessToken: string, message: EmailMessage): Promise<any> {
+  console.log('[sendEmail] Starting email send process')
+  console.log('[sendEmail] Message details:', {
+    to: message.to,
+    subject: message.subject,
+    hasBody: !!message.body,
+    hasHtml: !!message.html,
+    attachmentCount: message.attachments?.length || 0
+  })
+
   // Create RFC 2822 email format
   const boundary = `boundary_${Date.now()}`
   let email = ''
@@ -249,6 +260,7 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     .replace(/\//g, '_')
     .replace(/=+$/, '')
 
+  console.log('[sendEmail] Making request to Gmail API')
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
@@ -260,12 +272,48 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     }),
   })
 
+  console.log('[sendEmail] Gmail API response:', {
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok
+  })
+
   if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to send email: ${error}`)
+    const errorText = await response.text()
+    let errorDetails = ''
+    
+    try {
+      const errorJson = JSON.parse(errorText)
+      if (errorJson.error) {
+        errorDetails = errorJson.error.message || errorJson.error.code || errorText
+      } else {
+        errorDetails = errorText
+      }
+    } catch {
+      errorDetails = errorText
+    }
+    
+    console.error('Gmail API error response:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorDetails
+    })
+    
+    // Provide user-friendly error messages
+    if (response.status === 401) {
+      throw new Error('Gmail authentication failed. Please reconnect your Gmail account.')
+    } else if (response.status === 403) {
+      throw new Error('Permission denied. Please ensure you granted email sending permissions.')
+    } else if (response.status === 400) {
+      throw new Error(`Invalid email format: ${errorDetails}`)
+    } else {
+      throw new Error(`Failed to send email: ${errorDetails}`)
+    }
   }
 
-  return await response.json()
+  const result = await response.json()
+  console.log('[sendEmail] Email sent successfully:', result)
+  return result
 }
 
 async function readEmails(accessToken: string, parameters: any): Promise<any> {

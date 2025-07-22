@@ -20,6 +20,7 @@ export interface Integration {
   description: string;
   icon_name: string;
   status: 'available' | 'beta' | 'coming_soon' | 'deprecated';
+  agent_classification?: 'tool' | 'channel';
   is_popular: boolean;
   documentation_url?: string;
   display_order: number;
@@ -186,6 +187,48 @@ export function useIntegrationsByCategory(categoryId?: string) {
 
     fetchIntegrations();
   }, [categoryId]);
+
+  return { integrations, loading, error };
+}
+
+// Hook for fetching integrations by agent classification (tool or channel)
+export function useIntegrationsByClassification(classification: 'tool' | 'channel') {
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchIntegrations() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Query integrations by agent classification
+        const { data, error: queryError } = await supabase
+          .from('integrations')
+          .select('*')
+          .eq('agent_classification', classification)
+          .eq('is_active', true)
+          .order('display_order')
+          .order('name');
+
+        if (queryError) {
+          throw queryError;
+        } else {
+          // Successfully got data from basic query
+          setIntegrations(data || []);
+        }
+              } catch (err) {
+        console.error('Error fetching integrations by classification:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch integrations');
+        setIntegrations([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchIntegrations();
+  }, [classification]);
 
   return { integrations, loading, error };
 }
@@ -449,6 +492,108 @@ function getAllDummyIntegrations(): Integration[] {
   });
   
   return allIntegrations;
+}
+
+// Function to get dummy integrations by agent classification
+function getDummyIntegrationsByClassification(classification: 'tool' | 'channel'): Integration[] {
+  const channelIntegrations: Integration[] = [
+    {
+      id: 'gmail',
+      category_id: 'messaging',
+      name: 'Gmail',
+      description: 'Send, receive, and manage Gmail emails with comprehensive tools for email automation',
+      icon_name: 'MessageSquare',
+      status: 'available',
+      is_popular: true,
+      display_order: 1,
+      documentation_url: 'https://developers.google.com/gmail/api'
+    },
+    {
+      id: 'slack',
+      category_id: 'messaging',
+      name: 'Slack',
+      description: 'Send messages to Slack channels and manage workspace communications',
+      icon_name: 'MessageSquare',
+      status: 'available',
+      is_popular: true,
+      display_order: 2
+    },
+    {
+      id: 'discord',
+      category_id: 'messaging',
+      name: 'Discord',
+      description: 'Interact with Discord servers and manage bot communications',
+      icon_name: 'MessageSquare',
+      status: 'available',
+      is_popular: true,
+      display_order: 3
+    }
+  ];
+
+  const toolIntegrations: Integration[] = [
+    {
+      id: 'rest-api',
+      category_id: 'api',
+      name: 'REST API',
+      description: 'Connect to RESTful web services',
+      icon_name: 'Globe',
+      status: 'available',
+      is_popular: true,
+      display_order: 1
+    },
+    {
+      id: 'graphql',
+      category_id: 'api',
+      name: 'GraphQL',
+      description: 'Query APIs with GraphQL',
+      icon_name: 'Globe',
+      status: 'available',
+      is_popular: true,
+      display_order: 2
+    },
+    {
+      id: 'postgresql',
+      category_id: 'database',
+      name: 'PostgreSQL',
+      description: 'Connect to PostgreSQL databases',
+      icon_name: 'Database',
+      status: 'available',
+      is_popular: true,
+      display_order: 1
+    },
+    {
+      id: 'mongodb',
+      category_id: 'database',
+      name: 'MongoDB',
+      description: 'Connect to MongoDB collections',
+      icon_name: 'Database',
+      status: 'available',
+      is_popular: true,
+      display_order: 2
+    },
+    {
+      id: 'aws',
+      category_id: 'cloud',
+      name: 'AWS',
+      description: 'Amazon Web Services integration',
+      icon_name: 'Cloud',
+      status: 'available',
+      is_popular: true,
+      display_order: 1
+    },
+    {
+      id: 'github-actions',
+      category_id: 'automation',
+      name: 'GitHub Actions',
+      description: 'Trigger GitHub workflow actions',
+      icon_name: 'Zap',
+      status: 'available',
+      is_popular: true,
+      display_order: 1
+    }
+  ];
+
+  return classification === 'channel' ? channelIntegrations : toolIntegrations;
 }
 
 function getDummyIntegrations(categoryId: string): Integration[] {
