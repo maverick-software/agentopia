@@ -290,11 +290,16 @@ export function AgentChatPage() {
       ]);
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Chat API error response:', { status: response.status, errorText });
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const responseData = await response.json();
-      const assistantReply = responseData.response;
+      console.log('Chat API response:', responseData);
+      
+      // The chat function returns { message: string, agent: object }
+      const assistantReply = responseData.message;
 
       if (typeof assistantReply !== 'string') {
           console.error('Invalid response format from chat API:', responseData);
@@ -351,9 +356,9 @@ export function AgentChatPage() {
   // Loading state
   if (!user) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
         <div className="text-center">
-          <div className="text-gray-600 text-lg">Please sign in to chat with agents.</div>
+          <div className="text-[hsl(210,20%,98%)] text-lg">Please sign in to chat with agents.</div>
         </div>
       </div>
     );
@@ -361,10 +366,10 @@ export function AgentChatPage() {
 
   if (loading && !agent) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
-          <div className="text-gray-600">Loading agent...</div>
+          <Loader2 className="h-8 w-8 animate-spin text-[hsl(210,15%,70%)] mx-auto mb-4" />
+          <div className="text-[hsl(210,20%,98%)]">Loading agent...</div>
         </div>
       </div>
     );
@@ -372,10 +377,10 @@ export function AgentChatPage() {
 
   if (error && !agent) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
         <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
-          <div className="text-red-600 mb-4">Error loading agent: {error}</div>
+          <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-4" />
+          <div className="text-red-400 mb-4">Error loading agent: {error}</div>
           <button 
             onClick={() => window.location.reload()} 
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -389,46 +394,46 @@ export function AgentChatPage() {
 
   if (!loading && !agent) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
         <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-yellow-500 mx-auto mb-4" />
-          <div className="text-yellow-600">Agent not found.</div>
+          <AlertCircle className="h-8 w-8 text-yellow-400 mx-auto mb-4" />
+          <div className="text-yellow-400">Agent not found.</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen bg-[hsl(215,28%,9%)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => navigate('/agents')}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </button>
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-medium">
-                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-              </span>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">{agent?.name || 'Agent'}</h1>
-              <p className="text-sm text-gray-500">AI Assistant</p>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(217,19%,20%)] bg-[hsl(217,25%,12%)]">
+                  <div className="flex items-center space-x-3">
+            <button
+              onClick={() => navigate('/agents')}
+              className="p-2 hover:bg-[hsl(217,19%,20%)] rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5 text-[hsl(210,15%,70%)]" />
+            </button>
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-medium">
+                  {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                </span>
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-[hsl(210,20%,98%)]">{agent?.name || 'Agent'}</h1>
+                <p className="text-sm text-[hsl(210,15%,70%)]">AI Assistant</p>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <RefreshCw className="h-5 w-5 text-gray-600" />
-          </button>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <MoreVertical className="h-5 w-5 text-gray-600" />
-          </button>
-        </div>
+          <div className="flex items-center space-x-2">
+            <button className="p-2 hover:bg-[hsl(217,19%,20%)] rounded-lg transition-colors">
+              <RefreshCw className="h-5 w-5 text-[hsl(210,15%,70%)]" />
+            </button>
+            <button className="p-2 hover:bg-[hsl(217,19%,20%)] rounded-lg transition-colors">
+              <MoreVertical className="h-5 w-5 text-[hsl(210,15%,70%)]" />
+            </button>
+          </div>
       </div>
 
       {/* Messages Container */}
@@ -436,7 +441,7 @@ export function AgentChatPage() {
         <div className="h-full overflow-y-auto">
           {isHistoryLoading ? (
             <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-[hsl(210,15%,70%)]" />
             </div>
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -446,69 +451,74 @@ export function AgentChatPage() {
                     {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                   </span>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                <h3 className="text-xl font-semibold text-[hsl(210,20%,98%)] mb-2">
                   Chat with {agent?.name || 'Agent'}
                 </h3>
-                <p className="text-gray-600 mb-6">
+                <p className="text-[hsl(210,15%,70%)] mb-6">
                   Start a conversation with your AI assistant. Ask questions, get help, or just chat!
                 </p>
                 <div className="grid grid-cols-1 gap-2 text-sm">
-                  <div className="p-3 bg-gray-50 rounded-lg text-left">
-                    <div className="font-medium text-gray-900">💡 Try asking:</div>
-                    <div className="text-gray-600 mt-1">"What can you help me with?"</div>
+                  <div className="p-3 bg-[hsl(217,25%,12%)] rounded-lg text-left border border-[hsl(217,19%,20%)]">
+                    <div className="font-medium text-[hsl(210,20%,98%)]">💡 Try asking:</div>
+                    <div className="text-[hsl(210,15%,70%)] mt-1">"What can you help me with?"</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg text-left">
-                    <div className="font-medium text-gray-900">🔍 Or request:</div>
-                    <div className="text-gray-600 mt-1">"Help me analyze this data"</div>
+                  <div className="p-3 bg-[hsl(217,25%,12%)] rounded-lg text-left border border-[hsl(217,19%,20%)]">
+                    <div className="font-medium text-[hsl(210,20%,98%)]">🔍 Or request:</div>
+                    <div className="text-[hsl(210,15%,70%)] mt-1">"Help me analyze this data"</div>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto px-4 py-6">
-              <div className="space-y-6">
+            <div className="max-w-4xl mx-auto px-4 py-6">
+              <div className="space-y-4">
                 {messages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
-                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className="flex items-start space-x-4"
                   >
-                    <div className={`flex max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                      {/* Avatar */}
-                      <div className={`flex-shrink-0 ${message.role === 'user' ? 'ml-3' : 'mr-3'}`}>
-                        {message.role === 'user' ? (
-                          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm font-medium">
-                              {user?.email?.charAt(0)?.toUpperCase() || 'U'}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm font-medium">
-                              {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Message Content */}
-                      <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        <div
-                          className={`px-4 py-2 rounded-2xl max-w-full ${
-                            message.role === 'user'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}
-                        >
-                          <div className="prose prose-sm max-w-none">
-                            <ChatMessage message={message} />
-                          </div>
+                    {/* Avatar */}
+                    <div className="flex-shrink-0">
+                      {message.role === 'user' ? (
+                        <div className="w-8 h-8 bg-[hsl(210,20%,98%)] rounded-full flex items-center justify-center">
+                          <span className="text-[hsl(215,28%,9%)] text-sm font-medium">
+                            {user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                          </span>
                         </div>
-                        <div className="text-xs text-gray-500 mt-1 px-2">
+                      ) : (
+                        <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                          <span className="text-white text-sm font-medium">
+                            {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Message Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="mb-1">
+                        <span className="text-sm font-medium text-[hsl(210,20%,98%)]">
+                          {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
+                        </span>
+                        <span className="text-xs text-[hsl(210,15%,70%)] ml-2">
                           {message.timestamp.toLocaleTimeString([], { 
                             hour: '2-digit', 
                             minute: '2-digit' 
                           })}
-                        </div>
+                        </span>
+                      </div>
+                      <div className="text-[hsl(210,20%,98%)] leading-relaxed">
+                        <ChatMessage 
+                          message={message} 
+                          members={agent ? [{
+                            id: agent.id,
+                            agent_id: agent.id,
+                            agent: {
+                              id: agent.id,
+                              name: agent.name
+                            }
+                          } as any] : []} 
+                        />
                       </div>
                     </div>
                   </div>
@@ -516,21 +526,24 @@ export function AgentChatPage() {
                 
                 {/* Typing indicator */}
                 {sending && (
-                  <div className="flex justify-start">
-                    <div className="flex max-w-[80%]">
-                      <div className="flex-shrink-0 mr-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-medium">
-                            {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                          </span>
-                        </div>
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                        <span className="text-white text-sm font-medium">
+                          {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                        </span>
                       </div>
-                      <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="mb-1">
+                        <span className="text-sm font-medium text-[hsl(210,20%,98%)]">
+                          {agent?.name || 'Assistant'}
+                        </span>
+                      </div>
+                      <div className="flex space-x-1 items-center">
+                        <div className="w-2 h-2 bg-[hsl(210,15%,70%)] rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-[hsl(210,15%,70%)] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-[hsl(210,15%,70%)] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                       </div>
                     </div>
                   </div>
@@ -565,8 +578,8 @@ export function AgentChatPage() {
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 bg-white">
-        <div className="max-w-3xl mx-auto px-4 py-4">
+      <div className="border-t border-[hsl(217,19%,20%)] bg-[hsl(217,25%,12%)]">
+        <div className="max-w-4xl mx-auto px-4 py-4">
           <form onSubmit={handleSubmit} className="relative">
             <div className="flex items-end space-x-3">
               <div className="flex-1 relative">
@@ -576,7 +589,7 @@ export function AgentChatPage() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`Message ${agent?.name || 'Agent'}...`}
-                  className="w-full resize-none border border-gray-300 rounded-2xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full resize-none border border-[hsl(217,19%,20%)] bg-[hsl(215,28%,9%)] text-[hsl(210,20%,98%)] placeholder-[hsl(210,15%,70%)] rounded-2xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   disabled={sending || !agent}
                   rows={1}
                   style={{ minHeight: '48px', maxHeight: '200px' }}
@@ -584,7 +597,7 @@ export function AgentChatPage() {
                 <button
                   type="submit"
                   disabled={sending || !agent || !input.trim()}
-                  className="absolute right-2 bottom-2 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="absolute right-2 bottom-2 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   {sending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -595,7 +608,7 @@ export function AgentChatPage() {
               </div>
             </div>
           </form>
-          <div className="text-xs text-gray-500 text-center mt-2">
+          <div className="text-xs text-[hsl(210,15%,70%)] text-center mt-2">
             Press Enter to send, Shift+Enter for new line
           </div>
         </div>

@@ -47,7 +47,7 @@ export function DashboardPage() {
 
       const { data: agents, error: agentsError } = await supabase
         .from('agents')
-        .select('id, active, discord_channel')
+        .select('id, active')
         .eq('user_id', user.id);
 
       if (agentsError) throw agentsError;
@@ -61,7 +61,7 @@ export function DashboardPage() {
 
       const activeAgentsCount = agents?.filter(agent => agent.active).length ?? 0;
       const totalAgentsCount = agents?.length ?? 0;
-      const discordChannelsCount = agents?.filter(agent => agent.discord_channel).length ?? 0;
+      const discordChannelsCount = 0; // Temporarily set to 0 until Discord integration is fixed
 
       setStats({
         activeAgents: activeAgentsCount,
