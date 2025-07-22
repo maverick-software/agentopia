@@ -82,7 +82,16 @@ export function IntegrationSetupModal({
       if (integration.name === 'Gmail') {
         // Always initiate Gmail OAuth flow to allow multiple accounts
         await gmailInitiateOAuth();
-        // The OAuth flow will redirect the user, so we don't need to do anything else here
+        
+        // OAuth flow completed successfully (popup was closed after success)
+        setSuccess(true);
+        setSuccessMessage('Gmail connected successfully!');
+        
+        // Show success message briefly then close modal
+        setTimeout(() => {
+          onComplete();
+          onClose();
+        }, 1500);
       } else {
         // For other integrations, simulate OAuth flow
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -95,8 +104,11 @@ export function IntegrationSetupModal({
         }, 1500);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'OAuth flow failed');
-    } finally {
+      // Handle errors (user cancelled, timeout, etc.)
+      const errorMessage = err instanceof Error ? err.message : 'OAuth flow failed';
+      if (!errorMessage.includes('cancelled')) {
+        setError(errorMessage);
+      }
       setLoading(false);
     }
   };
@@ -222,10 +234,15 @@ export function IntegrationSetupModal({
                         <Button
                           type="button"
                           onClick={handleOAuthFlow}
-                          disabled={loading}
-                          className="w-full bg-blue-600 hover:bg-blue-700"
+                          disabled={loading || success}
+                          className={`w-full ${success ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                         >
-                          {loading ? (
+                          {success ? (
+                            <>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Success!
+                            </>
+                          ) : loading ? (
                             <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                               Connecting...

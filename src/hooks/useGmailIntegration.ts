@@ -145,17 +145,30 @@ export function useGmailConnection() {
 
     // Listen for popup completion
     return new Promise((resolve, reject) => {
-      const checkClosed = setInterval(() => {
+      const checkClosed = setInterval(async () => {
         if (popup?.closed) {
           clearInterval(checkClosed);
-          // Check if connection was successful by refetching
-          fetchConnections().then(() => {
-            if (connections.length > 0) {
+          
+          // Wait a moment for the callback to complete
+          await new Promise(r => setTimeout(r, 1000));
+          
+          // Check if connection was successful by fetching fresh data
+          try {
+            const { data } = await supabase.rpc(
+              'get_user_gmail_connections',
+              { p_user_id: user.id }
+            );
+            
+            if (data && data.length > 0) {
+              // Refresh local state
+              await fetchConnections();
               resolve();
             } else {
               reject(new Error('OAuth flow was cancelled or failed'));
             }
-          });
+          } catch (error) {
+            reject(new Error('Failed to verify connection'));
+          }
         }
       }, 1000);
 

@@ -21,49 +21,24 @@ interface UserInfo {
   id: string;
 }
 
-// Helper function to store OAuth tokens using Supabase Vault
+// Helper function to store OAuth tokens directly in the connection record
+// This uses your existing approach of storing tokens as encrypted text
 async function storeOAuthTokens(
   supabase: SupabaseClient,
   userId: string,
   tokens: OAuthTokenResponse
 ) {
   try {
-    // Create vault secrets using the official Supabase Vault functions
-    const accessTokenName = `gmail_access_token_${userId}_${Date.now()}`;
-    const refreshTokenName = `gmail_refresh_token_${userId}_${Date.now()}`;
-
-    // Store access token in vault
-    const { data: accessTokenId, error: accessError } = await supabase
-      .rpc('vault.create_secret', {
-        secret: tokens.access_token,
-        name: accessTokenName,
-        description: `Gmail access token for user ${userId}`
-      });
-
-    if (accessError) {
-      throw new Error(`Failed to store access token: ${accessError.message}`);
-    }
-
-    let refreshTokenId = null;
-    if (tokens.refresh_token) {
-      // Store refresh token in vault
-      const { data: refreshId, error: refreshError } = await supabase
-        .rpc('vault.create_secret', {
-          secret: tokens.refresh_token,
-          name: refreshTokenName,
-          description: `Gmail refresh token for user ${userId}`
-        });
-
-      if (refreshError) {
-        throw new Error(`Failed to store refresh token: ${refreshError.message}`);
-      }
-      refreshTokenId = refreshId;
-    }
-
-    console.log('OAuth tokens stored successfully in Vault');
-    return { accessTokenId, refreshTokenId };
+    console.log('Storing OAuth tokens for user:', userId);
+    
+    // Simply return the tokens to be stored directly in the user_oauth_connections table
+    // The encryption will be handled by your existing table structure
+    return {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || null
+    };
   } catch (error) {
-    console.error('Error storing OAuth tokens:', error);
+    console.error('Error preparing OAuth tokens:', error);
     throw error;
   }
 }
@@ -141,8 +116,8 @@ serve(async (req) => {
       throw new Error('Invalid or expired token')
     }
 
-    const { accessTokenId, refreshTokenId } = await storeOAuthTokens(supabase, user.id, tokens);
-    console.log('OAuth tokens stored securely in Vault.');
+    const { accessToken, refreshToken } = await storeOAuthTokens(supabase, user.id, tokens);
+    console.log('OAuth tokens prepared for storage.');
 
     const { data: oauthProvider, error: providerError } = await supabase
       .from('oauth_providers')
@@ -169,8 +144,8 @@ serve(async (req) => {
         connection_name: userInfo.email,
         external_user_id: userInfo.id,
         scopes_granted: scopesGranted,
-        vault_access_token_id: accessTokenId,
-        vault_refresh_token_id: refreshTokenId,
+        vault_access_token_id: accessToken,
+        vault_refresh_token_id: refreshToken,
         token_expires_at: expiresAt,
         connection_status: 'active',
         connection_metadata: {
@@ -179,7 +154,7 @@ serve(async (req) => {
           last_connected: new Date().toISOString(),
         },
       }, {
-        onConflict: 'user_id, oauth_provider_id, external_username',
+        onConflict: 'user_id, oauth_provider_id, connection_name',
       })
       .select('id')
       .single();

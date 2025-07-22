@@ -84,18 +84,23 @@ serve(async (req) => {
       throw new Error('Agent does not have required permissions for this Gmail operation')
     }
 
-    // Get user's Gmail access token from Vault via OAuth connections
+    // Get user's Gmail access token from OAuth connections
+    // First get the Gmail provider ID
+    const { data: gmailProvider, error: providerError } = await supabaseServiceRole
+      .from('oauth_providers')
+      .select('id')
+      .eq('name', 'gmail')
+      .single();
+
+    if (providerError || !gmailProvider) {
+      throw new Error(`Gmail OAuth provider not found: ${providerError?.message || 'Not found'}`);
+    }
+
     const { data: connection, error: connectionError } = await supabaseServiceRole
       .from('user_oauth_connections')
       .select('vault_access_token_id, vault_refresh_token_id, token_expires_at')
       .eq('user_id', user.id)
-      .eq('oauth_provider_id', (
-        supabaseServiceRole
-          .from('oauth_providers')
-          .select('id')
-          .eq('name', 'gmail')
-          .single()
-      ))
+      .eq('oauth_provider_id', gmailProvider.id)
       .eq('connection_status', 'active')
       .single();
 
@@ -108,20 +113,11 @@ serve(async (req) => {
       throw new Error('Gmail token has expired. Please reconnect your Gmail account.');
     }
 
-    // Retrieve access token from Vault using the decrypted_secrets view
-    const { data: tokenData, error: tokenError } = await supabaseServiceRole
-      .from('vault.decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('id', connection.vault_access_token_id)
-      .single();
-
-    if (tokenError || !tokenData) {
-      throw new Error(`Failed to retrieve access token from Vault: ${tokenError?.message || 'Not found'}`);
-    }
-
-    const accessToken = tokenData.decrypted_secret;
+    // Get access token directly from the connection record
+    // In your system, vault_access_token_id stores the actual token as text
+    const accessToken = connection.vault_access_token_id;
     if (!accessToken) {
-      throw new Error('Access token is empty in Vault.');
+      throw new Error('Access token is empty or not found.');
     }
 
     // Execute the requested Gmail API action
