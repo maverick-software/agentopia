@@ -21,61 +21,50 @@ interface UserInfo {
   id: string;
 }
 
-// Helper function to create or update secrets in the Vault
-async function createOrUpdateVaultSecrets(
+// Helper function to store OAuth tokens using Supabase Vault
+async function storeOAuthTokens(
   supabase: SupabaseClient,
   userId: string,
   tokens: OAuthTokenResponse
 ) {
-  const accessTokenName = `gmail_access_token_${userId}`;
-  const refreshTokenName = `gmail_refresh_token_${userId}`;
-  const description = `Gmail OAuth tokens for user ${userId}`;
+  try {
+    // Create vault secrets using the official Supabase Vault functions
+    const accessTokenName = `gmail_access_token_${userId}_${Date.now()}`;
+    const refreshTokenName = `gmail_refresh_token_${userId}_${Date.now()}`;
 
-  // Check if secrets already exist by name using the new RPC function
-  const { data: existingSecrets, error: rpcError } = await supabase
-    .rpc('get_vault_secrets_by_names', {
-      p_secret_names: [accessTokenName, refreshTokenName]
-    });
-
-  if (rpcError) {
-    throw new Error(`Failed to check for existing secrets via RPC: ${rpcError.message}`);
-  }
-
-  const existingAccessToken = existingSecrets.find(s => s.name === accessTokenName);
-  const existingRefreshToken = existingSecrets.find(s => s.name === refreshTokenName);
-
-  // Update or create access token
-  if (existingAccessToken) {
-    const { error } = await supabase.rpc('update_vault_secret', {
-      p_secret_id: existingAccessToken.id,
-      p_new_secret: tokens.access_token,
-    });
-    if (error) throw new Error(`Failed to update access token: ${error.message}`);
-  } else {
-    const { error } = await supabase.rpc('create_vault_secret', {
-      p_secret: tokens.access_token,
-      p_name: accessTokenName,
-      p_description: description,
-    });
-    if (error) throw new Error(`Failed to create access token: ${error.message}`);
-  }
-
-  // Update or create refresh token if it exists
-  if (tokens.refresh_token) {
-    if (existingRefreshToken) {
-      const { error } = await supabase.rpc('update_vault_secret', {
-        p_secret_id: existingRefreshToken.id,
-        p_new_secret: tokens.refresh_token,
+    // Store access token in vault
+    const { data: accessTokenId, error: accessError } = await supabase
+      .rpc('vault.create_secret', {
+        secret: tokens.access_token,
+        name: accessTokenName,
+        description: `Gmail access token for user ${userId}`
       });
-      if (error) throw new Error(`Failed to update refresh token: ${error.message}`);
-    } else {
-      const { error } = await supabase.rpc('create_vault_secret', {
-        p_secret: tokens.refresh_token,
-        p_name: refreshTokenName,
-        p_description: description,
-      });
-      if (error) throw new Error(`Failed to create refresh token: ${error.message}`);
+
+    if (accessError) {
+      throw new Error(`Failed to store access token: ${accessError.message}`);
     }
+
+    let refreshTokenId = null;
+    if (tokens.refresh_token) {
+      // Store refresh token in vault
+      const { data: refreshId, error: refreshError } = await supabase
+        .rpc('vault.create_secret', {
+          secret: tokens.refresh_token,
+          name: refreshTokenName,
+          description: `Gmail refresh token for user ${userId}`
+        });
+
+      if (refreshError) {
+        throw new Error(`Failed to store refresh token: ${refreshError.message}`);
+      }
+      refreshTokenId = refreshId;
+    }
+
+    console.log('OAuth tokens stored successfully in Vault');
+    return { accessTokenId, refreshTokenId };
+  } catch (error) {
+    console.error('Error storing OAuth tokens:', error);
+    throw error;
   }
 }
 
@@ -152,7 +141,7 @@ serve(async (req) => {
       throw new Error('Invalid or expired token')
     }
 
-    await createOrUpdateVaultSecrets(supabase, user.id, tokens);
+    const { accessTokenId, refreshTokenId } = await storeOAuthTokens(supabase, user.id, tokens);
     console.log('OAuth tokens stored securely in Vault.');
 
     const { data: oauthProvider, error: providerError } = await supabase
@@ -180,6 +169,8 @@ serve(async (req) => {
         connection_name: userInfo.email,
         external_user_id: userInfo.id,
         scopes_granted: scopesGranted,
+        vault_access_token_id: accessTokenId,
+        vault_refresh_token_id: refreshTokenId,
         token_expires_at: expiresAt,
         connection_status: 'active',
         connection_metadata: {

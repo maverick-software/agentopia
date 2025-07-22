@@ -84,19 +84,42 @@ serve(async (req) => {
       throw new Error('Agent does not have required permissions for this Gmail operation')
     }
 
-    // Get user's Gmail access token directly from the Vault via RPC
-    const accessTokenName = `gmail_access_token_${user.id}`;
+    // Get user's Gmail access token from Vault via OAuth connections
+    const { data: connection, error: connectionError } = await supabaseServiceRole
+      .from('user_oauth_connections')
+      .select('vault_access_token_id, vault_refresh_token_id, token_expires_at')
+      .eq('user_id', user.id)
+      .eq('oauth_provider_id', (
+        supabaseServiceRole
+          .from('oauth_providers')
+          .select('id')
+          .eq('name', 'gmail')
+          .single()
+      ))
+      .eq('connection_status', 'active')
+      .single();
 
-    const { data: secrets, error: rpcError } = await supabaseServiceRole
-      .rpc('get_vault_secrets_by_names', {
-        p_secret_names: [accessTokenName]
-      });
-
-    if (rpcError || !secrets || secrets.length === 0) {
-      throw new Error(`Failed to retrieve access token from Vault: ${rpcError?.message || 'Not found'}`);
+    if (connectionError || !connection) {
+      throw new Error(`No active Gmail connection found: ${connectionError?.message || 'Not found'}`);
     }
 
-    const accessToken = secrets[0].decrypted_secret;
+    // Check if token is expired
+    if (connection.token_expires_at && new Date(connection.token_expires_at) <= new Date()) {
+      throw new Error('Gmail token has expired. Please reconnect your Gmail account.');
+    }
+
+    // Retrieve access token from Vault using the decrypted_secrets view
+    const { data: tokenData, error: tokenError } = await supabaseServiceRole
+      .from('vault.decrypted_secrets')
+      .select('decrypted_secret')
+      .eq('id', connection.vault_access_token_id)
+      .single();
+
+    if (tokenError || !tokenData) {
+      throw new Error(`Failed to retrieve access token from Vault: ${tokenError?.message || 'Not found'}`);
+    }
+
+    const accessToken = tokenData.decrypted_secret;
     if (!accessToken) {
       throw new Error('Access token is empty in Vault.');
     }
