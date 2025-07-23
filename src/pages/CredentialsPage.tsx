@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Key, Shield, ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { Loader2, RefreshCw, Trash2, CheckCircle, AlertCircle, Shield, Key, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface OAuthConnection {
@@ -20,11 +20,20 @@ interface OAuthConnection {
   updated_at: string;
 }
 
+interface RefreshStatus {
+  [connectionId: string]: {
+    isRefreshing: boolean;
+    success: boolean;
+    message: string;
+    newExpiryDate?: string;
+  };
+}
+
 export function CredentialsPage() {
   const { user } = useAuth();
   const [connections, setConnections] = useState<OAuthConnection[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>({});
 
   useEffect(() => {
     if (user) {
@@ -33,10 +42,11 @@ export function CredentialsPage() {
   }, [user]);
 
   const fetchConnections = async () => {
+    if (!user) return;
+
     try {
-      setLoading(true);
       const { data, error } = await supabase.rpc('get_user_oauth_connections', {
-        p_user_id: user?.id
+        p_user_id: user.id
       });
 
       if (error) {
@@ -54,7 +64,16 @@ export function CredentialsPage() {
 
   const handleRefreshToken = async (connectionId: string) => {
     try {
-      setRefreshing(connectionId);
+      // Set refreshing state
+      setRefreshStatus(prev => ({
+        ...prev,
+        [connectionId]: {
+          isRefreshing: true,
+          success: false,
+          message: 'Refreshing token...'
+        }
+      }));
+
       console.log('Starting token refresh for connection:', connectionId);
       
       // Find the connection details
@@ -79,18 +98,57 @@ export function CredentialsPage() {
 
       console.log('Token refresh response:', data);
 
+      // Set success state with expiry info
+      const expiryDate = data?.expires_at ? new Date(data.expires_at) : null;
+      setRefreshStatus(prev => ({
+        ...prev,
+        [connectionId]: {
+          isRefreshing: false,
+          success: true,
+          message: 'Success!',
+          newExpiryDate: expiryDate?.toISOString()
+        }
+      }));
+
       // Refresh the connections list to show updated expiry
       await fetchConnections();
       
-      // Show success message
-      const message = `Token refreshed successfully! New expiry: ${data?.expires_at ? new Date(data.expires_at).toLocaleString() : 'Unknown'}`;
-      console.log(message);
-      alert(message);
+      // Clear success state after 3 seconds
+      setTimeout(() => {
+        setRefreshStatus(prev => ({
+          ...prev,
+          [connectionId]: {
+            isRefreshing: false,
+            success: false,
+            message: ''
+          }
+        }));
+      }, 3000);
+
     } catch (error) {
       console.error('Error refreshing token:', error);
-      alert(`Error refreshing token: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setRefreshing(null);
+      
+      // Set error state
+      setRefreshStatus(prev => ({
+        ...prev,
+        [connectionId]: {
+          isRefreshing: false,
+          success: false,
+          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      }));
+
+      // Clear error state after 5 seconds
+      setTimeout(() => {
+        setRefreshStatus(prev => ({
+          ...prev,
+          [connectionId]: {
+            isRefreshing: false,
+            success: false,
+            message: ''
+          }
+        }));
+      }, 5000);
     }
   };
 
@@ -136,6 +194,33 @@ export function CredentialsPage() {
         return '💬';
       default:
         return '🔗';
+    }
+  };
+
+  const isTokenExpired = (expiresAt: string | null): boolean => {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) <= new Date();
+  };
+
+  const getTokenExpiryColor = (expiresAt: string | null, refreshStatus?: any): string => {
+    if (refreshStatus?.success) return 'text-green-400';
+    if (!expiresAt) return 'text-gray-400';
+    return isTokenExpired(expiresAt) ? 'text-red-400' : 'text-green-400';
+  };
+
+  const formatExpiryDate = (expiresAt: string | null, refreshStatus?: any): string => {
+    // Show new expiry if refresh was successful and we have the new date
+    const dateToFormat = refreshStatus?.newExpiryDate || expiresAt;
+    
+    if (!dateToFormat) return 'No expiry information';
+    
+    const date = new Date(dateToFormat);
+    const now = new Date();
+    
+    if (date <= now) {
+      return `Expired ${date.toLocaleString()}`;
+    } else {
+      return `Expires ${date.toLocaleString()}`;
     }
   };
 
@@ -211,8 +296,8 @@ export function CredentialsPage() {
                     <div className="flex items-center space-x-2 text-sm">
                       <Shield className="h-4 w-4 text-gray-500" />
                       <span className="text-gray-400">Token expires:</span>
-                      <span className="text-gray-300">
-                        {format(new Date(connection.token_expires_at), 'PPp')}
+                      <span className={getTokenExpiryColor(connection.token_expires_at, refreshStatus[connection.connection_id])}>
+                        {formatExpiryDate(connection.token_expires_at, refreshStatus[connection.connection_id])}
                       </span>
                     </div>
                   )}
@@ -232,15 +317,32 @@ export function CredentialsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => handleRefreshToken(connection.connection_id)}
-                      disabled={refreshing === connection.connection_id}
-                      className="text-gray-300 hover:text-white"
+                      disabled={refreshStatus[connection.connection_id]?.isRefreshing}
+                      className={`text-gray-300 hover:text-white ${
+                        refreshStatus[connection.connection_id]?.success 
+                          ? 'border-green-500 text-green-400' 
+                          : refreshStatus[connection.connection_id]?.message && !refreshStatus[connection.connection_id]?.isRefreshing
+                          ? 'border-red-500 text-red-400'
+                          : ''
+                      }`}
                     >
-                      {refreshing === connection.connection_id ? (
+                      {refreshStatus[connection.connection_id]?.success ? (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      ) : refreshStatus[connection.connection_id]?.isRefreshing ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : refreshStatus[connection.connection_id]?.message && !refreshStatus[connection.connection_id]?.isRefreshing ? (
+                        <AlertCircle className="h-4 w-4 mr-2" />
                       ) : (
                         <RefreshCw className="h-4 w-4 mr-2" />
                       )}
-                      Refresh Token
+                      {refreshStatus[connection.connection_id]?.success 
+                        ? 'Success!' 
+                        : refreshStatus[connection.connection_id]?.isRefreshing 
+                        ? 'Refreshing...'
+                        : refreshStatus[connection.connection_id]?.message && !refreshStatus[connection.connection_id]?.isRefreshing
+                        ? 'Error'
+                        : 'Refresh Token'
+                      }
                     </Button>
                   )}
                   
@@ -256,6 +358,18 @@ export function CredentialsPage() {
                     </Button>
                   )}
                 </div>
+
+                {/* Show refresh status message if there's an error */}
+                {refreshStatus[connection.connection_id]?.message && 
+                 !refreshStatus[connection.connection_id]?.isRefreshing && 
+                 !refreshStatus[connection.connection_id]?.success && (
+                  <div className="mt-2 p-2 bg-red-900/20 border border-red-500/20 rounded text-sm">
+                    <div className="flex items-center gap-2 text-red-400">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{refreshStatus[connection.connection_id].message}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Expandable scopes section */}
                 <details className="text-sm">

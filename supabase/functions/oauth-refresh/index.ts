@@ -10,13 +10,13 @@ interface RefreshRequest {
   connection_id: string;
 }
 
-async function refreshGmailToken(supabase: SupabaseClient, userId: string, connectionId: string): Promise<{ success: boolean }> {
+async function refreshGmailToken(supabase: SupabaseClient, userId: string, connectionId: string): Promise<{ success: boolean; expires_at?: string }> {
   console.log(`Refreshing Gmail token for user ${userId}, connection ${connectionId}`);
 
   // Get the refresh token from user_oauth_connections table
   const { data: connection, error: fetchError } = await supabase
     .from('user_oauth_connections')
-    .select('refresh_token, external_username')
+    .select('vault_refresh_token_id, external_username')
     .eq('id', connectionId)
     .eq('user_id', userId)
     .single();
@@ -25,7 +25,7 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
     throw new Error(`Failed to retrieve connection: ${fetchError?.message || 'Connection not found'}`);
   }
 
-  if (!connection.refresh_token) {
+  if (!connection.vault_refresh_token_id) {
     throw new Error('No refresh token found for this connection.');
   }
   
@@ -44,7 +44,7 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
       grant_type: 'refresh_token',
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: connection.refresh_token,
+      refresh_token: connection.vault_refresh_token_id,
     }),
   });
 
@@ -57,16 +57,19 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
   const newTokens = await tokenResponse.json();
   console.log(`Received new tokens. Has refresh token: ${!!newTokens.refresh_token}`);
 
+  // Calculate expiry time
+  const expiresAt = new Date(Date.now() + (newTokens.expires_in * 1000)).toISOString();
+
   // Update the connection with new tokens
   const updateData: any = {
-    access_token: newTokens.access_token,
-    token_expires_at: new Date(Date.now() + (newTokens.expires_in * 1000)).toISOString(),
+    vault_access_token_id: newTokens.access_token,
+    token_expires_at: expiresAt,
     updated_at: new Date().toISOString()
   };
 
   // Update refresh token if a new one was provided
   if (newTokens.refresh_token) {
-    updateData.refresh_token = newTokens.refresh_token;
+    updateData.vault_refresh_token_id = newTokens.refresh_token;
   }
 
   const { error: updateError } = await supabase
@@ -79,8 +82,8 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
     throw new Error(`Failed to update tokens: ${updateError.message}`);
   }
 
-  console.log('Token refresh completed successfully');
-  return { success: true };
+  console.log('Token refresh completed successfully, expires at:', expiresAt);
+  return { success: true, expires_at: expiresAt };
 }
 
 serve(async (req) => {
@@ -108,9 +111,16 @@ serve(async (req) => {
       throw new Error('Invalid or expired token');
     }
 
-    await refreshGmailToken(supabase, user.id, connection_id);
+    const { success, expires_at } = await refreshGmailToken(supabase, user.id, connection_id);
 
-    return new Response(JSON.stringify({ success: true, message: 'Token refreshed successfully' }), {
+    const expiryDate = new Date(expires_at!);
+    const message = `Token refreshed successfully! New expiry: ${expiryDate.toLocaleString()}`;
+
+    return new Response(JSON.stringify({ 
+      success: success, 
+      message: message,
+      expires_at: expires_at 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
