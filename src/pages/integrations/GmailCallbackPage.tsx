@@ -39,9 +39,20 @@ export function GmailCallbackPage() {
         
         setStatus('success');
         
-        // Close the popup window if this is running in a popup
+        // Send success message to parent window if this is a popup
         if (window.opener) {
-          window.close();
+          window.opener.postMessage({
+            type: 'GMAIL_OAUTH_SUCCESS',
+            data: { 
+              success: true,
+              message: 'Gmail connected successfully!' 
+            }
+          }, window.location.origin);
+          
+          // Close popup after a brief delay to show success message
+          setTimeout(() => {
+            window.close();
+          }, 1500);
         } else {
           // If not in popup, redirect to integrations page after 3 seconds
           setTimeout(() => {
@@ -49,8 +60,23 @@ export function GmailCallbackPage() {
           }, 3000);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to complete OAuth flow');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to complete OAuth flow';
+        setError(errorMessage);
         setStatus('error');
+        
+        // Send error message to parent window if this is a popup
+        if (window.opener) {
+          window.opener.postMessage({
+            type: 'GMAIL_OAUTH_ERROR',
+            data: { 
+              success: false,
+              error: errorMessage 
+            }
+          }, window.location.origin);
+          
+          // Keep popup open on error so user can see the error message
+          // They can manually close it or retry
+        }
       }
     };
 
@@ -58,7 +84,11 @@ export function GmailCallbackPage() {
   }, [searchParams, handleOAuthCallback, navigate]);
 
   const handleRetry = () => {
-    navigate('/integrations');
+    if (window.opener) {
+      window.close();
+    } else {
+      navigate('/integrations');
+    }
   };
 
   return (
@@ -90,7 +120,11 @@ export function GmailCallbackPage() {
               <p className="text-gray-400 mb-4">
                 Your Gmail integration is now active and ready to use with your agents.
               </p>
-              {!window.opener && (
+              {window.opener ? (
+                <p className="text-sm text-gray-500">
+                  This window will close automatically...
+                </p>
+              ) : (
                 <p className="text-sm text-gray-500">
                   Redirecting to integrations page...
                 </p>
@@ -110,21 +144,19 @@ export function GmailCallbackPage() {
                   {error}
                 </AlertDescription>
               </Alert>
-              {!window.opener && (
-                <Button 
-                  onClick={handleRetry}
-                  variant="outline" 
-                  className="mt-4"
-                >
-                  Return to Integrations
-                </Button>
-              )}
+              <Button 
+                onClick={handleRetry}
+                variant="outline" 
+                className="mt-4"
+              >
+                {window.opener ? 'Close Window' : 'Return to Integrations'}
+              </Button>
             </div>
           )}
         </div>
 
         {/* Instructions for popup flow */}
-        {window.opener && status !== 'processing' && (
+        {window.opener && status !== 'processing' && status !== 'success' && (
           <div className="text-center">
             <p className="text-sm text-gray-500">
               You can close this window and return to the main application.

@@ -51,6 +51,29 @@ export function IntegrationSetupModal({
     custom_config: {}
   });
 
+  // Reset state when modal is closed
+  const resetModalState = () => {
+    setActiveTab('setup');
+    setAuthMethod('oauth');
+    setLoading(false);
+    setError(null);
+    setSuccess(false);
+    setSuccessMessage('');
+    setFormData({
+      connection_name: '',
+      api_key: '',
+      client_id: '',
+      client_secret: '',
+      custom_config: {}
+    });
+  };
+
+  // Handle modal close with state reset
+  const handleClose = () => {
+    resetModalState();
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -90,7 +113,7 @@ export function IntegrationSetupModal({
         // Show success message briefly then close modal
         setTimeout(() => {
           onComplete();
-          onClose();
+          handleClose();
         }, 1500);
       } else {
         // For other integrations, simulate OAuth flow
@@ -116,7 +139,7 @@ export function IntegrationSetupModal({
   if (!integration) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px] bg-gray-900 border-gray-800">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">

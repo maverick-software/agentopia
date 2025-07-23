@@ -143,11 +143,45 @@ export function useGmailConnection() {
       'width=600,height=700,scrollbars=yes,resizable=yes'
     );
 
-    // Listen for popup completion
+    // Listen for popup completion using postMessage and polling as fallback
     return new Promise((resolve, reject) => {
+      // Listen for messages from the popup
+      const handleMessage = (event: MessageEvent) => {
+        // Verify origin for security
+        if (event.origin !== window.location.origin) {
+          return;
+        }
+
+        if (event.data.type === 'GMAIL_OAUTH_SUCCESS') {
+          // Clean up listeners
+          window.removeEventListener('message', handleMessage);
+          clearInterval(checkClosed);
+          clearTimeout(timeout);
+          
+          // Refresh local state
+          fetchConnections().then(() => {
+            resolve();
+          }).catch(() => {
+            resolve(); // Still resolve as OAuth succeeded
+          });
+        } else if (event.data.type === 'GMAIL_OAUTH_ERROR') {
+          // Clean up listeners
+          window.removeEventListener('message', handleMessage);
+          clearInterval(checkClosed);
+          clearTimeout(timeout);
+          
+          reject(new Error(event.data.data.error || 'OAuth flow failed'));
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Fallback: polling to check if popup is closed (in case postMessage fails)
       const checkClosed = setInterval(async () => {
         if (popup?.closed) {
           clearInterval(checkClosed);
+          clearTimeout(timeout);
+          window.removeEventListener('message', handleMessage);
           
           // Wait a moment for the callback to complete
           await new Promise(r => setTimeout(r, 1000));
@@ -173,8 +207,9 @@ export function useGmailConnection() {
       }, 1000);
 
       // Timeout after 5 minutes
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         clearInterval(checkClosed);
+        window.removeEventListener('message', handleMessage);
         popup?.close();
         reject(new Error('OAuth flow timed out'));
       }, 300000);
