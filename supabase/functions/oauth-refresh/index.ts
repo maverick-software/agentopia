@@ -10,81 +10,33 @@ interface RefreshRequest {
   connection_id: string;
 }
 
-// This helper function will now be shared or colocated
-async function createOrUpdateVaultSecrets(
-  supabase: SupabaseClient,
-  userId: string,
-  tokens: { access_token: string; refresh_token?: string }
-) {
-  const accessTokenName = `gmail_access_token_${userId}`;
-  const refreshTokenName = `gmail_refresh_token_${userId}`;
-  const description = `Gmail OAuth tokens for user ${userId}`;
+async function refreshGmailToken(supabase: SupabaseClient, userId: string, connectionId: string): Promise<{ success: boolean }> {
+  console.log(`Refreshing Gmail token for user ${userId}, connection ${connectionId}`);
 
-  const { data: existingSecrets, error: selectError } = await supabase
-    .from('secrets')
-    .select('id, name')
-    .in('name', [accessTokenName, refreshTokenName])
-    .schema('vault');
+  // Get the refresh token from user_oauth_connections table
+  const { data: connection, error: fetchError } = await supabase
+    .from('user_oauth_connections')
+    .select('refresh_token, external_username')
+    .eq('id', connectionId)
+    .eq('user_id', userId)
+    .single();
 
-  if (selectError) throw new Error(`Failed to check for existing secrets: ${selectError.message}`);
-
-  const existingAccessToken = existingSecrets.find(s => s.name === accessTokenName);
-
-  if (existingAccessToken) {
-    const { error } = await supabase.rpc('update_vault_secret', {
-      p_secret_id: existingAccessToken.id,
-      p_new_secret: tokens.access_token,
-    });
-    if (error) throw new Error(`Failed to update access token: ${error.message}`);
-  } else {
-    const { error } = await supabase.rpc('create_vault_secret', {
-      p_secret: tokens.access_token,
-      p_name: accessTokenName,
-      p_description: description,
-    });
-    if (error) throw new Error(`Failed to create access token: ${error.message}`);
+  if (fetchError || !connection) {
+    throw new Error(`Failed to retrieve connection: ${fetchError?.message || 'Connection not found'}`);
   }
 
-  if (tokens.refresh_token) {
-    const existingRefreshToken = existingSecrets.find(s => s.name === refreshTokenName);
-    if (existingRefreshToken) {
-      const { error } = await supabase.rpc('update_vault_secret', {
-        p_secret_id: existingRefreshToken.id,
-        p_new_secret: tokens.refresh_token,
-      });
-      if (error) throw new Error(`Failed to update refresh token: ${error.message}`);
-    } else {
-      const { error } = await supabase.rpc('create_vault_secret', {
-        p_secret: tokens.refresh_token,
-        p_name: refreshTokenName,
-        p_description: description,
-      });
-      if (error) throw new Error(`Failed to create refresh token: ${error.message}`);
-    }
-  }
-}
-
-async function refreshGmailToken(supabase: SupabaseClient, userId: string): Promise<{ success: boolean }> {
-  const refreshTokenName = `gmail_refresh_token_${userId}`;
-
-  // Get the refresh token directly from the Vault using the RPC function
-  const { data: secrets, error: rpcError } = await supabase
-    .rpc('get_vault_secrets_by_names', { 
-      p_secret_names: [refreshTokenName] 
-    });
-
-  if (rpcError || !secrets || secrets.length === 0) {
-    throw new Error(`Failed to retrieve refresh token from Vault: ${rpcError?.message || 'Not found'}`);
-  }
-
-  const refreshToken = secrets[0].decrypted_secret;
-  if (!refreshToken) {
-    throw new Error('Refresh token is empty in Vault.');
+  if (!connection.refresh_token) {
+    throw new Error('No refresh token found for this connection.');
   }
   
-  const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!;
-  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!;
+  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
 
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth credentials not configured');
+  }
+
+  console.log('Making token refresh request to Google...');
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -92,22 +44,42 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string): Prom
       grant_type: 'refresh_token',
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: refreshToken,
+      refresh_token: connection.refresh_token,
     }),
   });
 
   if (!tokenResponse.ok) {
     const error = await tokenResponse.text();
+    console.error('Token refresh failed:', error);
     throw new Error(`Token refresh failed: ${error}`);
   }
 
   const newTokens = await tokenResponse.json();
+  console.log(`Received new tokens. Has refresh token: ${!!newTokens.refresh_token}`);
 
-  // We only need to update the access token, as the refresh token might not change
-  await createOrUpdateVaultSecrets(supabase, userId, {
+  // Update the connection with new tokens
+  const updateData: any = {
     access_token: newTokens.access_token,
-  });
+    token_expires_at: new Date(Date.now() + (newTokens.expires_in * 1000)).toISOString(),
+    updated_at: new Date().toISOString()
+  };
 
+  // Update refresh token if a new one was provided
+  if (newTokens.refresh_token) {
+    updateData.refresh_token = newTokens.refresh_token;
+  }
+
+  const { error: updateError } = await supabase
+    .from('user_oauth_connections')
+    .update(updateData)
+    .eq('id', connectionId)
+    .eq('user_id', userId);
+
+  if (updateError) {
+    throw new Error(`Failed to update tokens: ${updateError.message}`);
+  }
+
+  console.log('Token refresh completed successfully');
   return { success: true };
 }
 
@@ -136,7 +108,7 @@ serve(async (req) => {
       throw new Error('Invalid or expired token');
     }
 
-    await refreshGmailToken(supabase, user.id);
+    await refreshGmailToken(supabase, user.id, connection_id);
 
     return new Response(JSON.stringify({ success: true, message: 'Token refreshed successfully' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
