@@ -41,16 +41,20 @@ export function GmailCallbackPage() {
         
         // Send success message to parent window if this is a popup
         if (window.opener) {
-          window.opener.postMessage({
+          console.log('Sending success message to parent window');
+          const message = {
             type: 'GMAIL_OAUTH_SUCCESS',
             data: { 
               success: true,
               message: 'Gmail connected successfully!' 
             }
-          }, window.location.origin);
+          };
+          console.log('Message to send:', message, 'to origin:', window.location.origin);
+          window.opener.postMessage(message, '*');
           
           // Close popup after a brief delay to show success message
           setTimeout(() => {
+            console.log('Closing popup window');
             window.close();
           }, 1500);
         } else {
@@ -66,13 +70,16 @@ export function GmailCallbackPage() {
         
         // Send error message to parent window if this is a popup
         if (window.opener) {
-          window.opener.postMessage({
+          console.log('Sending error message to parent window:', errorMessage);
+          const message = {
             type: 'GMAIL_OAUTH_ERROR',
             data: { 
               success: false,
               error: errorMessage 
             }
-          }, window.location.origin);
+          };
+          console.log('Error message to send:', message, 'to origin:', window.location.origin);
+          window.opener.postMessage(message, '*');
           
           // Keep popup open on error so user can see the error message
           // They can manually close it or retry

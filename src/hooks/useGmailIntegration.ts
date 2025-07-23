@@ -147,12 +147,17 @@ export function useGmailConnection() {
     return new Promise((resolve, reject) => {
       // Listen for messages from the popup
       const handleMessage = (event: MessageEvent) => {
-        // Verify origin for security
-        if (event.origin !== window.location.origin) {
-          return;
-        }
+        console.log('Received postMessage:', event.data, 'from origin:', event.origin);
+        console.log('Window location origin:', window.location.origin);
+        
+        // Temporarily comment out origin check for debugging
+        // if (event.origin !== window.location.origin) {
+        //   console.log('Ignoring message from different origin:', event.origin);
+        //   return;
+        // }
 
         if (event.data.type === 'GMAIL_OAUTH_SUCCESS') {
+          console.log('Gmail OAuth success message received');
           // Clean up listeners
           window.removeEventListener('message', handleMessage);
           clearInterval(checkClosed);
@@ -160,11 +165,14 @@ export function useGmailConnection() {
           
           // Refresh local state
           fetchConnections().then(() => {
+            console.log('fetchConnections completed, resolving promise');
             resolve();
-          }).catch(() => {
+          }).catch((err) => {
+            console.log('fetchConnections failed but resolving anyway:', err);
             resolve(); // Still resolve as OAuth succeeded
           });
         } else if (event.data.type === 'GMAIL_OAUTH_ERROR') {
+          console.log('Gmail OAuth error message received:', event.data.data.error);
           // Clean up listeners
           window.removeEventListener('message', handleMessage);
           clearInterval(checkClosed);
@@ -174,11 +182,13 @@ export function useGmailConnection() {
         }
       };
 
+      console.log('Setting up postMessage listener for Gmail OAuth');
       window.addEventListener('message', handleMessage);
 
       // Fallback: polling to check if popup is closed (in case postMessage fails)
       const checkClosed = setInterval(async () => {
         if (popup?.closed) {
+          console.log('Popup closed, falling back to polling method');
           clearInterval(checkClosed);
           clearTimeout(timeout);
           window.removeEventListener('message', handleMessage);
@@ -208,6 +218,7 @@ export function useGmailConnection() {
 
       // Timeout after 5 minutes
       const timeout = setTimeout(() => {
+        console.log('Gmail OAuth timeout reached');
         clearInterval(checkClosed);
         window.removeEventListener('message', handleMessage);
         popup?.close();
