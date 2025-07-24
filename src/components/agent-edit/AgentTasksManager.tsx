@@ -106,6 +106,10 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
     const [expandedTask, setExpandedTask] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     
+    // Wizard state
+    const [currentStep, setCurrentStep] = useState(1);
+    const [totalSteps, setTotalSteps] = useState(5);
+    
     // Form state
     const [formData, setFormData] = useState({
         name: '',
@@ -158,6 +162,7 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
             const taskData = {
                 agent_id: agentId,
                 ...formData,
+                instructions: formData.description, // Map description to instructions
                 selected_tools: formData.selected_tools,
             };
 
@@ -190,13 +195,17 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
     const handleUpdateTask = async (task: AgentTask) => {
         try {
             setSaving(true);
+            const updateData = {
+                ...formData,
+                instructions: formData.description, // Map description to instructions
+            };
             const response = await fetch(`/functions/v1/agent-tasks/${task.id}`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(updateData),
             });
 
             if (!response.ok) {
@@ -309,12 +318,44 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
             start_date: '',
             end_date: '',
         });
+        setCurrentStep(1);
+    };
+
+    const nextStep = () => {
+        if (currentStep < totalSteps) {
+            setCurrentStep(currentStep + 1);
+        }
+    };
+
+    const prevStep = () => {
+        if (currentStep > 1) {
+            setCurrentStep(currentStep - 1);
+        }
+    };
+
+    const canProceedToNext = () => {
+        switch (currentStep) {
+            case 1:
+                return formData.name.trim().length > 0 && formData.task_type;
+            case 2:
+                return formData.description.trim().length > 0;
+            case 3:
+                return formData.task_type === 'event_based' ? 
+                    !!formData.event_trigger_type : 
+                    !!formData.cron_expression;
+            case 4:
+                return formData.selected_tools.length > 0;
+            case 5:
+                return true; // Optional step
+            default:
+                return false;
+        }
     };
 
     const startEditing = (task: AgentTask) => {
         setFormData({
             name: task.name,
-            description: task.description || '',
+            description: task.instructions || task.description || '', // Map instructions to description for editing
             task_type: task.task_type,
             instructions: task.instructions,
             selected_tools: task.selected_tools,
@@ -326,6 +367,7 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
             start_date: task.start_date ? task.start_date.split('T')[0] : '',
             end_date: task.end_date ? task.end_date.split('T')[0] : '',
         });
+        setCurrentStep(totalSteps); // Go to final step for editing
         setEditingTask(task);
     };
 
@@ -368,148 +410,257 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
         return new Date(nextRunAt).toLocaleString();
     };
 
+    const getStepTitle = () => {
+        switch (currentStep) {
+            case 1: return "Name Your Task";
+            case 2: return "Describe Your Task";
+            case 3: return formData.task_type === 'scheduled' ? "Set Schedule" : "Choose Event Trigger";
+            case 4: return "Select Tools";
+            case 5: return "Optional Settings";
+            default: return "Create Task";
+        }
+    };
+
+    const getStepDescription = () => {
+        switch (currentStep) {
+            case 1: return "Give your task a clear, descriptive name";
+            case 2: return "Explain what this task should accomplish";
+            case 3: return formData.task_type === 'scheduled' ? "When should this task run?" : "What should trigger this task?";
+            case 4: return "Which tools can this task use?";
+            case 5: return "Set limits and date ranges (optional)";
+            default: return "";
+        }
+    };
+
     const TaskForm = ({ isEditing = false }) => (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="task-name">Task Name</Label>
-                    <Input
-                        id="task-name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="My Daily Report"
-                    />
+            {/* Step Progress Indicator */}
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-2">
+                    {Array.from({ length: totalSteps }, (_, i) => (
+                        <div key={i} className="flex items-center">
+                            <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                                    i + 1 <= currentStep
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted text-muted-foreground'
+                                }`}
+                            >
+                                {i + 1}
+                            </div>
+                            {i < totalSteps - 1 && (
+                                <div
+                                    className={`w-8 h-0.5 mx-2 ${
+                                        i + 1 < currentStep ? 'bg-primary' : 'bg-muted'
+                                    }`}
+                                />
+                            )}
+                        </div>
+                    ))}
                 </div>
-                
-                <div className="space-y-2">
-                    <Label htmlFor="task-type">Task Type</Label>
-                    <Select
-                        value={formData.task_type}
-                        onValueChange={(value: 'scheduled' | 'event_based') => 
-                            setFormData({ ...formData, task_type: value })
-                        }
+                <div className="text-sm text-muted-foreground">
+                    Step {currentStep} of {totalSteps}
+                </div>
+            </div>
+
+            {/* Step Title and Description */}
+            <div className="text-center mb-6">
+                <h3 className="text-lg font-semibold mb-2">{getStepTitle()}</h3>
+                <p className="text-muted-foreground">{getStepDescription()}</p>
+            </div>
+
+            {/* Step Content */}
+            <div className="min-h-[300px]">
+                {currentStep === 1 && (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="task-name">Task Name</Label>
+                            <Input
+                                id="task-name"
+                                value={formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                placeholder="e.g., Daily Email Summary, Weekly Report Generation"
+                                className="text-lg"
+                                autoFocus
+                            />
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="task-type">Task Type</Label>
+                            <Select
+                                value={formData.task_type}
+                                onValueChange={(value: 'scheduled' | 'event_based') => 
+                                    setFormData({ ...formData, task_type: value })
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="scheduled">⏰ Scheduled (Time-based)</SelectItem>
+                                    <SelectItem value="event_based">⚡ Event-based (Triggered)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 2 && (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="task-description">What should this task do?</Label>
+                            <Textarea
+                                id="task-description"
+                                value={formData.description}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                placeholder="Be specific about what you want the agent to accomplish. For example: 'Check my email and create a summary of important messages' or 'Generate a weekly report of my project progress'"
+                                rows={6}
+                                className="text-base"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 3 && (
+                    <div className="space-y-4">
+                        {formData.task_type === 'scheduled' ? (
+                            <ScheduleSelector
+                                cronExpression={formData.cron_expression}
+                                timezone={formData.timezone}
+                                onScheduleChange={(cronExpression, timezone) => 
+                                    setFormData({
+                                        ...formData,
+                                        cron_expression: cronExpression,
+                                        timezone: timezone
+                                    })
+                                }
+                                disabled={saving}
+                            />
+                        ) : (
+                            <div className="space-y-2">
+                                <Label htmlFor="event-trigger">What should trigger this task?</Label>
+                                <Select
+                                    value={formData.event_trigger_type}
+                                    onValueChange={(value) => setFormData({ ...formData, event_trigger_type: value })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Choose what will trigger this task" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {EVENT_TRIGGER_TYPES.map((trigger) => (
+                                            <SelectItem key={trigger.value} value={trigger.value}>
+                                                <div className="flex items-center gap-2">
+                                                    <trigger.icon className="h-4 w-4" />
+                                                    {trigger.label}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {currentStep === 4 && (
+                    <div className="space-y-4">
+                        <ToolSelector
+                            agentId={agentId}
+                            selectedTools={formData.selected_tools}
+                            onToolSelectionChange={(selectedTools) => 
+                                setFormData({
+                                    ...formData,
+                                    selected_tools: selectedTools
+                                })
+                            }
+                            disabled={saving}
+                        />
+                    </div>
+                )}
+
+                {currentStep === 5 && (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="start-date">Start Date (Optional)</Label>
+                                <Input
+                                    id="start-date"
+                                    type="date"
+                                    value={formData.start_date}
+                                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                                />
+                            </div>
+                            
+                            <div className="space-y-2">
+                                <Label htmlFor="end-date">End Date (Optional)</Label>
+                                <Input
+                                    id="end-date"
+                                    type="date"
+                                    value={formData.end_date}
+                                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="max-executions">Max Executions (Optional)</Label>
+                            <Input
+                                id="max-executions"
+                                type="number"
+                                min="1"
+                                value={formData.max_executions || ''}
+                                onChange={(e) => setFormData({ 
+                                    ...formData, 
+                                    max_executions: e.target.value ? parseInt(e.target.value) : undefined 
+                                })}
+                                placeholder="Leave empty for unlimited"
+                            />
+                            <p className="text-sm text-muted-foreground">
+                                Maximum number of times this task should execute
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between pt-4 border-t">
+                <Button
+                    variant="outline"
+                    onClick={prevStep}
+                    disabled={currentStep === 1 || saving}
+                    className="flex items-center gap-2"
+                >
+                    ← Previous
+                </Button>
+
+                {currentStep < totalSteps ? (
+                    <Button
+                        onClick={nextStep}
+                        disabled={!canProceedToNext() || saving}
+                        className="flex items-center gap-2"
                     >
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="scheduled">Scheduled (Time-based)</SelectItem>
-                            <SelectItem value="event_based">Event-based</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-            
-            <div className="space-y-2">
-                <Label htmlFor="task-description">Description (Optional)</Label>
-                <Textarea
-                    id="task-description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of what this task does"
-                    rows={2}
-                />
-            </div>
-
-            <div className="space-y-2">
-                <Label htmlFor="task-instructions">Instructions</Label>
-                <Textarea
-                    id="task-instructions"
-                    value={formData.instructions}
-                    onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
-                    placeholder="What should the agent do when this task runs? Be specific about the desired behavior and output."
-                    rows={4}
-                    required
-                />
-            </div>
-
-            {formData.task_type === 'scheduled' ? (
-                <ScheduleSelector
-                    cronExpression={formData.cron_expression}
-                    timezone={formData.timezone}
-                    onScheduleChange={(cronExpression, timezone) => 
-                        setFormData({
-                            ...formData,
-                            cron_expression: cronExpression,
-                            timezone: timezone
-                        })
-                    }
-                    disabled={saving}
-                />
-            ) : (
-                <div className="space-y-2">
-                    <Label htmlFor="event-trigger">Event Trigger</Label>
-                    <Select
-                        value={formData.event_trigger_type}
-                        onValueChange={(value) => setFormData({ ...formData, event_trigger_type: value })}
+                        Next →
+                    </Button>
+                ) : (
+                    <Button
+                        onClick={() => isEditing ? (editingTask && handleUpdateTask(editingTask)) : handleCreateTask()}
+                        disabled={saving}
+                        className="flex items-center gap-2"
                     >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select an event trigger" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {EVENT_TRIGGER_TYPES.map((trigger) => (
-                                <SelectItem key={trigger.value} value={trigger.value}>
-                                    <div className="flex items-center gap-2">
-                                        <trigger.icon className="h-4 w-4" />
-                                        {trigger.label}
-                                    </div>
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            )}
-
-            <ToolSelector
-                agentId={agentId}
-                selectedTools={formData.selected_tools}
-                onToolSelectionChange={(selectedTools) => 
-                    setFormData({
-                        ...formData,
-                        selected_tools: selectedTools
-                    })
-                }
-                disabled={saving}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="start-date">Start Date (Optional)</Label>
-                    <Input
-                        id="start-date"
-                        type="date"
-                        value={formData.start_date}
-                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    />
-                </div>
-                
-                <div className="space-y-2">
-                    <Label htmlFor="end-date">End Date (Optional)</Label>
-                    <Input
-                        id="end-date"
-                        type="date"
-                        value={formData.end_date}
-                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    />
-                </div>
-            </div>
-
-            <div className="space-y-2">
-                <Label htmlFor="max-executions">Max Executions (Optional)</Label>
-                <Input
-                    id="max-executions"
-                    type="number"
-                    min="1"
-                    value={formData.max_executions || ''}
-                    onChange={(e) => setFormData({ 
-                        ...formData, 
-                        max_executions: e.target.value ? parseInt(e.target.value) : undefined 
-                    })}
-                    placeholder="Leave empty for unlimited"
-                />
-                <p className="text-sm text-muted-foreground">
-                    Maximum number of times this task should execute
-                </p>
+                        {saving ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                {isEditing ? 'Updating...' : 'Creating...'}
+                            </>
+                        ) : (
+                            <>
+                                {isEditing ? 'Update Task' : 'Create Task'}
+                            </>
+                        )}
+                    </Button>
+                )}
             </div>
         </div>
     );
@@ -560,18 +711,11 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
                             </DialogHeader>
                             <TaskForm />
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => setShowCreateDialog(false)} disabled={saving}>
+                                <Button variant="outline" onClick={() => {
+                                    setShowCreateDialog(false);
+                                    resetForm();
+                                }} disabled={saving}>
                                     Cancel
-                                </Button>
-                                <Button onClick={handleCreateTask} disabled={saving}>
-                                    {saving ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                            Creating...
-                                        </>
-                                    ) : (
-                                        'Create Task'
-                                    )}
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
@@ -745,18 +889,11 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
                         </DialogHeader>
                         <TaskForm isEditing={true} />
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setEditingTask(null)} disabled={saving}>
+                            <Button variant="outline" onClick={() => {
+                                setEditingTask(null);
+                                resetForm();
+                            }} disabled={saving}>
                                 Cancel
-                            </Button>
-                            <Button onClick={() => editingTask && handleUpdateTask(editingTask)} disabled={saving}>
-                                {saving ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        Updating...
-                                    </>
-                                ) : (
-                                    'Update Task'
-                                )}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

@@ -111,7 +111,7 @@ export const ScheduleSelector: React.FC<ScheduleSelectorProps> = ({
     onScheduleChange,
     disabled = false
 }) => {
-    const [selectedTab, setSelectedTab] = useState<'presets' | 'custom' | 'advanced'>('presets');
+    const [selectedTab, setSelectedTab] = useState<'presets' | 'custom' | 'advanced'>('custom');
     const [customSchedule, setCustomSchedule] = useState({
         minute: '0',
         hour: '9',
@@ -255,39 +255,10 @@ export const ScheduleSelector: React.FC<ScheduleSelectorProps> = ({
                 {/* Schedule Configuration Tabs */}
                 <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as any)}>
                     <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="presets">Presets</TabsTrigger>
-                        <TabsTrigger value="custom">Custom</TabsTrigger>
+                        <TabsTrigger value="custom">Schedule</TabsTrigger>
+                        <TabsTrigger value="presets">Quick Options</TabsTrigger>
                         <TabsTrigger value="advanced">Advanced</TabsTrigger>
                     </TabsList>
-
-                    <TabsContent value="presets" className="space-y-4">
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-medium mb-2">Common Intervals</h4>
-                                {renderPresetSchedules('common')}
-                            </div>
-                            
-                            <div>
-                                <h4 className="text-sm font-medium mb-2">Hourly</h4>
-                                {renderPresetSchedules('hourly')}
-                            </div>
-                            
-                            <div>
-                                <h4 className="text-sm font-medium mb-2">Daily</h4>
-                                {renderPresetSchedules('daily')}
-                            </div>
-                            
-                            <div>
-                                <h4 className="text-sm font-medium mb-2">Weekly</h4>
-                                {renderPresetSchedules('weekly')}
-                            </div>
-                            
-                            <div>
-                                <h4 className="text-sm font-medium mb-2">Monthly</h4>
-                                {renderPresetSchedules('monthly')}
-                            </div>
-                        </div>
-                    </TabsContent>
 
                     <TabsContent value="custom" className="space-y-4">
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -371,6 +342,35 @@ export const ScheduleSelector: React.FC<ScheduleSelectorProps> = ({
                                 Use * for "any", ranges like 1-5, lists like 1,3,5, or intervals like */15
                             </AlertDescription>
                         </Alert>
+                    </TabsContent>
+
+                    <TabsContent value="presets" className="space-y-4">
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="text-sm font-medium mb-2">Common Intervals</h4>
+                                {renderPresetSchedules('common')}
+                            </div>
+                            
+                            <div>
+                                <h4 className="text-sm font-medium mb-2">Hourly</h4>
+                                {renderPresetSchedules('hourly')}
+                            </div>
+                            
+                            <div>
+                                <h4 className="text-sm font-medium mb-2">Daily</h4>
+                                {renderPresetSchedules('daily')}
+                            </div>
+                            
+                            <div>
+                                <h4 className="text-sm font-medium mb-2">Weekly</h4>
+                                {renderPresetSchedules('weekly')}
+                            </div>
+                            
+                            <div>
+                                <h4 className="text-sm font-medium mb-2">Monthly</h4>
+                                {renderPresetSchedules('monthly')}
+                            </div>
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="advanced" className="space-y-4">

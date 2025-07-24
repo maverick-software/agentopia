@@ -318,6 +318,14 @@ const AgentEditPage = () => {
                         </CardContent>
                     </Card>
 
+                    {/* Channels (Communication) - Moved from right column */}
+                    <AgentIntegrationsManager 
+                        agentId={agentId!} 
+                        category="channel"
+                        title="Channels"
+                        description="Connect communication channels to this agent"
+                    />
+
                     <Card>
                         <CardHeader className="pb-3 flex flex-row items-center justify-between">
                             <div>
@@ -368,12 +376,10 @@ const AgentEditPage = () => {
 
                 <div className="space-y-6">
 
-                    {/* Channels (Communication) */}
-                    <AgentIntegrationsManager 
+                    {/* Agent Tasks - Moved to top of right column */}
+                    <AgentTasksManager 
                         agentId={agentId!} 
-                        category="channel"
-                        title="Channels"
-                        description="Connect communication channels to this agent"
+                        userId={user?.id!} 
                     />
 
                     {/* Tools */}
@@ -383,36 +389,6 @@ const AgentEditPage = () => {
                         title="Tools"
                         description="Connect external tools and services to this agent"
                     />
-
-                    {/* Tool Execution History */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Tool Execution History</CardTitle>
-                            <CardDescription>View recent tool executions and their results</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ToolExecutionHistory 
-                                agentId={agentId!}
-                                showFilters={true}
-                                showExport={true}
-                                maxItems={50}
-                            />
-                        </CardContent>
-                    </Card>
-
-                    {/* Agent Tasks */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Agent Tasks</CardTitle>
-                            <CardDescription>Create and manage scheduled and event-based tasks for your agent</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <AgentTasksManager 
-                                agentId={agentId!}
-                                userId={user?.id!}
-                            />
-                        </CardContent>
-                    </Card>
 
                     <Card>
                         <CardHeader className="pb-3">
@@ -451,9 +427,24 @@ const AgentEditPage = () => {
                         </CardContent>
                     </Card>
 
-
                 </div>
             </div>
+
+            {/* Tool Execution History - Moved to bottom, full width */}
+            <Card className="w-full">
+                <CardHeader>
+                    <CardTitle>Tool Execution History</CardTitle>
+                    <CardDescription>View recent tool executions and their results</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ToolExecutionHistory 
+                        agentId={agentId!}
+                        showFilters={true}
+                        showExport={true}
+                        maxItems={50}
+                    />
+                </CardContent>
+            </Card>
 
             <div className="pt-4 mt-6 border-t border-border sm:hidden">
                 <Button 
