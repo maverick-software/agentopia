@@ -135,15 +135,23 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
     const fetchTasks = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`/functions/v1/agent-tasks?agent_id=${agentId}`, {
+            
+            // For GET requests with query parameters, use direct fetch approach
+            const { data: session } = await supabase.auth.getSession();
+            if (!session?.session?.access_token) {
+                throw new Error('No authenticated session');
+            }
+
+            const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-tasks?agent_id=${agentId}`, {
+                method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                    'Authorization': `Bearer ${session.session.access_token}`,
                     'Content-Type': 'application/json',
-                },
+                }
             });
 
             if (!response.ok) {
-                throw new Error('Failed to fetch tasks');
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
@@ -166,18 +174,15 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
                 selected_tools: formData.selected_tools,
             };
 
-            const response = await fetch('/functions/v1/agent-tasks', {
-                method: 'POST',
+            const { data: result, error } = await supabase.functions.invoke('agent-tasks', {
+                body: taskData,
                 headers: {
-                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
                     'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(taskData),
+                }
             });
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to create task');
+            if (error) {
+                throw new Error(error.message || 'Failed to create task');
             }
 
             toast.success('Task created successfully');
@@ -277,22 +282,20 @@ export const AgentTasksManager: React.FC<AgentTasksManagerProps> = ({ agentId, a
 
     const handleRunTaskNow = async (taskId: string) => {
         try {
-            const response = await fetch('/functions/v1/task-executor', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
+            const { data, error } = await supabase.functions.invoke('task-executor', {
+                body: {
                     action: 'execute_task',
                     task_id: taskId,
                     trigger_type: 'manual',
                     trigger_data: {}
-                }),
+                },
+                headers: {
+                    'Content-Type': 'application/json',
+                }
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to execute task');
+            if (error) {
+                throw new Error(error.message || 'Failed to execute task');
             }
 
             toast.success('Task executed successfully');

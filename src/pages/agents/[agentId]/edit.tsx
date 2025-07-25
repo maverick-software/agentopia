@@ -531,13 +531,29 @@ const AgentEditPage = () => {
                            availableDatastores={availableDatastores}
                            selectedVectorStore={selectedVectorStore}
                            selectedKnowledgeStore={selectedKnowledgeStore}
-                           onSelectDatastore={() => {}}
-                            onConnectDatastores={async () => {
-                                setShowDatastoreModal(false);
-                                toast("Datastores connected!");
-                            }}
-                           loadingAvailable={false}
+                           onSelectDatastore={(type, value) => {
+                               if (type === 'vector') {
+                                   setSelectedVectorStore(value);
+                               } else {
+                                   setSelectedKnowledgeStore(value);
+                               }
+                           }}
+                           onConnectDatastores={async () => {
+                               // Save the datastore connections here
+                               toast.success("Datastore connections updated!");
+                           }}
+                           loadingAvailable={loading}
                            connecting={false}
+                           onDatastoresUpdated={async () => {
+                               // Refresh available datastores
+                               const { data: stores, error: dsError } = await supabase
+                                   .from('datastores')
+                                   .select('*')
+                                   .eq('user_id', user.id);
+                               if (!dsError) {
+                                   setAvailableDatastores(stores || []);
+                               }
+                           }}
                        />
                     </div>
 
