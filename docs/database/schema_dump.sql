@@ -19,7 +19,7 @@ CREATE EXTENSION IF NOT EXISTS "pgsodium";
 
 
 
-COMMENT ON SCHEMA "public" IS 'standard public schema';
+COMMENT ON SCHEMA "public" IS 'Cleaned up all database objects from the failed custom Vault implementation.';
 
 
 
@@ -181,6 +181,20 @@ CREATE TYPE "public"."droplet_status_enum" AS ENUM (
 ALTER TYPE "public"."droplet_status_enum" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."event_trigger_type_enum" AS ENUM (
+    'email_received',
+    'integration_webhook',
+    'time_based',
+    'manual',
+    'agent_mentioned',
+    'file_uploaded',
+    'workspace_message'
+);
+
+
+ALTER TYPE "public"."event_trigger_type_enum" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."integration_agent_classification_enum" AS ENUM (
     'tool',
     'channel'
@@ -226,6 +240,39 @@ CREATE TYPE "public"."room_member_details" AS (
 ALTER TYPE "public"."room_member_details" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."task_execution_status_enum" AS ENUM (
+    'pending',
+    'running',
+    'completed',
+    'failed',
+    'cancelled'
+);
+
+
+ALTER TYPE "public"."task_execution_status_enum" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."task_status_enum" AS ENUM (
+    'active',
+    'paused',
+    'completed',
+    'failed',
+    'cancelled'
+);
+
+
+ALTER TYPE "public"."task_status_enum" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."task_type_enum" AS ENUM (
+    'scheduled',
+    'event_based'
+);
+
+
+ALTER TYPE "public"."task_type_enum" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."tool_installation_status_enum" AS ENUM (
     'pending_install',
     'installing',
@@ -253,6 +300,21 @@ CREATE TYPE "public"."tool_packaging_type_enum" AS ENUM (
 
 
 ALTER TYPE "public"."tool_packaging_type_enum" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."calculate_next_run_time"("cron_expr" "text", "timezone_name" "text" DEFAULT 'UTC'::"text", "from_time" timestamp with time zone DEFAULT "now"()) RETURNS timestamp with time zone
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    -- This is a placeholder. In practice, you'd implement proper cron parsing
+    -- or call out to a function that uses a cron library
+    -- For now, we'll return a simple future time
+    RETURN from_time + INTERVAL '1 hour';
+END;
+$$;
+
+
+ALTER FUNCTION "public"."calculate_next_run_time"("cron_expr" "text", "timezone_name" "text", "from_time" timestamp with time zone) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."can_manage_chat_room_members"("p_room_id" "uuid", "p_user_id" "uuid") RETURNS boolean
@@ -293,17 +355,19 @@ $$;
 ALTER FUNCTION "public"."can_manage_workspace_members"("p_workspace_id" "uuid", "p_user_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."create_vault_secret"("secret_value" "text", "name" "text" DEFAULT NULL::"text", "description" "text" DEFAULT NULL::"text") RETURNS "uuid"
-    LANGUAGE "sql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "public"."create_vault_secret"("p_secret" "text", "p_name" "text", "p_description" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
-    SELECT vault.create_secret(secret_value, name, description);
+BEGIN
+    RETURN vault.create_secret(secret := p_secret, name := p_name, description := p_description);
+END;
 $$;
 
 
-ALTER FUNCTION "public"."create_vault_secret"("secret_value" "text", "name" "text", "description" "text") OWNER TO "postgres";
+ALTER FUNCTION "public"."create_vault_secret"("p_secret" "text", "p_name" "text", "p_description" "text") OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "public"."create_vault_secret"("secret_value" "text", "name" "text", "description" "text") IS 'Creates a new secret in Supabase Vault and returns its UUID. Inputs: secret_value, optional name, optional description.';
+COMMENT ON FUNCTION "public"."create_vault_secret"("p_secret" "text", "p_name" "text", "p_description" "text") IS 'A public RPC wrapper for vault.create_secret.';
 
 
 
@@ -918,6 +982,27 @@ $$;
 
 
 ALTER FUNCTION "public"."get_user_organization_role"("user_id" "uuid", "org_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_vault_secrets_by_names"("p_secret_names" "text"[]) RETURNS TABLE("id" "uuid", "name" "text", "decrypted_secret" "text")
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'vault', 'public'
+    AS $$
+    SELECT
+        s.id,
+        s.name,
+        ds.decrypted_secret
+    FROM vault.secrets s
+    JOIN vault.decrypted_secrets ds ON s.id = ds.id
+    WHERE s.name = ANY(p_secret_names);
+$$;
+
+
+ALTER FUNCTION "public"."get_vault_secrets_by_names"("p_secret_names" "text"[]) OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."get_vault_secrets_by_names"("p_secret_names" "text"[]) IS 'Retrieves decrypted secrets from the Vault by their unique names.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."get_workspace_id_for_channel"("p_channel_id" "uuid") RETURNS "uuid"
@@ -1757,6 +1842,22 @@ $$;
 ALTER FUNCTION "public"."update_user_oauth_connections_updated_at"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."update_vault_secret"("p_secret_id" "uuid", "p_new_secret" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+    PERFORM vault.update_secret(id := p_secret_id, secret := p_new_secret);
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_vault_secret"("p_secret_id" "uuid", "p_new_secret" "text") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."update_vault_secret"("p_secret_id" "uuid", "p_new_secret" "text") IS 'A public RPC wrapper for vault.update_secret.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."update_worker_status"("connection_id_in" "uuid", "new_status_in" "text") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -2120,6 +2221,123 @@ COMMENT ON TABLE "public"."agent_oauth_permissions" IS 'Agent permissions to acc
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."agent_task_event_triggers" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "task_id" "uuid" NOT NULL,
+    "trigger_type" "public"."event_trigger_type_enum" NOT NULL,
+    "trigger_name" "text" NOT NULL,
+    "trigger_config" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+    "is_active" boolean DEFAULT true,
+    "last_triggered_at" timestamp with time zone,
+    "trigger_count" integer DEFAULT 0,
+    "conditions" "jsonb" DEFAULT '{}'::"jsonb",
+    "cooldown_minutes" integer DEFAULT 0,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "cooldown_non_negative" CHECK (("cooldown_minutes" >= 0))
+);
+
+
+ALTER TABLE "public"."agent_task_event_triggers" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."agent_task_event_triggers" IS 'Defines event triggers for event-based tasks';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."agent_task_executions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "task_id" "uuid" NOT NULL,
+    "agent_id" "uuid" NOT NULL,
+    "status" "public"."task_execution_status_enum" DEFAULT 'pending'::"public"."task_execution_status_enum" NOT NULL,
+    "trigger_type" "text" NOT NULL,
+    "trigger_data" "jsonb" DEFAULT '{}'::"jsonb",
+    "instructions_used" "text" NOT NULL,
+    "tools_used" "jsonb" DEFAULT '[]'::"jsonb",
+    "started_at" timestamp with time zone,
+    "completed_at" timestamp with time zone,
+    "duration_ms" integer,
+    "output" "text",
+    "tool_outputs" "jsonb" DEFAULT '[]'::"jsonb",
+    "error_message" "text",
+    "metadata" "jsonb" DEFAULT '{}'::"jsonb",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "valid_duration" CHECK (((("status" = 'completed'::"public"."task_execution_status_enum") AND ("started_at" IS NOT NULL) AND ("completed_at" IS NOT NULL) AND ("duration_ms" IS NOT NULL)) OR ("status" <> 'completed'::"public"."task_execution_status_enum"))),
+    CONSTRAINT "valid_timing" CHECK ((("started_at" IS NULL) OR ("completed_at" IS NULL) OR ("started_at" <= "completed_at")))
+);
+
+
+ALTER TABLE "public"."agent_task_executions" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."agent_task_executions" IS 'Tracks individual executions of agent tasks';
+
+
+
+COMMENT ON COLUMN "public"."agent_task_executions"."trigger_data" IS 'Data about what triggered this execution (e.g., email content, webhook payload)';
+
+
+
+COMMENT ON COLUMN "public"."agent_task_executions"."tool_outputs" IS 'Outputs from each tool that was used during execution';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."agent_tasks" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "agent_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "description" "text",
+    "task_type" "public"."task_type_enum" DEFAULT 'scheduled'::"public"."task_type_enum" NOT NULL,
+    "status" "public"."task_status_enum" DEFAULT 'active'::"public"."task_status_enum" NOT NULL,
+    "instructions" "text" NOT NULL,
+    "selected_tools" "jsonb" DEFAULT '[]'::"jsonb",
+    "cron_expression" "text",
+    "timezone" "text" DEFAULT 'UTC'::"text",
+    "next_run_at" timestamp with time zone,
+    "last_run_at" timestamp with time zone,
+    "event_trigger_type" "public"."event_trigger_type_enum",
+    "event_trigger_config" "jsonb" DEFAULT '{}'::"jsonb",
+    "total_executions" integer DEFAULT 0,
+    "successful_executions" integer DEFAULT 0,
+    "failed_executions" integer DEFAULT 0,
+    "max_executions" integer,
+    "start_date" timestamp with time zone,
+    "end_date" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid",
+    CONSTRAINT "max_executions_positive" CHECK ((("max_executions" IS NULL) OR ("max_executions" > 0))),
+    CONSTRAINT "valid_cron_for_scheduled" CHECK (((("task_type" = 'scheduled'::"public"."task_type_enum") AND ("cron_expression" IS NOT NULL)) OR ("task_type" = 'event_based'::"public"."task_type_enum"))),
+    CONSTRAINT "valid_date_range" CHECK ((("start_date" IS NULL) OR ("end_date" IS NULL) OR ("start_date" < "end_date"))),
+    CONSTRAINT "valid_event_for_event_based" CHECK (((("task_type" = 'event_based'::"public"."task_type_enum") AND ("event_trigger_type" IS NOT NULL)) OR ("task_type" = 'scheduled'::"public"."task_type_enum")))
+);
+
+
+ALTER TABLE "public"."agent_tasks" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."agent_tasks" IS 'Stores scheduled and event-based tasks for agents';
+
+
+
+COMMENT ON COLUMN "public"."agent_tasks"."instructions" IS 'The prompt/instructions that will be given to the agent when the task executes';
+
+
+
+COMMENT ON COLUMN "public"."agent_tasks"."selected_tools" IS 'Array of tool IDs that the agent is allowed to use for this specific task';
+
+
+
+COMMENT ON COLUMN "public"."agent_tasks"."cron_expression" IS 'Cron expression for scheduled tasks (required for scheduled tasks)';
+
+
+
+COMMENT ON COLUMN "public"."agent_tasks"."event_trigger_config" IS 'Configuration specific to the event trigger type';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."agent_tool_capability_permissions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "agent_toolbelt_item_id" "uuid" NOT NULL,
@@ -2270,6 +2488,23 @@ COMMENT ON COLUMN "public"."datastores"."similarity_threshold" IS 'Minimum simil
 
 
 COMMENT ON COLUMN "public"."datastores"."max_results" IS 'Maximum number of results to return from similarity search';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."gmail_configurations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_oauth_connection_id" "uuid" NOT NULL,
+    "security_settings" "jsonb",
+    "rate_limit_settings" "jsonb",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."gmail_configurations" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."gmail_configurations" IS 'Stores user-specific configurations for the Gmail integration.';
 
 
 
@@ -2713,7 +2948,6 @@ CREATE TABLE IF NOT EXISTS "public"."user_oauth_connections" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "encrypted_access_token" "text",
     "encrypted_refresh_token" "text",
-    CONSTRAINT "chk_oauth_token_consistency" CHECK (((("connection_status" = 'active'::"text") AND (("vault_access_token_id" IS NOT NULL) OR ("encrypted_access_token" IS NOT NULL))) OR ("connection_status" <> 'active'::"text"))),
     CONSTRAINT "user_oauth_connections_connection_status_check" CHECK (("connection_status" = ANY (ARRAY['active'::"text", 'expired'::"text", 'revoked'::"text", 'error'::"text"])))
 );
 
@@ -2721,7 +2955,7 @@ CREATE TABLE IF NOT EXISTS "public"."user_oauth_connections" (
 ALTER TABLE "public"."user_oauth_connections" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."user_oauth_connections" IS 'User-specific OAuth provider connections with credential storage';
+COMMENT ON TABLE "public"."user_oauth_connections" IS 'Legacy token consistency check removed to support the new Vault-based token storage system.';
 
 
 
@@ -2936,6 +3170,21 @@ ALTER TABLE ONLY "public"."agent_oauth_permissions"
 
 
 
+ALTER TABLE ONLY "public"."agent_task_event_triggers"
+    ADD CONSTRAINT "agent_task_event_triggers_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."agent_task_executions"
+    ADD CONSTRAINT "agent_task_executions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."agent_tasks"
+    ADD CONSTRAINT "agent_tasks_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."agent_tool_capability_permissions"
     ADD CONSTRAINT "agent_tool_capability_permissions_pkey" PRIMARY KEY ("id");
 
@@ -2978,6 +3227,11 @@ ALTER TABLE ONLY "public"."workspaces"
 
 ALTER TABLE ONLY "public"."datastores"
     ADD CONSTRAINT "datastores_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."gmail_configurations"
+    ADD CONSTRAINT "gmail_configurations_pkey" PRIMARY KEY ("id");
 
 
 
@@ -3283,6 +3537,62 @@ CREATE INDEX "idx_agent_droplets_status" ON "public"."agent_droplets" USING "btr
 
 
 CREATE INDEX "idx_agent_oauth_permissions_agent_id" ON "public"."agent_oauth_permissions" USING "btree" ("agent_id") WHERE ("is_active" = true);
+
+
+
+CREATE INDEX "idx_agent_task_event_triggers_is_active" ON "public"."agent_task_event_triggers" USING "btree" ("is_active");
+
+
+
+CREATE INDEX "idx_agent_task_event_triggers_last_triggered_at" ON "public"."agent_task_event_triggers" USING "btree" ("last_triggered_at");
+
+
+
+CREATE INDEX "idx_agent_task_event_triggers_task_id" ON "public"."agent_task_event_triggers" USING "btree" ("task_id");
+
+
+
+CREATE INDEX "idx_agent_task_event_triggers_trigger_type" ON "public"."agent_task_event_triggers" USING "btree" ("trigger_type");
+
+
+
+CREATE INDEX "idx_agent_task_executions_agent_id" ON "public"."agent_task_executions" USING "btree" ("agent_id");
+
+
+
+CREATE INDEX "idx_agent_task_executions_created_at" ON "public"."agent_task_executions" USING "btree" ("created_at");
+
+
+
+CREATE INDEX "idx_agent_task_executions_status" ON "public"."agent_task_executions" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_agent_task_executions_task_id" ON "public"."agent_task_executions" USING "btree" ("task_id");
+
+
+
+CREATE INDEX "idx_agent_tasks_agent_id" ON "public"."agent_tasks" USING "btree" ("agent_id");
+
+
+
+CREATE INDEX "idx_agent_tasks_event_trigger_type" ON "public"."agent_tasks" USING "btree" ("event_trigger_type") WHERE ("task_type" = 'event_based'::"public"."task_type_enum");
+
+
+
+CREATE INDEX "idx_agent_tasks_next_run_at" ON "public"."agent_tasks" USING "btree" ("next_run_at") WHERE (("status" = 'active'::"public"."task_status_enum") AND ("task_type" = 'scheduled'::"public"."task_type_enum"));
+
+
+
+CREATE INDEX "idx_agent_tasks_status" ON "public"."agent_tasks" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_agent_tasks_task_type" ON "public"."agent_tasks" USING "btree" ("task_type");
+
+
+
+CREATE INDEX "idx_agent_tasks_user_id" ON "public"."agent_tasks" USING "btree" ("user_id");
 
 
 
@@ -3650,6 +3960,18 @@ CREATE OR REPLACE TRIGGER "update_admin_operation_logs_updated_at" BEFORE UPDATE
 
 
 
+CREATE OR REPLACE TRIGGER "update_agent_task_event_triggers_updated_at" BEFORE UPDATE ON "public"."agent_task_event_triggers" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "update_agent_task_executions_updated_at" BEFORE UPDATE ON "public"."agent_task_executions" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "update_agent_tasks_updated_at" BEFORE UPDATE ON "public"."agent_tasks" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
 CREATE OR REPLACE TRIGGER "update_agents_updated_at" BEFORE UPDATE ON "public"."agents" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
 
 
@@ -3730,6 +4052,36 @@ ALTER TABLE ONLY "public"."agent_oauth_permissions"
 
 
 
+ALTER TABLE ONLY "public"."agent_task_event_triggers"
+    ADD CONSTRAINT "agent_task_event_triggers_task_id_fkey" FOREIGN KEY ("task_id") REFERENCES "public"."agent_tasks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."agent_task_executions"
+    ADD CONSTRAINT "agent_task_executions_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."agent_task_executions"
+    ADD CONSTRAINT "agent_task_executions_task_id_fkey" FOREIGN KEY ("task_id") REFERENCES "public"."agent_tasks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."agent_tasks"
+    ADD CONSTRAINT "agent_tasks_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."agent_tasks"
+    ADD CONSTRAINT "agent_tasks_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."agent_tasks"
+    ADD CONSTRAINT "agent_tasks_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."agent_tool_capability_permissions"
     ADD CONSTRAINT "agent_tool_capability_permissions_agent_toolbelt_item_id_fkey" FOREIGN KEY ("agent_toolbelt_item_id") REFERENCES "public"."agent_toolbelt_items"("id") ON DELETE CASCADE;
 
@@ -3792,6 +4144,11 @@ ALTER TABLE ONLY "public"."workspaces"
 
 ALTER TABLE ONLY "public"."datastores"
     ADD CONSTRAINT "datastores_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."gmail_configurations"
+    ADD CONSTRAINT "gmail_configurations_user_oauth_connection_id_fkey" FOREIGN KEY ("user_oauth_connection_id") REFERENCES "public"."user_oauth_connections"("id") ON DELETE CASCADE;
 
 
 
@@ -4161,6 +4518,16 @@ CREATE POLICY "Allow users to insert their own messages" ON "public"."chat_messa
 
 
 
+CREATE POLICY "Allow users to manage their own gmail configurations" ON "public"."gmail_configurations" USING (("auth"."uid"() = ( SELECT "user_oauth_connections"."user_id"
+   FROM "public"."user_oauth_connections"
+  WHERE ("user_oauth_connections"."id" = "gmail_configurations"."user_oauth_connection_id"))));
+
+
+
+COMMENT ON POLICY "Allow users to manage their own gmail configurations" ON "public"."gmail_configurations" IS 'Users can manage their own Gmail configurations based on the ownership of the related OAuth connection.';
+
+
+
 CREATE POLICY "Allow users to read their own messages and agent messages" ON "public"."chat_messages" FOR SELECT USING ((("auth"."uid"() = "sender_user_id") OR ("sender_agent_id" IS NOT NULL)));
 
 
@@ -4311,11 +4678,21 @@ CREATE POLICY "Service roles can manage tool catalog" ON "public"."tool_catalog"
 
 
 
+CREATE POLICY "System can manage task executions" ON "public"."agent_task_executions" USING (true);
+
+
+
 CREATE POLICY "Users can create datastores" ON "public"."datastores" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
 CREATE POLICY "Users can create organizations" ON "public"."organizations" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Users can create tasks for their own agents" ON "public"."agent_tasks" FOR INSERT WITH CHECK ((("user_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."agents"
+  WHERE (("agents"."id" = "agent_tasks"."agent_id") AND ("agents"."user_id" = "auth"."uid"()))))));
 
 
 
@@ -4332,6 +4709,10 @@ CREATE POLICY "Users can delete own datastores" ON "public"."datastores" FOR DEL
 
 
 CREATE POLICY "Users can delete their own OAuth connections" ON "public"."user_oauth_connections" FOR DELETE TO "authenticated" USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "Users can delete their own agent tasks" ON "public"."agent_tasks" FOR DELETE USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -4395,6 +4776,12 @@ CREATE POLICY "Users can manage their own account tool environment" ON "public".
 
 
 
+CREATE POLICY "Users can manage their own task event triggers" ON "public"."agent_task_event_triggers" USING ((EXISTS ( SELECT 1
+   FROM "public"."agent_tasks"
+  WHERE (("agent_tasks"."id" = "agent_task_event_triggers"."task_id") AND ("agent_tasks"."user_id" = "auth"."uid"())))));
+
+
+
 CREATE POLICY "Users can manage toolbelt items for their agents" ON "public"."agent_toolbelt_items" USING (("auth"."uid"() = ( SELECT "agents"."user_id"
    FROM "public"."agents"
   WHERE ("agents"."id" = "agent_toolbelt_items"."agent_id")))) WITH CHECK (("auth"."uid"() = ( SELECT "agents"."user_id"
@@ -4435,6 +4822,10 @@ CREATE POLICY "Users can update their own OAuth connections" ON "public"."user_o
 
 
 
+CREATE POLICY "Users can update their own agent tasks" ON "public"."agent_tasks" FOR UPDATE USING (("user_id" = "auth"."uid"()));
+
+
+
 CREATE POLICY "Users can update their own profile" ON "public"."profiles" FOR UPDATE TO "authenticated" USING (("auth"."uid"() = "id")) WITH CHECK (("auth"."uid"() = "id"));
 
 
@@ -4463,7 +4854,23 @@ CREATE POLICY "Users can view their own OAuth connections" ON "public"."user_oau
 
 
 
+CREATE POLICY "Users can view their own agent tasks" ON "public"."agent_tasks" FOR SELECT USING (("user_id" = "auth"."uid"()));
+
+
+
 CREATE POLICY "Users can view their own profile" ON "public"."profiles" FOR SELECT TO "authenticated" USING (("auth"."uid"() = "id"));
+
+
+
+CREATE POLICY "Users can view their own task event triggers" ON "public"."agent_task_event_triggers" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."agent_tasks"
+  WHERE (("agent_tasks"."id" = "agent_task_event_triggers"."task_id") AND ("agent_tasks"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "Users can view their own task executions" ON "public"."agent_task_executions" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."agent_tasks"
+  WHERE (("agent_tasks"."id" = "agent_task_executions"."task_id") AND ("agent_tasks"."user_id" = "auth"."uid"())))));
 
 
 
@@ -4486,6 +4893,15 @@ ALTER TABLE "public"."agent_datastores" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."agent_oauth_permissions" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."agent_task_event_triggers" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."agent_task_executions" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."agent_tasks" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."agent_tool_capability_permissions" ENABLE ROW LEVEL SECURITY;
 
 
@@ -4505,6 +4921,9 @@ ALTER TABLE "public"."chat_messages" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."datastores" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."gmail_configurations" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."gmail_operation_logs" ENABLE ROW LEVEL SECURITY;
@@ -5053,6 +5472,12 @@ GRANT ALL ON FUNCTION "public"."binary_quantize"("public"."vector") TO "service_
 
 
 
+GRANT ALL ON FUNCTION "public"."calculate_next_run_time"("cron_expr" "text", "timezone_name" "text", "from_time" timestamp with time zone) TO "anon";
+GRANT ALL ON FUNCTION "public"."calculate_next_run_time"("cron_expr" "text", "timezone_name" "text", "from_time" timestamp with time zone) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."calculate_next_run_time"("cron_expr" "text", "timezone_name" "text", "from_time" timestamp with time zone) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."can_manage_chat_room_members"("p_room_id" "uuid", "p_user_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."can_manage_chat_room_members"("p_room_id" "uuid", "p_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."can_manage_chat_room_members"("p_room_id" "uuid", "p_user_id" "uuid") TO "service_role";
@@ -5086,9 +5511,9 @@ GRANT ALL ON FUNCTION "public"."cosine_distance"("public"."vector", "public"."ve
 
 
 
-GRANT ALL ON FUNCTION "public"."create_vault_secret"("secret_value" "text", "name" "text", "description" "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."create_vault_secret"("secret_value" "text", "name" "text", "description" "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."create_vault_secret"("secret_value" "text", "name" "text", "description" "text") TO "service_role";
+GRANT ALL ON FUNCTION "public"."create_vault_secret"("p_secret" "text", "p_name" "text", "p_description" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."create_vault_secret"("p_secret" "text", "p_name" "text", "p_description" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."create_vault_secret"("p_secret" "text", "p_name" "text", "p_description" "text") TO "service_role";
 
 
 
@@ -5221,6 +5646,12 @@ GRANT ALL ON FUNCTION "public"."get_user_oauth_connections"("p_user_id" "uuid") 
 GRANT ALL ON FUNCTION "public"."get_user_organization_role"("user_id" "uuid", "org_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_user_organization_role"("user_id" "uuid", "org_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_user_organization_role"("user_id" "uuid", "org_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_vault_secrets_by_names"("p_secret_names" "text"[]) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_vault_secrets_by_names"("p_secret_names" "text"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_vault_secrets_by_names"("p_secret_names" "text"[]) TO "service_role";
 
 
 
@@ -5779,6 +6210,12 @@ GRANT ALL ON FUNCTION "public"."update_user_oauth_connections_updated_at"() TO "
 
 
 
+GRANT ALL ON FUNCTION "public"."update_vault_secret"("p_secret_id" "uuid", "p_new_secret" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."update_vault_secret"("p_secret_id" "uuid", "p_new_secret" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_vault_secret"("p_secret_id" "uuid", "p_new_secret" "text") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."update_worker_status"("connection_id_in" "uuid", "new_status_in" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."update_worker_status"("connection_id_in" "uuid", "new_status_in" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_worker_status"("connection_id_in" "uuid", "new_status_in" "text") TO "service_role";
@@ -6028,6 +6465,24 @@ GRANT ALL ON TABLE "public"."agent_oauth_permissions" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."agent_task_event_triggers" TO "anon";
+GRANT ALL ON TABLE "public"."agent_task_event_triggers" TO "authenticated";
+GRANT ALL ON TABLE "public"."agent_task_event_triggers" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."agent_task_executions" TO "anon";
+GRANT ALL ON TABLE "public"."agent_task_executions" TO "authenticated";
+GRANT ALL ON TABLE "public"."agent_task_executions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."agent_tasks" TO "anon";
+GRANT ALL ON TABLE "public"."agent_tasks" TO "authenticated";
+GRANT ALL ON TABLE "public"."agent_tasks" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."agent_tool_capability_permissions" TO "anon";
 GRANT ALL ON TABLE "public"."agent_tool_capability_permissions" TO "authenticated";
 GRANT ALL ON TABLE "public"."agent_tool_capability_permissions" TO "service_role";
@@ -6061,6 +6516,12 @@ GRANT ALL ON TABLE "public"."agents" TO "service_role";
 GRANT ALL ON TABLE "public"."datastores" TO "anon";
 GRANT ALL ON TABLE "public"."datastores" TO "authenticated";
 GRANT ALL ON TABLE "public"."datastores" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."gmail_configurations" TO "anon";
+GRANT ALL ON TABLE "public"."gmail_configurations" TO "authenticated";
+GRANT ALL ON TABLE "public"."gmail_configurations" TO "service_role";
 
 
 

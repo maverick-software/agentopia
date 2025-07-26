@@ -461,7 +461,7 @@ export function AgentEdit() {
                 {/* Vector Datastore Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Vector Datastore (Pinecone)
+                    Vector Datastore
                   </label>
                   <select
                     value={selectedDatastores.vector || ''}
@@ -484,7 +484,7 @@ export function AgentEdit() {
                 {/* Knowledge Graph Datastore Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Knowledge Graph (GetZep)
+                    Knowledge Graph
                   </label>
                   <select
                     value={selectedDatastores.knowledge || ''}

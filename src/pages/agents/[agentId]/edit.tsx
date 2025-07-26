@@ -101,7 +101,19 @@ const AgentEditPage = () => {
                     .select('*')
                     .eq('user_id', user.id);
                 if (dsError) console.error("Error fetching datastores:", dsError);
-                else setAvailableDatastores(stores || []);
+                else {
+                    setAvailableDatastores(stores || []);
+                    
+                    // Set initial selected datastores based on agent connections
+                    if (agent.agent_datastores && stores) {
+                        const connectedDatastoreIds = agent.agent_datastores.map((conn: any) => conn.datastore_id);
+                        const vectorStore = stores.find(ds => ds.type === 'pinecone' && connectedDatastoreIds.includes(ds.id));
+                        const knowledgeStore = stores.find(ds => ds.type === 'getzep' && connectedDatastoreIds.includes(ds.id));
+                        
+                        if (vectorStore) setSelectedVectorStore(vectorStore.id);
+                        if (knowledgeStore) setSelectedKnowledgeStore(knowledgeStore.id);
+                    }
+                }
                 
             } catch (err: any) {
                 console.error("[AgentEditPage] Error fetching data:", err);
@@ -318,78 +330,6 @@ const AgentEditPage = () => {
                         </CardContent>
                     </Card>
 
-                    {/* Channels (Communication) - Moved from right column */}
-                    <AgentIntegrationsManager 
-                        agentId={agentId!} 
-                        category="channel"
-                        title="Channels"
-                        description="Connect communication channels to this agent"
-                    />
-
-                    <Card>
-                        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle>Knowledge</CardTitle>
-                                <CardDescription>Connect to knowledge bases</CardDescription>
-                            </div>
-                            <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setShowDatastoreModal(true)}
-                            >
-                                <Database className="h-4 w-4 mr-2" />
-                                Connect Datastores
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
-                            {(() => {
-                                const connectedDatastores = Array.isArray(
-                                    (agentData as any)?.agent_datastores
-                                ) ? (agentData as any).agent_datastores.length : 0;
-                                
-                                if (connectedDatastores > 0) {
-                                    return (
-                                        <div className="text-sm">
-                                            {connectedDatastores} datastore(s) connected
-                                        </div>
-                                    );
-                                } else {
-                                    return (
-                                        <div className="text-center py-6 text-muted-foreground">
-                                            <Database className="h-10 w-10 mx-auto opacity-50 mb-2" />
-                                            <p>No datastores connected</p>
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="mt-4"
-                                                onClick={() => setShowDatastoreModal(true)}
-                                            >
-                                                Connect Datastores
-                                            </Button>
-                                        </div>
-                                    );
-                                }
-                            })()}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <div className="space-y-6">
-
-                    {/* Agent Tasks - Moved to top of right column */}
-                    <AgentTasksManager 
-                        agentId={agentId!} 
-                        userId={user?.id!} 
-                    />
-
-                    {/* Tools */}
-                    <AgentIntegrationsManager 
-                        agentId={agentId!} 
-                        category="tool"
-                        title="Tools"
-                        description="Connect external tools and services to this agent"
-                    />
-
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle>Agent Settings</CardTitle>
@@ -424,6 +364,111 @@ const AgentEditPage = () => {
                                 <PencilLine className="h-4 w-4 mr-2" />
                                 Edit Instructions
                             </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Channels (Communication) - Moved below Agent Settings */}
+                    <AgentIntegrationsManager 
+                        agentId={agentId!} 
+                        category="channel"
+                        title="Channels"
+                        description="Connect communication channels to this agent"
+                    />
+                </div>
+
+                <div className="space-y-6">
+
+                    {/* Agent Tasks - Moved to top of right column */}
+                    {user && (
+                        <AgentTasksManager 
+                            agentId={agentId!} 
+                            availableTools={[]}
+                        />
+                    )}
+
+                    {/* Tools */}
+                    <AgentIntegrationsManager 
+                        agentId={agentId!} 
+                        category="tool"
+                        title="Tools"
+                        description="Connect external tools and services to this agent"
+                    />
+
+                    <Card>
+                        <CardHeader className="pb-4 flex flex-row items-center justify-between">
+                            <div className="space-y-1">
+                                <CardTitle>Knowledge</CardTitle>
+                                <CardDescription>Connect to knowledge bases</CardDescription>
+                            </div>
+                            <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => setShowDatastoreModal(true)}
+                            >
+                                <Database className="h-4 w-4 mr-2" />
+                                Connect Datastores
+                            </Button>
+                        </CardHeader>
+                        <CardContent className="pt-2 pb-6 min-h-[200px]">
+                            {(() => {
+                                const agentDatastores = (agentData as any)?.agent_datastores;
+                                const connectedDatastores = Array.isArray(agentDatastores) ? agentDatastores.length : 0;
+                                
+                                if (connectedDatastores > 0) {
+                                    // Show connected datastores with their names
+                                    const connectedDatastoreIds = agentDatastores.map((conn: any) => conn.datastore_id);
+                                    const connectedStores = availableDatastores.filter(ds => connectedDatastoreIds.includes(ds.id));
+                                    
+                                    return (
+                                        <div className="space-y-3">
+                                            {connectedStores.map(store => (
+                                                <div key={store.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors hover:bg-slate-700/50">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className="flex-shrink-0">
+                                                            <Database className="h-5 w-5 text-blue-400" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <p className="text-sm font-medium text-white">{store.name}</p>
+                                                            <p className="text-xs text-slate-400">
+                                                                {store.type === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center space-x-2">
+                                                        <Badge variant="secondary" className="text-xs px-3 py-1 bg-green-500/20 text-green-400 border-green-500/30">
+                                                            Connected
+                                                        </Badge>
+                                                        <div className="text-slate-400">
+                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                } else {
+                                    return (
+                                        <div className="text-center py-8 px-4">
+                                            <Database className="h-12 w-12 mx-auto text-slate-600 mb-4" />
+                                            <p className="text-sm mb-1 text-slate-300">No datastores connected</p>
+                                            <p className="text-xs mb-6 text-slate-500">
+                                                Connect knowledge bases to enhance your agent's capabilities
+                                            </p>
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="px-4 py-2 border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                                                onClick={() => setShowDatastoreModal(true)}
+                                            >
+                                                <Database className="h-4 w-4 mr-2" />
+                                                Connect Datastores
+                                            </Button>
+                                        </div>
+                                    );
+                                }
+                            })()}
                         </CardContent>
                     </Card>
 
@@ -531,27 +576,77 @@ const AgentEditPage = () => {
                            availableDatastores={availableDatastores}
                            selectedVectorStore={selectedVectorStore}
                            selectedKnowledgeStore={selectedKnowledgeStore}
-                           onSelectDatastore={(type, value) => {
+                           onSelectDatastore={async (type, value) => {
                                if (type === 'vector') {
                                    setSelectedVectorStore(value);
                                } else {
                                    setSelectedKnowledgeStore(value);
                                }
+                               
+                                                               // Auto-save on selection
+                                if (agentId && user?.id) {
+                                   try {
+                                       const currentVector = type === 'vector' ? value : selectedVectorStore;
+                                       const currentKnowledge = type === 'knowledge' ? value : selectedKnowledgeStore;
+                                       
+                                       // Remove all existing connections for this agent
+                                       await supabase
+                                           .from('agent_datastores')
+                                           .delete()
+                                           .eq('agent_id', agentId);
+                                       
+                                       // Add new connections
+                                       const connections = [];
+                                       if (currentVector) {
+                                           connections.push({ agent_id: agentId, datastore_id: currentVector });
+                                       }
+                                       if (currentKnowledge) {
+                                           connections.push({ agent_id: agentId, datastore_id: currentKnowledge });
+                                       }
+                                       
+                                       if (connections.length > 0) {
+                                           const { error } = await supabase
+                                               .from('agent_datastores')
+                                               .insert(connections);
+                                           
+                                           if (error) throw error;
+                                       }
+                                       
+                                       toast.success("Datastore connection updated!");
+                                       
+                                       // Refresh agent data to show updated connections
+                                       const { data: updatedAgent, error: fetchError } = await supabase
+                                           .from('agents')
+                                           .select(`*, agent_datastores(datastore_id)`)
+                                           .eq('id', agentId)
+                                           .eq('user_id', user.id)
+                                           .single();
+                                       
+                                       if (!fetchError && updatedAgent) {
+                                           setAgentData(updatedAgent);
+                                       }
+                                   } catch (error) {
+                                       console.error('Error saving datastore connection:', error);
+                                       toast.error("Failed to update datastore connection");
+                                   }
+                               }
                            }}
                            onConnectDatastores={async () => {
-                               // Save the datastore connections here
-                               toast.success("Datastore connections updated!");
+                               // This is now handled by auto-save on selection
+                               // Just close the modal
                            }}
                            loadingAvailable={loading}
                            connecting={false}
                            onDatastoresUpdated={async () => {
                                // Refresh available datastores
-                               const { data: stores, error: dsError } = await supabase
-                                   .from('datastores')
-                                   .select('*')
-                                   .eq('user_id', user.id);
-                               if (!dsError) {
-                                   setAvailableDatastores(stores || []);
+                               if (user?.id) {
+                                   const { data: stores, error: dsError } = await supabase
+                                       .from('datastores')
+                                       .select('*')
+                                       .eq('user_id', user.id);
+                                   if (!dsError) {
+                                       setAvailableDatastores(stores || []);
+                                   }
                                }
                            }}
                        />

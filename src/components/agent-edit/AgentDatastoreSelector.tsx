@@ -334,7 +334,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
           {selectedVector ? (
             <div className="flex items-center justify-between p-3 border rounded-md">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Vector Store (Pinecone)</p>
+                <p className="text-sm font-medium">Vector Store</p>
                 <p className="text-sm text-muted-foreground">
                   {selectedVector.name}
                 </p>
@@ -353,7 +353,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
           ) : (
             <div className="flex items-center justify-between p-3 border-2 border-dashed border-muted-foreground/30 rounded-md bg-muted/20">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Vector Store (Pinecone)</p>
+                <p className="text-sm font-medium text-muted-foreground">Vector Store</p>
                 <p className="text-sm text-muted-foreground/70">
                   Add vector datastore
                 </p>
@@ -373,7 +373,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
           {selectedKnowledge ? (
             <div className="flex items-center justify-between p-3 border rounded-md">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Knowledge Store (GetZep)</p>
+                <p className="text-sm font-medium">Knowledge Store</p>
                 <p className="text-sm text-muted-foreground">
                   {selectedKnowledge.name}
                 </p>
@@ -392,7 +392,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
           ) : (
             <div className="flex items-center justify-between p-3 border-2 border-dashed border-muted-foreground/30 rounded-md bg-muted/20">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Knowledge Store (GetZep)</p>
+                <p className="text-sm font-medium text-muted-foreground">Knowledge Store</p>
                 <p className="text-sm text-muted-foreground/70">
                   Add Knowledge Graph
                 </p>
@@ -493,18 +493,8 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={connecting}>
-                Cancel
-              </Button>
-              <Button onClick={handleConnectClick} disabled={connecting || loadingAvailable}>
-                {connecting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Save Connections'
-                )}
+              <Button onClick={() => setIsModalOpen(false)} disabled={connecting}>
+                Done
               </Button>
             </DialogFooter>
           </DialogContent>
