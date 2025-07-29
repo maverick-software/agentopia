@@ -5,7 +5,8 @@ import { corsHeaders } from '../_shared/cors.ts';
 serve(async (req) => {
   // This is needed if you're planning to invoke your function from a browser.
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    const origin = req.headers.get('Origin') || '';
+    return new Response('ok', { headers: corsHeaders(origin) });
   }
 
   try {

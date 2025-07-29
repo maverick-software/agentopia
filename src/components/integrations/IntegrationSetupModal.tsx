@@ -19,6 +19,7 @@ import {
   Key,
   Search
 } from 'lucide-react';
+import { VaultService } from '@/services/VaultService';
 
 interface IntegrationSetupModalProps {
   integration: any;
@@ -40,6 +41,7 @@ export function IntegrationSetupModal({
   
   // Hooks
   const supabase = useSupabaseClient();
+  const vaultService = new VaultService(supabase);
   const { user } = useAuth();
   const { connection: gmailConnection, initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
   
@@ -109,16 +111,11 @@ export function IntegrationSetupModal({
 
       if (providerError) throw providerError;
 
-      // Store API key by invoking the new Edge Function
-      const { data: encryptedKey, error: vaultError } = await supabase.functions.invoke('create-secret', {
-        body: {
-          name: `${providerName}_api_key_${user.id}_${Date.now()}`,
-          secret: formData.api_key,
-          description: `${integration.name} API key for user ${user.id}`
-        }
-      });
-
-      if (vaultError) throw vaultError;
+      const vault_secret_id = await vaultService.createSecret(
+        `${providerName}_api_key_${user.id}_${Date.now()}`,
+        formData.api_key,
+        `${integration.name} API key for user ${user.id}`
+      );
 
       // Create user web search key record
       const { error: keyError } = await supabase
@@ -126,7 +123,7 @@ export function IntegrationSetupModal({
         .insert({
           user_id: user.id,
           provider_id: providerData.id,
-          vault_api_key_id: encryptedKey,
+          vault_api_key_id: vault_secret_id,
           key_name: formData.connection_name || `${integration.name} Connection`,
           key_status: 'active'
         });
