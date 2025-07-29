@@ -29,12 +29,12 @@ serve(async (req) => {
       });
     }
 
-    console.log('Calling vault.create_secret...');
-    // Use the official Supabase Vault function to create secrets
-    const { data, error } = await supabase.rpc('vault.create_secret', {
-      secret,
-      name,
-      description
+    console.log('Calling create_vault_secret...');
+    // Use the public wrapper function for vault.create_secret
+    const { data, error } = await supabase.rpc('create_vault_secret', {
+      p_secret: secret,
+      p_name: name,
+      p_description: description
     });
 
     if (error) {
