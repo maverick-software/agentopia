@@ -10,6 +10,9 @@ import {
 import { toast } from 'react-hot-toast';
 import { AgentFormInstructions } from '@/components/agent-edit/AgentFormInstructions';
 import { AgentDatastoreSelector } from '@/components/agent-edit/AgentDatastoreSelector';
+import { VectorStoreModal } from '@/components/agent-edit/VectorStoreModal';
+import { KnowledgeGraphModal } from '@/components/agent-edit/KnowledgeGraphModal';
+import { CreateDatastoreModal } from '@/components/agent-edit/CreateDatastoreModal';
 import type { Agent } from '@/types/index';
 import type { Datastore } from '@/types';
 import { Input } from '@/components/ui/input';
@@ -19,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
 import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
+import { AgentWebSearchPermissions } from '@/components/agent-edit/AgentWebSearchPermissions';
 import { AgentTasksManager } from '@/components/agent-edit/AgentTasksManager';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,6 +66,12 @@ const AgentEditPage = () => {
         }
     }, [saveSuccess]);
     const [showDatastoreModal, setShowDatastoreModal] = useState(false);
+    const [showVectorModal, setShowVectorModal] = useState(false);
+    const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+    const [showCreateDatastoreModal, setShowCreateDatastoreModal] = useState(false);
+    const [createDatastoreType, setCreateDatastoreType] = useState<'pinecone' | 'getzep' | null>(null);
+    const [connecting, setConnecting] = useState(false);
+    const [loadingAvailableDatastores, setLoadingAvailableDatastores] = useState(false);
     const [showProfileImageModal, setShowProfileImageModal] = useState(false);
 
     const [personalityTemplates, setPersonalityTemplates] = useState<any[]>([
@@ -394,6 +404,11 @@ const AgentEditPage = () => {
                         description="Connect external tools and services to this agent"
                     />
 
+                    {/* Web Search Permissions */}
+                    <AgentWebSearchPermissions 
+                        agentId={agentId!} 
+                    />
+
                     <Card>
                         <CardHeader className="pb-4 flex flex-row items-center justify-between">
                             <div className="space-y-1">
@@ -412,62 +427,111 @@ const AgentEditPage = () => {
                         <CardContent className="pt-2 pb-6 min-h-[200px]">
                             {(() => {
                                 const agentDatastores = (agentData as any)?.agent_datastores;
-                                const connectedDatastores = Array.isArray(agentDatastores) ? agentDatastores.length : 0;
+                                const connectedDatastoreIds = Array.isArray(agentDatastores) ? agentDatastores.map((conn: any) => conn.datastore_id) : [];
                                 
-                                if (connectedDatastores > 0) {
-                                    // Show connected datastores with their names
-                                    const connectedDatastoreIds = agentDatastores.map((conn: any) => conn.datastore_id);
-                                    const connectedStores = availableDatastores.filter(ds => connectedDatastoreIds.includes(ds.id));
-                                    
-                                    return (
-                                        <div className="space-y-3">
-                                            {connectedStores.map(store => (
-                                                <div key={store.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors hover:bg-slate-700/50">
-                                                    <div className="flex items-center space-x-3">
-                                                        <div className="flex-shrink-0">
-                                                            <Database className="h-5 w-5 text-blue-400" />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <p className="text-sm font-medium text-white">{store.name}</p>
-                                                            <p className="text-xs text-slate-400">
-                                                                {store.type === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}
-                                                            </p>
-                                                        </div>
+                                // Find connected datastores by type
+                                const connectedVectorStore = availableDatastores.find(ds => ds.type === 'pinecone' && connectedDatastoreIds.includes(ds.id));
+                                const connectedKnowledgeStore = availableDatastores.find(ds => ds.type === 'getzep' && connectedDatastoreIds.includes(ds.id));
+                                
+                                return (
+                                    <div className="space-y-3">
+                                        {/* Vector Store Section */}
+                                        {connectedVectorStore ? (
+                                            <div 
+                                                className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors hover:bg-slate-700/50 cursor-pointer"
+                                                onClick={() => setShowVectorModal(true)}
+                                            >
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="flex-shrink-0">
+                                                        <Database className="h-5 w-5 text-blue-400" />
                                                     </div>
-                                                    <div className="flex items-center space-x-2">
-                                                        <Badge variant="secondary" className="text-xs px-3 py-1 bg-green-500/20 text-green-400 border-green-500/30">
-                                                            Connected
-                                                        </Badge>
-                                                        <div className="text-slate-400">
-                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                            </svg>
-                                                        </div>
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium text-white">{connectedVectorStore.name}</p>
+                                                        <p className="text-xs text-slate-400">Vector Store</p>
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    );
-                                } else {
-                                    return (
-                                        <div className="text-center py-8 px-4">
-                                            <Database className="h-12 w-12 mx-auto text-slate-600 mb-4" />
-                                            <p className="text-sm mb-1 text-slate-300">No datastores connected</p>
-                                            <p className="text-xs mb-6 text-slate-500">
-                                                Connect knowledge bases to enhance your agent's capabilities
-                                            </p>
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="px-4 py-2 border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:text-white"
-                                                onClick={() => setShowDatastoreModal(true)}
+                                                <div className="flex items-center space-x-2">
+                                                    <Badge variant="secondary" className="text-xs px-3 py-1 bg-green-500/20 text-green-400 border-green-500/30">
+                                                        Connected
+                                                    </Badge>
+                                                    <div className="text-slate-400">
+                                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div 
+                                                className="flex items-center justify-between p-4 border-2 border-dashed border-slate-600/50 rounded-lg bg-slate-800/20 transition-colors hover:bg-slate-800/30 cursor-pointer"
+                                                onClick={() => setShowVectorModal(true)}
                                             >
-                                                <Database className="h-4 w-4 mr-2" />
-                                                Connect Datastores
-                                            </Button>
-                                        </div>
-                                    );
-                                }
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="flex-shrink-0">
+                                                        <Database className="h-5 w-5 text-slate-500" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium text-slate-400">Vector Store</p>
+                                                        <p className="text-xs text-slate-500">Add vector datastore</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-slate-500">
+                                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Knowledge Graph Section */}
+                                        {connectedKnowledgeStore ? (
+                                            <div 
+                                                className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors hover:bg-slate-700/50 cursor-pointer"
+                                                onClick={() => setShowKnowledgeModal(true)}
+                                            >
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="flex-shrink-0">
+                                                        <Database className="h-5 w-5 text-blue-400" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium text-white">{connectedKnowledgeStore.name}</p>
+                                                        <p className="text-xs text-slate-400">Knowledge Graph</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Badge variant="secondary" className="text-xs px-3 py-1 bg-green-500/20 text-green-400 border-green-500/30">
+                                                        Connected
+                                                    </Badge>
+                                                    <div className="text-slate-400">
+                                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div 
+                                                className="flex items-center justify-between p-4 border-2 border-dashed border-slate-600/50 rounded-lg bg-slate-800/20 transition-colors hover:bg-slate-800/30 cursor-pointer"
+                                                onClick={() => setShowKnowledgeModal(true)}
+                                            >
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="flex-shrink-0">
+                                                        <Database className="h-5 w-5 text-slate-500" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium text-slate-400">Knowledge Store</p>
+                                                        <p className="text-xs text-slate-500">Add Knowledge Graph</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-slate-500">
+                                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
                             })()}
                         </CardContent>
                     </Card>
@@ -561,7 +625,7 @@ const AgentEditPage = () => {
                 </DialogContent>
             </Dialog>
             
-            <Dialog open={showDatastoreModal} onOpenChange={setShowDatastoreModal}>
+                                    <Dialog open={showDatastoreModal} onOpenChange={setShowDatastoreModal}>
                 <DialogContent className="sm:max-w-3xl">
                     <DialogHeader>
                         <DialogTitle>Connect Datastores</DialogTitle>
@@ -571,11 +635,12 @@ const AgentEditPage = () => {
                     </DialogHeader>
                     
                     <div className="py-4">
-                       <AgentDatastoreSelector
+                                              <AgentDatastoreSelector 
                            agentId={agentId}
                            availableDatastores={availableDatastores}
                            selectedVectorStore={selectedVectorStore}
                            selectedKnowledgeStore={selectedKnowledgeStore}
+
                            onSelectDatastore={async (type, value) => {
                                if (type === 'vector') {
                                    setSelectedVectorStore(value);
@@ -659,6 +724,122 @@ const AgentEditPage = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Separate Vector Store Modal */}
+            <VectorStoreModal
+                isOpen={showVectorModal}
+                onOpenChange={setShowVectorModal}
+                vectorStores={availableDatastores.filter(ds => ds.type === 'pinecone')}
+                selectedVectorStore={selectedVectorStore}
+                onSelectDatastore={(value) => {
+                    if (agentId && user?.id) {
+                        // Auto-save on selection
+                        const handleVectorSave = async () => {
+                            await supabase.from('agent_datastores').delete().eq('agent_id', agentId);
+                            
+                            const connections = [];
+                            if (value) connections.push({ agent_id: agentId, datastore_id: value });
+                            if (selectedKnowledgeStore) connections.push({ agent_id: agentId, datastore_id: selectedKnowledgeStore });
+                            
+                            if (connections.length > 0) {
+                                await supabase.from('agent_datastores').insert(connections);
+                            }
+                            
+                            toast.success("Vector store connection updated!");
+                            
+                            // Refresh agent data
+                            const { data: updatedAgent } = await supabase
+                                .from('agents')
+                                .select(`*, agent_datastores(datastore_id)`)
+                                .eq('id', agentId)
+                                .eq('user_id', user.id)
+                                .single();
+                            
+                            if (updatedAgent) setAgentData(updatedAgent);
+                            setSelectedVectorStore(value);
+                        };
+                        handleVectorSave();
+                    }
+                }}
+                                    onCreateNew={() => {
+                        setCreateDatastoreType('pinecone');
+                        setShowCreateDatastoreModal(true);
+                        setShowVectorModal(false);
+                    }}
+                    connecting={connecting}
+                    loadingAvailable={loadingAvailableDatastores}
+                />
+
+                {/* Separate Knowledge Graph Modal */}
+            <KnowledgeGraphModal
+                isOpen={showKnowledgeModal}
+                onOpenChange={setShowKnowledgeModal}
+                knowledgeStores={availableDatastores.filter(ds => ds.type === 'getzep')}
+                selectedKnowledgeStore={selectedKnowledgeStore}
+                onSelectDatastore={(value) => {
+                    if (agentId && user?.id) {
+                        // Auto-save on selection
+                        const handleKnowledgeSave = async () => {
+                            await supabase.from('agent_datastores').delete().eq('agent_id', agentId);
+                            
+                            const connections = [];
+                            if (selectedVectorStore) connections.push({ agent_id: agentId, datastore_id: selectedVectorStore });
+                            if (value) connections.push({ agent_id: agentId, datastore_id: value });
+                            
+                            if (connections.length > 0) {
+                                await supabase.from('agent_datastores').insert(connections);
+                            }
+                            
+                            toast.success("Knowledge graph connection updated!");
+                            
+                            // Refresh agent data
+                            const { data: updatedAgent } = await supabase
+                                .from('agents')
+                                .select(`*, agent_datastores(datastore_id)`)
+                                .eq('id', agentId)
+                                .eq('user_id', user.id)
+                                .single();
+                            
+                            if (updatedAgent) setAgentData(updatedAgent);
+                            setSelectedKnowledgeStore(value);
+                        };
+                        handleKnowledgeSave();
+                    }
+                }}
+                onCreateNew={() => {
+                    setCreateDatastoreType('getzep');
+                    setShowCreateDatastoreModal(true);
+                    setShowKnowledgeModal(false);
+                }}
+                connecting={connecting}
+                loadingAvailable={loadingAvailableDatastores}
+                            />
+
+                {/* Create Datastore Modal */}
+                <CreateDatastoreModal
+                    isOpen={showCreateDatastoreModal}
+                    onOpenChange={setShowCreateDatastoreModal}
+                    type={createDatastoreType}
+                    onSuccess={async () => {
+                        // Refresh available datastores
+                        const { data: stores } = await supabase
+                            .from('datastores')
+                            .select('*')
+                            .eq('user_id', user?.id);
+                        
+                        if (stores) {
+                            setAvailableDatastores(stores);
+                        }
+                        
+                        // If vector modal was open, reopen it
+                        if (createDatastoreType === 'pinecone') {
+                            setShowVectorModal(true);
+                        } else if (createDatastoreType === 'getzep') {
+                            setShowKnowledgeModal(true);
+                        }
+                        setCreateDatastoreType(null);
+                    }}
+                />
         </div>
     );
 };

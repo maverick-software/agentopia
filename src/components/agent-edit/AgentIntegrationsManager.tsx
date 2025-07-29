@@ -345,7 +345,7 @@ export function AgentIntegrationsManager({
 
       {/* Step 1: Add Integration Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Add {category === 'channel' ? 'Channel' : category === 'tool' ? 'Tool' : 'Integration'}</DialogTitle>
             <DialogDescription>
@@ -353,37 +353,39 @@ export function AgentIntegrationsManager({
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
-            {availableIntegrations.length > 0 ? (
-              availableIntegrations.map((integration: { id: string; name: string; description?: string }) => (
-                <div
-                  key={integration.id}
-                  className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted"
-                  onClick={() => handleSelectIntegration(integration)}
-                >
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-8 w-8 text-blue-500" />
-                    <div>
-                      <div className="font-medium">{integration.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {integration.description}
+          <div className="flex-1 overflow-y-auto min-h-0 max-h-[calc(85vh-10rem)]">
+            <div className="space-y-4 p-1">
+              {availableIntegrations.length > 0 ? (
+                availableIntegrations.map((integration: { id: string; name: string; description?: string }) => (
+                  <div
+                    key={integration.id}
+                    className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted"
+                    onClick={() => handleSelectIntegration(integration)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Mail className="h-8 w-8 text-blue-500" />
+                      <div>
+                        <div className="font-medium">{integration.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {integration.description}
+                        </div>
                       </div>
                     </div>
+                    <ChevronRight className="h-5 w-5" />
                   </div>
-                  <ChevronRight className="h-5 w-5" />
-                </div>
-              ))
-            ) : (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No new integrations available. Gmail is currently the only supported integration.
-                </AlertDescription>
-              </Alert>
-            )}
+                ))
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    No new integrations available. Gmail is currently the only supported integration.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
               Cancel
             </Button>
@@ -393,7 +395,7 @@ export function AgentIntegrationsManager({
 
       {/* Step 2: Select Credentials Modal */}
       <Dialog open={showCredentialsModal && workflowMode === 'add'} onOpenChange={setShowCredentialsModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Button
@@ -413,43 +415,45 @@ export function AgentIntegrationsManager({
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
-            {availableCredentials.length > 0 ? (
-              availableCredentials.map(credential => (
-                <div
-                  key={credential.id}
-                  className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted"
-                  onClick={() => handleSelectCredential(credential)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-background rounded">
-                      <Mail className="h-5 w-5 text-blue-500" />
-                    </div>
-                    <div>
-                      <div className="font-medium">{credential.external_username}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {credential.connection_metadata?.user_name || 'Gmail Account'}
+          <div className="flex-1 overflow-y-auto min-h-0 max-h-[calc(85vh-10rem)]">
+            <div className="space-y-4 p-1">
+              {availableCredentials.length > 0 ? (
+                availableCredentials.map(credential => (
+                  <div
+                    key={credential.id}
+                    className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted"
+                    onClick={() => handleSelectCredential(credential)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-background rounded">
+                        <Mail className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{credential.external_username}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {credential.connection_metadata?.user_name || 'Gmail Account'}
+                        </div>
                       </div>
                     </div>
+                    <ChevronRight className="h-5 w-5" />
                   </div>
-                  <ChevronRight className="h-5 w-5" />
-                </div>
-              ))
-            ) : (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No available credentials. Please connect a Gmail account first in the{' '}
-                  <a href="/integrations" className="text-primary hover:underline">
-                    Integrations page
-                  </a>
-                  .
-                </AlertDescription>
-              </Alert>
-            )}
+                ))
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    No available credentials. Please connect a Gmail account first in the{' '}
+                    <a href="/integrations" className="text-primary hover:underline">
+                      Integrations page
+                    </a>
+                    .
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowCredentialsModal(false)}>
               Cancel
             </Button>

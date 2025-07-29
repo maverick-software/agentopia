@@ -82,9 +82,20 @@ export function IntegrationsPage() {
   const { userIntegrations, loading: userIntegrationsLoading } = useUserIntegrations();
   const { connections: gmailConnections } = useGmailConnection();
 
-  // Override integration status - only Gmail is available
+  // Override integration status - Gmail and Web Search providers are available
   const getEffectiveStatus = (integration: any) => {
-    return integration.name === 'Gmail' ? 'available' : 'coming_soon';
+    // Gmail is available
+    if (integration.name === 'Gmail') {
+      return 'available';
+    }
+    
+    // Web Search providers are available
+    if (['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration.name)) {
+      return 'available';
+    }
+    
+    // Everything else is coming soon
+    return 'coming_soon';
   };
 
   const getIconComponent = (iconName: string) => {

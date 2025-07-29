@@ -457,7 +457,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
                       disabled={connecting}
                     >
                       <SelectTrigger id="vectorStore" className="col-span-3">
-                        <SelectValue placeholder="Select Pinecone store..." />
+                        <SelectValue placeholder="Select vector store..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
@@ -479,7 +479,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
                       disabled={connecting}
                     >
                       <SelectTrigger id="knowledgeStore" className="col-span-3">
-                        <SelectValue placeholder="Select GetZep store..." />
+                        <SelectValue placeholder="Select knowledge store..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>

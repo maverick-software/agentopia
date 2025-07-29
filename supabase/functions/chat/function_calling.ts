@@ -171,6 +171,106 @@ export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
 };
 
 /**
+ * Web Search MCP Tools Registry
+ */
+export const WEB_SEARCH_MCP_TOOLS: Record<string, MCPTool> = {
+  web_search: {
+    name: 'web_search',
+    description: 'Search the web for current information, news, and content. Use this when you need up-to-date information that might not be in your training data.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query',
+        },
+        num_results: {
+          type: 'integer',
+          description: 'Number of results to return (1-10)',
+          minimum: 1,
+          maximum: 10,
+          default: 5,
+        },
+        location: {
+          type: 'string',
+          description: 'Geographic location for localized results (e.g., "New York, NY", "London, UK")',
+        },
+        time_range: {
+          type: 'string',
+          enum: ['day', 'week', 'month', 'year', 'all'],
+          description: 'Time range for results',
+          default: 'all',
+        },
+      },
+      required: ['query'],
+    },
+    required_scopes: ['web_search'],
+  },
+
+  scrape_and_summarize: {
+    name: 'scrape_and_summarize',
+    description: 'Scrape content from web pages and provide a summarized version. Use this when you need detailed information from specific websites.',
+    parameters: {
+      type: 'object',
+      properties: {
+        urls: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'URLs to scrape and summarize',
+          maxItems: 5,
+        },
+        summary_length: {
+          type: 'string',
+          enum: ['short', 'medium', 'long'],
+          description: 'Length of summary',
+          default: 'medium',
+        },
+        focus_keywords: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Keywords to focus on in the summary',
+        },
+      },
+      required: ['urls'],
+    },
+    required_scopes: ['web_search'],
+  },
+
+  news_search: {
+    name: 'news_search',
+    description: 'Search for recent news articles and current events. Use this for up-to-date news and breaking stories.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'News search query',
+        },
+        num_results: {
+          type: 'integer',
+          description: 'Number of news results (1-10)',
+          minimum: 1,
+          maximum: 10,
+          default: 5,
+        },
+        time_range: {
+          type: 'string',
+          enum: ['hour', 'day', 'week', 'month'],
+          description: 'Time range for news results',
+          default: 'week',
+        },
+        location: {
+          type: 'string',
+          description: 'Geographic location for local news',
+        },
+      },
+      required: ['query'],
+    },
+    required_scopes: ['web_search', 'news_search'],
+  },
+};
+
+/**
  * Function Calling Manager
  */
 export class FunctionCallingManager {
@@ -189,10 +289,13 @@ export class FunctionCallingManager {
       // Get Gmail tools if agent has Gmail permissions
       const gmailTools = await this.getGmailTools(agentId, userId);
       
+      // Get Web Search tools if agent has web search permissions
+      const webSearchTools = await this.getWebSearchTools(agentId, userId);
+      
       // Future: Add other tool providers here
       // const slackTools = await this.getSlackTools(agentId, userId);
       
-      const allTools = [...gmailTools];
+      const allTools = [...gmailTools, ...webSearchTools];
       
       console.log(`[FunctionCalling] Found ${allTools.length} available tools`);
       return allTools;
@@ -269,6 +372,41 @@ export class FunctionCallingManager {
   }
 
   /**
+   * Get Web Search tools for an agent
+   */
+  private async getWebSearchTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      // Check if user has web search API keys configured
+      const { data: hasPermissions } = await this.supabaseClient
+        .rpc('validate_web_search_permissions', {
+          p_agent_id: agentId,
+          p_user_id: userId,
+        });
+
+      if (!hasPermissions) {
+        console.log(`[FunctionCalling] No web search permissions found for agent ${agentId}`);
+        return [];
+      }
+
+      console.log(`[FunctionCalling] Agent ${agentId} has web search permissions`);
+      console.log(`[FunctionCalling] Available web search tool definitions:`, Object.keys(WEB_SEARCH_MCP_TOOLS));
+      
+      // All web search tools are available if user has API keys configured
+      const availableTools: OpenAIFunction[] = Object.values(WEB_SEARCH_MCP_TOOLS).map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      }));
+
+      console.log(`[FunctionCalling] Available web search tools for agent ${agentId}:`, availableTools.map(t => t.name));
+      return availableTools;
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting web search tools:', error);
+      return [];
+    }
+  }
+
+  /**
    * Execute a function call
    */
   async executeFunction(
@@ -285,6 +423,10 @@ export class FunctionCallingManager {
       // Route to appropriate tool provider
       if (Object.keys(GMAIL_MCP_TOOLS).includes(functionName)) {
         return await this.executeGmailTool(agentId, userId, functionName, parameters);
+      }
+      
+      if (Object.keys(WEB_SEARCH_MCP_TOOLS).includes(functionName)) {
+        return await this.executeWebSearchTool(agentId, userId, functionName, parameters);
       }
       
       // Future: Add other providers
@@ -387,6 +529,88 @@ export class FunctionCallingManager {
           execution_time_ms: Date.now() - startTime,
         },
       };
+    }
+  }
+
+  /**
+   * Execute Web Search tool
+   */
+  private async executeWebSearchTool(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    const startTime = Date.now();
+    
+    try {
+      // Validate permissions
+      const hasPermission = await this.validateWebSearchPermissions(agentId, userId);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'Agent does not have required web search permissions for this operation',
+          metadata: {
+            execution_time_ms: Date.now() - startTime,
+          },
+        };
+      }
+
+      // Call Web Search API via Supabase Edge Function with auth token
+      const { data, error } = await this.supabaseClient.functions.invoke('web-search-api', {
+        body: {
+          action: toolName,
+          agent_id: agentId,
+          parameters: parameters,
+        },
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Check if the response indicates an error
+      if (data && !data.success && data.error) {
+        throw new Error(data.error);
+      }
+
+      return {
+        success: true,
+        data: data?.data || data,
+        metadata: {
+          quota_consumed: data?.metadata?.quota_consumed || 1,
+          execution_time_ms: Date.now() - startTime,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        metadata: {
+          execution_time_ms: Date.now() - startTime,
+        },
+      };
+    }
+  }
+
+  /**
+   * Validate web search permissions for an agent
+   */
+  private async validateWebSearchPermissions(agentId: string, userId: string): Promise<boolean> {
+    try {
+      const { data: isValid } = await this.supabaseClient
+        .rpc('validate_web_search_permissions', {
+          p_agent_id: agentId,
+          p_user_id: userId,
+        });
+
+      return isValid || false;
+    } catch (error) {
+      console.error('[FunctionCalling] Error validating web search permissions:', error);
+      return false;
     }
   }
 
