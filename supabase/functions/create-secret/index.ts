@@ -3,9 +3,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin') || '';
+  
   // This is needed if you're planning to invoke your function from a browser.
   if (req.method === 'OPTIONS') {
-    const origin = req.headers.get('Origin') || '';
     return new Response('ok', { headers: corsHeaders(origin) });
   }
 
@@ -19,30 +20,29 @@ serve(async (req) => {
 
     if (!name || !secret) {
       return new Response(JSON.stringify({ error: 'Name and secret are required' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
         status: 400,
       });
     }
 
-    // The 'vault' schema is protected, so we can't use an RPC wrapper.
-    // We must call it from a secure context, like an Edge Function, using the service_role key.
-    const { data, error } = await supabase
-      .from('vault.secrets')
-      .insert({ name, secret, description })
-      .select('id')
-      .single();
+    // Use the official Supabase Vault function to create secrets
+    const { data, error } = await supabase.rpc('vault.create_secret', {
+      secret,
+      name,
+      description
+    });
 
     if (error) {
       throw error;
     }
 
-    return new Response(JSON.stringify({ id: data.id }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ id: data }), {
+      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
       status: 400,
     });
   }

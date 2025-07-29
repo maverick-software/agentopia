@@ -36,6 +36,9 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   Team Management
 *   Datastore Management (Pinecone RAG)
 *   Knowledge Graph Integration (GetZep) for advanced memory, contextual understanding, and reasoning.
+*   **🆕 Secure Secret Management:** Built-in Supabase Vault integration for secure API key storage and management
+*   **🆕 Gmail Integration:** Complete OAuth-based Gmail integration allowing agents to send emails on behalf of users
+*   **🆕 Web Research Capabilities:** Integrated web search, page scraping, and content summarization through multiple providers (Serper API, SerpAPI, Brave Search)
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -196,6 +199,121 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   `discord-interaction-handler`: Handles incoming webhooks from Discord for slash commands (like `/activate`) and autocomplete.
 *   `manage-discord-worker`: Provides an endpoint for the frontend to request starting/stopping specific agent Discord workers via the `worker-manager` service.
 *   `register-agent-commands`: Registers necessary Discord slash commands for agents.
+*   **🆕 `create-secret`**: Securely creates and stores API keys and sensitive data in Supabase Vault with proper CORS handling.
+*   **🆕 `web-search-api`**: Handles web search, page scraping, and content summarization for agent research capabilities.
+*   **🆕 `gmail-oauth`**: Manages Gmail OAuth authentication flow for email integration.
+*   **🆕 `gmail-api`**: Executes Gmail operations like sending emails on behalf of authenticated users.
+
+## Secure Secret Management (Supabase Vault)
+
+Agentopia implements a comprehensive secret management system using Supabase Vault to securely store and manage API keys, OAuth tokens, and other sensitive data. This system ensures that secrets are encrypted at rest and only accessible through secure, server-side operations.
+
+### VaultService Class
+
+The `VaultService` class (`src/services/VaultService.ts`) provides a centralized, reusable interface for all secret management operations:
+
+```typescript
+const vaultService = new VaultService(supabaseClient);
+
+// Create a new secret
+const secretId = await vaultService.createSecret(
+  'api_key_name',
+  'secret_value',
+  'Description of the secret'
+);
+
+// Retrieve a secret
+const secretValue = await vaultService.getSecret(secretId);
+```
+
+### Database Functions
+
+The system includes secure database functions for secret operations:
+
+*   **`public.create_vault_secret`**: Server-side function for creating encrypted secrets
+*   **`public.get_secret`**: Secure retrieval of decrypted secrets from the vault
+
+### Security Features
+
+*   **Encryption at Rest**: All secrets are stored using authenticated encryption
+*   **Server-Side Only**: Secrets are never exposed to client-side code
+*   **Edge Function Integration**: Uses Supabase Edge Functions for secure secret operations
+*   **CORS Protection**: Proper cross-origin request handling for production deployments
+*   **Access Control**: Row-level security ensures users can only access their own secrets
+
+### Usage Across Integrations
+
+The VaultService is used throughout the application for:
+
+*   **API Key Storage**: Web search provider API keys (Serper, SerpAPI, Brave Search)
+*   **OAuth Token Management**: Gmail and other OAuth integration tokens
+*   **Service Credentials**: Database connection strings and service account keys
+*   **Custom Integrations**: Extensible for any future API or service integrations
+
+## Web Research Integration
+
+Agentopia provides comprehensive web research capabilities that allow agents to search the web, scrape web pages, and summarize content to answer user questions with up-to-date information.
+
+### Supported Providers
+
+*   **Serper API**: Fast Google search results with high accuracy
+*   **SerpAPI**: Comprehensive search engine results API
+*   **Brave Search API**: Privacy-focused search with good coverage
+
+### Features
+
+*   **Web Search**: Query multiple search engines for relevant results
+*   **Page Scraping**: Extract content from web pages for analysis
+*   **Content Summarization**: AI-powered summarization of web content
+*   **Multi-Provider Support**: Seamless switching between search providers
+*   **Secure API Key Management**: All provider API keys stored securely in Supabase Vault
+
+### Database Schema
+
+Key tables for web research:
+
+*   **`web_search_providers`**: Configuration for different search providers
+*   **`user_web_search_keys`**: User API keys for search providers (stored securely)
+*   **`user_integrations`**: Integration status and configuration
+
+### Usage Flow
+
+1. **Setup**: Users add their search provider API keys through the integrations interface
+2. **Storage**: API keys are securely stored using the VaultService
+3. **Agent Access**: Agents can use web research tools when granted permissions
+4. **Execution**: The `web-search-api` function handles search, scrape, and summarization requests
+5. **Results**: Processed information is returned to agents for response generation
+
+## Gmail Integration
+
+Full Gmail integration allows agents to send emails on behalf of users through secure OAuth authentication.
+
+### Features
+
+*   **OAuth 2.0 Authentication**: Secure Google OAuth flow for Gmail access
+*   **Email Sending**: Agents can compose and send emails
+*   **Permission Management**: Fine-grained control over which agents can access Gmail
+*   **Scope-Based Security**: Only granted OAuth scopes are accessible to agents
+
+### OAuth Flow
+
+1. **User Authorization**: Users authenticate with Google via OAuth 2.0
+2. **Token Storage**: OAuth tokens securely stored in Supabase Vault
+3. **Agent Permissions**: Users grant specific Gmail permissions to agents
+4. **Secure Access**: Agents access Gmail only through server-side functions
+
+### Database Schema
+
+*   **`oauth_providers`**: OAuth provider configurations
+*   **`user_oauth_connections`**: User OAuth connections with encrypted tokens
+*   **`agent_oauth_permissions`**: Agent-specific OAuth scope permissions
+
+### Security Model
+
+*   **Encrypted Token Storage**: All OAuth tokens encrypted in Supabase Vault
+*   **Scope Validation**: Each agent operation validates required OAuth scopes
+*   **User Control**: Users maintain full control over agent permissions
+*   **Audit Trail**: Complete logging of all Gmail operations for transparency
 
 ## Tool Use Infrastructure
 
@@ -369,6 +487,21 @@ Located in `services/`. These are designed for persistent execution on a server 
 
 ## Recent Improvements
 
+*   **🆕 Web Search Integration (July 2025):**
+    *   Complete web research infrastructure with support for multiple providers (Serper API, SerpAPI, Brave Search)
+    *   Secure API key management through Supabase Vault integration
+    *   Web search, page scraping, and AI-powered content summarization capabilities
+    *   Edge Function (`web-search-api`) for server-side search operations
+    *   Integration setup modal with provider selection and key management
+*   **🆕 Secure Secret Management System (July 2025):**
+    *   Implemented centralized `VaultService` class for secure secret management
+    *   Created `create-secret` Edge Function with proper CORS handling for production deployments
+    *   Added `get_secret` database function for secure secret retrieval
+    *   Established reusable pattern for all future API integrations and OAuth systems
+*   **🆕 Gmail Integration Enhancement (July 2025):**
+    *   Enhanced existing Gmail OAuth integration with improved security
+    *   Updated to use new VaultService for secure token storage
+    *   Improved error handling and permission validation
 *   **Agent Edit Page Refactor:**
     *   Fixed double sidebar issue by removing redundant Layout wrapper that was applied both at the route level and component level
     *   Solved scrolling issues by fixing `overflow-y-auto` in Layout component and replacing Monaco editor with Shadcn UI's Textarea
@@ -391,6 +524,9 @@ Located in `services/`. These are designed for persistent execution on a server 
 
 *   **Workspace Refactor:** Largely complete, including DB schema, backend hooks, core UI, chat functionality, context window settings, and member management.
 *   **UI Improvements:** Completed significant improvements to the AgentEditPage, focusing on layout, organization, and better component usage.
+*   **✅ Web Search Integration:** **COMPLETE** - Full web research capabilities deployed with multi-provider support, secure API key management, and AI-powered content summarization.
+*   **✅ Secure Secret Management:** **COMPLETE** - Comprehensive VaultService system deployed with encrypted storage, server-side operations, and reusable architecture for all future integrations.
+*   **✅ Gmail Integration:** **ENHANCED** - Existing Gmail OAuth integration updated with improved security and VaultService integration.
 *   **MCP Management Interface (Phase 2.3.1):** **40% Complete** - Major progress on Multi-MCP Management Components:
     *   ✅ **Foundation Complete:** TypeScript interfaces, component architecture, DTMA API integration
     *   ✅ **MCPServerList Component:** Full server listing with search, filtering, status management (432 lines)
@@ -404,7 +540,7 @@ Located in `services/`. These are designed for persistent execution on a server 
     *   Complete remaining MCP management components (MCPServerConfig, health monitoring)
     *   Finalize admin marketplace management interface
     *   Continue thorough testing of Workspace features (chat, settings, member management, context limits)
-*   **Future:** Link Supabase project for proper CLI functionality, refactor remaining large components, enhance Team-based workspace access logic.
+*   **Future:** Link Supabase project for proper CLI functionality, refactor remaining large components, enhance Team-based workspace access logic, extend VaultService for additional OAuth providers (Slack, GitHub, etc.).
 
 ## Deployment
 
