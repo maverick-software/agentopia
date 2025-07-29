@@ -109,13 +109,14 @@ export function IntegrationSetupModal({
 
       if (providerError) throw providerError;
 
-      // Store API key in vault
-      const { data: encryptedKey, error: vaultError } = await supabase
-        .rpc('vault.create_secret', {
-          secret: formData.api_key,
+      // Store API key by invoking the new Edge Function
+      const { data: encryptedKey, error: vaultError } = await supabase.functions.invoke('create-secret', {
+        body: {
           name: `${providerName}_api_key_${user.id}_${Date.now()}`,
+          secret: formData.api_key,
           description: `${integration.name} API key for user ${user.id}`
-        });
+        }
+      });
 
       if (vaultError) throw vaultError;
 
