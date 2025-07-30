@@ -372,18 +372,25 @@ export class FunctionCallingManager {
   }
 
   /**
-   * Get Web Search tools for an agent
+   * Get Web Search tools for an agent (using unified OAuth system)
    */
   private async getWebSearchTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
     try {
-      // Check if user has web search API keys configured
-      const { data: hasPermissions } = await this.supabaseClient
-        .rpc('validate_web_search_permissions', {
-          p_agent_id: agentId,
-          p_user_id: userId,
-        });
+      // Check if agent has web search permissions using the unified OAuth system
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          *,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name)
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('is_active', true);
 
-      if (!hasPermissions) {
+      if (!permissions || permissions.length === 0) {
         console.log(`[FunctionCalling] No web search permissions found for agent ${agentId}`);
         return [];
       }
@@ -391,12 +398,15 @@ export class FunctionCallingManager {
       console.log(`[FunctionCalling] Agent ${agentId} has web search permissions`);
       console.log(`[FunctionCalling] Available web search tool definitions:`, Object.keys(WEB_SEARCH_MCP_TOOLS));
       
-      // All web search tools are available if user has API keys configured
-      const availableTools: OpenAIFunction[] = Object.values(WEB_SEARCH_MCP_TOOLS).map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      }));
+      // Filter tools based on granted scopes
+      const grantedScopes = permissions[0]?.allowed_scopes || [];
+      const availableTools: OpenAIFunction[] = Object.values(WEB_SEARCH_MCP_TOOLS)
+        .filter(tool => tool.required_scopes.some(scope => grantedScopes.includes(scope)))
+        .map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        }));
 
       console.log(`[FunctionCalling] Available web search tools for agent ${agentId}:`, availableTools.map(t => t.name));
       return availableTools;
@@ -597,17 +607,24 @@ export class FunctionCallingManager {
   }
 
   /**
-   * Validate web search permissions for an agent
+   * Validate web search permissions for an agent (using unified OAuth system)
    */
   private async validateWebSearchPermissions(agentId: string, userId: string): Promise<boolean> {
     try {
-      const { data: isValid } = await this.supabaseClient
-        .rpc('validate_web_search_permissions', {
-          p_agent_id: agentId,
-          p_user_id: userId,
-        });
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          *,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name)
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('is_active', true);
 
-      return isValid || false;
+      return permissions && permissions.length > 0;
     } catch (error) {
       console.error('[FunctionCalling] Error validating web search permissions:', error);
       return false;
