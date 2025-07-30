@@ -54,25 +54,12 @@
     --chat-ai-text: 240 10% 3.9%;             /* AI message text */
     --chat-timestamp: 215.4 16.3% 46.9%;      /* Timestamp color */
     
-      /* Dashboard Colors */
-  --dashboard-card: 0 0% 100%;              /* White dashboard cards */
-  --dashboard-card-border: 214.3 31.8% 91.4%; /* Light borders */
-  --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
-  --dashboard-stat-negative: 0 84.2% 60.2%;  /* Red for negative stats */
-  --dashboard-stat-neutral: 215.4 16.3% 46.9%; /* Gray for neutral stats */
-
-  /* Vibrant Icon Colors - Professional Color Palette */
-  --icon-dashboard: 262 83% 58%;           /* Purple - Analytics & Overview */
-  --icon-agents: 221.2 83.2% 53.3%;       /* Blue - Primary Actions */
-  --icon-memory: 142.1 76.2% 36.3%;       /* Green - Knowledge & Growth */
-  --icon-workflows: 25 95% 53%;            /* Orange - Processes & Automation */
-  --icon-integrations: 173 58% 39%;        /* Teal - Connections */
-  --icon-credentials: 0 84.2% 60.2%;       /* Red - Security & Access */
-  --icon-teams: 231 48% 48%;               /* Indigo - Collaboration */
-  --icon-workspaces: 199 89% 48%;          /* Cyan - Spaces & Environments */
-  --icon-projects: 316 73% 52%;            /* Pink - Creativity & Projects */
-  --icon-settings: 215.4 16.3% 46.9%;     /* Gray - Utility & Configuration */
-  --icon-monitoring: 47.9 95.8% 53.1%;    /* Amber - System Monitoring */
+    /* Dashboard Colors */
+    --dashboard-card: 0 0% 100%;              /* White dashboard cards */
+    --dashboard-card-border: 214.3 31.8% 91.4%; /* Light borders */
+    --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
+    --dashboard-stat-negative: 0 84.2% 60.2%;  /* Red for negative stats */
+    --dashboard-stat-neutral: 215.4 16.3% 46.9%; /* Gray for neutral stats */
   }
 
   .dark {
@@ -119,25 +106,12 @@
     --chat-ai-text: 210 20% 98%;              /* AI message text */
     --chat-timestamp: 210 15% 70%;            /* Timestamp color */
     
-      /* Dashboard Colors */
-  --dashboard-card: 217 25% 12%;            /* Dark dashboard cards */
-  --dashboard-card-border: 217 19% 20%;     /* Dark borders */
-  --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
-  --dashboard-stat-negative: 0 62.8% 30.6%;  /* Red for negative stats */
-  --dashboard-stat-neutral: 210 15% 70%;     /* Gray for neutral stats */
-
-  /* Vibrant Icon Colors - Dark Mode Optimized */
-  --icon-dashboard: 262 73% 68%;           /* Purple - Lighter for dark mode */
-  --icon-agents: 221.2 83.2% 63.3%;       /* Blue - Lighter for contrast */
-  --icon-memory: 142.1 66.2% 46.3%;       /* Green - Adjusted for dark */
-  --icon-workflows: 25 85% 63%;            /* Orange - Lighter for visibility */
-  --icon-integrations: 173 48% 49%;        /* Teal - Better dark contrast */
-  --icon-credentials: 0 74.2% 70.2%;       /* Red - Lighter for dark mode */
-  --icon-teams: 231 38% 58%;               /* Indigo - Adjusted for dark */
-  --icon-workspaces: 199 79% 58%;          /* Cyan - Lighter for contrast */
-  --icon-projects: 316 63% 62%;            /* Pink - Better dark visibility */
-  --icon-settings: 210 15% 70%;            /* Gray - Light for dark mode */
-  --icon-monitoring: 47.9 85.8% 63.1%;    /* Amber - Lighter for dark */
+    /* Dashboard Colors */
+    --dashboard-card: 217 25% 12%;            /* Dark dashboard cards */
+    --dashboard-card-border: 217 19% 20%;     /* Dark borders */
+    --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
+    --dashboard-stat-negative: 0 62.8% 30.6%;  /* Red for negative stats */
+    --dashboard-stat-neutral: 210 15% 70%;     /* Gray for neutral stats */
   }
 }
 

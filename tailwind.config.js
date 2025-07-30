@@ -49,13 +49,44 @@ export default {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
-  			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
-  			}
+  						chart: {
+				'1': 'hsl(var(--chart-1))',
+				'2': 'hsl(var(--chart-2))',
+				'3': 'hsl(var(--chart-3))',
+				'4': 'hsl(var(--chart-4))',
+				'5': 'hsl(var(--chart-5))'
+			},
+			warning: {
+				DEFAULT: 'hsl(var(--warning))',
+				foreground: 'hsl(var(--warning-foreground))'
+			},
+			success: {
+				DEFAULT: 'hsl(var(--success))',
+				foreground: 'hsl(var(--success-foreground))'
+			},
+			'sidebar-background': 'hsl(var(--sidebar-background))',
+			'sidebar-foreground': 'hsl(var(--sidebar-foreground))',
+			'sidebar-primary': 'hsl(var(--sidebar-primary))',
+			'sidebar-primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+			'sidebar-accent': 'hsl(var(--sidebar-accent))',
+			'sidebar-accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+			'sidebar-border': 'hsl(var(--sidebar-border))',
+			'dashboard-card': 'hsl(var(--dashboard-card))',
+			'dashboard-card-border': 'hsl(var(--dashboard-card-border))',
+			'dashboard-stat-positive': 'hsl(var(--dashboard-stat-positive))',
+			'dashboard-stat-negative': 'hsl(var(--dashboard-stat-negative))',
+			'dashboard-stat-neutral': 'hsl(var(--dashboard-stat-neutral))',
+			'icon-dashboard': 'hsl(var(--icon-dashboard))',
+			'icon-agents': 'hsl(var(--icon-agents))',
+			'icon-memory': 'hsl(var(--icon-memory))',
+			'icon-workflows': 'hsl(var(--icon-workflows))',
+			'icon-integrations': 'hsl(var(--icon-integrations))',
+			'icon-credentials': 'hsl(var(--icon-credentials))',
+			'icon-teams': 'hsl(var(--icon-teams))',
+			'icon-workspaces': 'hsl(var(--icon-workspaces))',
+			'icon-projects': 'hsl(var(--icon-projects))',
+			'icon-settings': 'hsl(var(--icon-settings))',
+			'icon-monitoring': 'hsl(var(--icon-monitoring))'
   		}
   	}
   },

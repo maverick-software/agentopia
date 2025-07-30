@@ -156,16 +156,16 @@ export function DashboardPage() {
         {statCards.map(({ label, value, icon: Icon, color, description }) => (
           <div
             key={label}
-            className="bg-dashboard-card border border-dashboard-card-border rounded-lg p-6 shadow-sm"
+            className="bg-gray-800 rounded-lg p-6"
           >
             <div className="flex items-start space-x-4">
               <div className={`${color} p-3 rounded-lg`}>
                 <Icon className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
-                <h2 className="text-lg font-semibold text-foreground">{label}</h2>
-                <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
-                <p className="text-sm text-muted-foreground mt-2">{description}</p>
+                <h2 className="text-lg font-semibold text-gray-300">{label}</h2>
+                <p className="text-2xl font-bold text-white mt-1">{value}</p>
+                <p className="text-sm text-gray-400 mt-2">{description}</p>
               </div>
             </div>
           </div>
@@ -173,49 +173,49 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-dashboard-card border border-dashboard-card-border rounded-lg p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-foreground mb-4">System Status</h2>
+        <div className="bg-gray-800 rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">System Status</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Database Connection</span>
-              <span className="flex items-center text-dashboard-stat-positive">
-                <span className="w-2 h-2 bg-dashboard-stat-positive rounded-full mr-2"></span>
+              <span className="text-gray-400">Database Connection</span>
+              <span className="flex items-center text-green-400">
+                <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
                 Operational
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Vector Search</span>
-              <span className="flex items-center text-dashboard-stat-positive">
-                <span className="w-2 h-2 bg-dashboard-stat-positive rounded-full mr-2"></span>
+              <span className="text-gray-400">Vector Search</span>
+              <span className="flex items-center text-green-400">
+                <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
                 Operational
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Discord Integration</span>
-              <span className="flex items-center text-warning">
-                <span className="w-2 h-2 bg-warning rounded-full mr-2"></span>
+              <span className="text-gray-400">Discord Integration</span>
+              <span className="flex items-center text-yellow-400">
+                <span className="w-2 h-2 bg-yellow-400 rounded-full mr-2"></span>
                 Partial
               </span>
             </div>
           </div>
         </div>
 
-        <div className="bg-dashboard-card border border-dashboard-card-border rounded-lg p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-foreground mb-4">Recent Activity</h2>
+        <div className="bg-gray-800 rounded-lg p-6">
+          <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
           {stats.loading ? (
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="animate-pulse flex space-x-4">
-                  <div className="w-12 h-12 bg-muted rounded"></div>
+                  <div className="w-12 h-12 bg-gray-700 rounded"></div>
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-muted rounded w-3/4"></div>
-                    <div className="h-3 bg-muted rounded w-1/2"></div>
+                    <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-700 rounded w-1/2"></div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-muted-foreground">No recent activity</div>
+            <div className="text-gray-400">No recent activity</div>
           )}
         </div>
       </div>

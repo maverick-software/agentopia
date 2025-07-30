@@ -29,50 +29,17 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-// Helper function to get icon color class based on route or label
-const getIconColorClass = (route: string, label: string): string => {
-  // Check by route first, then by label for flexibility
-  if (route.includes('/dashboard') || label.includes('Dashboard')) return 'text-icon-dashboard';
-  if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
-  if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
-  if (route.includes('/workflows') || label.includes('Workflows')) return 'text-icon-workflows';
-  if (route.includes('/integrations') || label.includes('Integrations')) return 'text-icon-integrations';
-  if (route.includes('/credentials') || label.includes('Credentials')) return 'text-icon-credentials';
-  if (route.includes('/teams') || label.includes('Team')) return 'text-icon-teams';
-  if (route.includes('/workspaces') || label.includes('Workspaces')) return 'text-icon-workspaces';
-  if (route.includes('/projects') || label.includes('Projects')) return 'text-icon-projects';
-  if (route.includes('/monitoring') || label.includes('Monitoring')) return 'text-icon-monitoring';
-  if (route.includes('/settings') || label.includes('Settings')) return 'text-icon-settings';
-  
-  // Default fallback
-  return 'text-sidebar-foreground';
-};
-
-// Updated navigation structure with organized hierarchical nesting
+// Updated navigation structure with nesting
 const navItems: NavItem[] = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { 
-    to: '/agents', 
-    icon: Users, 
-    label: 'Agents',
-    children: [
-      { to: '/agents', icon: Users, label: 'Agent Management' },
-      { to: '/memory', icon: MemoryStick, label: 'Memory' },
-      { to: '/workflows', icon: GitBranch, label: 'Workflows' },
-      { to: '/integrations', icon: Server, label: 'Integrations' },
-      { to: '/credentials', icon: Key, label: 'Credentials' },
-    ]
-  },
-  { 
-    to: '/teams', 
-    icon: Building2, 
-    label: 'Teams',
-    children: [
-      { to: '/teams', icon: Building2, label: 'Team Management' },
-      { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' },
-      { to: '/projects', icon: FolderKanban, label: 'Projects' },
-    ]
-  },
+  { to: '/agents', icon: Users, label: 'Agents' },
+  { to: '/memory', icon: MemoryStick, label: 'Memory' },
+  { to: '/teams', icon: Building2, label: 'Teams' },
+  { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
+  { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/integrations', icon: Server, label: 'Integrations' },
+  { to: '/credentials', icon: Key, label: 'Credentials' },
   {
     to: '/settings', 
     icon: Settings, 
@@ -113,9 +80,9 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
           }`}
           style={{ paddingLeft: `${1 + level * 1.5}rem` }} // Indentation for submenus
         >
-          <item.icon className={`w-5 h-5 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
+          <item.icon className="w-5 h-5 flex-shrink-0" />
           <span className="font-medium flex-1 text-left truncate">{item.label}</span>
-          {isExpanded ? <ChevronDown size={16} className="text-sidebar-foreground" /> : <ChevronRight size={16} className="text-sidebar-foreground" />}
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </button>
         {isExpanded && (
           <div className="mt-1 space-y-1">
@@ -148,7 +115,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
         }
         style={!isCollapsed ? { paddingLeft: `${1 + level * 1.5}rem` } : {}}
       >
-        <item.icon className={`w-5 h-5 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
+        <item.icon className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? '' : ''}`} />
         {!isCollapsed && <span className="font-medium truncate">{item.label}</span>}
       </NavLink>
     );
@@ -186,7 +153,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       <div className="flex-1 mb-4 flex flex-col">
         <div>
           <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
-            <Bot size={isCollapsed ? 28 : 24} className="text-icon-agents" />
+            <Bot size={isCollapsed ? 28 : 24} className="text-sidebar-primary" />
             <span className={`ml-2 text-xl font-bold text-sidebar-foreground transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
               Agentopia
             </span>

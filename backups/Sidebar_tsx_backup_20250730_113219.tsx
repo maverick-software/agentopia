@@ -29,50 +29,17 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-// Helper function to get icon color class based on route or label
-const getIconColorClass = (route: string, label: string): string => {
-  // Check by route first, then by label for flexibility
-  if (route.includes('/dashboard') || label.includes('Dashboard')) return 'text-icon-dashboard';
-  if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
-  if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
-  if (route.includes('/workflows') || label.includes('Workflows')) return 'text-icon-workflows';
-  if (route.includes('/integrations') || label.includes('Integrations')) return 'text-icon-integrations';
-  if (route.includes('/credentials') || label.includes('Credentials')) return 'text-icon-credentials';
-  if (route.includes('/teams') || label.includes('Team')) return 'text-icon-teams';
-  if (route.includes('/workspaces') || label.includes('Workspaces')) return 'text-icon-workspaces';
-  if (route.includes('/projects') || label.includes('Projects')) return 'text-icon-projects';
-  if (route.includes('/monitoring') || label.includes('Monitoring')) return 'text-icon-monitoring';
-  if (route.includes('/settings') || label.includes('Settings')) return 'text-icon-settings';
-  
-  // Default fallback
-  return 'text-sidebar-foreground';
-};
-
-// Updated navigation structure with organized hierarchical nesting
+// Updated navigation structure with nesting
 const navItems: NavItem[] = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { 
-    to: '/agents', 
-    icon: Users, 
-    label: 'Agents',
-    children: [
-      { to: '/agents', icon: Users, label: 'Agent Management' },
-      { to: '/memory', icon: MemoryStick, label: 'Memory' },
-      { to: '/workflows', icon: GitBranch, label: 'Workflows' },
-      { to: '/integrations', icon: Server, label: 'Integrations' },
-      { to: '/credentials', icon: Key, label: 'Credentials' },
-    ]
-  },
-  { 
-    to: '/teams', 
-    icon: Building2, 
-    label: 'Teams',
-    children: [
-      { to: '/teams', icon: Building2, label: 'Team Management' },
-      { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' },
-      { to: '/projects', icon: FolderKanban, label: 'Projects' },
-    ]
-  },
+  { to: '/agents', icon: Users, label: 'Agents' },
+  { to: '/memory', icon: MemoryStick, label: 'Memory' },
+  { to: '/teams', icon: Building2, label: 'Teams' },
+  { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' }, 
+  { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/integrations', icon: Server, label: 'Integrations' },
+  { to: '/credentials', icon: Key, label: 'Credentials' },
   {
     to: '/settings', 
     icon: Settings, 
@@ -108,14 +75,14 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center w-full space-x-3 rounded-md transition-colors px-4 py-3 text-sidebar-foreground hover:bg-sidebar-accent ${
-            isActiveOrParent ? 'bg-sidebar-accent/50' : '' // Subtle highlight for active parent
+          className={`flex items-center w-full space-x-3 rounded-md transition-colors px-4 py-3 text-gray-300 hover:bg-gray-700 ${
+            isActiveOrParent ? 'bg-gray-700/50' : '' // Subtle highlight for active parent
           }`}
           style={{ paddingLeft: `${1 + level * 1.5}rem` }} // Indentation for submenus
         >
-          <item.icon className={`w-5 h-5 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
+          <item.icon className="w-5 h-5 flex-shrink-0" />
           <span className="font-medium flex-1 text-left truncate">{item.label}</span>
-          {isExpanded ? <ChevronDown size={16} className="text-sidebar-foreground" /> : <ChevronRight size={16} className="text-sidebar-foreground" />}
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </button>
         {isExpanded && (
           <div className="mt-1 space-y-1">
@@ -142,13 +109,13 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
                 : 'px-4 py-3' // Top-level item style (not collapsed)
           } ${
             isActive
-              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-              : 'text-sidebar-foreground hover:bg-sidebar-accent'
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-300 hover:bg-gray-700'
           }`
         }
         style={!isCollapsed ? { paddingLeft: `${1 + level * 1.5}rem` } : {}}
       >
-        <item.icon className={`w-5 h-5 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
+        <item.icon className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? '' : ''}`} />
         {!isCollapsed && <span className="font-medium truncate">{item.label}</span>}
       </NavLink>
     );
@@ -181,13 +148,13 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   return (
     <nav 
-      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-auto transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16 p-2' : 'w-64 p-4'}`}
+      className={`relative flex flex-col bg-gray-800 h-full overflow-y-auto transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16 p-2' : 'w-64 p-4'}`}
     >
       <div className="flex-1 mb-4 flex flex-col">
         <div>
           <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
-            <Bot size={isCollapsed ? 28 : 24} className="text-icon-agents" />
-            <span className={`ml-2 text-xl font-bold text-sidebar-foreground transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
+            <Bot size={isCollapsed ? 28 : 24} className="text-indigo-400" />
+            <span className={`ml-2 text-xl font-bold text-white transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
               Agentopia
             </span>
           </div>
@@ -201,7 +168,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className={`mt-auto text-sidebar-foreground hover:text-sidebar-accent-foreground p-1 rounded hover:bg-sidebar-accent transition-colors duration-200 mb-2 ${ 
+          className={`mt-auto text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700 transition-colors duration-200 mb-2 ${ 
             isCollapsed ? 'self-center' : 'self-start ml-1'
           }`}
           title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
@@ -214,23 +181,23 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
-              className={`flex items-center w-full rounded-md hover:bg-sidebar-accent transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
+              className={`flex items-center w-full rounded-md hover:bg-gray-700 transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
               title="Account options"
             >
               <Avatar className={`flex-shrink-0 w-8 h-8 ${!isCollapsed ? 'mr-3' : ''}`}> 
-                 <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
+                 <AvatarFallback className="bg-indigo-500 text-white text-xs">
                     {user.email?.substring(0, 2).toUpperCase() || '??'}
                  </AvatarFallback>
               </Avatar>
               {!isCollapsed && (
-                <span className="flex-1 text-sm text-left text-sidebar-foreground truncate" title={user.email || 'User'}>
+                <span className="flex-1 text-sm text-left text-gray-300 truncate" title={user.email || 'User'}>
                   {user.email}
                 </span>
               )}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent 
-             className="w-56 bg-popover border-border text-popover-foreground" 
+             className="w-56 bg-gray-800 border-gray-700 text-gray-200" 
              sideOffset={5} 
              align={isCollapsed ? "start" : "center"}
              alignOffset={isCollapsed ? 5 : 0}
@@ -238,27 +205,27 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                  <p className="text-sm font-medium leading-none">Signed in as</p>
-                 <p className="text-xs leading-none text-muted-foreground truncate">
+                 <p className="text-xs leading-none text-gray-400 truncate">
                     {user.email}
                  </p>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator className="border-border" />
+            <DropdownMenuSeparator className="bg-gray-700" />
             {isAdmin && (
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-gray-700 focus:text-white">
                  <Link to="/admin" className="flex items-center w-full">
                     <UserIcon className="mr-2 h-4 w-4" />
                     <span>Admin Panel</span>
                  </Link>
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
+            <DropdownMenuItem asChild className="cursor-pointer focus:bg-gray-700 focus:text-white">
                <Link to="/settings" className="flex items-center w-full">
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="border-border" />
+            <DropdownMenuSeparator className="bg-gray-700" />
             <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-900/50 focus:text-red-300">
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>

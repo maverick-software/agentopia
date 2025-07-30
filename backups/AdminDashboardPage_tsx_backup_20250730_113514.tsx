@@ -55,48 +55,48 @@ export function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* User Stat Card */}
-        <div className="bg-dashboard-card border border-dashboard-card-border p-6 rounded-lg shadow-sm">
+        <div className="bg-gray-800 p-6 rounded-lg shadow">
           <div className="flex items-center space-x-4">
             <div className="bg-blue-500 p-3 rounded-lg">
                 <Users className="w-6 h-6 text-white" />
             </div>
             <div>
-                <h2 className="text-lg font-semibold text-foreground">Total Users</h2>
+                <h2 className="text-lg font-semibold text-gray-400">Total Users</h2>
                 {loading ? (
-                    <div className="h-8 w-16 bg-muted rounded animate-pulse mt-1"></div>
+                    <div className="h-8 w-16 bg-gray-700 rounded animate-pulse mt-1"></div>
                 ) : (
-                    <p className="text-3xl font-bold text-foreground mt-1">{stats?.totalUsers ?? 'N/A'}</p>
+                    <p className="text-3xl font-bold text-white mt-1">{stats?.totalUsers ?? 'N/A'}</p>
                 )}
             </div>
           </div>
         </div>
 
         {/* Active Agent Stat Card */}
-        <div className="bg-dashboard-card border border-dashboard-card-border p-6 rounded-lg shadow-sm">
+        <div className="bg-gray-800 p-6 rounded-lg shadow">
             <div className="flex items-center space-x-4">
                 <div className="bg-green-500 p-3 rounded-lg">
                     <Bot className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <h2 className="text-lg font-semibold text-foreground">Active Agents</h2>
+                    <h2 className="text-lg font-semibold text-gray-400">Active Agents</h2>
                     {loading ? (
-                        <div className="h-8 w-16 bg-muted rounded animate-pulse mt-1"></div>
+                        <div className="h-8 w-16 bg-gray-700 rounded animate-pulse mt-1"></div>
                     ) : (
-                        <p className="text-3xl font-bold text-foreground mt-1">{stats?.activeAgents ?? 'N/A'}</p>
+                        <p className="text-3xl font-bold text-white mt-1">{stats?.activeAgents ?? 'N/A'}</p>
                     )}
                 </div>
             </div>
         </div>
 
         {/* System Health Placeholder Card (update later in WBS 3.6) */}
-        <div className="bg-dashboard-card border border-dashboard-card-border p-6 rounded-lg shadow-sm">
+        <div className="bg-gray-800 p-6 rounded-lg shadow">
              <div className="flex items-center space-x-4">
                  <div className="bg-yellow-500 p-3 rounded-lg">
                      <AlertCircle className="w-6 h-6 text-white" /> 
                  </div>
                  <div>
-                     <h2 className="text-lg font-semibold text-foreground">System Health</h2>
-                     <p className="text-muted-foreground mt-1 italic">Metrics coming soon...</p>
+                     <h2 className="text-lg font-semibold text-gray-400">System Health</h2>
+                     <p className="text-gray-500 mt-1 italic">Metrics coming soon...</p>
                  </div>
              </div>
         </div>
