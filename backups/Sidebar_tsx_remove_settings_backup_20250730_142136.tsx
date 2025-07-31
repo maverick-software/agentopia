@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
-  LayoutDashboard, Users, Settings,
-  LogOut, Bot, PanelLeftClose, PanelRightClose,
+  LayoutDashboard, Users, Database, Brain, Activity, Settings,
+  ShieldCheck, LogOut, Bot, PanelLeftClose, PanelRightClose,
   MessageSquare, ChevronDown, ChevronRight, MemoryStick,
-  GitBranch, FolderKanban,
+  Wrench, GitBranch, FolderKanban, Folder,
   Building2,
   User as UserIcon,
-  Server, Key
+  Server, Store, Key
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -41,6 +41,7 @@ const getIconColorClass = (route: string, label: string): string => {
   if (route.includes('/teams') || label.includes('Team')) return 'text-icon-teams';
   if (route.includes('/workspaces') || label.includes('Workspaces')) return 'text-icon-workspaces';
   if (route.includes('/projects') || label.includes('Projects')) return 'text-icon-projects';
+  if (route.includes('/monitoring') || label.includes('Monitoring')) return 'text-icon-monitoring';
   if (route.includes('/settings') || label.includes('Settings')) return 'text-icon-settings';
   
   // Default fallback
@@ -70,6 +71,15 @@ const navItems: NavItem[] = [
       { to: '/teams', icon: Building2, label: 'Team Management' },
       { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' },
       { to: '/projects', icon: FolderKanban, label: 'Projects' },
+    ]
+  },
+  {
+    to: '/settings', 
+    icon: Settings, 
+    label: 'Settings',
+    children: [
+      { to: '/settings', icon: Settings, label: 'General Settings' },
+      { to: '/monitoring', icon: Activity, label: 'Monitoring' },
     ]
   },
 ];

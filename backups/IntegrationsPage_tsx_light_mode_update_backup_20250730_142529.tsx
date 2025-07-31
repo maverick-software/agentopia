@@ -143,21 +143,21 @@ export function IntegrationsPage() {
     return (
       <div className="flex-1 space-y-4 p-4 pt-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-white">Integrations</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[...Array(6)].map((_, i) => (
-            <Card key={i} className="bg-card border-border animate-pulse">
+            <Card key={i} className="bg-gray-900 border-gray-800 animate-pulse">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <div className="h-6 w-32 bg-muted rounded"></div>
-                  <div className="h-4 w-16 bg-muted rounded"></div>
+                  <div className="h-6 w-32 bg-gray-700 rounded"></div>
+                  <div className="h-4 w-16 bg-gray-700 rounded"></div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="h-4 w-full bg-muted rounded mb-2"></div>
-                <div className="h-4 w-2/3 bg-muted rounded mb-4"></div>
-                <div className="h-8 w-full bg-muted rounded"></div>
+                <div className="h-4 w-full bg-gray-700 rounded mb-2"></div>
+                <div className="h-4 w-2/3 bg-gray-700 rounded mb-4"></div>
+                <div className="h-8 w-full bg-gray-700 rounded"></div>
               </CardContent>
             </Card>
           ))}
@@ -171,15 +171,15 @@ export function IntegrationsPage() {
       {/* Header */}
       <div className="flex flex-col space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
+          <h2 className="text-3xl font-bold tracking-tight text-white">Integrations</h2>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-gray-400">
               {userIntegrations.length} connected
             </span>
           </div>
         </div>
         
-        <p className="text-muted-foreground text-sm">
+        <p className="text-gray-400 text-sm">
           Connect your favorite tools and services to power your AI agents with external capabilities.
         </p>
       </div>
@@ -187,24 +187,24 @@ export function IntegrationsPage() {
       {/* Search and Filter */}
       <div className="flex flex-col space-y-4">
         <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <Input
             placeholder="Search integrations..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-input border-border text-foreground placeholder-muted-foreground"
+            className="pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
           />
         </div>
 
         <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-          <TabsList className="bg-card border-border">
-            <TabsTrigger value="all" className="text-foreground">
+          <TabsList className="bg-gray-800 border-gray-700">
+            <TabsTrigger value="all" className="text-gray-300">
               All ({integrations.length})
             </TabsTrigger>
             {categories.map((category) => {
               const CategoryIcon = getIconComponent(category.icon_name);
               return (
-                <TabsTrigger key={category.id} value={category.id} className="text-foreground">
+                <TabsTrigger key={category.id} value={category.id} className="text-gray-300">
                   <CategoryIcon className="h-4 w-4 mr-2" />
                   {category.name}
                 </TabsTrigger>
@@ -226,15 +226,15 @@ export function IntegrationsPage() {
                 return (
                   <Card 
                     key={integration.id} 
-                    className={`bg-card border-border transition-colors ${
-                      isComingSoon ? 'opacity-60' : 'hover:border-muted-foreground'
+                    className={`bg-gray-900 border-gray-800 transition-colors ${
+                      isComingSoon ? 'opacity-60' : 'hover:border-gray-700'
                     }`}
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
                           <div className={`p-2 rounded-lg ${
-                            isComingSoon ? 'bg-muted/50' : 'bg-muted'
+                            isComingSoon ? 'bg-gray-800/50' : 'bg-gray-800'
                           }`}>
                             <IconComponent className={`h-5 w-5 ${
                               isComingSoon ? 'text-gray-500' : 'text-blue-400'
@@ -287,7 +287,7 @@ export function IntegrationsPage() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="flex-1 border-border text-foreground hover:bg-accent"
+                              className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-800"
                               onClick={() => handleAddCredentials(integration)}
                             >
                               <Settings className="h-4 w-4 mr-2" />
@@ -296,7 +296,7 @@ export function IntegrationsPage() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="border-border text-foreground hover:bg-accent"
+                              className="border-gray-700 text-gray-300 hover:bg-gray-800"
                             >
                               <ChevronRight className="h-4 w-4" />
                             </Button>
@@ -306,7 +306,7 @@ export function IntegrationsPage() {
                             onClick={() => handleAddCredentials(integration)}
                             className={`w-full ${
                               isComingSoon 
-                                ? 'bg-muted hover:bg-muted text-muted-foreground cursor-not-allowed' 
+                                ? 'bg-gray-700 hover:bg-gray-700 text-gray-500 cursor-not-allowed' 
                                 : 'bg-blue-600 hover:bg-blue-700 text-white'
                             }`}
                             disabled={isComingSoon}

@@ -252,7 +252,7 @@ export function AgentEdit() {
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Please sign in to manage agents.</div>
+        <div className="text-gray-400">Please sign in to manage agents.</div>
       </div>
     );
   }
@@ -260,7 +260,7 @@ export function AgentEdit() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading agent...</div>
+        <div className="text-gray-400">Loading agent...</div>
       </div>
     );
   }
@@ -271,7 +271,7 @@ export function AgentEdit() {
         <div className="flex items-center space-x-4">
           <button
             onClick={() => navigate('/agents')}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-gray-400 hover:text-white"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
@@ -327,11 +327,11 @@ export function AgentEdit() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Basic Information */}
-          <div className="bg-card border border-border rounded-lg p-6 space-y-4 shadow-sm">
+          <div className="bg-gray-800 rounded-lg p-6 space-y-4">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
             
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Name
               </label>
               <input
@@ -339,34 +339,34 @@ export function AgentEdit() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter agent name"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Description
               </label>
               <textarea
                 required
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter agent description"
                 rows={3}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Personality Template
               </label>
               <select
                 required
                 value={formData.personality}
                 onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">Select a template</option>
                 {personalityTemplates.map(template => (
@@ -379,7 +379,7 @@ export function AgentEdit() {
           </div>
 
           {/* Discord Configuration */}
-          <div className="bg-card border border-border rounded-lg p-6 space-y-4 shadow-sm">
+          <div className="bg-gray-800 rounded-lg p-6 space-y-4">
             <h2 className="text-xl font-semibold mb-4">Discord Configuration</h2>
             
             <DiscordConnect
@@ -394,12 +394,12 @@ export function AgentEdit() {
         </div>
 
         {/* System Instructions */}
-        <div className="bg-card border border-border rounded-lg p-6 space-y-4 shadow-sm">
+        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">System Instructions</h2>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-gray-400 mb-4">
             Define the core behavior and capabilities of your AI agent. These instructions set the foundation for how the agent will interact and process information.
           </p>
-          <div className="h-64 border border-border rounded-lg overflow-hidden">
+          <div className="h-64 border border-gray-700 rounded-lg overflow-hidden">
             <MonacoEditor
               language="markdown"
               theme="vs-dark"
@@ -417,12 +417,12 @@ export function AgentEdit() {
         </div>
 
         {/* Assistant Instructions */}
-        <div className="bg-card border border-border rounded-lg p-6 space-y-4 shadow-sm">
+        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
           <h2 className="text-xl font-semibold mb-4">Assistant Instructions</h2>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-gray-400 mb-4">
             Specify additional context and instructions for the assistant, including any relevant information from datastores or specific behavioral guidelines.
           </p>
-          <div className="h-64 border border-border rounded-lg overflow-hidden">
+          <div className="h-64 border border-gray-700 rounded-lg overflow-hidden">
             <MonacoEditor
               language="markdown"
               theme="vs-dark"
@@ -443,24 +443,24 @@ export function AgentEdit() {
       {/* Datastore Connection Modal */}
       {showDatastoreModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl shadow-lg">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl">
             <h2 className="text-2xl font-bold mb-6">Connect Datastores</h2>
             
             {loadingDatastores ? (
               <div className="text-center py-8">
                 <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading datastores...</p>
+                <p className="text-gray-400">Loading datastores...</p>
               </div>
             ) : datastores.length === 0 ? (
               <div className="text-center py-8">
-                <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No datastores found. Create a datastore first.</p>
+                <Database className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">No datastores found. Create a datastore first.</p>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Vector Datastore Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Vector Datastore
                   </label>
                   <select
@@ -469,7 +469,7 @@ export function AgentEdit() {
                       ...selectedDatastores,
                       vector: e.target.value || undefined
                     })}
-                    className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">Select a vector datastore</option>
                     {datastores
@@ -483,7 +483,7 @@ export function AgentEdit() {
 
                 {/* Knowledge Graph Datastore Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Knowledge Graph
                   </label>
                   <select
@@ -492,7 +492,7 @@ export function AgentEdit() {
                       ...selectedDatastores,
                       knowledge: e.target.value || undefined
                     })}
-                    className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">Select a knowledge graph datastore</option>
                     {datastores
@@ -508,7 +508,7 @@ export function AgentEdit() {
                   <button
                     type="button"
                     onClick={() => setShowDatastoreModal(false)}
-                    className="px-4 py-2 text-foreground hover:text-foreground transition-colors"
+                    className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
                     disabled={connectingDatastores}
                   >
                     Cancel

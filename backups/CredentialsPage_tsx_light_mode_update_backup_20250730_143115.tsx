@@ -179,7 +179,7 @@ export function CredentialsPage() {
       case 'revoked':
         return 'bg-red-500/10 text-red-500 border-red-500/20';
       default:
-        return 'bg-gray-500/10 text-muted-foreground border-gray-500/20';
+        return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
     }
   };
 
@@ -204,7 +204,7 @@ export function CredentialsPage() {
 
   const getTokenExpiryColor = (expiresAt: string | null, refreshStatus?: any): string => {
     if (refreshStatus?.success) return 'text-green-400';
-    if (!expiresAt) return 'text-muted-foreground';
+    if (!expiresAt) return 'text-gray-400';
     return isTokenExpired(expiresAt) ? 'text-red-400' : 'text-green-400';
   };
 
@@ -227,7 +227,7 @@ export function CredentialsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
       </div>
     );
   }
@@ -236,17 +236,17 @@ export function CredentialsPage() {
     <div className="container mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Credentials</h1>
-        <p className="text-muted-foreground">
+        <p className="text-gray-400">
           Manage your OAuth connections and API credentials stored securely in the vault.
         </p>
       </div>
 
       <div className="grid gap-4">
         {connections.length === 0 ? (
-          <Card className="bg-card border-border">
+          <Card className="bg-gray-800 border-gray-700">
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <Shield className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground text-center">
+              <Shield className="h-12 w-12 text-gray-500 mb-4" />
+              <p className="text-gray-400 text-center">
                 No credentials found. Connect to services from the Integrations page.
               </p>
               <Button
@@ -260,16 +260,16 @@ export function CredentialsPage() {
           </Card>
         ) : (
           connections.map((connection) => (
-            <Card key={connection.connection_id} className="bg-card border-border">
+            <Card key={connection.connection_id} className="bg-gray-800 border-gray-700">
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="text-2xl">{getProviderIcon(connection.provider_name)}</div>
                     <div>
-                      <CardTitle className="text-foreground">
+                      <CardTitle className="text-white">
                         {connection.provider_display_name}
                       </CardTitle>
-                      <CardDescription className="text-muted-foreground">
+                      <CardDescription className="text-gray-400">
                         {connection.external_username || connection.connection_name || 'Connected Account'}
                       </CardDescription>
                     </div>
@@ -285,17 +285,17 @@ export function CredentialsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2 text-sm">
-                    <Key className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Scopes:</span>
-                    <span className="text-foreground">
+                    <Key className="h-4 w-4 text-gray-500" />
+                    <span className="text-gray-400">Scopes:</span>
+                    <span className="text-gray-300">
                       {connection.scopes_granted.length} permissions granted
                     </span>
                   </div>
                   
                   {connection.token_expires_at && (
                     <div className="flex items-center space-x-2 text-sm">
-                      <Shield className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Token expires:</span>
+                      <Shield className="h-4 w-4 text-gray-500" />
+                      <span className="text-gray-400">Token expires:</span>
                       <span className={getTokenExpiryColor(connection.token_expires_at, refreshStatus[connection.connection_id])}>
                         {formatExpiryDate(connection.token_expires_at, refreshStatus[connection.connection_id])}
                       </span>
@@ -303,9 +303,9 @@ export function CredentialsPage() {
                   )}
 
                   <div className="flex items-center space-x-2 text-sm">
-                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Connected:</span>
-                    <span className="text-foreground">
+                    <ExternalLink className="h-4 w-4 text-gray-500" />
+                    <span className="text-gray-400">Connected:</span>
+                    <span className="text-gray-300">
                       {format(new Date(connection.created_at), 'PP')}
                     </span>
                   </div>
@@ -318,7 +318,7 @@ export function CredentialsPage() {
                       size="sm"
                       onClick={() => handleRefreshToken(connection.connection_id)}
                       disabled={refreshStatus[connection.connection_id]?.isRefreshing}
-                      className={`text-foreground hover:text-white ${
+                      className={`text-gray-300 hover:text-white ${
                         refreshStatus[connection.connection_id]?.success 
                           ? 'border-green-500 text-green-400' 
                           : refreshStatus[connection.connection_id]?.message && !refreshStatus[connection.connection_id]?.isRefreshing
@@ -373,12 +373,12 @@ export function CredentialsPage() {
 
                 {/* Expandable scopes section */}
                 <details className="text-sm">
-                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  <summary className="cursor-pointer text-gray-400 hover:text-gray-300">
                     View granted permissions
                   </summary>
                   <div className="mt-2 space-y-1">
                     {connection.scopes_granted.map((scope, index) => (
-                      <div key={index} className="text-muted-foreground pl-4">
+                      <div key={index} className="text-gray-500 pl-4">
                         • {scope}
                       </div>
                     ))}

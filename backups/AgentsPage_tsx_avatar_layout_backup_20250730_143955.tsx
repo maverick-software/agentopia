@@ -176,31 +176,9 @@ export function AgentsPage() {
           className="bg-card border border-border rounded-lg p-6 space-y-4 transition-colors duration-200 hover:bg-accent shadow-sm"
         >
           <div className="flex justify-between items-start">
-            <div className="flex items-start space-x-4 flex-1">
-              {/* Avatar */}
-              <div className="flex-shrink-0">
-                {agent.avatar_url ? (
-                  <img 
-                    src={agent.avatar_url} 
-                    alt={`${agent.name} avatar`}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-border"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-muted border-2 border-border flex items-center justify-center">
-                    <span className="text-muted-foreground text-lg font-semibold">
-                      {agent.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-              </div>
-              
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-semibold text-foreground">{agent.name}</h3>
-                <p className="text-muted-foreground text-sm mt-1 line-clamp-2 leading-relaxed">
-                  {agent.description}
-                </p>
-              </div>
+            <div>
+              <h3 className="text-xl font-semibold text-foreground">{agent.name}</h3>
+              <p className="text-muted-foreground text-sm mt-1">{agent.description}</p>
             </div>
             <div className="flex space-x-2">
               <button
@@ -235,16 +213,20 @@ export function AgentsPage() {
             </div>
           </div>
           
-          <div className="pt-4 border-t border-border">
+          <div className="pt-4 border-t border-[hsl(217,19%,20%)]">
+            <div className="flex justify-between text-sm">
+              <span className="text-[hsl(210,15%,70%)]">Personality:</span>
+              <span className="text-[hsl(210,20%,98%)]">{agent.personality}</span>
+            </div>
             {agent.discord_channel && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Discord Channel:</span>
-                <span className="text-foreground">#{agent.discord_channel}</span>
+              <div className="flex justify-between text-sm mt-2">
+                <span className="text-[hsl(210,15%,70%)]">Discord Channel:</span>
+                <span className="text-[hsl(210,20%,98%)]">#{agent.discord_channel}</span>
               </div>
             )}
-            <div className={`flex justify-between text-sm ${agent.discord_channel ? 'mt-2' : ''}`}>
-              <span className="text-muted-foreground">Status:</span>
-              <span className={agent.active ? 'text-success' : 'text-muted-foreground'}>
+            <div className="flex justify-between text-sm mt-2">
+              <span className="text-[hsl(210,15%,70%)]">Status:</span>
+              <span className={agent.active ? 'text-[hsl(160,60%,45%)]' : 'text-[hsl(210,15%,70%)]'}>
                 {agent.active ? 'Active' : 'Inactive'}
               </span>
             </div>

@@ -228,7 +228,7 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
 
   if (loading) {
     return (
-      <Card className={`bg-card border-border ${className}`}>
+      <Card className={`bg-gray-900 border-gray-800 ${className}`}>
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <Search className="h-5 w-5 text-blue-400" />
@@ -244,7 +244,7 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
 
   return (
     <>
-      <Card className={`bg-card border-border ${className}`}>
+      <Card className={`bg-gray-900 border-gray-800 ${className}`}>
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <Search className="h-5 w-5 text-blue-400" />
@@ -281,7 +281,7 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
                 <>
                   <div className="space-y-3">
                     {permissions.filter(perm => perm.is_active).map((permission) => (
-                      <div key={permission.permission_id} className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
+                      <div key={permission.permission_id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <div className="p-2 bg-gray-700 rounded-lg">
                             {getProviderIcon(permission.provider_name)}
@@ -315,7 +315,7 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
                   </div>
 
                   {getAvailableKeys().length > 0 && (
-                    <Button onClick={handleAddPermission} variant="outline" className="w-full border-border text-foreground hover:bg-card border border-border">
+                    <Button onClick={handleAddPermission} variant="outline" className="w-full border-gray-700 text-gray-300 hover:bg-gray-800">
                       <Plus className="h-4 w-4 mr-2" />
                       Add More Web Search Access
                     </Button>
@@ -329,7 +329,7 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
 
       {/* Add Permission Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="sm:max-w-[500px] bg-card border-gray-800">
+        <DialogContent className="sm:max-w-[500px] bg-gray-900 border-gray-800">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Search className="h-5 w-5 text-blue-400" />
@@ -355,10 +355,10 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
                 Select API Key
               </label>
               <Select value={selectedKeyId} onValueChange={setSelectedKeyId}>
-                <SelectTrigger className="bg-card border border-border border-border text-white">
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                   <SelectValue placeholder="Choose a web search API key" />
                 </SelectTrigger>
-                <SelectContent className="bg-card border border-border border-border">
+                <SelectContent className="bg-gray-800 border-gray-700">
                   {getAvailableKeys().map((key) => (
                     <SelectItem key={key.key_id} value={key.key_id} className="text-white hover:bg-gray-700">
                       <div className="flex items-center space-x-2">
@@ -402,7 +402,7 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
             <Button
               variant="outline"
               onClick={() => setShowAddModal(false)}
-              className="border-border text-foreground hover:bg-card border border-border"
+              className="border-gray-700 text-gray-300 hover:bg-gray-800"
             >
               Cancel
             </Button>

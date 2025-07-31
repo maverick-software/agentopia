@@ -198,7 +198,7 @@ export function DatastoresPage() {
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Please sign in to manage datastores.</div>
+        <div className="text-gray-400">Please sign in to manage datastores.</div>
       </div>
     );
   }
@@ -236,59 +236,59 @@ export function DatastoresPage() {
           Array.from({ length: 3 }).map((_, index) => (
             <div
               key={`skeleton-${index}`}
-              className="bg-card border border-border rounded-lg p-6 space-y-4"
+              className="bg-gray-800 rounded-lg p-6 space-y-4"
             >
               <div className="animate-pulse space-y-4">
                 <div className="flex justify-between">
-                  <div className="h-6 bg-muted rounded w-1/2"></div>
+                  <div className="h-6 bg-gray-700 rounded w-1/2"></div>
                   <div className="space-x-2 flex">
-                    <div className="w-8 h-8 bg-muted rounded"></div>
-                    <div className="w-8 h-8 bg-muted rounded"></div>
+                    <div className="w-8 h-8 bg-gray-700 rounded"></div>
+                    <div className="w-8 h-8 bg-gray-700 rounded"></div>
                   </div>
                 </div>
-                <div className="h-4 bg-muted rounded w-3/4"></div>
-                <div className="pt-4 border-t border-border space-y-2">
+                <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+                <div className="pt-4 border-t border-gray-700 space-y-2">
                   <div className="flex justify-between">
-                    <div className="h-4 bg-muted rounded w-1/4"></div>
-                    <div className="h-4 bg-muted rounded w-1/3"></div>
+                    <div className="h-4 bg-gray-700 rounded w-1/4"></div>
+                    <div className="h-4 bg-gray-700 rounded w-1/3"></div>
                   </div>
                   <div className="flex justify-between">
-                    <div className="h-4 bg-muted rounded w-1/4"></div>
-                    <div className="h-4 bg-muted rounded w-1/3"></div>
+                    <div className="h-4 bg-gray-700 rounded w-1/4"></div>
+                    <div className="h-4 bg-gray-700 rounded w-1/3"></div>
                   </div>
                 </div>
               </div>
             </div>
           ))
         ) : datastores.length === 0 ? (
-          <div className="col-span-full bg-card border border-border rounded-lg p-8 text-center">
-            <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No datastores found. Create your first datastore to get started!</p>
+          <div className="col-span-full bg-gray-800 rounded-lg p-8 text-center">
+            <Database className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">No datastores found. Create your first datastore to get started!</p>
           </div>
         ) : (
           datastores.map((datastore) => (
             <div
               key={datastore.id}
-              className="bg-card border border-border rounded-lg p-6 space-y-4"
+              className="bg-gray-800 rounded-lg p-6 space-y-4"
             >
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-xl font-semibold">{datastore.name}</h3>
-                  <p className="text-muted-foreground text-sm mt-1">
+                  <p className="text-gray-400 text-sm mt-1">
                     {datastore.description}
                   </p>
                 </div>
                 <div className="flex space-x-2">
                   <button
                     onClick={() => setEditingDatastore(datastore)}
-                    className="p-2 text-muted-foreground hover:text-primary rounded-md transition-colors"
+                    className="p-2 text-gray-400 hover:text-blue-400 rounded-md transition-colors"
                     title="Edit datastore"
                   >
                     <Edit2 className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(datastore.id)}
-                    className="p-2 text-muted-foreground hover:text-destructive rounded-md transition-colors"
+                    className="p-2 text-gray-400 hover:text-red-400 rounded-md transition-colors"
                     title="Delete datastore"
                   >
                     <Trash2 className="w-5 h-5" />
@@ -296,28 +296,28 @@ export function DatastoresPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-border">
+              <div className="pt-4 border-t border-gray-700">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Type:</span>
-                  <span className="text-foreground capitalize">{datastore.type}</span>
+                  <span className="text-gray-400">Type:</span>
+                  <span className="text-gray-300 capitalize">{datastore.type}</span>
                 </div>
                 {datastore.type === 'pinecone' && (
                   <>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-muted-foreground">Index:</span>
-                      <span className="text-foreground">
+                      <span className="text-gray-400">Index:</span>
+                      <span className="text-gray-300">
                         {datastore.config.indexName}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-muted-foreground">Region:</span>
-                      <span className="text-foreground">
+                      <span className="text-gray-400">Region:</span>
+                      <span className="text-gray-300">
                         {datastore.config.region}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-muted-foreground">Dimensions:</span>
-                      <span className="text-foreground">
+                      <span className="text-gray-400">Dimensions:</span>
+                      <span className="text-gray-300">
                         {datastore.config.dimensions}
                       </span>
                     </div>
@@ -326,14 +326,14 @@ export function DatastoresPage() {
                 {datastore.type === 'getzep' && (
                   <>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-muted-foreground">Collection:</span>
-                      <span className="text-foreground">
+                      <span className="text-gray-400">Collection:</span>
+                      <span className="text-gray-300">
                         {datastore.config.collectionName}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-muted-foreground">Project:</span>
-                      <span className="text-foreground">
+                      <span className="text-gray-400">Project:</span>
+                      <span className="text-gray-300">
                         {datastore.config.projectId}
                       </span>
                     </div>
@@ -342,8 +342,8 @@ export function DatastoresPage() {
               </div>
 
               {datastore.agent_datastores && datastore.agent_datastores.length > 0 && (
-                <div className="pt-4 border-t border-border">
-                  <div className="text-sm text-muted-foreground">
+                <div className="pt-4 border-t border-gray-700">
+                  <div className="text-sm text-gray-400">
                     Connected to {datastore.agent_datastores.length} agent{datastore.agent_datastores.length !== 1 ? 's' : ''}
                   </div>
                 </div>
@@ -355,15 +355,15 @@ export function DatastoresPage() {
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <h2 className="text-2xl font-bold mb-4">Delete Datastore</h2>
-            <p className="text-foreground mb-6">
+            <p className="text-gray-300 mb-6">
               Are you sure you want to delete this datastore? This action cannot be undone.
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
+                className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
                 disabled={isDeleting}
               >
                 Cancel
@@ -426,7 +426,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl">
+    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl">
       <h2 className="text-2xl font-bold mb-6">
         {datastore ? 'Edit Datastore' : 'Create Datastore'}
       </h2>
@@ -439,7 +439,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
             Name
           </label>
           <input
@@ -447,21 +447,21 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="Enter datastore name"
             disabled={isSaving}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
             Description
           </label>
           <textarea
             required
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="Enter datastore description"
             rows={3}
             disabled={isSaving}
@@ -469,7 +469,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label className="block text-sm font-medium text-gray-300 mb-1">
             Type
           </label>
           <select
@@ -480,7 +480,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
               type: e.target.value as 'pinecone' | 'getzep',
               config: {}
             })}
-            className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             disabled={isSaving}
           >
             <option value="pinecone">Pinecone</option>
@@ -491,7 +491,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
         {formData.type === 'pinecone' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 API Key
               </label>
               <input
@@ -502,14 +502,14 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, apiKey: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter Pinecone API key"
                 disabled={isSaving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Region
               </label>
               <input
@@ -520,14 +520,14 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, region: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter Pinecone region (e.g., us-west-2)"
                 disabled={isSaving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Host
               </label>
               <input
@@ -538,14 +538,14 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, host: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter Pinecone host URL"
                 disabled={isSaving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Index Name
               </label>
               <input
@@ -556,14 +556,14 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, indexName: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter index name"
                 disabled={isSaving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Dimensions
               </label>
               <input
@@ -575,7 +575,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, dimensions: parseInt(e.target.value, 10) }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter vector dimensions (e.g., 1536)"
                 disabled={isSaving}
               />
@@ -586,7 +586,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
         {formData.type === 'getzep' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 API Key
               </label>
               <input
@@ -597,14 +597,14 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, apiKey: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter Zep API key"
                 disabled={isSaving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Project ID
               </label>
               <input
@@ -615,14 +615,14 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, projectId: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter project ID"
                 disabled={isSaving}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 Collection Name
               </label>
               <input
@@ -633,7 +633,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                   ...formData,
                   config: { ...formData.config, collectionName: e.target.value }
                 })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter collection name"
                 disabled={isSaving}
               />
@@ -645,7 +645,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-foreground hover:text-white transition-colors"
+            className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
             disabled={isSaving}
           >
             Cancel
