@@ -14,11 +14,13 @@ import {
   ArrowLeft,
   Shield,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Search
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
+import { useWebSearchConnection, useAgentWebSearchPermissions } from '@/hooks/useWebSearchIntegration';
 import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
 import { toast } from 'react-hot-toast';
 
@@ -49,6 +51,13 @@ const DEFAULT_GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify'
 ];
 
+const DEFAULT_SEARCH_API_SCOPES = [
+  'web_search',
+  'news_search', 
+  'image_search',
+  'local_search'
+];
+
 export function AgentIntegrationsManager({ 
   agentId, 
   category = 'channel', 
@@ -57,6 +66,7 @@ export function AgentIntegrationsManager({
 }: AgentIntegrationsManagerProps) {
   const { user } = useAuth();
   const { connections: gmailConnections } = useGmailConnection();
+  const { connections: webSearchConnections } = useWebSearchConnection();
   const { integrations } = useIntegrationsByClassification(category as 'tool' | 'channel');
   
   // State for modals
@@ -69,7 +79,7 @@ export function AgentIntegrationsManager({
   const [workflowMode, setWorkflowMode] = useState<'add' | 'view' | 'edit'>('add');
   const [selectedIntegration, setSelectedIntegration] = useState<any>(null);
   const [selectedCredential, setSelectedCredential] = useState<any>(null);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(DEFAULT_GMAIL_SCOPES);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   const [editingPermission, setEditingPermission] = useState<AgentPermission | null>(null);
   
   // Data state
@@ -125,6 +135,16 @@ export function AgentIntegrationsManager({
   // Step 2: Show credentials for selected integration
   const handleSelectIntegration = (integration: { id: string; name: string; icon_name?: string }) => {
     setSelectedIntegration(integration);
+    
+    // Set default scopes based on integration type
+    const integrationId = integration.id || integration.name.toLowerCase();
+    const defaultScopes = integrationId === 'gmail' ? DEFAULT_GMAIL_SCOPES :
+                         (integrationId.includes('serper') || 
+                          integrationId.includes('serpapi') || 
+                          integrationId.includes('brave') || 
+                          integrationId.includes('search')) ? DEFAULT_SEARCH_API_SCOPES : [];
+    
+    setSelectedScopes(defaultScopes);
     setShowAddModal(false);
     setShowCredentialsModal(true);
   };
@@ -202,7 +222,7 @@ export function AgentIntegrationsManager({
     setShowViewModal(false);
     setSelectedIntegration(null);
     setSelectedCredential(null);
-    setSelectedScopes(DEFAULT_GMAIL_SCOPES);
+    setSelectedScopes([]);
     setEditingPermission(null);
     setWorkflowMode('add');
   };
@@ -211,7 +231,10 @@ export function AgentIntegrationsManager({
   const handleViewCredentials = (permission: AgentPermission) => {
     // Find the integration type and set up for viewing
     setWorkflowMode('view');
-    setSelectedIntegration({ name: 'Gmail', icon_name: 'Mail' });
+    const providerName = permission.connection?.provider_name || 'Integration';
+    const iconName = providerName.toLowerCase() === 'gmail' ? 'Mail' : 
+                     providerName.toLowerCase().includes('search') ? 'Search' : 'Settings';
+    setSelectedIntegration({ name: providerName, icon_name: iconName });
     setSelectedCredential(permission.connection);
     setShowViewModal(true);
   };
@@ -221,7 +244,16 @@ export function AgentIntegrationsManager({
     setWorkflowMode('edit');
     setEditingPermission(permission);
     setSelectedCredential(permission.connection);
-    setSelectedScopes(permission.allowed_scopes || DEFAULT_GMAIL_SCOPES);
+    
+    // Set default scopes based on provider type if no existing scopes
+    const providerName = permission.connection?.provider_name?.toLowerCase();
+    const defaultScopes = providerName === 'gmail' ? DEFAULT_GMAIL_SCOPES :
+                         (providerName?.includes('search') || 
+                          providerName?.includes('serper') || 
+                          providerName?.includes('serpapi') || 
+                          providerName?.includes('brave')) ? DEFAULT_SEARCH_API_SCOPES : [];
+    
+    setSelectedScopes(permission.allowed_scopes || defaultScopes);
     setShowViewModal(false);
     setShowPermissionsModal(true);
   };
@@ -260,20 +292,74 @@ export function AgentIntegrationsManager({
     }
     
     // If no integration found, default based on provider name patterns
-    // Gmail should be a channel, everything else defaults to tool
+    // Gmail should be a channel, Web Search should be a tool, everything else defaults to tool
     const providerName = permission.connection?.provider_name?.toLowerCase();
     if (providerName === 'gmail') {
       return category === 'channel';
+    }
+    if (providerName?.includes('search') || 
+        providerName?.includes('serper') || 
+        providerName?.includes('serpapi') || 
+        providerName?.includes('brave') ||
+        providerName === 'web search') {
+      return category === 'tool';
     }
     
     return category === 'tool';
   });
 
   // Get available credentials for selected integration
-  const availableCredentials = gmailConnections.filter(
-    conn => conn.connection_status === 'active' && 
-    !permissions.some(perm => perm.user_oauth_connection_id === conn.id)
-  );
+  const getAvailableCredentials = () => {
+    if (!selectedIntegration) return [];
+    
+    const integrationId = selectedIntegration.id || selectedIntegration.name?.toLowerCase();
+    switch (integrationId) {
+      case 'gmail':
+        return gmailConnections.filter(
+          conn => conn.connection_status === 'active' && 
+          !permissions.some(perm => perm.user_oauth_connection_id === conn.id)
+        );
+      case 'serper-api':
+      case 'serper api':
+      case 'serpapi':
+      case 'brave-search-api':
+      case 'brave search api':
+      case 'web-search':
+      case 'web search':
+        // Filter web search connections by the specific provider type
+        // Match against provider_name from database: 'serper_api', 'serpapi', 'brave_search'
+        const providerNameFilter = integrationId.includes('serper') && !integrationId.includes('serpapi') ? 'serper_api' :
+                                   integrationId.includes('serpapi') ? 'serpapi' :
+                                   integrationId.includes('brave') ? 'brave_search' : null;
+        
+        return webSearchConnections.filter(conn => 
+          conn.is_active === true && 
+          !permissions.some(perm => perm.user_oauth_connection_id === conn.id) &&
+          (!providerNameFilter || conn.provider_name === providerNameFilter)
+        );
+      default:
+        return [];
+    }
+  };
+  
+  const availableCredentials = getAvailableCredentials();
+
+  // Helper function to get the appropriate icon for each integration type
+  const getIntegrationIcon = (providerName?: string) => {
+    const provider = providerName?.toLowerCase();
+    switch (provider) {
+      case 'gmail':
+        return <Mail className="h-5 w-5 text-blue-500" />;
+      case 'serper api':
+      case 'serpapi':
+      case 'brave search api':
+      case 'web search':
+      case 'websearch':
+        return <Search className="h-5 w-5 text-green-500" />;
+      default:
+        return <Settings className="h-5 w-5 text-gray-500" />;
+    }
+  };
 
   if (loading) {
     return (
@@ -309,7 +395,7 @@ export function AgentIntegrationsManager({
                 <div key={permission.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-background rounded">
-                      <Mail className="h-5 w-5 text-blue-500" />
+                      {getIntegrationIcon(permission.connection?.provider_name)}
                     </div>
                     <div>
                       <div className="font-medium">{permission.connection?.provider_name || 'Integration'}</div>
@@ -426,12 +512,12 @@ export function AgentIntegrationsManager({
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-background rounded">
-                        <Mail className="h-5 w-5 text-blue-500" />
+                        {getIntegrationIcon(selectedIntegration?.name)}
                       </div>
                       <div>
                         <div className="font-medium">{credential.external_username}</div>
                         <div className="text-sm text-muted-foreground">
-                          {credential.connection_metadata?.user_name || 'Gmail Account'}
+                          {credential.connection_metadata?.user_name || credential.provider_display_name || selectedIntegration?.name || 'API Account'}
                         </div>
                       </div>
                     </div>
@@ -442,7 +528,7 @@ export function AgentIntegrationsManager({
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    No available credentials. Please connect a Gmail account first in the{' '}
+                    No available credentials. Please connect {selectedIntegration?.name || 'this integration'} first in the{' '}
                     <a href="/integrations" className="text-primary hover:underline">
                       Integrations page
                     </a>
@@ -502,54 +588,135 @@ export function AgentIntegrationsManager({
             <div className="space-y-3">
               <Label className="text-sm font-medium">Allowed Actions</Label>
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.readonly')}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedScopes([...selectedScopes, 'https://www.googleapis.com/auth/gmail.readonly']);
-                      } else {
-                        setSelectedScopes(selectedScopes.filter(s => s !== 'https://www.googleapis.com/auth/gmail.readonly'));
-                      }
-                    }}
-                    className="rounded border-border"
-                  />
-                  <Mail className="h-4 w-4" />
-                  Read emails
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.send')}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedScopes([...selectedScopes, 'https://www.googleapis.com/auth/gmail.send']);
-                      } else {
-                        setSelectedScopes(selectedScopes.filter(s => s !== 'https://www.googleapis.com/auth/gmail.send'));
-                      }
-                    }}
-                    className="rounded border-border"
-                  />
-                  <Mail className="h-4 w-4" />
-                  Send emails
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.modify')}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedScopes([...selectedScopes, 'https://www.googleapis.com/auth/gmail.modify']);
-                      } else {
-                        setSelectedScopes(selectedScopes.filter(s => s !== 'https://www.googleapis.com/auth/gmail.modify'));
-                      }
-                    }}
-                    className="rounded border-border"
-                  />
-                  <Settings className="h-4 w-4" />
-                  Modify emails (archive, labels, etc.)
-                </label>
+                {(() => {
+                  const integrationId = selectedIntegration?.id || selectedIntegration?.name?.toLowerCase() || '';
+                  const isSearchAPI = integrationId.includes('serper') || integrationId.includes('serpapi') || integrationId.includes('brave') || integrationId.includes('search');
+                  
+                  if (isSearchAPI) {
+                    return (
+                      <>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('web_search')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'web_search']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'web_search'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Search className="h-4 w-4" />
+                          Web search
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('news_search')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'news_search']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'news_search'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Search className="h-4 w-4" />
+                          News search
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('image_search')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'image_search']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'image_search'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Search className="h-4 w-4" />
+                          Image search
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('local_search')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'local_search']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'local_search'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Search className="h-4 w-4" />
+                          Local search
+                        </label>
+                      </>
+                    );
+                  } else {
+                    // Gmail scopes
+                    return (
+                      <>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.readonly')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'https://www.googleapis.com/auth/gmail.readonly']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'https://www.googleapis.com/auth/gmail.readonly'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Mail className="h-4 w-4" />
+                          Read emails
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.send')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'https://www.googleapis.com/auth/gmail.send']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'https://www.googleapis.com/auth/gmail.send'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Mail className="h-4 w-4" />
+                          Send emails
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.modify')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedScopes([...selectedScopes, 'https://www.googleapis.com/auth/gmail.modify']);
+                              } else {
+                                setSelectedScopes(selectedScopes.filter(s => s !== 'https://www.googleapis.com/auth/gmail.modify'));
+                              }
+                            }}
+                            className="rounded border-border"
+                          />
+                          <Settings className="h-4 w-4" />
+                          Modify emails (archive, labels, etc.)
+                        </label>
+                      </>
+                    );
+                  }
+                })()}
               </div>
             </div>
           </div>
@@ -573,8 +740,8 @@ export function AgentIntegrationsManager({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5 text-blue-500" />
-              Gmail Integration
+              {getIntegrationIcon(selectedIntegration?.name)}
+              {selectedIntegration?.name || 'Integration'}
             </DialogTitle>
             <DialogDescription>
               Account: {selectedCredential?.external_username}

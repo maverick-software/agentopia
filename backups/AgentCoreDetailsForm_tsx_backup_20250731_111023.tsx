@@ -36,13 +36,13 @@ export const AgentCoreDetailsForm: React.FC<AgentCoreDetailsFormProps> = ({
     onFormDataChange('active', checked);
   };
 
-  const inputClasses = "block w-full px-3 py-2 border border-input placeholder:text-muted-foreground text-foreground bg-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed";
-  const labelClasses = "block text-sm font-medium text-foreground mb-1";
+  const inputClasses = "block w-full px-3 py-2 border border-gray-700 placeholder-gray-500 text-white bg-gray-800 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed";
+  const labelClasses = "block text-sm font-medium text-gray-300 mb-1";
   const textAreaClasses = `${inputClasses} min-h-[100px]`; // Example height
 
   return (
-    <div className="space-y-6 bg-card border border-border p-6 rounded-lg shadow-sm">
-      <h2 className="text-xl font-semibold text-card-foreground mb-4 border-b border-border pb-2">Core Agent Details</h2>
+    <div className="space-y-6 bg-gray-850 p-6 rounded-lg shadow">
+      <h2 className="text-xl font-semibold text-white mb-4 border-b border-gray-700 pb-2">Core Agent Details</h2>
       
       {/* Active Toggle */}
       <div className="flex items-center justify-between">
@@ -52,8 +52,8 @@ export const AgentCoreDetailsForm: React.FC<AgentCoreDetailsFormProps> = ({
           onChange={handleToggleChange}
           disabled={saving}
           className={`${
-            formData.active ? 'bg-primary' : 'bg-muted'
-          } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed`}
+            formData.active ? 'bg-indigo-600' : 'bg-gray-600'
+          } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span
             className={`${
@@ -117,7 +117,7 @@ export const AgentCoreDetailsForm: React.FC<AgentCoreDetailsFormProps> = ({
                 <option key={template.id} value={template.id}>{template.name}</option>
             ))}
         </select>
-         <p className="mt-1 text-xs text-muted-foreground">Selecting a template can help pre-fill the personality instructions below.</p>
+         <p className="mt-1 text-xs text-gray-400">Selecting a template can help pre-fill the personality instructions below.</p>
       </div>
 
       {/* Personality Instructions */}
@@ -148,7 +148,7 @@ export const AgentCoreDetailsForm: React.FC<AgentCoreDetailsFormProps> = ({
           placeholder="Provide high-level instructions or context for the underlying LLM (e.g., constraints, domain knowledge, rules for tool use)."
           disabled={saving}
         />
-         <p className="mt-1 text-xs text-muted-foreground">Overrides general system prompts. Use with caution.</p>
+         <p className="mt-1 text-xs text-gray-400">Overrides general system prompts. Use with caution.</p>
       </div>
 
       {/* Assistant Instructions (If applicable - adjust based on your AgentType) */}

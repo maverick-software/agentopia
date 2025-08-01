@@ -29,15 +29,15 @@ import { useGmailConnection } from '@/hooks/useGmailIntegration';
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'available':
-      return 'bg-green-500/20 text-green-300 border-green-500/30';
+      return 'bg-green-500/20 text-green-600 dark:text-green-300 border-green-500/30';
     case 'beta':
-      return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+      return 'bg-blue-500/20 text-blue-600 dark:text-blue-300 border-blue-500/30';
     case 'coming_soon':
-      return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+      return 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-300 border-yellow-500/30';
     case 'deprecated':
-      return 'bg-red-500/20 text-red-300 border-red-500/30';
+      return 'bg-red-500/20 text-red-600 dark:text-red-300 border-red-500/30';
     default:
-      return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
+      return 'bg-muted/20 text-muted-foreground border-border';
   }
 };
 
@@ -59,11 +59,11 @@ const getStatusText = (status: string) => {
 const getConnectionStatusIcon = (status: string) => {
   switch (status) {
     case 'connected':
-      return <Check className="h-4 w-4 text-green-400" />;
+      return <Check className="h-4 w-4 text-green-600 dark:text-green-400" />;
     case 'pending':
-      return <Clock className="h-4 w-4 text-yellow-400" />;
+      return <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
     case 'error':
-      return <AlertCircle className="h-4 w-4 text-red-400" />;
+      return <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />;
     default:
       return null;
   }
@@ -117,10 +117,15 @@ export function IntegrationsPage() {
     }
   };
 
-  const filteredIntegrations = integrations.filter(integration =>
-    integration.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    integration.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredIntegrations = integrations.filter(integration => {
+    const matchesSearch = integration.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      integration.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const effectiveStatus = getEffectiveStatus(integration);
+    const isNotDisabled = effectiveStatus !== 'coming_soon';
+    
+    return matchesSearch && isNotDisabled;
+  });
 
   const getUserIntegrationStatus = (integrationId: string) => {
     const userIntegration = userIntegrations.find(ui => ui.integration_id === integrationId);
@@ -237,12 +242,12 @@ export function IntegrationsPage() {
                             isComingSoon ? 'bg-muted/50' : 'bg-muted'
                           }`}>
                             <IconComponent className={`h-5 w-5 ${
-                              isComingSoon ? 'text-gray-500' : 'text-blue-400'
+                              isComingSoon ? 'text-muted-foreground' : 'text-primary'
                             }`} />
                           </div>
                           <div>
                             <CardTitle className={`text-lg font-semibold ${
-                              isComingSoon ? 'text-gray-400' : 'text-white'
+                              isComingSoon ? 'text-muted-foreground' : 'text-card-foreground'
                             }`}>
                               {integration.name}
                             </CardTitle>
@@ -264,13 +269,13 @@ export function IntegrationsPage() {
                     
                     <CardContent className="space-y-4">
                       <p className={`text-sm line-clamp-3 ${
-                        isComingSoon ? 'text-gray-500' : 'text-gray-400'
+                        isComingSoon ? 'text-muted-foreground/50' : 'text-muted-foreground'
                       }`}>
                         {integration.description}
                       </p>
                       
                       {isConnected && !isComingSoon && (
-                        <div className="flex items-center space-x-2 text-sm text-green-400">
+                        <div className="flex items-center space-x-2 text-sm text-green-600 dark:text-green-400">
                           <Check className="h-4 w-4" />
                           <span>
                             Connected
@@ -307,7 +312,7 @@ export function IntegrationsPage() {
                             className={`w-full ${
                               isComingSoon 
                                 ? 'bg-muted hover:bg-muted text-muted-foreground cursor-not-allowed' 
-                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                : 'bg-primary hover:bg-primary/90 text-primary-foreground'
                             }`}
                             disabled={isComingSoon}
                           >
@@ -320,12 +325,12 @@ export function IntegrationsPage() {
                       </div>
                       
                       {integration.documentation_url && !isComingSoon && (
-                        <div className="pt-2 border-t border-gray-800">
+                        <div className="pt-2 border-t border-border">
                           <a 
                             href={integration.documentation_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center"
+                            className="text-xs text-primary hover:text-primary/80 flex items-center"
                           >
                             <ExternalLink className="h-3 w-3 mr-1" />
                             View Documentation
@@ -340,8 +345,8 @@ export function IntegrationsPage() {
             
             {filteredIntegrations.length === 0 && (
               <div className="text-center py-8">
-                <Settings className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">No integrations found matching your search.</p>
+                <Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No integrations found matching your search.</p>
               </div>
             )}
           </TabsContent>

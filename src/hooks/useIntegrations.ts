@@ -532,6 +532,36 @@ function getDummyIntegrationsByClassification(classification: 'tool' | 'channel'
 
   const toolIntegrations: Integration[] = [
     {
+      id: 'serper-api',
+      category_id: 'api',
+      name: 'Serper API',
+      description: 'Google Search API with fast, reliable results. Perfect for web search, news, images, and location-based queries. Offers 1000 free searches per month.',
+      icon_name: 'Search',
+      status: 'available',
+      is_popular: true,
+      display_order: 1
+    },
+    {
+      id: 'serpapi',
+      category_id: 'api',
+      name: 'SerpAPI',
+      description: 'Comprehensive search API supporting Google, Bing, Yahoo and Baidu. Advanced features include device simulation and multiple search engines.',
+      icon_name: 'Search',
+      status: 'available',
+      is_popular: true,
+      display_order: 2
+    },
+    {
+      id: 'brave-search-api',
+      category_id: 'api',
+      name: 'Brave Search API',
+      description: 'Privacy-focused search API from Brave. No tracking, independent index, and high monthly quota. Perfect for privacy-conscious applications.',
+      icon_name: 'Search',
+      status: 'available',
+      is_popular: true,
+      display_order: 3
+    },
+    {
       id: 'rest-api',
       category_id: 'api',
       name: 'REST API',
@@ -539,7 +569,7 @@ function getDummyIntegrationsByClassification(classification: 'tool' | 'channel'
       icon_name: 'Globe',
       status: 'available',
       is_popular: true,
-      display_order: 1
+      display_order: 2
     },
     {
       id: 'graphql',
@@ -549,7 +579,7 @@ function getDummyIntegrationsByClassification(classification: 'tool' | 'channel'
       icon_name: 'Globe',
       status: 'available',
       is_popular: true,
-      display_order: 2
+      display_order: 3
     },
     {
       id: 'postgresql',

@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
 import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
-import { AgentWebSearchPermissions } from '@/components/agent-edit/AgentWebSearchPermissionsUnified';
+
 import { AgentTasksManager } from '@/components/agent-edit/AgentTasksManager';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -397,17 +397,18 @@ const AgentEditPage = () => {
                     )}
 
                     {/* Tools */}
-                    <AgentIntegrationsManager 
-                        agentId={agentId!} 
-                        category="tool"
-                        title="Tools"
-                        description="Connect external tools and services to this agent"
-                    />
+                    <Card>
+                        <CardContent className="p-0">
+                            <AgentIntegrationsManager 
+                                agentId={agentId!} 
+                                category="tool"
+                                title="Tools"
+                                description="Connect external tools and services to this agent"
+                            />
+                        </CardContent>
+                    </Card>
 
-                    {/* Web Search Permissions */}
-                    <AgentWebSearchPermissions 
-                        agentId={agentId!} 
-                    />
+
 
                     <Card>
                         <CardHeader className="pb-4 flex flex-row items-center justify-between">
@@ -438,16 +439,16 @@ const AgentEditPage = () => {
                                         {/* Vector Store Section */}
                                         {connectedVectorStore ? (
                                             <div 
-                                                className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors hover:bg-slate-700/50 cursor-pointer"
+                                                className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border transition-colors hover:bg-muted cursor-pointer"
                                                 onClick={() => setShowVectorModal(true)}
                                             >
                                                 <div className="flex items-center space-x-3">
                                                     <div className="flex-shrink-0">
-                                                        <Database className="h-5 w-5 text-blue-400" />
+                                                        <Database className="h-5 w-5 text-primary" />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <p className="text-sm font-medium text-white">{connectedVectorStore.name}</p>
-                                                        <p className="text-xs text-slate-400">Vector Store</p>
+                                                        <p className="text-sm font-medium text-foreground">{connectedVectorStore.name}</p>
+                                                        <p className="text-xs text-muted-foreground">Vector Store</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
@@ -463,19 +464,19 @@ const AgentEditPage = () => {
                                             </div>
                                         ) : (
                                             <div 
-                                                className="flex items-center justify-between p-4 border-2 border-dashed border-slate-600/50 rounded-lg bg-slate-800/20 transition-colors hover:bg-slate-800/30 cursor-pointer"
+                                                className="flex items-center justify-between p-4 border-2 border-dashed border-border rounded-lg bg-muted/20 transition-colors hover:bg-muted/30 cursor-pointer"
                                                 onClick={() => setShowVectorModal(true)}
                                             >
                                                 <div className="flex items-center space-x-3">
                                                     <div className="flex-shrink-0">
-                                                        <Database className="h-5 w-5 text-slate-500" />
+                                                        <Database className="h-5 w-5 text-muted-foreground" />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <p className="text-sm font-medium text-slate-400">Vector Store</p>
-                                                        <p className="text-xs text-slate-500">Add vector datastore</p>
+                                                        <p className="text-sm font-medium text-muted-foreground">Vector Store</p>
+                                                        <p className="text-xs text-muted-foreground">Add vector datastore</p>
                                                     </div>
                                                 </div>
-                                                <div className="text-slate-500">
+                                                <div className="text-muted-foreground">
                                                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                                     </svg>
@@ -486,23 +487,23 @@ const AgentEditPage = () => {
                                         {/* Knowledge Graph Section */}
                                         {connectedKnowledgeStore ? (
                                             <div 
-                                                className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 transition-colors hover:bg-slate-700/50 cursor-pointer"
+                                                className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border transition-colors hover:bg-muted cursor-pointer"
                                                 onClick={() => setShowKnowledgeModal(true)}
                                             >
                                                 <div className="flex items-center space-x-3">
                                                     <div className="flex-shrink-0">
-                                                        <Database className="h-5 w-5 text-blue-400" />
+                                                        <Database className="h-5 w-5 text-primary" />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <p className="text-sm font-medium text-white">{connectedKnowledgeStore.name}</p>
-                                                        <p className="text-xs text-slate-400">Knowledge Graph</p>
+                                                        <p className="text-sm font-medium text-foreground">{connectedKnowledgeStore.name}</p>
+                                                        <p className="text-xs text-muted-foreground">Knowledge Graph</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <Badge variant="secondary" className="text-xs px-3 py-1 bg-green-500/20 text-green-400 border-green-500/30">
                                                         Connected
                                                     </Badge>
-                                                    <div className="text-slate-400">
+                                                    <div className="text-muted-foreground">
                                                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                                         </svg>
@@ -511,19 +512,19 @@ const AgentEditPage = () => {
                                             </div>
                                         ) : (
                                             <div 
-                                                className="flex items-center justify-between p-4 border-2 border-dashed border-slate-600/50 rounded-lg bg-slate-800/20 transition-colors hover:bg-slate-800/30 cursor-pointer"
+                                                className="flex items-center justify-between p-4 border-2 border-dashed border-border rounded-lg bg-muted/20 transition-colors hover:bg-muted/30 cursor-pointer"
                                                 onClick={() => setShowKnowledgeModal(true)}
                                             >
                                                 <div className="flex items-center space-x-3">
                                                     <div className="flex-shrink-0">
-                                                        <Database className="h-5 w-5 text-slate-500" />
+                                                        <Database className="h-5 w-5 text-muted-foreground" />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <p className="text-sm font-medium text-slate-400">Knowledge Store</p>
-                                                        <p className="text-xs text-slate-500">Add Knowledge Graph</p>
+                                                        <p className="text-sm font-medium text-muted-foreground">Knowledge Store</p>
+                                                        <p className="text-xs text-muted-foreground">Add Knowledge Graph</p>
                                                     </div>
                                                 </div>
-                                                <div className="text-slate-500">
+                                                <div className="text-muted-foreground">
                                                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                                     </svg>
