@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw, UserPlus } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
@@ -9,6 +9,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
+import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
+import { AboutMeModal } from '../components/modals/AboutMeModal';
+import { HowIThinkModal } from '../components/modals/HowIThinkModal';
+import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
+import { ToolsModal } from '../components/modals/ToolsModal';
 import { ChatMessage } from '../components/ChatMessage';
 import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { ToolExecutionLogger } from '../components/ToolExecutionLogger';
@@ -27,6 +32,11 @@ export function AgentChatPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
+  const [showAboutMeModal, setShowAboutMeModal] = useState(false);
+  const [showHowIThinkModal, setShowHowIThinkModal] = useState(false);
+  const [showWhatIKnowModal, setShowWhatIKnowModal] = useState(false);
+  const [showToolsModal, setShowToolsModal] = useState(false);
   
   // AI State tracking
   const [aiState, setAiState] = useState<AIState | null>(null);
@@ -153,7 +163,7 @@ export function AgentChatPage() {
         
         const { data, error } = await supabase
           .from('agents')
-          .select('*')
+          .select('*, agent_datastores(datastore_id)')
           .eq('id', agentId)
           .eq('user_id', user.id)
           .single();
@@ -444,6 +454,34 @@ export function AgentChatPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
+                  onClick={() => setShowAboutMeModal(true)}
+                  className="cursor-pointer"
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowHowIThinkModal(true)}
+                  className="cursor-pointer"
+                >
+                  <Brain className="h-4 w-4 mr-2" />
+                  Behavior  
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowWhatIKnowModal(true)}
+                  className="cursor-pointer"
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Knowledge
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowToolsModal(true)}
+                  className="cursor-pointer"
+                >
+                  <Wrench className="h-4 w-4 mr-2" />
+                  Tools
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => navigate(`/agents/${agentId}/edit`)}
                   className="cursor-pointer"
                 >
@@ -451,7 +489,7 @@ export function AgentChatPage() {
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => {/* TODO: Open team assignment modal */}}
+                  onClick={() => setShowTeamAssignmentModal(true)}
                   className="cursor-pointer"
                 >
                   <UserPlus className="h-4 w-4 mr-2" />
@@ -637,6 +675,80 @@ export function AgentChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Team Assignment Modal */}
+      <TeamAssignmentModal
+        isOpen={showTeamAssignmentModal}
+        onClose={() => setShowTeamAssignmentModal(false)}
+        agentId={agentId || ''}
+        agentName={agent?.name || 'Agent'}
+        onTeamAssigned={(teamId, teamName) => {
+          console.log(`Agent ${agent?.name} assigned to team ${teamName}`);
+          // You could show a success toast here
+        }}
+      />
+
+      {/* About Me Modal */}
+      <AboutMeModal
+        isOpen={showAboutMeModal}
+        onClose={() => setShowAboutMeModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name,
+          description: agent?.description,
+          personality: agent?.personality,
+          avatar_url: agent?.avatar_url
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent updated:', updatedAgent);
+        }}
+      />
+
+      {/* How I Think Modal */}
+      <HowIThinkModal
+        isOpen={showHowIThinkModal}
+        onClose={() => setShowHowIThinkModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          system_instructions: agent?.system_instructions,
+          assistant_instructions: agent?.assistant_instructions,
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent thinking updated:', updatedAgent);
+        }}
+      />
+
+      {/* What I Know Modal */}
+      <WhatIKnowModal
+        isOpen={showWhatIKnowModal}
+        onClose={() => setShowWhatIKnowModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name,
+          agent_datastores: agent?.agent_datastores || []
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent knowledge updated:', updatedAgent);
+        }}
+      />
+
+      {/* Tools Modal */}
+      <ToolsModal
+        isOpen={showToolsModal}
+        onClose={() => setShowToolsModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent tools updated:', updatedAgent);
+        }}
+      />
     </div>
   );
 }

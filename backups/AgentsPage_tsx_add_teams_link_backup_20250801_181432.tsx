@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, RefreshCw, Search, Sparkles, ArrowUpRight, Building2 } from 'lucide-react';
+import { Plus, RefreshCw, Search, Sparkles, ArrowUpRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
@@ -266,28 +266,19 @@ export function AgentsPage() {
       {/* Header Section */}
       <div className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-8">
-          {/* Title and Action Buttons */}
+          {/* Title and Create Button */}
           <div className="flex items-start justify-between mb-8">
             <div className="flex-1 pr-8">
               <h1 className="text-3xl font-bold text-foreground mb-2">Discover custom agents designed for different uses</h1>
               <p className="text-muted-foreground text-lg">Enhance your productivity, streamline workflows, and get things done with AI agents</p>
             </div>
-            <div className="flex items-center space-x-3 flex-shrink-0">
-              <button
-                onClick={() => navigate('/teams')}
-                className="flex items-center px-5 py-2.5 bg-card text-foreground border border-border hover:bg-accent rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-              >
-                <Building2 className="w-4 h-4 mr-2" />
-                Teams
-              </button>
-              <button
-                onClick={() => navigate('/agents/new')}
-                className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Agent
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/agents/new')}
+              className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md flex-shrink-0"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Agent
+            </button>
           </div>
 
           {/* Search Bar */}
