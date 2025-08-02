@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light Mode Theme (Primary Theme) */
+    --background: 0 0% 100%;         /* Pure white background */
+    --foreground: 240 10% 3.9%;     /* Deep charcoal text */
+    --card: 0 0% 100%;               /* White cards */
+    --card-foreground: 240 10% 3.9%; /* Dark card text */
+    --popover: 0 0% 100%;            /* White popovers */
+    --popover-foreground: 240 10% 3.9%; /* Dark popover text */
+    --primary: 221.2 83.2% 53.3%;   /* Vibrant blue primary */
+    --primary-foreground: 210 40% 98%; /* White text on primary */
+    --secondary: 210 40% 96%;        /* Light gray secondary */
+    --secondary-foreground: 222.2 84% 4.9%; /* Dark text on secondary */
+    --muted: 210 40% 96%;            /* Muted background */
+    --muted-foreground: 215.4 16.3% 46.9%; /* Muted text */
+    --accent: 210 40% 96%;           /* Accent background */
+    --accent-foreground: 222.2 84% 4.9%; /* Dark accent text */
+    --destructive: 0 84.2% 60.2%;    /* Red for destructive actions */
+    --destructive-foreground: 210 40% 98%; /* White text on destructive */
+    --border: 214.3 31.8% 91.4%;     /* Light gray borders */
+    --input: 214.3 31.8% 91.4%;      /* Input field borders */
+    --ring: 221.2 83.2% 53.3%;       /* Focus ring color (matches primary) */
+
+    /* Chart Colors for Data Visualization */
+    --chart-1: 220 70% 50%;          /* Blue */
+    --chart-2: 160 60% 45%;          /* Green */
+    --chart-3: 30 80% 55%;           /* Orange */
+    --chart-4: 280 65% 60%;          /* Purple */
+    --chart-5: 340 75% 55%;          /* Pink */
+
+    /* Extended Light Theme Colors */
+    --warning: 47.9 95.8% 53.1%;     /* Amber warning color */
+    --warning-foreground: 26 83.3% 14.1%; /* Dark text on warning */
+    --success: 142.1 76.2% 36.3%;    /* Green success color */
+    --success-foreground: 355.7 100% 97.3%; /* Light text on success */
+    
+    /* Sidebar Colors */
+    --sidebar-background: 210 40% 98%;     /* Very light gray */
+    --sidebar-foreground: 240 10% 3.9%;   /* Dark text */
+    --sidebar-primary: 221.2 83.2% 53.3%; /* Blue for active items */
+    --sidebar-primary-foreground: 210 40% 98%; /* White text on active */
+    --sidebar-accent: 210 40% 94%;        /* Hover state background */
+    --sidebar-accent-foreground: 240 10% 3.9%; /* Dark text on hover */
+    --sidebar-border: 214.3 31.8% 91.4%;  /* Border color */
+    
+    /* Chat Interface Colors */
+    --chat-user-bubble: 221.2 83.2% 53.3%;    /* User message background */
+    --chat-user-text: 210 40% 98%;            /* User message text */
+    --chat-ai-bubble: 210 40% 96%;            /* AI message background */
+    --chat-ai-text: 240 10% 3.9%;             /* AI message text */
+    --chat-timestamp: 215.4 16.3% 46.9%;      /* Timestamp color */
+    
+      /* Dashboard Colors */
+  --dashboard-card: 0 0% 100%;              /* White dashboard cards */
+  --dashboard-card-border: 214.3 31.8% 91.4%; /* Light borders */
+  --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
+  --dashboard-stat-negative: 0 84.2% 60.2%;  /* Red for negative stats */
+  --dashboard-stat-neutral: 215.4 16.3% 46.9%; /* Gray for neutral stats */
+
+  /* Vibrant Icon Colors - Professional Color Palette */
+  --icon-dashboard: 262 83% 58%;           /* Purple - Analytics & Overview */
+  --icon-agents: 221.2 83.2% 53.3%;       /* Blue - Primary Actions */
+  --icon-memory: 142.1 76.2% 36.3%;       /* Green - Knowledge & Growth */
+  --icon-workflows: 25 95% 53%;            /* Orange - Processes & Automation */
+  --icon-integrations: 173 58% 39%;        /* Teal - Connections */
+  --icon-credentials: 0 84.2% 60.2%;       /* Red - Security & Access */
+  --icon-teams: 231 48% 48%;               /* Indigo - Collaboration */
+  --icon-workspaces: 199 89% 48%;          /* Cyan - Spaces & Environments */
+  --icon-projects: 316 73% 52%;            /* Pink - Creativity & Projects */
+  --icon-settings: 215.4 16.3% 46.9%;     /* Gray - Utility & Configuration */
+  --icon-monitoring: 47.9 95.8% 53.1%;    /* Amber - System Monitoring */
+  }
+
+  .dark {
+    /* Dark Mode Theme */
+    --background: 215 28% 9%;        /* Dark bluish-gray background */
+    --foreground: 210 20% 98%;       /* Light text color with blue tint */
+    --card: 217 25% 12%;             /* Card background - slightly lighter than base */
+    --card-foreground: 210 20% 98%;  /* Card text color */
+    --popover: 217 25% 12%;          /* Popover background */
+    --popover-foreground: 210 20% 98%; /* Popover text */
+    --primary: 221.2 83.2% 53.3%;   /* Blue primary color */
+    --primary-foreground: 210 40% 98%; /* White text on primary */
+    --secondary: 217 19% 20%;        /* Secondary elements color (medium bluish-gray) */
+    --secondary-foreground: 210 20% 98%; /* Text on secondary elements */
+    --muted: 217 19% 20%;            /* Muted elements (subtle background) */
+    --muted-foreground: 210 15% 70%; /* Muted text color */
+    --accent: 217 19% 20%;           /* Accent elements */
+    --accent-foreground: 210 20% 98%; /* Text on accent elements */
+    --destructive: 0 62.8% 30.6%;    /* Destructive/error color (red) */
+    --destructive-foreground: 210 20% 98%; /* Text on destructive elements */
+    --border: 217 19% 20%;           /* Border color */
+    --input: 217 19% 20%;            /* Input field background */
+    --ring: 221.2 83.2% 53.3%;       /* Focus ring color */
+
+    /* Extended Dark Theme Colors */
+    --warning: 47.9 95.8% 53.1%;     /* Amber warning color */
+    --warning-foreground: 26 83.3% 14.1%; /* Dark text on warning */
+    --success: 142.1 76.2% 36.3%;    /* Green success color */
+    --success-foreground: 355.7 100% 97.3%; /* Light text on success */
+    
+    /* Sidebar Colors */
+    --sidebar-background: 217 25% 12%;     /* Dark card background */
+    --sidebar-foreground: 210 20% 98%;    /* Light text */
+    --sidebar-primary: 221.2 83.2% 53.3%; /* Blue for active items */
+    --sidebar-primary-foreground: 210 40% 98%; /* White text on active */
+    --sidebar-accent: 217 19% 20%;        /* Hover state background */
+    --sidebar-accent-foreground: 210 20% 98%; /* Light text on hover */
+    --sidebar-border: 217 19% 20%;        /* Border color */
+    
+    /* Chat Interface Colors */
+    --chat-user-bubble: 221.2 83.2% 53.3%;    /* User message background */
+    --chat-user-text: 210 40% 98%;            /* User message text */
+    --chat-ai-bubble: 217 25% 12%;            /* AI message background */
+    --chat-ai-text: 210 20% 98%;              /* AI message text */
+    --chat-timestamp: 210 15% 70%;            /* Timestamp color */
+    
+      /* Dashboard Colors */
+  --dashboard-card: 217 25% 12%;            /* Dark dashboard cards */
+  --dashboard-card-border: 217 19% 20%;     /* Dark borders */
+  --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
+  --dashboard-stat-negative: 0 62.8% 30.6%;  /* Red for negative stats */
+  --dashboard-stat-neutral: 210 15% 70%;     /* Gray for neutral stats */
+
+  /* Vibrant Icon Colors - Dark Mode Optimized */
+  --icon-dashboard: 262 73% 68%;           /* Purple - Lighter for dark mode */
+  --icon-agents: 221.2 83.2% 63.3%;       /* Blue - Lighter for contrast */
+  --icon-memory: 142.1 66.2% 46.3%;       /* Green - Adjusted for dark */
+  --icon-workflows: 25 85% 63%;            /* Orange - Lighter for visibility */
+  --icon-integrations: 173 48% 49%;        /* Teal - Better dark contrast */
+  --icon-credentials: 0 74.2% 70.2%;       /* Red - Lighter for dark mode */
+  --icon-teams: 231 38% 58%;               /* Indigo - Adjusted for dark */
+  --icon-workspaces: 199 79% 58%;          /* Cyan - Lighter for contrast */
+  --icon-projects: 316 63% 62%;            /* Pink - Better dark visibility */
+  --icon-settings: 210 15% 70%;            /* Gray - Light for dark mode */
+  --icon-monitoring: 47.9 85.8% 63.1%;    /* Amber - Lighter for dark */
+  }
+}
+
+:root {
+  font-family: 'Poppins', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
+
+/* Ultra-minimal Claude-style scrollbar - Centralized theme management */
+::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 1px;
+  transition: background-color 0.3s ease;
+}
+
+/* Light mode scrollbar - using theme variables */
+:root ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.15);
+}
+
+/* Dark mode scrollbar - using theme variables */
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.25);
+}
+
+/* Firefox scrollbar - minimal and theme-aware */
+* {
+  scrollbar-width: none; /* Hide by default */
+}
+
+*:hover {
+  scrollbar-width: thin;
+}
+
+:root *:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.15) transparent;
+}
+
+.dark *:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+}
+
+/* Utility class for completely hidden scrollbars */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Line clamp utilities for multiline text truncation */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+} 

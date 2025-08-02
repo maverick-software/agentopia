@@ -320,21 +320,27 @@ export function useAgentGmailPermissions(agentId?: string) {
         .from('agent_oauth_permissions')
         .select(`
           *,
-          user_oauth_connections!inner(
+          user_oauth_connections(
             external_username,
             oauth_provider_id,
-            oauth_providers!inner(name)
+            oauth_providers(name)
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.oauth_providers.name', 'gmail')
         .eq('user_oauth_connections.user_id', user.id);
+
+      // Filter on client-side for Gmail provider
+      const filteredData = (data || []).filter((permission: any) => 
+        permission.user_oauth_connections && 
+        permission.user_oauth_connections.oauth_providers && 
+        permission.user_oauth_connections.oauth_providers.name === 'gmail'
+      );
 
       if (fetchError) {
         throw new Error(fetchError.message);
       }
 
-      setPermissions(data || []);
+      setPermissions(filteredData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch agent permissions');
     } finally {

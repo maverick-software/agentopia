@@ -122,21 +122,27 @@ export function useAgentWebSearchPermissions(agentId?: string) {
         .from('agent_oauth_permissions')
         .select(`
           *,
-          user_oauth_connections!inner(
+          user_oauth_connections(
             external_username,
             oauth_provider_id,
-            oauth_providers!inner(name, display_name)
+            oauth_providers(name, display_name)
           )
         `)
         .eq('agent_id', agentId)
-        .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
         .eq('user_oauth_connections.user_id', user.id);
+
+      // Filter on client-side for web search providers
+      const filteredData = (data || []).filter((permission: any) => 
+        permission.user_oauth_connections && 
+        permission.user_oauth_connections.oauth_providers && 
+        ['serper_api', 'serpapi', 'brave_search'].includes(permission.user_oauth_connections.oauth_providers.name)
+      );
 
       if (fetchError) {
         throw new Error(fetchError.message);
       }
 
-      setPermissions(data || []);
+      setPermissions(filteredData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch agent web search permissions');
     } finally {

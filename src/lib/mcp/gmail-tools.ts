@@ -248,22 +248,29 @@ export class GmailMCPToolsService {
         .select(`
           allowed_scopes,
           is_active,
-          user_oauth_connections!inner(
+          user_oauth_connections(
             oauth_provider_id,
-            oauth_providers!inner(name)
+            oauth_providers(name)
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'gmail')
-        .eq('is_active', true)
-        .single();
+        .eq('is_active', true);
 
-      if (!permissions) {
+      // Filter for Gmail provider on client-side
+      const gmailPermissions = (permissions || []).filter((permission: any) => 
+        permission.user_oauth_connections && 
+        permission.user_oauth_connections.oauth_providers && 
+        permission.user_oauth_connections.oauth_providers.name === 'gmail'
+      );
+
+      const gmailPermission = gmailPermissions.length > 0 ? gmailPermissions[0] : null;
+
+      if (!gmailPermission) {
         return [];
       }
 
-      const grantedScopes = permissions.allowed_scopes || [];
+      const grantedScopes = gmailPermission.allowed_scopes || [];
       
       // Filter tools based on granted scopes
       const availableTools = Object.values(GMAIL_MCP_TOOLS).filter(tool => {
