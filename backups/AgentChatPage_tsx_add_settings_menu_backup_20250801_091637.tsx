@@ -1,14 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw, UserPlus } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu';
 import { ChatMessage } from '../components/ChatMessage';
 import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { ToolExecutionLogger } from '../components/ToolExecutionLogger';
@@ -436,29 +430,9 @@ export function AgentChatPage() {
             <button className="p-2 hover:bg-accent rounded-lg transition-colors">
               <RefreshCw className="h-5 w-5 text-muted-foreground" />
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-2 hover:bg-accent rounded-lg transition-colors">
-                  <MoreVertical className="h-5 w-5 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={() => navigate(`/agents/${agentId}/edit`)}
-                  className="cursor-pointer"
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {/* TODO: Open team assignment modal */}}
-                  className="cursor-pointer"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add to Team
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button className="p-2 hover:bg-accent rounded-lg transition-colors">
+              <MoreVertical className="h-5 w-5 text-muted-foreground" />
+            </button>
           </div>
       </div>
 

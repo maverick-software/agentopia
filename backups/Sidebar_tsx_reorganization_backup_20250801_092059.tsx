@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
-  Users, Settings,
+  LayoutDashboard, Users, Settings,
   LogOut, Bot, PanelLeftClose, PanelRightClose,
-  ChevronDown, ChevronRight, MemoryStick,
+  MessageSquare, ChevronDown, ChevronRight, MemoryStick,
   GitBranch, FolderKanban,
   Building2,
   User as UserIcon,
   Server, Key
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useAgents } from '../hooks/useAgents';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +27,6 @@ interface NavItem {
   label: string;
   children?: NavItem[];
   adminOnly?: boolean;
-  isCustom?: boolean; // For special handling of Agents and Teams
 }
 
 // Helper function to get icon color class based on route or label
@@ -51,14 +49,29 @@ const getIconColorClass = (route: string, label: string): string => {
 
 // Updated navigation structure with organized hierarchical nesting
 const navItems: NavItem[] = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { 
     to: '/agents', 
     icon: Users, 
     label: 'Agents',
-    isCustom: true
+    children: [
+      { to: '/agents', icon: Users, label: 'Agent Management' },
+      { to: '/memory', icon: MemoryStick, label: 'Memory' },
+      { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+      { to: '/integrations', icon: Server, label: 'Integrations' },
+      { to: '/credentials', icon: Key, label: 'Credentials' },
+    ]
   },
-  { to: '/projects', icon: FolderKanban, label: 'Projects' },
-  { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+  { 
+    to: '/teams', 
+    icon: Building2, 
+    label: 'Teams',
+    children: [
+      { to: '/teams', icon: Building2, label: 'Team Management' },
+      { to: '/workspaces', icon: MessageSquare, label: 'Workspaces' },
+      { to: '/projects', icon: FolderKanban, label: 'Projects' },
+    ]
+  },
 ];
 
 // Component to render a single NavLink or a collapsible parent item
@@ -119,7 +132,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
                 : 'px-4 py-3' // Top-level item style (not collapsed)
           } ${
             isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent'
           }`
         }
@@ -131,104 +144,6 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
     );
   }
 };
-
-// Custom component for Agents navigation with recent agents
-const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({ isCollapsed, level = 0 }) => {
-  const location = useLocation();
-  const { agents, fetchAllAgents } = useAgents();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [recentAgents, setRecentAgents] = useState<any[]>([]);
-
-  const isActiveOrParent = location.pathname.startsWith('/agents');
-
-  useEffect(() => {
-    if (isActiveOrParent && !isCollapsed) {
-      setIsExpanded(true);
-    }
-  }, [isActiveOrParent, isCollapsed]);
-
-  useEffect(() => {
-    fetchAllAgents().then((fetchedAgents) => {
-      // Get top 3 most recent agents (already ordered by created_at desc)
-      setRecentAgents(fetchedAgents.slice(0, 3));
-    });
-  }, [fetchAllAgents]);
-
-  if (isCollapsed) {
-    return (
-      <NavLink
-        to="/agents"
-        title="Agents"
-        className={({ isActive }): string =>
-          `flex items-center space-x-3 rounded-md transition-colors px-2 justify-center py-3 ${
-            isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
-              : 'text-sidebar-foreground hover:bg-sidebar-accent'
-          }`
-        }
-      >
-        <Users className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/agents', 'Agents')}`} />
-      </NavLink>
-    );
-  }
-
-  return (
-    <div>
-      <div className={`flex items-center w-full rounded-md transition-colors ${
-        isActiveOrParent ? 'bg-sidebar-accent/50' : ''
-      }`}>
-        <NavLink
-          to="/agents"
-          className={({ isActive }): string =>
-            `flex items-center space-x-3 rounded-l-md transition-colors px-4 py-3 flex-1 ${
-              isActive
-                ? 'bg-sidebar-accent/30 text-sidebar-foreground'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent'
-            }`
-          }
-          style={{ paddingLeft: `${1 + level * 1.5}rem` }}
-        >
-          <Users className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/agents', 'Agents')}`} />
-          <span className="font-medium truncate">Agents</span>
-        </NavLink>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="p-3 hover:bg-sidebar-accent rounded-r-md transition-colors text-sidebar-foreground"
-        >
-          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        </button>
-      </div>
-      {isExpanded && (
-        <div className="mt-1 space-y-1">
-          {recentAgents.map((agent) => (
-            <NavLink
-              key={agent.id}
-              to={`/agents/${agent.id}/chat`}
-              className={({ isActive }): string =>
-                `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
-                  isActive
-                    ? 'bg-sidebar-accent/20 text-sidebar-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent'
-                }`
-              }
-              style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
-            >
-              <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-medium">
-                  {agent.name?.charAt(0)?.toUpperCase() || 'A'}
-                </span>
-              </div>
-              <span className="font-medium truncate">{agent.name || 'Unnamed Agent'}</span>
-            </NavLink>
-          ))}
-
-        </div>
-      )}
-    </div>
-  );
-};
-
-
 
 // Update props interface
 interface SidebarProps {
@@ -268,13 +183,9 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </div>
           
           <div className="space-y-2">
-            {visibleNavItems.map((item) => {
-              if (item.isCustom && item.label === 'Agents') {
-                return <AgentsNavRenderer key={item.to} isCollapsed={isCollapsed} />;
-              } else {
-                return <NavItemRenderer key={item.to} item={item} isCollapsed={isCollapsed} />;
-              }
-            })}
+            {visibleNavItems.map((item) => (
+              <NavItemRenderer key={item.to} item={item} isCollapsed={isCollapsed} />
+            ))}
           </div>
         </div>
 
@@ -322,38 +233,20 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                  </p>
               </div>
             </DropdownMenuLabel>
-                        <DropdownMenuSeparator className="border-border" />
+            <DropdownMenuSeparator className="border-border" />
             {isAdmin && (
               <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-                <Link to="/admin" className="flex items-center w-full">
-                  <UserIcon className="mr-2 h-4 w-4" />
-                  <span>Admin Panel</span>
-                </Link>
+                 <Link to="/admin" className="flex items-center w-full">
+                    <UserIcon className="mr-2 h-4 w-4" />
+                    <span>Admin Panel</span>
+                 </Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/memory" className="flex items-center w-full">
-                <MemoryStick className="mr-2 h-4 w-4" />
-                <span>Memory</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/integrations" className="flex items-center w-full">
-                <Server className="mr-2 h-4 w-4" />
-                <span>Integrations</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/credentials" className="flex items-center w-full">
-                <Key className="mr-2 h-4 w-4" />
-                <span>Credentials</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/settings" className="flex items-center w-full">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </Link>
+               <Link to="/settings" className="flex items-center w-full">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="border-border" />
             <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-900/50 focus:text-red-300">

@@ -205,12 +205,22 @@ export function AgentsPage() {
       onClick={() => navigate(`/agents/${agent.id}/chat`)}
       className="group bg-card rounded-2xl border border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 overflow-hidden cursor-pointer relative"
     >
-      {/* Permanent link arrow indicator */}
+      {/* Arrow indicator */}
       <div className="absolute top-4 right-4 z-10">
-        <div className="w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm border border-border/50 group-hover:bg-primary group-hover:border-primary transition-all duration-200">
-          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary-foreground transition-colors duration-200" />
+        <div className="w-8 h-8 bg-background/80 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm">
+          <ArrowUpRight className="w-4 h-4 text-foreground" />
         </div>
       </div>
+
+      {/* Active status badge */}
+      {agent.active && (
+        <div className="absolute top-4 left-4 z-10">
+          <div className="flex items-center space-x-1 text-xs text-success bg-success/10 backdrop-blur-sm px-2 py-1 rounded-full border border-success/20">
+            <div className="w-1.5 h-1.5 bg-success rounded-full"></div>
+            <span>Active</span>
+          </div>
+        </div>
+      )}
       
       <div className="p-6">
         {/* Large centered avatar */}

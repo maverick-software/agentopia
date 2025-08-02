@@ -32,7 +32,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
       {messages.map((message) => (
         <div key={message.id} className="flex items-start space-x-3 group">
           {/* Avatar Placeholder */}
-          <Avatar className="w-8 h-8 border border-border">
+          <Avatar className="w-8 h-8 border border-gray-300 dark:border-gray-600">
              {/* Conditional rendering based on sender type */} 
              {message.sender_user && (
                  <>
@@ -53,7 +53,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
               <span className="font-semibold text-sm">
                  {message.sender_user?.full_name || message.sender_agent?.name || 'Unknown Sender'}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
                 {formatTimestamp(message.created_at)}
               </span>
             </div>

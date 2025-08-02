@@ -108,7 +108,7 @@ const ChannelListSidebar: React.FC<ChannelListSidebarProps> = ({
        
       </div>
 
-      <div className="flex-1 flex flex-col pt-3 px-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+              <div className="flex-1 flex flex-col pt-3 px-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-card">
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
              <Button variant="ghost" size="sm" className="w-full justify-start mb-1 text-muted-foreground hover:bg-muted hover:text-foreground">

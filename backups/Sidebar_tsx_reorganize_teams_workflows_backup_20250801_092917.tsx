@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
+import { useTeams } from '../hooks/useTeams';
+import { supabase } from '../lib/supabase';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,10 +57,18 @@ const navItems: NavItem[] = [
     to: '/agents', 
     icon: Users, 
     label: 'Agents',
+    isCustom: true,
+    children: [
+      { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+    ]
+  },
+  { 
+    to: '/teams', 
+    icon: Building2, 
+    label: 'Teams',
     isCustom: true
   },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
-  { to: '/workflows', icon: GitBranch, label: 'Workflows' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item
@@ -119,7 +129,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
                 : 'px-4 py-3' // Top-level item style (not collapsed)
           } ${
             isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent'
           }`
         }
@@ -162,7 +172,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
         className={({ isActive }): string =>
           `flex items-center space-x-3 rounded-md transition-colors px-2 justify-center py-3 ${
             isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent'
           }`
         }
@@ -182,7 +192,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
           className={({ isActive }): string =>
             `flex items-center space-x-3 rounded-l-md transition-colors px-4 py-3 flex-1 ${
               isActive
-                ? 'bg-sidebar-accent/30 text-sidebar-foreground'
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                 : 'text-sidebar-foreground hover:bg-sidebar-accent'
             }`
           }
@@ -207,7 +217,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
               className={({ isActive }): string =>
                 `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
                   isActive
-                    ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent'
                 }`
               }
@@ -221,14 +231,134 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
               <span className="font-medium truncate">{agent.name || 'Unnamed Agent'}</span>
             </NavLink>
           ))}
-
+          <NavLink
+            to="/workflows"
+            className={({ isActive }): string =>
+              `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
+                isActive
+                  ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent'
+              }`
+            }
+            style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
+          >
+            <GitBranch className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium truncate">Workflows</span>
+          </NavLink>
         </div>
       )}
     </div>
   );
 };
 
+// Custom component for Teams navigation with recent teams
+const TeamsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({ isCollapsed, level = 0 }) => {
+  const location = useLocation();
+  const { teams, fetchTeams } = useTeams();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [recentTeams, setRecentTeams] = useState<any[]>([]);
 
+  const isActiveOrParent = location.pathname.startsWith('/teams');
+
+  useEffect(() => {
+    if (isActiveOrParent && !isCollapsed) {
+      setIsExpanded(true);
+    }
+  }, [isActiveOrParent, isCollapsed]);
+
+  useEffect(() => {
+    fetchTeams().then(() => {
+      // Get first 3 teams (ordered by name)
+      setRecentTeams(teams.slice(0, 3));
+    });
+  }, [fetchTeams, teams]);
+
+  if (isCollapsed) {
+    return (
+      <NavLink
+        to="/teams"
+        title="Teams"
+        className={({ isActive }): string =>
+          `flex items-center space-x-3 rounded-md transition-colors px-2 justify-center py-3 ${
+            isActive
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+              : 'text-sidebar-foreground hover:bg-sidebar-accent'
+          }`
+        }
+      >
+        <Building2 className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/teams', 'Teams')}`} />
+      </NavLink>
+    );
+  }
+
+  return (
+    <div>
+      <div className={`flex items-center w-full rounded-md transition-colors ${
+        isActiveOrParent ? 'bg-sidebar-accent/50' : ''
+      }`}>
+        <NavLink
+          to="/teams"
+          className={({ isActive }): string =>
+            `flex items-center space-x-3 rounded-l-md transition-colors px-4 py-3 flex-1 ${
+              isActive
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                : 'text-sidebar-foreground hover:bg-sidebar-accent'
+            }`
+          }
+          style={{ paddingLeft: `${1 + level * 1.5}rem` }}
+        >
+          <Building2 className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/teams', 'Teams')}`} />
+          <span className="font-medium truncate">Teams</span>
+        </NavLink>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="p-3 hover:bg-sidebar-accent rounded-r-md transition-colors text-sidebar-foreground"
+        >
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        </button>
+      </div>
+      {isExpanded && (
+        <div className="mt-1 space-y-1">
+          <NavLink
+            to="/teams"
+            className={({ isActive }): string =>
+              `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
+                isActive
+                  ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent'
+              }`
+            }
+            style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
+          >
+            <Building2 className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium truncate">All Teams</span>
+          </NavLink>
+          {recentTeams.map((team) => (
+            <NavLink
+              key={team.id}
+              to={`/teams/${team.id}`}
+              className={({ isActive }): string =>
+                `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
+                  isActive
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent'
+                }`
+              }
+              style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
+            >
+              <div className="w-4 h-4 rounded bg-gradient-to-br from-green-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-medium">
+                  {team.name?.charAt(0)?.toUpperCase() || 'T'}
+                </span>
+              </div>
+              <span className="font-medium truncate">{team.name || 'Unnamed Team'}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Update props interface
 interface SidebarProps {
@@ -271,6 +401,8 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             {visibleNavItems.map((item) => {
               if (item.isCustom && item.label === 'Agents') {
                 return <AgentsNavRenderer key={item.to} isCollapsed={isCollapsed} />;
+              } else if (item.isCustom && item.label === 'Teams') {
+                return <TeamsNavRenderer key={item.to} isCollapsed={isCollapsed} />;
               } else {
                 return <NavItemRenderer key={item.to} item={item} isCollapsed={isCollapsed} />;
               }

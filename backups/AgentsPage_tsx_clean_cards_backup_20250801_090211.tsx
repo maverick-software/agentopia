@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, RefreshCw, Search, Sparkles, ArrowUpRight } from 'lucide-react';
+import { Plus, Trash2, Power, Edit2, MessageSquare, RefreshCw, Settings, Search, Star, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
@@ -199,45 +199,84 @@ export function AgentsPage() {
     return filtered;
   }, [agents, searchQuery, selectedCategory]);
 
-  // Profile-style agent card component
+  // Modern agent card component
   const AgentCard = ({ agent }: { agent: Agent }) => (
-    <div 
-      onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="group bg-card rounded-2xl border border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 overflow-hidden cursor-pointer relative"
-    >
-      {/* Permanent link arrow indicator */}
-      <div className="absolute top-4 right-4 z-10">
-        <div className="w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm border border-border/50 group-hover:bg-primary group-hover:border-primary transition-all duration-200">
-          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary-foreground transition-colors duration-200" />
+    <div className="group bg-card rounded-2xl border border-border hover:border-primary/20 transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 overflow-hidden">
+      {/* Card Header */}
+      <div className="p-6 pb-4">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start space-x-4 flex-1">
+            {/* Avatar */}
+            <div className="flex-shrink-0">
+              {agent.avatar_url ? (
+                <img 
+                  src={agent.avatar_url} 
+                  alt={`${agent.name} avatar`}
+                  className="w-12 h-12 rounded-xl object-cover"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/30 flex items-center justify-center">
+                  <span className="text-primary text-lg font-semibold">
+                    {agent.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between">
+                <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
+                  {agent.name}
+                </h3>
+                {agent.active && (
+                  <div className="flex items-center space-x-1 text-xs text-success bg-success/10 px-2 py-1 rounded-full">
+                    <div className="w-1.5 h-1.5 bg-success rounded-full"></div>
+                    <span>Active</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-muted-foreground text-sm mt-1 line-clamp-2 leading-relaxed">
+                {agent.description || 'A helpful AI assistant ready to assist you.'}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-      
-      <div className="p-6">
-        {/* Large centered avatar */}
-        <div className="flex justify-center mb-4">
-          {agent.avatar_url ? (
-            <img 
-              src={agent.avatar_url} 
-              alt={`${agent.name} avatar`}
-              className="w-20 h-20 rounded-2xl object-cover ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
-              <span className="text-primary text-2xl font-semibold">
-                {agent.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
-        
-        {/* Centered content */}
-        <div className="text-center">
-          <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors mb-2">
-            {agent.name}
-          </h3>
-          <p className="text-muted-foreground text-sm line-clamp-3 leading-relaxed">
-            {agent.description || 'A helpful AI assistant ready to assist you with various tasks and questions.'}
-          </p>
+
+      {/* Card Actions */}
+      <div className="px-6 pb-6">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate(`/agents/${agent.id}/chat`)}
+            className="flex-1 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl hover:bg-primary/90 transition-colors duration-200 font-medium mr-2"
+          >
+            <MessageSquare className="w-4 h-4 inline mr-2" />
+            Chat
+          </button>
+          <div className="flex space-x-1">
+            <button
+              onClick={() => navigate(`/agents/${agent.id}/edit`)}
+              className="p-2.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-xl transition-all duration-200"
+              title="Edit Agent"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => navigate(`/agents/${agent.id}/edit?tab=settings`)}
+              className="p-2.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-xl transition-all duration-200"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(agent.id)}
+              className="p-2.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all duration-200"
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -264,17 +303,17 @@ export function AgentsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header Section */}
-      <div className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 py-6">
           {/* Title and Create Button */}
-          <div className="flex items-start justify-between mb-8">
-            <div className="flex-1 pr-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Discover custom agents designed for different uses</h1>
-              <p className="text-muted-foreground text-lg">Enhance your productivity, streamline workflows, and get things done with AI agents</p>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Discover custom agents designed for different uses</h1>
+              <p className="text-muted-foreground mt-1">Enhance your productivity, streamline workflows, and get things done with AI agents</p>
             </div>
             <button
               onClick={() => navigate('/agents/new')}
-              className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md flex-shrink-0"
+              className="flex items-center px-4 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors duration-200 font-medium shadow-sm"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Agent
@@ -282,27 +321,29 @@ export function AgentsPage() {
           </div>
 
           {/* Search Bar */}
-          <div className="relative max-w-2xl mb-6">
+          <div className="relative max-w-2xl">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
             <input
               type="text"
               placeholder="Search agents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3.5 bg-card border border-border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all duration-200 shadow-sm"
+              className="w-full pl-12 pr-4 py-3 bg-card border border-border rounded-2xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all duration-200"
             />
           </div>
+        </div>
 
-          {/* Category Tabs */}
-          <div className="flex space-x-2 overflow-x-auto scrollbar-thin scrollbar-thumb-border">
+        {/* Category Tabs */}
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex space-x-1 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-border">
             {AGENT_CATEGORIES.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   selectedCategory === category.id
                     ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
                 {category.name}
@@ -313,7 +354,7 @@ export function AgentsPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         
         {/* Error State */}
         {error && (
@@ -332,12 +373,12 @@ export function AgentsPage() {
 
         {/* Featured Section (when on 'all' or 'featured' category) */}
         {(selectedCategory === 'all' || selectedCategory === 'featured') && !loading && !error && (
-          <div className="mb-12">
-            <div className="flex items-center space-x-3 mb-6">
+          <div className="mb-8">
+            <div className="flex items-center space-x-2 mb-4">
               <Sparkles className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-semibold text-foreground">Featured</h2>
+              <h2 className="text-xl font-semibold text-foreground">Featured</h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredAgents.filter(agent => agent.active).slice(0, 4).map((agent) => (
                 <AgentCard key={`featured-${agent.id}`} agent={agent} />
               ))}
@@ -347,25 +388,21 @@ export function AgentsPage() {
 
         {/* All Agents Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {[...Array(8)].map((_, i) => (
               <div 
                 key={i} 
-                className="bg-card border border-border rounded-2xl p-6 animate-pulse"
+                className="bg-card border border-border rounded-2xl p-6 space-y-4 animate-pulse"
               >
-                {/* Skeleton avatar */}
-                <div className="flex justify-center mb-4">
-                  <div className="w-20 h-20 bg-muted rounded-2xl"></div>
-                </div>
-                {/* Skeleton content */}
-                <div className="text-center space-y-3">
-                  <div className="h-5 bg-muted rounded w-3/4 mx-auto"></div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-muted rounded w-full"></div>
-                    <div className="h-3 bg-muted rounded w-4/5 mx-auto"></div>
-                    <div className="h-3 bg-muted rounded w-2/3 mx-auto"></div>
+                <div className="flex items-start space-x-4">
+                  <div className="w-12 h-12 bg-muted rounded-xl"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-5 bg-muted rounded w-3/4"></div>
+                    <div className="h-4 bg-muted rounded w-full"></div>
+                    <div className="h-4 bg-muted rounded w-2/3"></div>
                   </div>
                 </div>
+                <div className="h-10 bg-muted rounded-xl"></div>
               </div>
             ))}
           </div>
@@ -393,38 +430,39 @@ export function AgentsPage() {
           </div>
         ) : (
           <div>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-semibold text-foreground">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-foreground">
                 {selectedCategory === 'all' ? 'All Agents' : AGENT_CATEGORIES.find(c => c.id === selectedCategory)?.name}
-                <span className="text-muted-foreground font-normal ml-3 text-lg">({filteredAgents.length})</span>
+                <span className="text-muted-foreground font-normal ml-2">({filteredAgents.length})</span>
               </h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {renderedAgents}
             </div>
           </div>
         )}
       </div>
+    </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-semibold mb-3 text-foreground">Delete Agent</h2>
-            <p className="text-muted-foreground mb-6 leading-relaxed">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md shadow-lg">
+            <h2 className="text-2xl font-bold mb-4 text-foreground">Delete Agent</h2>
+            <p className="text-foreground mb-6">
               Are you sure you want to delete this agent? This action cannot be undone.
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-all duration-200"
+                className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors duration-200"
                 disabled={isDeleting}
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteAgent(showDeleteConfirm)}
-                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 disabled={isDeleting}
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}

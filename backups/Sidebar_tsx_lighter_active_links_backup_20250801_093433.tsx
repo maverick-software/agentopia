@@ -57,8 +57,9 @@ const navItems: NavItem[] = [
     label: 'Agents',
     isCustom: true
   },
-  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/teams', icon: Building2, label: 'Teams' },
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+  { to: '/projects', icon: FolderKanban, label: 'Projects' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item
@@ -119,7 +120,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
                 : 'px-4 py-3' // Top-level item style (not collapsed)
           } ${
             isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent'
           }`
         }
@@ -162,7 +163,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
         className={({ isActive }): string =>
           `flex items-center space-x-3 rounded-md transition-colors px-2 justify-center py-3 ${
             isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent'
           }`
         }
@@ -182,7 +183,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
           className={({ isActive }): string =>
             `flex items-center space-x-3 rounded-l-md transition-colors px-4 py-3 flex-1 ${
               isActive
-                ? 'bg-sidebar-accent/30 text-sidebar-foreground'
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                 : 'text-sidebar-foreground hover:bg-sidebar-accent'
             }`
           }
@@ -207,7 +208,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
               className={({ isActive }): string =>
                 `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
                   isActive
-                    ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent'
                 }`
               }

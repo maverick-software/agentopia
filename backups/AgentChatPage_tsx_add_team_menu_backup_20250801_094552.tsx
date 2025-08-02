@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw, UserPlus } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
@@ -449,13 +449,6 @@ export function AgentChatPage() {
                 >
                   <Settings className="h-4 w-4 mr-2" />
                   Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {/* TODO: Open team assignment modal */}}
-                  className="cursor-pointer"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add to Team
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

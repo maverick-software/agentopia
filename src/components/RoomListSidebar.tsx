@@ -93,7 +93,7 @@ const RoomListSidebar: React.FC = () => {
       </div>
 
       {/* Room List with improved design */}
-      <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-gray-600">
+              <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-border">
         {loading && !chatRooms.length && (
           <div className="flex justify-center py-4">
             <Loader2 className="animate-spin text-indigo-400 w-6 h-6" />

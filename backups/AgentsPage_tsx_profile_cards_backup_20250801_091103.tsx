@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, RefreshCw, Search, Sparkles, ArrowUpRight } from 'lucide-react';
+import { Plus, MessageSquare, RefreshCw, Search, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
@@ -199,46 +199,58 @@ export function AgentsPage() {
     return filtered;
   }, [agents, searchQuery, selectedCategory]);
 
-  // Profile-style agent card component
+  // Modern agent card component
   const AgentCard = ({ agent }: { agent: Agent }) => (
-    <div 
-      onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="group bg-card rounded-2xl border border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 overflow-hidden cursor-pointer relative"
-    >
-      {/* Permanent link arrow indicator */}
-      <div className="absolute top-4 right-4 z-10">
-        <div className="w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm border border-border/50 group-hover:bg-primary group-hover:border-primary transition-all duration-200">
-          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary-foreground transition-colors duration-200" />
+    <div className="group bg-card rounded-2xl border border-border hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 transition-all duration-300 overflow-hidden">
+      {/* Card Header */}
+      <div className="p-5">
+        <div className="flex items-start space-x-3">
+          {/* Avatar */}
+          <div className="flex-shrink-0">
+            {agent.avatar_url ? (
+              <img 
+                src={agent.avatar_url} 
+                alt={`${agent.name} avatar`}
+                className="w-10 h-10 rounded-lg object-cover ring-1 ring-border"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/15 to-primary/25 flex items-center justify-center ring-1 ring-border">
+                <span className="text-primary text-sm font-medium">
+                  {agent.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
+          </div>
+          
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between mb-1">
+              <h3 className="text-base font-medium text-foreground group-hover:text-primary transition-colors leading-tight">
+                {agent.name}
+              </h3>
+              {agent.active && (
+                <div className="flex items-center space-x-1 text-xs text-success bg-success/10 px-2 py-0.5 rounded-md ml-2 flex-shrink-0">
+                  <div className="w-1.5 h-1.5 bg-success rounded-full"></div>
+                  <span>Active</span>
+                </div>
+              )}
+            </div>
+            <p className="text-muted-foreground text-sm line-clamp-2 leading-relaxed">
+              {agent.description || 'A helpful AI assistant ready to assist you.'}
+            </p>
+          </div>
         </div>
       </div>
-      
-      <div className="p-6">
-        {/* Large centered avatar */}
-        <div className="flex justify-center mb-4">
-          {agent.avatar_url ? (
-            <img 
-              src={agent.avatar_url} 
-              alt={`${agent.name} avatar`}
-              className="w-20 h-20 rounded-2xl object-cover ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
-              <span className="text-primary text-2xl font-semibold">
-                {agent.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
-        
-        {/* Centered content */}
-        <div className="text-center">
-          <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors mb-2">
-            {agent.name}
-          </h3>
-          <p className="text-muted-foreground text-sm line-clamp-3 leading-relaxed">
-            {agent.description || 'A helpful AI assistant ready to assist you with various tasks and questions.'}
-          </p>
-        </div>
+
+      {/* Card Actions */}
+      <div className="px-5 pb-5">
+        <button
+          onClick={() => navigate(`/agents/${agent.id}/chat`)}
+          className="w-full bg-primary/90 hover:bg-primary text-primary-foreground text-sm font-medium px-3 py-2 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm hover:shadow-md"
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Chat</span>
+        </button>
       </div>
     </div>
   );
@@ -351,21 +363,17 @@ export function AgentsPage() {
             {[...Array(8)].map((_, i) => (
               <div 
                 key={i} 
-                className="bg-card border border-border rounded-2xl p-6 animate-pulse"
+                className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-pulse"
               >
-                {/* Skeleton avatar */}
-                <div className="flex justify-center mb-4">
-                  <div className="w-20 h-20 bg-muted rounded-2xl"></div>
-                </div>
-                {/* Skeleton content */}
-                <div className="text-center space-y-3">
-                  <div className="h-5 bg-muted rounded w-3/4 mx-auto"></div>
-                  <div className="space-y-2">
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 bg-muted rounded-lg"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded w-3/4"></div>
                     <div className="h-3 bg-muted rounded w-full"></div>
-                    <div className="h-3 bg-muted rounded w-4/5 mx-auto"></div>
-                    <div className="h-3 bg-muted rounded w-2/3 mx-auto"></div>
+                    <div className="h-3 bg-muted rounded w-2/3"></div>
                   </div>
                 </div>
+                <div className="h-9 bg-muted rounded-lg"></div>
               </div>
             ))}
           </div>

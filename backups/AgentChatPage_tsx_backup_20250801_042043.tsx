@@ -1,14 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw, UserPlus } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu';
 import { ChatMessage } from '../components/ChatMessage';
 import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { ToolExecutionLogger } from '../components/ToolExecutionLogger';
@@ -410,15 +404,15 @@ export function AgentChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-[hsl(215,28%,9%)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(217,19%,20%)] bg-[hsl(217,25%,12%)]">
                   <div className="flex items-center space-x-3">
             <button
               onClick={() => navigate('/agents')}
-              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              className="p-2 hover:bg-[hsl(217,19%,20%)] rounded-lg transition-colors"
             >
-              <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+              <ArrowLeft className="h-5 w-5 text-[hsl(210,15%,70%)]" />
             </button>
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
@@ -427,46 +421,27 @@ export function AgentChatPage() {
                 </span>
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
-                <p className="text-sm text-muted-foreground">AI Assistant</p>
+                <h1 className="text-lg font-semibold text-[hsl(210,20%,98%)]">{agent?.name || 'Agent'}</h1>
+                <p className="text-sm text-[hsl(210,15%,70%)]">AI Assistant</p>
               </div>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <button className="p-2 hover:bg-accent rounded-lg transition-colors">
-              <RefreshCw className="h-5 w-5 text-muted-foreground" />
+            <button className="p-2 hover:bg-[hsl(217,19%,20%)] rounded-lg transition-colors">
+              <RefreshCw className="h-5 w-5 text-[hsl(210,15%,70%)]" />
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-2 hover:bg-accent rounded-lg transition-colors">
-                  <MoreVertical className="h-5 w-5 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={() => navigate(`/agents/${agentId}/edit`)}
-                  className="cursor-pointer"
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {/* TODO: Open team assignment modal */}}
-                  className="cursor-pointer"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add to Team
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button className="p-2 hover:bg-[hsl(217,19%,20%)] rounded-lg transition-colors">
+              <MoreVertical className="h-5 w-5 text-[hsl(210,15%,70%)]" />
+            </button>
           </div>
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full overflow-y-auto">
           {isHistoryLoading ? (
             <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-[hsl(210,15%,70%)]" />
             </div>
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -476,20 +451,20 @@ export function AgentChatPage() {
                     {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                   </span>
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">
+                <h3 className="text-xl font-semibold text-[hsl(210,20%,98%)] mb-2">
                   Chat with {agent?.name || 'Agent'}
                 </h3>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-[hsl(210,15%,70%)] mb-6">
                   Start a conversation with your AI assistant. Ask questions, get help, or just chat!
                 </p>
                 <div className="grid grid-cols-1 gap-2 text-sm">
-                  <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
-                    <div className="font-medium text-foreground">💡 Try asking:</div>
-                    <div className="text-muted-foreground mt-1">"What can you help me with?"</div>
+                  <div className="p-3 bg-[hsl(217,25%,12%)] rounded-lg text-left border border-[hsl(217,19%,20%)]">
+                    <div className="font-medium text-[hsl(210,20%,98%)]">💡 Try asking:</div>
+                    <div className="text-[hsl(210,15%,70%)] mt-1">"What can you help me with?"</div>
                   </div>
-                  <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
-                    <div className="font-medium text-foreground">🔍 Or request:</div>
-                    <div className="text-muted-foreground mt-1">"Help me analyze this data"</div>
+                  <div className="p-3 bg-[hsl(217,25%,12%)] rounded-lg text-left border border-[hsl(217,19%,20%)]">
+                    <div className="font-medium text-[hsl(210,20%,98%)]">🔍 Or request:</div>
+                    <div className="text-[hsl(210,15%,70%)] mt-1">"Help me analyze this data"</div>
                   </div>
                 </div>
               </div>
@@ -505,8 +480,8 @@ export function AgentChatPage() {
                     {/* Avatar */}
                     <div className="flex-shrink-0">
                       {message.role === 'user' ? (
-                        <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
-                          <span className="text-sm font-medium">
+                        <div className="w-8 h-8 bg-[hsl(210,20%,98%)] rounded-full flex items-center justify-center">
+                          <span className="text-[hsl(215,28%,9%)] text-sm font-medium">
                             {user?.email?.charAt(0)?.toUpperCase() || 'U'}
                           </span>
                         </div>
@@ -522,17 +497,17 @@ export function AgentChatPage() {
                     {/* Message Content */}
                     <div className="flex-1 min-w-0">
                       <div className="mb-1">
-                        <span className="text-sm font-medium text-foreground">
+                        <span className="text-sm font-medium text-[hsl(210,20%,98%)]">
                           {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
                         </span>
-                        <span className="text-xs text-muted-foreground ml-2">
+                        <span className="text-xs text-[hsl(210,15%,70%)] ml-2">
                           {message.timestamp.toLocaleTimeString([], { 
                             hour: '2-digit', 
                             minute: '2-digit' 
                           })}
                         </span>
                       </div>
-                      <div className="text-foreground leading-relaxed">
+                      <div className="text-[hsl(210,20%,98%)] leading-relaxed">
                         <ChatMessage 
                           message={message} 
                           members={agent ? [{
@@ -561,14 +536,14 @@ export function AgentChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="mb-1">
-                        <span className="text-sm font-medium text-foreground">
+                        <span className="text-sm font-medium text-[hsl(210,20%,98%)]">
                           {agent?.name || 'Assistant'}
                         </span>
                       </div>
                       <div className="flex space-x-1 items-center">
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-2 h-2 bg-[hsl(210,15%,70%)] rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-[hsl(210,15%,70%)] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-[hsl(210,15%,70%)] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                       </div>
                     </div>
                   </div>
@@ -599,10 +574,11 @@ export function AgentChatPage() {
               <div ref={messagesEndRef} />
             </div>
           )}
+        </div>
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-border bg-card shadow-sm">
+      <div className="border-t border-[hsl(217,19%,20%)] bg-[hsl(217,25%,12%)]">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <form onSubmit={handleSubmit} className="relative">
             <div className="flex items-end space-x-3">
@@ -613,7 +589,7 @@ export function AgentChatPage() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`Message ${agent?.name || 'Agent'}...`}
-                  className="w-full resize-none border border-border bg-input text-foreground placeholder-muted-foreground rounded-2xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full resize-none border border-[hsl(217,19%,20%)] bg-[hsl(215,28%,9%)] text-[hsl(210,20%,98%)] placeholder-[hsl(210,15%,70%)] rounded-2xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   disabled={sending || !agent}
                   rows={1}
                   style={{ minHeight: '48px', maxHeight: '200px' }}
@@ -632,7 +608,7 @@ export function AgentChatPage() {
               </div>
             </div>
           </form>
-          <div className="text-xs text-muted-foreground text-center mt-2">
+          <div className="text-xs text-[hsl(210,15%,70%)] text-center mt-2">
             Press Enter to send, Shift+Enter for new line
           </div>
         </div>
