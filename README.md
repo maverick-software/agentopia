@@ -48,6 +48,12 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
     *   Configurable Agent Context Window (Size & Token Limit)
 *   MCP (Multi-Cloud Proxy) Integration
 *   Agent Mentions (`@AgentName`) within Chat
+*   **🆕 Enhanced Chat Experience with AI Process Transparency:**
+    *   Real-time AI thinking process indicators with step-by-step visibility
+    *   Expandable "Thoughts" sections showing actual AI responses, tool calls, and results
+    *   Integrated debugging capabilities for prompt verification and troubleshooting
+    *   Persistent chat history with seamless message state management
+    *   Professional Claude-style UI with gradient effects and seamless message bubbles
 *   Admin Interface
 *   (Optional) Discord Integration:
     *   Activate/Deactivate agents in Discord servers
@@ -593,6 +599,116 @@ To add new tool providers:
 4. Add execution logic in `FunctionCallingManager`
 5. Create provider-specific API handler in `supabase/functions/[provider]-api`
 
+## Enhanced Chat Experience & AI Process Transparency
+
+Agentopia provides an unprecedented level of transparency into AI agent thinking processes, allowing users to see exactly how agents analyze requests, make decisions, and execute tools. This system enables effective prompt verification, debugging, and understanding of agent behavior.
+
+### Real-Time AI Process Visualization
+
+**🧠 Thinking Process Indicators:**
+- **Step-by-step visibility** of AI processing phases (thinking, analyzing tools, executing tools, processing results, generating response)
+- **Real-time status updates** with agent avatar and current processing state
+- **Discreet header indicators** showing AI state without interrupting conversation flow
+- **Professional animations** with smooth transitions and visual feedback
+
+**📋 Process Phases Tracked:**
+1. **Thinking**: Initial analysis of user request and context evaluation
+2. **Analyzing Tools**: Evaluation of available tools and decision making
+3. **Executing Tool**: Active tool usage with parameter validation and execution
+4. **Processing Results**: Analysis and integration of tool outputs
+5. **Generating Response**: Final response formulation and delivery
+
+### Expandable "Thoughts" Section
+
+**🔍 Deep Visibility Features:**
+- **Integrated "Thoughts" dropdown** next to agent name in each response
+- **Expandable step details** showing complete AI reasoning process
+- **Actual AI responses** captured during each processing phase
+- **Tool call visibility** with exact function calls and parameters
+- **Tool result inspection** with complete JSON responses and error details
+- **Execution timing** with millisecond-precision duration tracking
+
+**📊 What You Can See:**
+```
+🧠 AI Response:
+User asked: "send an email"
+I need to understand what they're asking for and determine the best way to help them...
+
+🔧 Tool Call:
+gmail.send_email({
+  to: "user@example.com",
+  subject: "Response to your inquiry", 
+  body: "Thank you for your message..."
+})
+
+✅ Tool Result:
+{
+  "success": true,
+  "message_id": "msg_abc123",
+  "sent_at": "2025-01-02T10:35:00Z"
+}
+```
+
+### Professional Chat Interface
+
+**🎨 Claude-Style Design:**
+- **Seamless message bubbles** without borders for clean appearance
+- **Timestamp positioning** in bottom-right corner of messages
+- **Gradient fade effects** for elegant text transitions
+- **Proper message alignment** with user messages on right, agent on left
+- **Agent avatar integration** showing profile images throughout chat
+- **Responsive layout** with optimized spacing and typography
+
+**⚡ State Management:**
+- **Persistent thinking data** preserved across page reloads
+- **Smart message merging** maintaining AI process details during history loads
+- **Real-time updates** with immediate response visibility
+- **Robust error handling** with fallback mechanisms
+
+### Developer & Debug Benefits
+
+**🔧 Debugging Capabilities:**
+- **Prompt verification** by viewing actual AI reasoning
+- **Tool execution validation** with complete request/response cycles
+- **Performance monitoring** with detailed timing information
+- **Error diagnosis** through comprehensive process visibility
+- **Integration testing** with real-time tool call inspection
+
+**📈 Use Cases:**
+- **Agent Development**: Verify prompts are working as intended
+- **Tool Integration**: Debug API calls and response handling
+- **Performance Optimization**: Identify bottlenecks in processing
+- **User Support**: Understand agent behavior for better assistance
+- **Quality Assurance**: Validate agent responses and decision-making
+
+### Technical Implementation
+
+**🏗️ Architecture:**
+- **React state management** with robust message persistence
+- **TypeScript interfaces** for type-safe AI process tracking
+- **CSS variable theming** with dark/light mode support
+- **Tailwind styling** with professional color schemes
+- **Supabase integration** for secure data storage and retrieval
+
+**💾 Data Structures:**
+```typescript
+interface AIProcessDetails {
+  steps: Array<{
+    state: string;
+    label: string;
+    response?: string;        // Actual AI reasoning
+    toolCall?: string;        // Function call details
+    toolResult?: any;         // Complete tool response
+    duration?: number;        // Execution timing
+    completed: boolean;
+  }>;
+  totalDuration?: number;
+  toolsUsed?: string[];
+}
+```
+
+This transparency system transforms agent interactions from black-box operations into fully observable, debuggable processes, enabling better agent development, troubleshooting, and user understanding.
+
 ## Backend Services
 
 Located in `services/`. These are designed for persistent execution on a server (e.g., DigitalOcean Droplet) managed by PM2.
@@ -690,10 +806,20 @@ Located in `services/`. These are designed for persistent execution on a server 
 *   **Component Improvements:**
     *   Added the Badge component for status indicators
     *   Fixed typing issues with newly installed components
+*   **🆕 Enhanced Chat Experience & AI Transparency (January 2025):**
+    *   **Revolutionary AI Process Visibility:** Complete transparency into agent thinking with step-by-step process indicators
+    *   **Expandable "Thoughts" System:** Click on any agent response to see actual AI reasoning, tool calls, and results
+    *   **Professional Chat Interface:** Claude-style design with seamless message bubbles, gradient effects, and proper alignment
+    *   **Developer Debug Features:** Full prompt verification, tool execution validation, and performance monitoring capabilities
+    *   **Persistent State Management:** Smart message merging preserves AI process details across page reloads and history loads
+    *   **Real-Time Processing:** Live status updates with agent avatars and discreet header indicators
+    *   **Technical Implementation:** TypeScript interfaces for type-safe AI tracking, CSS variable theming, robust error handling
+    *   **Debugging Revolution:** Transform black-box agent operations into fully observable, debuggable processes
 
 ## Current Status & Next Steps
 
 *   **✅ Light Mode Theme System:** **COMPLETE & PRODUCTION-READY** - Comprehensive light mode implementation with professional UI transformation, WCAG AA accessibility compliance, advanced CSS variable architecture, and vibrant 11-color icon system. Complete component updates across 100+ UI elements with automated backup system and developer documentation.
+*   **✅ Enhanced Chat Experience & AI Transparency:** **COMPLETE & PRODUCTION-READY** - Revolutionary AI process visibility system with expandable "Thoughts" sections, real-time thinking indicators, complete tool call/response visibility, professional Claude-style UI, and persistent state management. Transforms agent interactions from black-box operations into fully observable, debuggable processes.
 *   **Workspace Refactor:** Largely complete, including DB schema, backend hooks, core UI, chat functionality, context window settings, and member management.
 *   **UI Improvements:** Completed significant improvements to the AgentEditPage, focusing on layout, organization, and better component usage.
 *   **✅ Web Search Integration:** **COMPLETE** - Full web research capabilities deployed with multi-provider support, secure API key management, and AI-powered content summarization.
