@@ -23,6 +23,7 @@ import { HistoryModal } from '../components/modals/HistoryModal';
 import { ChatMessage } from '../components/ChatMessage';
 import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicator';
+import { InlineThinkingIndicator } from '../components/InlineThinkingIndicator';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
 
@@ -52,6 +53,15 @@ export function AgentChatPage() {
   const [aiState, setAiState] = useState<AIState | null>(null);
   const [currentTool, setCurrentTool] = useState<ToolExecutionStatus | null>(null);
   const [showAIIndicator, setShowAIIndicator] = useState(false);
+  const [processSteps, setProcessSteps] = useState<Array<{
+    state: AIState;
+    label: string;
+    duration?: number;
+    details?: string;
+    completed: boolean;
+    startTime?: Date;
+  }>>([]);
+  const [thinkingMessageIndex, setThinkingMessageIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchAgentAttempts = useRef(0);
@@ -138,24 +148,136 @@ export function AgentChatPage() {
     setShowAIIndicator(true);
     setAiState('thinking');
     setCurrentTool(null);
-  }, []);
+    setProcessSteps([]);
+    
+    // Add thinking message to chat
+    const thinkingMessage: Message = {
+      role: 'thinking',
+      content: 'Processing your request...',
+      timestamp: new Date(),
+      agentId: agent?.id,
+      userId: user?.id,
+      metadata: { isCompleted: false },
+      aiProcessDetails: { steps: [], toolsUsed: [] }
+    };
+    
+    setMessages(prev => {
+      const newMessages = [...prev, thinkingMessage];
+      setThinkingMessageIndex(newMessages.length - 1);
+      return newMessages;
+    });
+  }, [agent?.id, user?.id]);
 
   const updateAIState = useCallback((newState: AIState, toolInfo?: Partial<ToolExecutionStatus>) => {
     setAiState(newState);
     if (toolInfo) {
       setCurrentTool(prev => ({ ...prev, ...toolInfo } as ToolExecutionStatus));
     }
+    
+    // Add step to process tracking
+    const stepLabel = {
+      'thinking': 'Analyzing your message',
+      'analyzing_tools': 'Checking available tools',
+      'executing_tool': toolInfo?.toolName ? `Using ${toolInfo.toolName}` : 'Executing tool',
+      'processing_results': 'Processing tool results',
+      'generating_response': 'Generating response'
+    }[newState] || 'Processing';
+    
+    setProcessSteps(prev => {
+      const existingIndex = prev.findIndex(step => step.state === newState);
+      const newStep = {
+        state: newState,
+        label: stepLabel,
+        startTime: new Date(),
+        completed: false,
+        details: toolInfo?.provider ? `Using ${toolInfo.provider}` : undefined
+      };
+      
+      if (existingIndex >= 0) {
+        // Update existing step
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], ...newStep };
+        return updated;
+      } else {
+        // Add new step and mark previous as completed
+        const updated = prev.map(step => ({ ...step, completed: true }));
+        return [...updated, newStep];
+      }
+    });
   }, []);
 
   const completeAIProcessing = useCallback((success: boolean = true) => {
     setAiState(success ? 'completed' : 'failed');
-    // The AIThinkingIndicator will auto-hide after 3 seconds
+    
+    // Mark all steps as completed
+    setProcessSteps(prev => prev.map(step => ({ ...step, completed: true })));
+    
+    // Update thinking message to completed state (keep it visible as "Thoughts")
+    if (thinkingMessageIndex !== null) {
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[thinkingMessageIndex]?.role === 'thinking') {
+          updated[thinkingMessageIndex] = {
+            ...updated[thinkingMessageIndex],
+            metadata: { isCompleted: true },
+            aiProcessDetails: {
+              steps: processSteps.map(step => ({ ...step, completed: true })),
+              totalDuration: Date.now() - (processSteps[0]?.startTime?.getTime() || Date.now()),
+              toolsUsed: processSteps.filter(s => s.details).map(s => s.details || '')
+            }
+          };
+        }
+        return updated;
+      });
+    }
+    
+    // Clean up state
     setTimeout(() => {
       setShowAIIndicator(false);
       setAiState(null);
       setCurrentTool(null);
-    }, 3500);
-  }, []);
+      setThinkingMessageIndex(null);
+    }, 500);
+  }, [thinkingMessageIndex, processSteps]);
+
+  const completeAIProcessingWithResponse = useCallback((responseContent: string) => {
+    setAiState('completed');
+    
+    // Mark all steps as completed
+    setProcessSteps(prev => prev.map(step => ({ ...step, completed: true })));
+    
+    // Convert thinking message to assistant response with thoughts
+    if (thinkingMessageIndex !== null) {
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[thinkingMessageIndex]?.role === 'thinking') {
+          // Convert to assistant message with thinking details
+          updated[thinkingMessageIndex] = {
+            role: 'assistant',
+            content: responseContent,
+            timestamp: new Date(),
+            agentId: agent?.id,
+            userId: user?.id,
+            metadata: { isCompleted: true },
+            aiProcessDetails: {
+              steps: processSteps.map(step => ({ ...step, completed: true })),
+              totalDuration: Date.now() - (processSteps[0]?.startTime?.getTime() || Date.now()),
+              toolsUsed: processSteps.filter(s => s.details).map(s => s.details || '')
+            }
+          };
+        }
+        return updated;
+      });
+    }
+    
+    // Clean up state
+    setTimeout(() => {
+      setShowAIIndicator(false);
+      setAiState(null);
+      setCurrentTool(null);
+      setThinkingMessageIndex(null);
+    }, 500);
+  }, [thinkingMessageIndex, processSteps, agent?.id, user?.id]);
 
   // Simulate AI processing phases
   const simulateAIProcessing = useCallback(async () => {
@@ -281,7 +403,7 @@ export function AgentChatPage() {
             content: msg.content,
             timestamp: new Date(msg.created_at),
             agentId: msg.sender_agent_id,
-            userId: msg.sender_user_id,
+            userId: msg.sender_agent_id ? user.id : msg.sender_user_id, // For assistant messages, use current user's ID
           }));
           setMessages(formattedMessages);
         }
@@ -387,23 +509,12 @@ export function AgentChatPage() {
           throw new Error('Received an invalid response format from the chat service.');
       }
 
-      // Complete AI processing successfully
-      completeAIProcessing(true);
+      // Complete AI processing and convert thinking message to assistant response
+      completeAIProcessingWithResponse(assistantReply);
 
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: assistantReply,
-        timestamp: new Date(),
-        agentId: agent.id,
-      };
-
-      // Check mount status before setting state
+      // Scroll after updating message
       if (isMounted.current) {
-           setMessages(prev => [...prev, assistantMessage]);
-           // Scroll after adding assistant message
-           requestAnimationFrame(scrollToBottom);
-      } else {
-           console.log("[handleSubmit] Component unmounted before adding assistant message.");
+        requestAnimationFrame(scrollToBottom);
       }
 
     } catch (err: any) {
@@ -487,7 +598,7 @@ export function AgentChatPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-card shadow-sm">
                   <div className="flex items-center space-x-3">
             <button
               onClick={() => navigate('/agents')}
@@ -587,23 +698,27 @@ export function AgentChatPage() {
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto">
-          {isHistoryLoading ? (
+      <div className="relative flex-1 overflow-y-auto">
+        {/* Gradient fade effect at top of messages */}
+        {messages.length > 0 && (
+          <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10" />
+        )}
+        {isHistoryLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md mx-auto px-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-white text-lg font-medium">
+              <div className="text-center max-w-md mx-auto px-6 animate-fade-in">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                  <span className="text-white text-xl font-medium">
                     {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                   </span>
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">
+                <h3 className="text-2xl font-semibold text-foreground mb-3">
                   Chat with {agent?.name || 'Agent'}
                 </h3>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-muted-foreground mb-8 leading-relaxed">
                   Start a conversation with your AI assistant. Ask questions, get help, or just chat!
                 </p>
                 <div className="grid grid-cols-1 gap-2 text-sm">
@@ -619,131 +734,188 @@ export function AgentChatPage() {
               </div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto px-4 py-6">
-              <div className="space-y-4">
-                {messages.map((message, index) => (
-                  <div
-                    key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
-                    className="flex items-start space-x-4"
-                  >
-                    {/* Avatar */}
-                    <div className="flex-shrink-0">
-                      {message.role === 'user' ? (
-                        <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
-                          <span className="text-sm font-medium">
-                            {user?.email?.charAt(0)?.toUpperCase() || 'U'}
-                          </span>
+            <div className="max-w-4xl mx-auto px-4 py-6 pb-8">
+              <div className="space-y-6">
+                {messages.map((message, index) => {
+                  // Handle thinking messages with inline indicator
+                  if (message.role === 'thinking') {
+                    return (
+                      <InlineThinkingIndicator
+                        key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
+                        isVisible={true}
+                        currentState={message.metadata?.isCompleted ? 'completed' : aiState}
+                        currentTool={currentTool}
+                        processSteps={message.aiProcessDetails?.steps || processSteps.map(step => ({
+                          state: step.state,
+                          label: step.label,
+                          duration: step.duration,
+                          details: step.details,
+                          completed: step.completed
+                        }))}
+                        agentName={agent?.name || 'Agent'}
+                        agentAvatarUrl={agent?.avatar_url}
+                        isCompleted={message.metadata?.isCompleted || false}
+                        className="mb-4"
+                      />
+                    );
+                  }
+                  
+                  // Handle assistant messages with thinking details
+                  if (message.role === 'assistant' && message.aiProcessDetails?.steps?.length) {
+                    return (
+                      <div key={`${message.role}-${index}-${message.timestamp.toISOString()}`} className="space-y-4">
+                        {/* Regular assistant message */}
+                        <div className="flex items-start space-x-4 animate-fade-in">
+                          {/* Avatar */}
+                          <div className="flex-shrink-0">
+                            {agent?.avatar_url ? (
+                              <img 
+                                src={agent.avatar_url} 
+                                alt={agent.name || 'Agent'}
+                                className="w-8 h-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                                <span className="text-white text-sm font-medium">
+                                  {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Message Content */}
+                          <div className="flex-1 min-w-0 max-w-[70%] text-left">
+                            <div className="mb-1 text-left">
+                              <span className="text-sm font-medium text-foreground">
+                                {agent?.name || 'Assistant'}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {message.timestamp.toLocaleTimeString([], { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </span>
+                            </div>
+                            <div className="inline-block p-3 rounded-2xl shadow-sm bg-card text-card-foreground border border-border">
+                              <div className="text-sm leading-relaxed">
+                                {message.content}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        agent?.avatar_url ? (
-                          <img 
-                            src={agent.avatar_url} 
-                            alt={agent.name || 'Agent'}
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm font-medium">
-                              {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                        
+                        {/* Thoughts section */}
+                        <InlineThinkingIndicator
+                          key={`thoughts-${index}`}
+                          isVisible={false}
+                          processSteps={message.aiProcessDetails.steps}
+                          agentName={agent?.name || 'Agent'}
+                          agentAvatarUrl={agent?.avatar_url}
+                          isCompleted={true}
+                          className="ml-12"
+                        />
+                      </div>
+                    );
+                  }
+                  
+                  // Handle regular messages
+                  return (
+                    <div
+                      key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
+                      className={`flex items-start space-x-4 animate-fade-in ${
+                        message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                      }`}
+                    >
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        {message.role === 'user' ? (
+                          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium">
+                              {user?.email?.charAt(0)?.toUpperCase() || 'U'}
                             </span>
                           </div>
-                        )
-                      )}
-                    </div>
-                    
-                    {/* Message Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="mb-1">
-                        <span className="text-sm font-medium text-foreground">
-                          {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
-                        </span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {message.timestamp.toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </span>
+                        ) : (
+                          agent?.avatar_url ? (
+                            <img 
+                              src={agent.avatar_url} 
+                              alt={agent.name || 'Agent'}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                              <span className="text-white text-sm font-medium">
+                                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                              </span>
+                            </div>
+                          )
+                        )}
                       </div>
-                      <div className="text-foreground leading-relaxed">
-                        <ChatMessage 
-                          message={message} 
-                          members={agent ? [{
-                            id: agent.id,
-                            agent_id: agent.id,
-                            agent: {
-                              id: agent.id,
-                              name: agent.name
-                            }
-                          } as any] : []} 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Typing indicator */}
-                {sending && (
-                  <div className="flex items-start space-x-4">
-                    <div className="flex-shrink-0">
-                      {agent?.avatar_url ? (
-                        <img 
-                          src={agent.avatar_url} 
-                          alt={agent.name || 'Agent'}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-medium">
-                            {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                      
+                      {/* Message Content */}
+                      <div className={`flex-1 min-w-0 max-w-[70%] ${
+                        message.role === 'user' ? 'text-right' : 'text-left'
+                      }`}>
+                        <div className={`mb-1 ${
+                          message.role === 'user' ? 'text-right' : 'text-left'
+                        }`}>
+                          <span className="text-sm font-medium text-foreground">
+                            {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {message.timestamp.toLocaleTimeString([], { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
                           </span>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="mb-1">
-                        <span className="text-sm font-medium text-foreground">
-                          {agent?.name || 'Assistant'}
-                        </span>
-                      </div>
-                      <div className="flex space-x-1 items-center">
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        <div className={`inline-block p-3 rounded-2xl shadow-sm ${
+                          message.role === 'user' 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-card text-card-foreground border border-border'
+                        }`}>
+                          <div className="text-sm leading-relaxed">
+                            {message.content}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
+                
+                {/* Note: Typing indicator now handled by InlineThinkingIndicator */}
 
                 {/* Removed prominent AI indicators - now using discreet header indicator */}
               </div>
               <div ref={messagesEndRef} />
             </div>
           )}
+          
+
       </div>
 
       {/* Clean Input Area - Claude Style (Tools Outside Text Area) */}
-      <div className="bg-background">
-        <div className="max-w-3xl mx-auto px-4 pb-6">
+      <div className="bg-background border-t border-border/20">
+        <div className="max-w-3xl mx-auto px-4 py-4">
           <form onSubmit={handleSubmit} className="relative">
             {/* Text input container - Clean text area only */}
             <div className="relative bg-card border border-border/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md">
-              <div className="px-4 py-3">
+              <div className="px-5 py-4">
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`Message ${agent?.name || 'Agent'}...`}
-                  className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/60 border-0 outline-0 text-sm leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
                   disabled={sending || !agent}
                   rows={1}
-                  style={{ minHeight: '24px', maxHeight: '200px' }}
+                  style={{ minHeight: '28px', maxHeight: '200px' }}
                 />
               </div>
             </div>
 
             {/* Bottom controls - Outside the text area like Claude */}
-            <div className="flex items-center justify-between mt-2 px-2">
+            <div className="flex items-center justify-between mt-3 px-2">
               {/* Left side - Tools */}
               <div className="flex items-center">
                 <DropdownMenu>
@@ -794,7 +966,7 @@ export function AgentChatPage() {
                 <button
                   type="submit"
                   disabled={sending || !agent || !input.trim()}
-                  className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[36px] min-h-[36px]"
+                  className="p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[40px] min-h-[40px] shadow-sm hover:scale-105 disabled:hover:scale-100"
                 >
                   {sending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

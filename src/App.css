@@ -3,4 +3,47 @@
 .app {
   height: 100vh;
   overflow: hidden;
+}
+
+/* Chat animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Better gradient fade for chat messages - Claude style */
+.chat-gradient-fade {
+  background: linear-gradient(to top, 
+    hsl(var(--background)) 0%, 
+    hsl(var(--background) / 0.95) 20%,
+    hsl(var(--background) / 0.8) 40%,
+    hsl(var(--background) / 0.4) 70%,
+    transparent 100%);
+}
+
+/* Top gradient fade for chat messages */
+.chat-gradient-fade-top {
+  background: linear-gradient(to bottom, 
+    hsl(var(--background)) 0%, 
+    hsl(var(--background) / 0.95) 20%,
+    hsl(var(--background) / 0.8) 40%,
+    hsl(var(--background) / 0.4) 70%,
+    transparent 100%);
+}
+
+/* Improved placeholder centering for mobile */
+@media (max-width: 640px) {
+  .placeholder-center::placeholder {
+    text-align: center;
+  }
 } 

@@ -7,7 +7,7 @@ export type AgentDiscordConnection = Database['public']['Tables']['agent_discord
 
 // Keep existing Message type if needed
 export interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'thinking';
   content: string;
   timestamp: Date;
   agentId?: string | null;
@@ -16,4 +16,16 @@ export interface Message {
   userName?: string | null;
   userAvatar?: string | null;
   metadata?: any;
+  // AI processing details
+  aiProcessDetails?: {
+    steps: Array<{
+      state: string;
+      label: string;
+      duration?: number;
+      details?: string;
+      completed: boolean;
+    }>;
+    totalDuration?: number;
+    toolsUsed?: string[];
+  };
 } 

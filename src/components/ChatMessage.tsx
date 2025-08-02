@@ -48,10 +48,10 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
       if (message.role === 'assistant') {
           console.log('[ChatMessage] Rendering Assistant Message:', message);
           console.log('[ChatMessage] Received Members Prop:', members);
-          // Type guard for sender_agent_id property
-          const senderAgentId = 'sender_agent_id' in message ? (message as any).sender_agent_id : null;
+          // Use the correct agentId field from Message interface
+          const senderAgentId = message.agentId;
           const foundMember = members?.find(m => m.agent_id === senderAgentId);
-          console.log('[ChatMessage] Found Member based on sender_agent_id:', foundMember);
+          console.log('[ChatMessage] Found Member based on agentId:', foundMember);
       }
   }, [message, members]);
 
