@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, Settings, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
 import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
@@ -14,6 +15,9 @@ import { AboutMeModal } from '../components/modals/AboutMeModal';
 import { HowIThinkModal } from '../components/modals/HowIThinkModal';
 import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
 import { ToolsModal } from '../components/modals/ToolsModal';
+import { ChannelsModal } from '../components/modals/ChannelsModal';
+import { TasksModal } from '../components/modals/TasksModal';
+import { HistoryModal } from '../components/modals/HistoryModal';
 import { ChatMessage } from '../components/ChatMessage';
 import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { ToolExecutionLogger } from '../components/ToolExecutionLogger';
@@ -37,6 +41,9 @@ export function AgentChatPage() {
   const [showHowIThinkModal, setShowHowIThinkModal] = useState(false);
   const [showWhatIKnowModal, setShowWhatIKnowModal] = useState(false);
   const [showToolsModal, setShowToolsModal] = useState(false);
+  const [showChannelsModal, setShowChannelsModal] = useState(false);
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   
   // AI State tracking
   const [aiState, setAiState] = useState<AIState | null>(null);
@@ -457,42 +464,50 @@ export function AgentChatPage() {
                   onClick={() => setShowAboutMeModal(true)}
                   className="cursor-pointer"
                 >
-                  <User className="h-4 w-4 mr-2" />
+                  <User className="h-4 w-4 mr-2 text-blue-500" />
                   Profile
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowHowIThinkModal(true)}
                   className="cursor-pointer"
                 >
-                  <Brain className="h-4 w-4 mr-2" />
+                  <Brain className="h-4 w-4 mr-2 text-purple-500" />
                   Behavior  
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowWhatIKnowModal(true)}
                   className="cursor-pointer"
                 >
-                  <BookOpen className="h-4 w-4 mr-2" />
+                  <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
                   Knowledge
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowToolsModal(true)}
                   className="cursor-pointer"
                 >
-                  <Wrench className="h-4 w-4 mr-2" />
+                  <Wrench className="h-4 w-4 mr-2 text-cyan-500" />
                   Tools
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => navigate(`/agents/${agentId}/edit`)}
+                  onClick={() => setShowChannelsModal(true)}
                   className="cursor-pointer"
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
+                  <MessageSquare className="h-4 w-4 mr-2 text-green-500" />
+                  Channels
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowTasksModal(true)}
+                  className="cursor-pointer"
+                >
+                  <Target className="h-4 w-4 mr-2 text-red-500" />
+                  Schedule
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setShowTeamAssignmentModal(true)}
                   className="cursor-pointer"
                 >
-                  <UserPlus className="h-4 w-4 mr-2" />
+                  <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
                   Add to Team
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -747,6 +762,48 @@ export function AgentChatPage() {
         onAgentUpdated={(updatedAgent) => {
           setAgent(updatedAgent);
           console.log('Agent tools updated:', updatedAgent);
+        }}
+      />
+
+      {/* Channels Modal */}
+      <ChannelsModal
+        isOpen={showChannelsModal}
+        onClose={() => setShowChannelsModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent channels updated:', updatedAgent);
+        }}
+      />
+
+      {/* Tasks Modal */}
+      <TasksModal
+        isOpen={showTasksModal}
+        onClose={() => setShowTasksModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent tasks updated:', updatedAgent);
+        }}
+      />
+
+      {/* History Modal */}
+      <HistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent history updated:', updatedAgent);
         }}
       />
     </div>

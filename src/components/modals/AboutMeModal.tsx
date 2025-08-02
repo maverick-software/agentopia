@@ -23,6 +23,8 @@ import {
   Palette
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
+import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
 import { toast } from 'react-hot-toast';
 
 interface AboutMeModalProps {
@@ -38,41 +40,28 @@ interface AboutMeModalProps {
   onAgentUpdated?: (updatedData: any) => void;
 }
 
+// Real personality templates from the actual system  
 const PERSONALITY_OPTIONS = [
   {
     id: 'helpful',
-    name: 'Friendly & Warm',
-    description: 'I love helping and making people feel comfortable',
+    name: 'Helpful',
+    description: 'Friendly and eager to assist',
     icon: Smile,
-    gradient: 'from-pink-500 to-rose-400'
+    gradient: 'from-green-400 to-blue-500'
   },
   {
     id: 'professional',
-    name: 'Professional & Focused',
-    description: 'I keep things organized and get results',
+    name: 'Professional',
+    description: 'Formal and business-oriented',
     icon: Briefcase,
-    gradient: 'from-blue-600 to-blue-500'
+    gradient: 'from-gray-600 to-blue-600'
   },
   {
-    id: 'energetic',
-    name: 'Energetic & Enthusiastic',
-    description: 'I bring energy and excitement to everything!',
+    id: 'cheerful',
+    name: 'Cheerful',
+    description: 'Upbeat and positive',
     icon: Zap,
-    gradient: 'from-yellow-500 to-orange-500'
-  },
-  {
-    id: 'thoughtful',
-    name: 'Thoughtful & Analytical',
-    description: 'I think deeply and consider all angles',
-    icon: Brain,
-    gradient: 'from-purple-600 to-indigo-500'
-  },
-  {
-    id: 'creative',
-    name: 'Creative & Playful',
-    description: 'I love exploring new ideas and having fun',
-    icon: Palette,
-    gradient: 'from-green-500 to-teal-500'
+    gradient: 'from-yellow-400 to-orange-500'
   }
 ];
 
@@ -84,16 +73,18 @@ export function AboutMeModal({
   onAgentUpdated
 }: AboutMeModalProps) {
   const supabase = useSupabaseClient();
+  const { user } = useAuth();
   
   // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedPersonality, setSelectedPersonality] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   
   // UI state
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showImageEditor, setShowImageEditor] = useState(false);
 
   // Initialize form data when modal opens or agent data changes
   useEffect(() => {
@@ -101,8 +92,9 @@ export function AboutMeModal({
       setName(agentData.name || '');
       setDescription(agentData.description || '');
       setSelectedPersonality(agentData.personality || '');
-      setAvatarUrl(agentData.avatar_url || '');
+      setAvatarUrl(agentData.avatar_url || null);
       setSaved(false);
+      setShowImageEditor(false);
     }
   }, [isOpen, agentData]);
 
@@ -115,27 +107,29 @@ export function AboutMeModal({
   }, [saved]);
 
   const handleSave = useCallback(async () => {
-    if (!agentId) return;
+    if (!agentId || !user) return;
     
     setLoading(true);
     
     try {
+      const updatePayload = {
+        name: name.trim() || undefined,
+        description: description.trim() || undefined,
+        personality: selectedPersonality || undefined,
+        avatar_url: avatarUrl
+      };
+
       const { data: updatedAgent, error } = await supabase
         .from('agents')
-        .update({
-          name: name.trim(),
-          description: description.trim(),
-          personality: selectedPersonality,
-          avatar_url: avatarUrl || null,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', agentId)
+        .eq('user_id', user.id)
         .select()
         .single();
 
       if (error) throw error;
 
-      toast.success('Your agent has been updated! 🎉');
+      toast.success('Profile updated! ✨');
       setSaved(true);
       
       // Notify parent component
@@ -145,11 +139,16 @@ export function AboutMeModal({
       
     } catch (error: any) {
       console.error('Error updating agent:', error);
-      toast.error('Failed to update agent identity');
+      toast.error('Failed to update profile');
     } finally {
       setLoading(false);
     }
-  }, [agentId, name, description, selectedPersonality, avatarUrl, supabase, onAgentUpdated]);
+  }, [agentId, name, description, selectedPersonality, avatarUrl, supabase, user, onAgentUpdated]);
+
+  const handleAvatarUpdate = useCallback((newAvatarUrl: string | null) => {
+    setAvatarUrl(newAvatarUrl);
+    setShowImageEditor(false);
+  }, []);
 
   const getSelectedPersonality = () => {
     return PERSONALITY_OPTIONS.find(p => p.id === selectedPersonality);
@@ -161,7 +160,7 @@ export function AboutMeModal({
       name !== (agentData.name || '') ||
       description !== (agentData.description || '') ||
       selectedPersonality !== (agentData.personality || '') ||
-      avatarUrl !== (agentData.avatar_url || '')
+      avatarUrl !== (agentData.avatar_url || null)
     );
   };
 
@@ -181,7 +180,7 @@ export function AboutMeModal({
           {/* Avatar Section */}
           <div className="flex flex-col items-center space-y-4">
             <div className="relative group">
-              <Avatar className="h-24 w-24 border-4 border-white shadow-lg">
+              <Avatar className="h-24 w-24 border-4 border-border shadow-lg">
                 {avatarUrl ? (
                   <AvatarImage src={avatarUrl} alt={name || 'Agent'} />
                 ) : (
@@ -190,16 +189,23 @@ export function AboutMeModal({
                   </AvatarFallback>
                 )}
               </Avatar>
-              <button 
-                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full"
-                onClick={() => toast.info('Avatar editor coming soon! 📸')}
+              <button
+                onClick={() => setShowImageEditor(!showImageEditor)}
+                className="absolute -bottom-2 -right-2 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:scale-110 transition-transform"
               >
-                <Camera className="h-6 w-6 text-white" />
+                <Camera className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-sm text-muted-foreground text-center">
-              Click to upload a photo or choose a style
-            </p>
+            
+            {showImageEditor && (
+              <div className="w-full p-4 border border-border rounded-lg bg-card">
+                <AgentProfileImageEditor 
+                  agentId={agentId}
+                  currentAvatarUrl={avatarUrl}
+                  onAvatarUpdate={handleAvatarUpdate}
+                />
+              </div>
+            )}
           </div>
 
           {/* Name Section */}
