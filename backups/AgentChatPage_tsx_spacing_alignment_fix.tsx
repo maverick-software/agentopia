@@ -635,7 +635,7 @@ export function AgentChatPage() {
                           </span>
                         </div>
                       ) : (
-                        agent?.avatar_url ? (
+                        {agent?.avatar_url ? (
                           <img 
                             src={agent.avatar_url} 
                             alt={agent.name || 'Agent'}
@@ -647,7 +647,7 @@ export function AgentChatPage() {
                               {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                             </span>
                           </div>
-                        )
+                        )}
                       )}
                     </div>
                     

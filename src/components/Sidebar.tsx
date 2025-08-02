@@ -147,11 +147,17 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
     }
   }, [isActiveOrParent, isCollapsed]);
 
+  // Update recent agents when the agents list changes
   useEffect(() => {
-    fetchAllAgents().then((fetchedAgents) => {
+    if (agents.length > 0) {
       // Get top 3 most recent agents (already ordered by created_at desc)
-      setRecentAgents(fetchedAgents.slice(0, 3));
-    });
+      setRecentAgents(agents.slice(0, 3));
+    }
+  }, [agents]);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchAllAgents();
   }, [fetchAllAgents]);
 
   if (isCollapsed) {
@@ -213,11 +219,19 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
               }
               style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
             >
-              <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-medium">
-                  {agent.name?.charAt(0)?.toUpperCase() || 'A'}
-                </span>
-              </div>
+              {agent.avatar_url ? (
+                <img 
+                  src={agent.avatar_url} 
+                  alt={agent.name || 'Agent'}
+                  className="w-4 h-4 rounded object-cover flex-shrink-0"
+                />
+              ) : (
+                <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-medium">
+                    {agent.name?.charAt(0)?.toUpperCase() || 'A'}
+                  </span>
+                </div>
+              )}
               <span className="font-medium truncate">{agent.name || 'Unnamed Agent'}</span>
             </NavLink>
           ))}

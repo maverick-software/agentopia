@@ -171,10 +171,10 @@ body {
   height: 100vh;
 }
 
-/* Ultra-minimal Claude-style scrollbar - No layout shift */
+/* Ultra-minimal Claude-style scrollbar - Centralized theme management */
 ::-webkit-scrollbar {
-  width: 4px;  /* Reserve consistent space */
-  height: 4px;
+  width: 2px;
+  height: 2px;
 }
 
 ::-webkit-scrollbar-track {
@@ -182,45 +182,36 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: transparent;  /* Invisible by default */
-  border-radius: 2px;
-  transition: background-color 0.2s ease;
+  background: transparent;
+  border-radius: 1px;
+  transition: background-color 0.3s ease;
 }
 
-/* Light mode scrollbar - only visible on hover/scroll */
-::-webkit-scrollbar-thumb:hover,
-::-webkit-scrollbar-thumb:active {
-  background: hsl(var(--muted-foreground) / 0.12);
+/* Light mode scrollbar - using theme variables */
+:root ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.15);
 }
 
-/* Dark mode scrollbar */
-.dark ::-webkit-scrollbar-thumb:hover,
-.dark ::-webkit-scrollbar-thumb:active {
-  background: hsl(var(--muted-foreground) / 0.2);
+/* Dark mode scrollbar - using theme variables */
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.25);
 }
 
-/* Show scrollbar during scroll activity to provide feedback */
-::-webkit-scrollbar-thumb:vertical:active {
-  background: hsl(var(--muted-foreground) / 0.2);
-}
-
-.dark ::-webkit-scrollbar-thumb:vertical:active {
-  background: hsl(var(--muted-foreground) / 0.3);
-}
-
-/* Firefox scrollbar - consistent width to avoid layout shift */
+/* Firefox scrollbar - minimal and theme-aware */
 * {
-  scrollbar-width: thin;  /* Always reserve space */
-  scrollbar-color: transparent transparent;  /* Invisible by default */
+  scrollbar-width: none; /* Hide by default */
 }
 
-/* Show on hover/interaction */
 *:hover {
-  scrollbar-color: hsl(var(--muted-foreground) / 0.12) transparent;
+  scrollbar-width: thin;
+}
+
+:root *:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.15) transparent;
 }
 
 .dark *:hover {
-  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
 }
 
 /* Utility class for completely hidden scrollbars */

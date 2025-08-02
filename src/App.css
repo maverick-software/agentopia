@@ -1,40 +1,6 @@
 /* App-specific styles */
+/* Note: Scrollbar styles moved to src/index.css for centralized theme management */
 .app {
   height: 100vh;
   overflow: hidden;
-}
-
-/* Minimalist Claude-style scrollbar - Nearly invisible */
-::-webkit-scrollbar {
-  width: 3px;
-  height: 3px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 2px;
-  transition: all 0.2s ease;
-}
-
-/* Only show scrollbar on hover */
-:hover::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.2);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.4);
-}
-
-/* Firefox scrollbar styling */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-*:hover {
-  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
 } 

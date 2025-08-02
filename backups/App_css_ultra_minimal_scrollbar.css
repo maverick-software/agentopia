@@ -1,0 +1,56 @@
+/* App-specific styles */
+.app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Ultra-minimal Claude-style scrollbar - Truly invisible until needed */
+::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 1px;
+  transition: background-color 0.3s ease;
+}
+
+/* Light mode optimized - very subtle */
+:root ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Firefox - minimal scrollbar */
+* {
+  scrollbar-width: none; /* Hide scrollbar by default */
+}
+
+/* Show thin scrollbar only on hover for Firefox */
+*:hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.08) transparent;
+}
+
+.dark *:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Hide scrollbar completely for mobile and specific containers */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+} 

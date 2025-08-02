@@ -125,6 +125,16 @@ export function useAgents(): UseAgentsReturn {
         .single(); // Return the updated record
 
       if (updateError) throw updateError;
+      
+      // Update the local agents state as well
+      if (data) {
+        setAgents(prevAgents => 
+          prevAgents.map(agent => 
+            agent.id === agentId ? { ...agent, ...data } : agent
+          )
+        );
+      }
+      
       return data || null;
     } catch (err) {
       console.error(`Error updating agent ${agentId}:`, err);
