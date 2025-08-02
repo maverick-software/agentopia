@@ -20,11 +20,16 @@ import {
   Briefcase,
   Zap,
   Brain,
-  Palette
+  Palette,
+  Edit3,
+  Upload,
+  ImageIcon
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
+import { GenerateAvatarModal } from './GenerateAvatarModal';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'react-hot-toast';
 
 interface AboutMeModalProps {
@@ -85,6 +90,8 @@ export function AboutMeModal({
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showImageEditor, setShowImageEditor] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // Initialize form data when modal opens or agent data changes
   useEffect(() => {
@@ -98,10 +105,10 @@ export function AboutMeModal({
     }
   }, [isOpen, agentData]);
 
-  // Clear saved state after 3 seconds
+  // Clear saved state after 2.5 seconds for better UX
   useEffect(() => {
     if (saved) {
-      const timer = setTimeout(() => setSaved(false), 3000);
+      const timer = setTimeout(() => setSaved(false), 2500);
       return () => clearTimeout(timer);
     }
   }, [saved]);
@@ -109,9 +116,14 @@ export function AboutMeModal({
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
     
+    // Reset saved state and start loading
+    setSaved(false);
     setLoading(true);
     
     try {
+      // Ensure minimum loading time so user can see "Saving..." state
+      const startTime = Date.now();
+      
       const updatePayload = {
         name: name.trim() || undefined,
         description: description.trim() || undefined,
@@ -129,8 +141,21 @@ export function AboutMeModal({
 
       if (error) throw error;
 
-      toast.success('Profile updated! ✨');
+      // Ensure at least 800ms of loading time for better UX
+      const elapsedTime = Date.now() - startTime;
+      const minLoadingTime = 800;
+      if (elapsedTime < minLoadingTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+      }
+
+      // Show success feedback with slight delay to ensure state visibility
+      setLoading(false);
+      
+      // Small delay to ensure loading state clears before showing saved state
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       setSaved(true);
+      toast.success('Profile updated! ✨');
       
       // Notify parent component
       if (onAgentUpdated && updatedAgent) {
@@ -140,14 +165,78 @@ export function AboutMeModal({
     } catch (error: any) {
       console.error('Error updating agent:', error);
       toast.error('Failed to update profile');
-    } finally {
       setLoading(false);
+      setSaved(false);
     }
   }, [agentId, name, description, selectedPersonality, avatarUrl, supabase, user, onAgentUpdated]);
 
   const handleAvatarUpdate = useCallback((newAvatarUrl: string | null) => {
     setAvatarUrl(newAvatarUrl);
     setShowImageEditor(false);
+  }, []);
+
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0 || !agentId || !user) {
+      return;
+    }
+
+    const file = event.target.files[0];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please upload a PNG, JPEG, or WebP image');
+      return;
+    }
+
+    if (file.size > maxSize) {
+      toast.error('Image must be smaller than 5MB');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${agentId}-${Date.now()}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('agent-avatars')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('agent-avatars')
+        .getPublicUrl(fileName);
+
+      // Update agent record
+      const { error: updateError } = await supabase
+        .from('agents')
+        .update({ avatar_url: publicUrl })
+        .eq('id', agentId)
+        .eq('user_id', user.id);
+
+      if (updateError) throw updateError;
+
+      setAvatarUrl(publicUrl);
+      toast.success('Avatar uploaded successfully! 📸');
+      
+    } catch (error: any) {
+      console.error('Error uploading avatar:', error);
+      toast.error('Failed to upload avatar');
+    } finally {
+      setUploading(false);
+      // Reset the input value so the same file can be selected again
+      event.target.value = '';
+    }
+  }, [agentId, user, supabase]);
+
+  const handleGeneratedAvatar = useCallback((newAvatarUrl: string) => {
+    setAvatarUrl(newAvatarUrl);
+    setShowGenerateModal(false);
   }, []);
 
   const getSelectedPersonality = () => {
@@ -166,8 +255,8 @@ export function AboutMeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-4">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] p-0 flex flex-col">
+        <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0">
           <DialogTitle className="text-xl font-semibold flex items-center">
             🎭 Profile
           </DialogTitle>
@@ -176,36 +265,61 @@ export function AboutMeModal({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="px-6 space-y-6">
+        <div className="px-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           {/* Avatar Section */}
           <div className="flex flex-col items-center space-y-4">
             <div className="relative group">
-              <Avatar className="h-24 w-24 border-4 border-border shadow-lg">
-                {avatarUrl ? (
-                  <AvatarImage src={avatarUrl} alt={name || 'Agent'} />
-                ) : (
-                  <AvatarFallback className="text-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                    {name?.charAt(0)?.toUpperCase() || 'A'}
-                  </AvatarFallback>
-                )}
-              </Avatar>
-              <button
-                onClick={() => setShowImageEditor(!showImageEditor)}
-                className="absolute -bottom-2 -right-2 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:scale-110 transition-transform"
-              >
-                <Camera className="h-4 w-4" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <div className="relative cursor-pointer">
+                    <Avatar className="h-24 w-24 border-4 border-border shadow-lg transition-all group-hover:border-primary/50">
+                      {avatarUrl ? (
+                        <AvatarImage src={avatarUrl} alt={name || 'Agent'} />
+                      ) : (
+                        <AvatarFallback className="text-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                          {name?.charAt(0)?.toUpperCase() || 'A'}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Edit3 className="h-6 w-6 text-white" />
+                    </div>
+                    
+                    {/* Loading overlay */}
+                    {uploading && (
+                      <div className="absolute inset-0 bg-black/70 rounded-full flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-48">
+                  <DropdownMenuItem onClick={() => document.getElementById('avatar-upload')?.click()}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Image
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowGenerateModal(true)}>
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Generate Image
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              {/* Hidden file input */}
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={handleFileUpload}
+                disabled={uploading}
+              />
             </div>
-            
-            {showImageEditor && (
-              <div className="w-full p-4 border border-border rounded-lg bg-card">
-                <AgentProfileImageEditor 
-                  agentId={agentId}
-                  currentAvatarUrl={avatarUrl}
-                  onAvatarUpdate={handleAvatarUpdate}
-                />
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground text-center">
+              Click the avatar to upload or generate an image
+            </p>
           </div>
 
           {/* Name Section */}
@@ -275,24 +389,42 @@ export function AboutMeModal({
           </div>
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t border-border bg-card/50">
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card/50 flex-shrink-0">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
           <Button 
             onClick={handleSave} 
             disabled={loading || !hasChanges()}
-            className="min-w-[120px]"
+            className={`min-w-[140px] transition-all duration-200 ${
+              saved ? 'bg-green-600 hover:bg-green-700 text-white' : ''
+            }`}
           >
             {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
             ) : saved ? (
-              <Check className="mr-2 h-4 w-4" />
-            ) : null}
-            {loading ? 'Saving...' : saved ? 'Saved!' : 'Save My Identity'}
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                Saved!
+              </>
+            ) : (
+              'Save My Identity'
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Generate Avatar Modal */}
+      <GenerateAvatarModal
+        isOpen={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+        agentId={agentId || ''}
+        agentName={name}
+        onAvatarGenerated={handleGeneratedAvatar}
+      />
     </Dialog>
   );
 }

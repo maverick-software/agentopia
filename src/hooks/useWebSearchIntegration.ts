@@ -48,30 +48,35 @@ export function useWebSearchConnection() {
         .from('user_oauth_connections')
         .select(`
           *,
-          oauth_providers!inner(
+          oauth_providers(
             name,
             display_name
           )
         `)
         .eq('user_id', user.id)
-        .in('oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
         .eq('is_active', true);
 
       if (fetchError) {
         throw new Error(fetchError.message);
       }
 
-      const formattedConnections = (data || []).map((conn: any) => ({
-        id: conn.id,
-        user_id: conn.user_id,
-        oauth_provider_id: conn.oauth_provider_id,
-        provider_name: conn.oauth_providers.name,
-        provider_display_name: conn.oauth_providers.display_name,
-        external_username: conn.external_username,
-        is_active: conn.is_active,
-        created_at: conn.created_at,
-        updated_at: conn.updated_at,
-      }));
+      // Filter for web search providers and format the connections
+      const formattedConnections = (data || [])
+        .filter((conn: any) => 
+          conn.oauth_providers && 
+          ['serper_api', 'serpapi', 'brave_search'].includes(conn.oauth_providers.name)
+        )
+        .map((conn: any) => ({
+          id: conn.id,
+          user_id: conn.user_id,
+          oauth_provider_id: conn.oauth_provider_id,
+          provider_name: conn.oauth_providers.name,
+          provider_display_name: conn.oauth_providers.display_name,
+          external_username: conn.external_username,
+          is_active: conn.is_active,
+          created_at: conn.created_at,
+          updated_at: conn.updated_at,
+        }));
 
       setConnections(formattedConnections);
     } catch (err) {

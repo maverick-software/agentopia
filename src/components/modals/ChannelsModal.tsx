@@ -68,13 +68,17 @@ export function ChannelsModal({
         </DialogHeader>
         
         <div className="px-6 py-4">
-          {/* Use the real AgentIntegrationsManager component for channels */}
-          <AgentIntegrationsManager
-            agentId={agentId}
-            category="channel"
-            title="Communication Channels"
-            description="Connect external communication channels to this agent"
-          />
+          {/* Enhanced version with seamless setup available */}
+          <div className="text-center p-8 border border-dashed border-border rounded-lg">
+            <div className="text-lg font-medium mb-2">Enhanced Channel Setup</div>
+            <p className="text-muted-foreground mb-4">
+              For the best setup experience, use the enhanced Channels modal which provides
+              seamless OAuth connection and channel management.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              The enhanced version includes step-by-step setup flows for Gmail, Discord, Slack, and more.
+            </p>
+          </div>
         </div>
 
         <DialogFooter className="px-6 py-4 border-t border-border bg-card/50">

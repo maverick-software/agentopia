@@ -20,7 +20,8 @@ import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
 import { TasksModal } from '../components/modals/TasksModal';
 import { HistoryModal } from '../components/modals/HistoryModal';
 import { ChatMessage } from '../components/ChatMessage';
-import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
+import AIThinkingIndicator, { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
+import { ToolExecutionLogger } from '../components/ToolExecutionLogger';
 import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicator';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
@@ -61,15 +62,7 @@ export function AgentChatPage() {
 
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
-      // Use requestAnimationFrame to ensure DOM is updated
-      requestAnimationFrame(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ 
-            behavior: 'smooth',
-            block: 'end'
-          });
-        }
-      });
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, []);
 
@@ -86,50 +79,6 @@ export function AgentChatPage() {
   useEffect(() => {
     adjustTextareaHeight();
   }, [input, adjustTextareaHeight]);
-
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    // Only auto-scroll if we're not in loading state and have messages
-    if (!isHistoryLoading && messages.length > 0) {
-      // Use multiple methods to ensure scrolling works reliably
-      const scrollToBottomReliably = () => {
-        if (messagesEndRef.current) {
-          // Method 1: scrollIntoView with smooth behavior
-          messagesEndRef.current.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'end' 
-          });
-          
-          // Method 2: Fallback with direct scroll
-          const container = messagesEndRef.current.parentElement;
-          if (container) {
-            container.scrollTop = container.scrollHeight;
-          }
-        }
-      };
-
-      // Execute immediately
-      scrollToBottomReliably();
-      
-      // Also execute after a brief delay to handle late DOM updates
-      setTimeout(scrollToBottomReliably, 50);
-    }
-  }, [messages, isHistoryLoading]);
-
-  // Ensure scroll to bottom when history loading completes
-  useEffect(() => {
-    if (!isHistoryLoading && messages.length > 0) {
-      // Additional scroll after loading state changes
-      setTimeout(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ 
-            behavior: 'auto', // Instant scroll for initial load
-            block: 'end' 
-          });
-        }
-      }, 100);
-    }
-  }, [isHistoryLoading, messages.length]);
 
   // AI State Management Functions
   const startAIProcessing = useCallback(() => {
@@ -312,10 +261,7 @@ export function AgentChatPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
-    // Immediate scroll for better UX
-    requestAnimationFrame(() => {
-      scrollToBottom();
-    });
+    scrollToBottom();
 
     try {
       setSending(true);
@@ -695,79 +641,39 @@ export function AgentChatPage() {
           )}
       </div>
 
-      {/* Clean Input Area - ChatGPT Inspired */}
-      <div className="bg-background">
-        <div className="max-w-3xl mx-auto px-4 pb-6">
+      {/* Input Area */}
+      <div className="border-t border-border bg-card shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-4">
           <form onSubmit={handleSubmit} className="relative">
-            <div className="relative bg-card border border-border/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md">
-              <div className="flex items-end">
-                {/* Left side - Discreet options */}
-                <div className="flex items-center pl-4 py-3">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                        disabled={sending || !agent}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-48">
-                      <DropdownMenuItem className="cursor-pointer">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                        </svg>
-                        Attach file
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Upload image
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                {/* Text input area */}
-                <div className="flex-1 px-2">
-                  <textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={`Message ${agent?.name || 'Agent'}...`}
-                    className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/60 border-0 outline-0 py-3 text-sm leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={sending || !agent}
-                    rows={1}
-                    style={{ minHeight: '24px', maxHeight: '200px' }}
-                  />
-                </div>
-
-                {/* Right side - Send button */}
-                <div className="flex items-center pr-3 py-3">
-                  <button
-                    type="submit"
-                    disabled={sending || !agent || !input.trim()}
-                    className="p-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[32px] min-h-[32px]"
-                  >
-                    {sending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
+            <div className="flex items-end space-x-3">
+              <div className="flex-1 relative">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message ${agent?.name || 'Agent'}...`}
+                  className="w-full resize-none border border-border bg-input text-foreground placeholder-muted-foreground rounded-2xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  disabled={sending || !agent}
+                  rows={1}
+                  style={{ minHeight: '48px', maxHeight: '200px' }}
+                />
+                <button
+                  type="submit"
+                  disabled={sending || !agent || !input.trim()}
+                  className="absolute right-2 bottom-2 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
           </form>
-          
-          {/* Discreet help text */}
-          <div className="text-xs text-muted-foreground/70 text-center mt-3 opacity-0 hover:opacity-100 transition-opacity duration-300">
-            Press <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">⇧</kbd>+<kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> for new line
+          <div className="text-xs text-muted-foreground text-center mt-2">
+            Press Enter to send, Shift+Enter for new line
           </div>
         </div>
       </div>
