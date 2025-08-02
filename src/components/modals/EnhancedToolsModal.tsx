@@ -81,7 +81,7 @@ export function EnhancedToolsModal({
       gradient: 'from-blue-500 to-cyan-500',
       tools: [
         {
-          id: 'serper',
+          id: 'serper_api',
           name: 'Serper API',
           description: 'Fast Google search results with real-time data',
           type: 'api_key',
@@ -179,10 +179,12 @@ export function EnhancedToolsModal({
         .insert({
           user_id: user.id,
           oauth_provider_id: providerData.id,
+          external_user_id: user.id, // Required field
           external_username: connectionName || `${selectedProvider} Connection`,
+          connection_name: connectionName || `${selectedProvider} Connection`,
           encrypted_access_token: encryptedKey,
-          granted_scopes: ['web_search', 'news_search', 'image_search'],
-          is_active: true,
+          scopes_granted: ['web_search', 'news_search', 'image_search'],
+          connection_status: 'active'
         });
 
       if (insertError) throw insertError;

@@ -173,9 +173,12 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
         .insert({
           user_id: user.id,
           oauth_provider_id: providerData.id,
+          external_user_id: user.id, // Required field
+          external_username: `${selectedProvider} Connection`,
+          connection_name: `${selectedProvider} Connection`,
           encrypted_access_token: encryptedKey,
-          granted_scopes: ['web_search', 'news_search', 'image_search'],
-          is_active: true,
+          scopes_granted: ['web_search', 'news_search', 'image_search'],
+          connection_status: 'active'
         });
 
       if (insertError) throw insertError;

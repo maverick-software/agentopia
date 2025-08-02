@@ -92,7 +92,7 @@ export function IntegrationSetupModal({
 
       // Get the web search provider
       const providerNameMap: { [key: string]: string } = {
-        'Serper API': 'serper',
+        'Serper API': 'serper_api',
         'SerpAPI': 'serpapi',
         'Brave Search API': 'brave_search'
       };
@@ -104,7 +104,7 @@ export function IntegrationSetupModal({
 
       // Get provider details
       const { data: providerData, error: providerError } = await supabase
-        .from('web_search_providers')
+        .from('oauth_providers')
         .select('id')
         .eq('name', providerName)
         .single();
@@ -117,15 +117,18 @@ export function IntegrationSetupModal({
         `${integration.name} API key for user ${user.id}`
       );
 
-      // Create user web search key record
+      // Create user OAuth connection record (unified system for API keys)
       const { error: keyError } = await supabase
-        .from('user_web_search_keys')
+        .from('user_oauth_connections')
         .insert({
           user_id: user.id,
-          provider_id: providerData.id,
-          vault_api_key_id: vault_secret_id,
-          key_name: formData.connection_name || `${integration.name} Connection`,
-          key_status: 'active'
+          oauth_provider_id: providerData.id,
+          external_user_id: user.id, // Required field
+          external_username: formData.connection_name || `${integration.name} Connection`,
+          connection_name: formData.connection_name || `${integration.name} Connection`,
+          encrypted_access_token: vault_secret_id,
+          scopes_granted: ['web_search', 'news_search', 'scrape_and_summarize'],
+          connection_status: 'active'
         });
 
       if (keyError) throw keyError;
