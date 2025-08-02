@@ -54,7 +54,7 @@ export function useWebSearchConnection() {
           )
         `)
         .eq('user_id', user.id)
-        .eq('is_active', true);
+        .eq('connection_status', 'active');
 
       if (fetchError) {
         throw new Error(fetchError.message);
