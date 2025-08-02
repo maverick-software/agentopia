@@ -23,6 +23,9 @@ export interface Message {
       label: string;
       duration?: number;
       details?: string;
+      response?: string;
+      toolCall?: string;
+      toolResult?: any;
       completed: boolean;
     }>;
     totalDuration?: number;

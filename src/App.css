@@ -31,7 +31,7 @@
     transparent 100%);
 }
 
-/* Top gradient fade for chat messages */
+/* Gradient fade for top of messages */
 .chat-gradient-fade-top {
   background: linear-gradient(to bottom, 
     hsl(var(--background)) 0%, 

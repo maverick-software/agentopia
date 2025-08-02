@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -58,6 +58,9 @@ export function AgentChatPage() {
     label: string;
     duration?: number;
     details?: string;
+    response?: string;
+    toolCall?: string;
+    toolResult?: any;
     completed: boolean;
     startTime?: Date;
   }>>([]);
@@ -206,6 +209,34 @@ export function AgentChatPage() {
     });
   }, []);
 
+  // Function to add response data to current step
+  const addStepResponse = useCallback((state: AIState, response: string) => {
+    setProcessSteps(prev => {
+      const updated = [...prev];
+      const stepIndex = updated.findLastIndex(step => step.state === state);
+      if (stepIndex >= 0) {
+        updated[stepIndex] = { ...updated[stepIndex], response };
+      }
+      return updated;
+    });
+  }, []);
+
+  // Function to add tool call data to current step
+  const addStepToolCall = useCallback((state: AIState, toolCall: string, toolResult?: any) => {
+    setProcessSteps(prev => {
+      const updated = [...prev];
+      const stepIndex = updated.findLastIndex(step => step.state === state);
+      if (stepIndex >= 0) {
+        updated[stepIndex] = { 
+          ...updated[stepIndex], 
+          toolCall,
+          ...(toolResult && { toolResult })
+        };
+      }
+      return updated;
+    });
+  }, []);
+
   const completeAIProcessing = useCallback((success: boolean = true) => {
     setAiState(success ? 'completed' : 'failed');
     
@@ -244,15 +275,18 @@ export function AgentChatPage() {
     setAiState('completed');
     
     // Mark all steps as completed
-    setProcessSteps(prev => prev.map(step => ({ ...step, completed: true })));
-    
-    // Convert thinking message to assistant response with thoughts
-    if (thinkingMessageIndex !== null) {
+    setProcessSteps(prevSteps => {
+      const completedSteps = prevSteps.map(step => ({ ...step, completed: true }));
+      
+      // Find and convert the thinking message to assistant response
       setMessages(prev => {
         const updated = [...prev];
-        if (updated[thinkingMessageIndex]?.role === 'thinking') {
+        // Find the most recent thinking message
+        const thinkingIndex = updated.findLastIndex(msg => msg.role === 'thinking' && !msg.metadata?.isCompleted);
+        
+        if (thinkingIndex !== -1) {
           // Convert to assistant message with thinking details
-          updated[thinkingMessageIndex] = {
+          updated[thinkingIndex] = {
             role: 'assistant',
             content: responseContent,
             timestamp: new Date(),
@@ -260,15 +294,32 @@ export function AgentChatPage() {
             userId: user?.id,
             metadata: { isCompleted: true },
             aiProcessDetails: {
-              steps: processSteps.map(step => ({ ...step, completed: true })),
-              totalDuration: Date.now() - (processSteps[0]?.startTime?.getTime() || Date.now()),
-              toolsUsed: processSteps.filter(s => s.details).map(s => s.details || '')
+              steps: completedSteps,
+              totalDuration: Date.now() - (completedSteps[0]?.startTime?.getTime() || Date.now()),
+              toolsUsed: completedSteps.filter(s => s.details).map(s => s.details || '')
             }
           };
+        } else {
+          // Fallback: Add new assistant message if no thinking message found
+          updated.push({
+            role: 'assistant',
+            content: responseContent,
+            timestamp: new Date(),
+            agentId: agent?.id,
+            userId: user?.id,
+            metadata: { isCompleted: true },
+            aiProcessDetails: {
+              steps: completedSteps,
+              totalDuration: Date.now() - (completedSteps[0]?.startTime?.getTime() || Date.now()),
+              toolsUsed: completedSteps.filter(s => s.details).map(s => s.details || '')
+            }
+          });
         }
         return updated;
       });
-    }
+      
+      return completedSteps;
+    });
     
     // Clean up state
     setTimeout(() => {
@@ -277,24 +328,30 @@ export function AgentChatPage() {
       setCurrentTool(null);
       setThinkingMessageIndex(null);
     }, 500);
-  }, [thinkingMessageIndex, processSteps, agent?.id, user?.id]);
+  }, [agent?.id, user?.id]);
 
   // Simulate AI processing phases
   const simulateAIProcessing = useCallback(async () => {
     // Phase 1: Thinking
     updateAIState('thinking');
     await new Promise(resolve => setTimeout(resolve, 800));
+    // Capture thinking response
+    addStepResponse('thinking', `User asked: "${input}"\nI need to understand what they're asking for and determine the best way to help them. Let me analyze this message and see if I need to use any tools or if I can respond directly.`);
 
     // Phase 2: Analyzing tools
     updateAIState('analyzing_tools');
     await new Promise(resolve => setTimeout(resolve, 600));
+    // Capture tool analysis response
+    const toolAnalysis = input.toLowerCase().includes('send') || 
+                        input.toLowerCase().includes('email') ||
+                        input.toLowerCase().includes('gmail') ||
+                        input.toLowerCase().includes('read') ||
+                        input.toLowerCase().includes('check');
+    
+    addStepResponse('analyzing_tools', `Checking available tools for this request...\nEmail-related keywords detected: ${toolAnalysis}\nAvailable tools: Gmail integration, Web search, File operations\nDecision: ${toolAnalysis ? 'Will use Gmail tool' : 'No tools needed for this request'}`);
 
     // Phase 3: Check if we might execute a tool (simulate tool detection)
-    const mightUseTool = input.toLowerCase().includes('send') || 
-                         input.toLowerCase().includes('email') ||
-                         input.toLowerCase().includes('gmail') ||
-                         input.toLowerCase().includes('read') ||
-                         input.toLowerCase().includes('check');
+    const mightUseTool = toolAnalysis;
 
     if (mightUseTool) {
       // Phase 4: Tool execution
@@ -304,6 +361,22 @@ export function AgentChatPage() {
         status: 'executing',
         startTime: new Date(),
       });
+      
+      // Capture tool call
+      addStepToolCall('executing_tool', 
+        `gmail.send_email({
+  to: "user@example.com",
+  subject: "Response to your inquiry",
+  body: "Thank you for your message..."
+})`,
+        {
+          success: true,
+          message_id: "msg_abc123",
+          sent_at: new Date().toISOString(),
+          recipients: ["user@example.com"]
+        }
+      );
+      
       await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Phase 5: Processing results
@@ -311,13 +384,18 @@ export function AgentChatPage() {
         status: 'completed',
         endTime: new Date(),
       });
+      
+      addStepResponse('processing_results', `Tool execution completed successfully!\nEmail sent with ID: msg_abc123\nProcessing the result to formulate a response to the user.`);
+      
       await new Promise(resolve => setTimeout(resolve, 800));
     }
 
     // Phase 6: Generating response
     updateAIState('generating_response');
+    addStepResponse('generating_response', `Generating final response based on:\n- User's original request: "${input}"\n- Tool results: ${mightUseTool ? 'Email sent successfully' : 'No tools used'}\n- Context: Friendly conversation\n\nFormulating helpful and conversational response...`);
+    
     await new Promise(resolve => setTimeout(resolve, 1000));
-  }, [input, updateAIState]);
+  }, [input, updateAIState, addStepResponse, addStepToolCall]);
 
   // Effect to handle component unmount for async operations
   useEffect(() => {
@@ -405,7 +483,41 @@ export function AgentChatPage() {
             agentId: msg.sender_agent_id,
             userId: msg.sender_agent_id ? user.id : msg.sender_user_id, // For assistant messages, use current user's ID
           }));
-          setMessages(formattedMessages);
+          
+          // Preserve existing messages with aiProcessDetails to avoid losing "Thoughts" data
+          setMessages(prevMessages => {
+            // Find messages with aiProcessDetails that should be preserved
+            const messagesWithThoughts = prevMessages.filter(msg => 
+              msg.aiProcessDetails && msg.role === 'assistant'
+            );
+            
+            // If we have no messages with thoughts, just use the formatted messages
+            if (messagesWithThoughts.length === 0) {
+              return formattedMessages;
+            }
+            
+            // Merge: keep database messages but preserve any with aiProcessDetails
+            const merged = [...formattedMessages];
+            messagesWithThoughts.forEach(thoughtMsg => {
+              // Find if this message exists in formatted messages (by content and rough timestamp)
+              const existingIndex = merged.findIndex(msg => 
+                msg.content === thoughtMsg.content && 
+                msg.role === 'assistant' &&
+                Math.abs(msg.timestamp.getTime() - thoughtMsg.timestamp.getTime()) < 60000 // Within 1 minute
+              );
+              
+              if (existingIndex !== -1) {
+                // Replace the database version with our version that has aiProcessDetails
+                merged[existingIndex] = thoughtMsg;
+              } else {
+                // This is a recent message not yet in database, add it
+                merged.push(thoughtMsg);
+              }
+            });
+            
+            // Sort by timestamp to maintain order
+            return merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          });
         }
       } catch (err) {
         console.error("Failed to fetch chat history:", err);
@@ -597,31 +709,31 @@ export function AgentChatPage() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-border bg-card shadow-sm">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-0.5 border-b border-border bg-card shadow-sm">
                   <div className="flex items-center space-x-3">
             <button
               onClick={() => navigate('/agents')}
-              className="p-2 hover:bg-accent rounded-lg transition-colors"
+              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
             >
-              <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
             </button>
             <div className="flex items-center space-x-3">
               {agent?.avatar_url ? (
                 <img 
                   src={agent.avatar_url} 
                   alt={agent.name || 'Agent'}
-                  className="w-8 h-8 rounded-full object-cover"
+                  className="w-6 h-6 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
+                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-medium">
                     {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                   </span>
                 </div>
               )}
               <div>
-                <h1 className="text-lg font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
+                <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
                 <DiscreetAIStatusIndicator 
                   aiState={aiState}
                   currentTool={currentTool}
@@ -631,14 +743,14 @@ export function AgentChatPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <button className="p-2 hover:bg-accent rounded-lg transition-colors">
-              <RefreshCw className="h-5 w-5 text-muted-foreground" />
+          <div className="flex items-center space-x-1">
+            <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
+              <RefreshCw className="h-4 w-4 text-muted-foreground" />
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="p-2 hover:bg-accent rounded-lg transition-colors">
-                  <MoreVertical className="h-5 w-5 text-muted-foreground" />
+                <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -697,8 +809,8 @@ export function AgentChatPage() {
           </div>
       </div>
 
-      {/* Messages Container */}
-      <div className="relative flex-1 overflow-y-auto">
+      {/* Scrollable Messages Container */}
+      <div className="relative flex-1 overflow-y-auto min-h-0">
         {/* Gradient fade effect at top of messages */}
         {messages.length > 0 && (
           <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10" />
@@ -763,57 +875,137 @@ export function AgentChatPage() {
                   // Handle assistant messages with thinking details
                   if (message.role === 'assistant' && message.aiProcessDetails?.steps?.length) {
                     return (
-                      <div key={`${message.role}-${index}-${message.timestamp.toISOString()}`} className="space-y-4">
-                        {/* Regular assistant message */}
-                        <div className="flex items-start space-x-4 animate-fade-in">
-                          {/* Avatar */}
-                          <div className="flex-shrink-0">
-                            {agent?.avatar_url ? (
-                              <img 
-                                src={agent.avatar_url} 
-                                alt={agent.name || 'Agent'}
-                                className="w-8 h-8 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-                                <span className="text-white text-sm font-medium">
-                                  {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Message Content */}
-                          <div className="flex-1 min-w-0 max-w-[70%] text-left">
-                            <div className="mb-1 text-left">
-                              <span className="text-sm font-medium text-foreground">
-                                {agent?.name || 'Assistant'}
-                              </span>
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {message.timestamp.toLocaleTimeString([], { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })}
+                      <div key={`${message.role}-${index}-${message.timestamp.toISOString()}`} className="flex items-start space-x-4 animate-fade-in">
+                        {/* Avatar */}
+                        <div className="flex-shrink-0">
+                          {agent?.avatar_url ? (
+                            <img 
+                              src={agent.avatar_url} 
+                              alt={agent.name || 'Agent'}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                              <span className="text-white text-sm font-medium">
+                                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                               </span>
                             </div>
-                            <div className="inline-block p-3 rounded-2xl shadow-sm bg-card text-card-foreground border border-border">
-                              <div className="text-sm leading-relaxed">
-                                {message.content}
+                          )}
+                        </div>
+                        
+                        {/* Message Content with integrated Thoughts */}
+                        <div className="flex-1 min-w-0 max-w-[70%] text-left space-y-3">
+                          {/* Header with Agent Name and Thoughts */}
+                          <div className="flex items-center space-x-2 mb-1 text-left">
+                            <span className="text-sm font-medium text-foreground">
+                              {agent?.name || 'Assistant'}
+                            </span>
+                            
+                            {/* Thoughts Section next to name */}
+                            <details className="group">
+                              <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
+                                <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
+                                <span className="text-xs text-muted-foreground group-open:text-foreground">
+                                  Thoughts
+                                </span>
+                                <span className="text-xs text-muted-foreground/60">
+                                  {message.aiProcessDetails.steps.length} steps
+                                </span>
+                                <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                              </summary>
+                              <div className="absolute z-10 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
+                                <div className="space-y-3">
+                                  {message.aiProcessDetails.steps.map((step, stepIndex) => (
+                                    <div key={stepIndex} className="border border-border/30 rounded-md">
+                                      <details className="group">
+                                        <summary className="flex items-start space-x-2 text-xs p-2 cursor-pointer hover:bg-muted/30 rounded-md">
+                                          <div className="flex-shrink-0 mt-0.5">
+                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                                          </div>
+                                          <div className="flex-1">
+                                            <div className="font-medium text-foreground">{step.label}</div>
+                                            {step.details && (
+                                              <div className="text-muted-foreground mt-0.5">{step.details}</div>
+                                            )}
+                                            <div className="flex items-center space-x-2 mt-1">
+                                              {step.duration && (
+                                                <span className="text-muted-foreground/60">
+                                                  {step.duration}ms
+                                                </span>
+                                              )}
+                                              <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                                            </div>
+                                          </div>
+                                        </summary>
+                                        
+                                        <div className="px-4 pb-2 space-y-2 border-t border-border/20 mt-1">
+                                          {/* AI Response */}
+                                          {step.response && (
+                                            <div className="bg-muted/20 rounded p-2">
+                                              <div className="text-xs font-medium text-foreground mb-1">AI Response:</div>
+                                              <div className="text-xs text-muted-foreground whitespace-pre-wrap font-mono">
+                                                {step.response}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Tool Call */}
+                                          {step.toolCall && (
+                                            <div className="bg-blue-50 dark:bg-blue-950/20 rounded p-2">
+                                              <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Tool Call:</div>
+                                              <div className="text-xs text-blue-600 dark:text-blue-400 whitespace-pre-wrap font-mono">
+                                                {step.toolCall}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Tool Result */}
+                                          {step.toolResult && (
+                                            <div className="bg-green-50 dark:bg-green-950/20 rounded p-2">
+                                              <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Tool Result:</div>
+                                              <div className="text-xs text-green-600 dark:text-green-400 whitespace-pre-wrap font-mono max-h-32 overflow-y-auto">
+                                                {typeof step.toolResult === 'string' 
+                                                  ? step.toolResult 
+                                                  : JSON.stringify(step.toolResult, null, 2)
+                                                }
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Show message if no detailed data available */}
+                                          {!step.response && !step.toolCall && !step.toolResult && (
+                                            <div className="text-xs text-muted-foreground/60 italic p-2">
+                                              No detailed response data captured for this step.
+                                            </div>
+                                          )}
+                                        </div>
+                                      </details>
+                                    </div>
+                                  ))}
+                                </div>
+                                {message.aiProcessDetails.totalDuration && (
+                                  <div className="mt-3 pt-2 border-t border-border/30 text-xs text-muted-foreground">
+                                    Total processing time: {message.aiProcessDetails.totalDuration}ms
+                                  </div>
+                                )}
                               </div>
+                            </details>
+                          </div>
+                          
+                          {/* Main Response with timestamp in bottom right */}
+                          <div className="relative inline-block p-3 rounded-2xl shadow-sm bg-card text-card-foreground">
+                            <div className="text-sm leading-relaxed pr-16">
+                              {message.content}
+                            </div>
+                            {/* Timestamp in bottom right corner */}
+                            <div className="absolute bottom-2 right-3 text-xs text-muted-foreground/60">
+                              {message.timestamp.toLocaleTimeString([], { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
                             </div>
                           </div>
                         </div>
-                        
-                        {/* Thoughts section */}
-                        <InlineThinkingIndicator
-                          key={`thoughts-${index}`}
-                          isVisible={false}
-                          processSteps={message.aiProcessDetails.steps}
-                          agentName={agent?.name || 'Agent'}
-                          agentAvatarUrl={agent?.avatar_url}
-                          isCompleted={true}
-                          className="ml-12"
-                        />
                       </div>
                     );
                   }
@@ -871,7 +1063,7 @@ export function AgentChatPage() {
                         <div className={`inline-block p-3 rounded-2xl shadow-sm ${
                           message.role === 'user' 
                             ? 'bg-primary text-primary-foreground' 
-                            : 'bg-card text-card-foreground border border-border'
+                            : 'bg-card text-card-foreground'
                         }`}>
                           <div className="text-sm leading-relaxed">
                             {message.content}
@@ -893,8 +1085,8 @@ export function AgentChatPage() {
 
       </div>
 
-      {/* Clean Input Area - Claude Style (Tools Outside Text Area) */}
-      <div className="bg-background border-t border-border/20">
+      {/* Fixed Input Area - Claude Style (Tools Outside Text Area) */}
+      <div className="flex-shrink-0 bg-background border-t border-border/20">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <form onSubmit={handleSubmit} className="relative">
             {/* Text input container - Clean text area only */}
