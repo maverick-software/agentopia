@@ -73,7 +73,7 @@ export function useWebSearchConnection() {
           provider_name: conn.oauth_providers.name,
           provider_display_name: conn.oauth_providers.display_name,
           external_username: conn.external_username,
-          is_active: conn.is_active,
+          is_active: conn.connection_status === 'active',
           created_at: conn.created_at,
           updated_at: conn.updated_at,
         }));

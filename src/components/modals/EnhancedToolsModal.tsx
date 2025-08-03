@@ -57,7 +57,7 @@ export function EnhancedToolsModal({
 }: EnhancedToolsModalProps) {
   const { user } = useAuth();
   const supabase = useSupabaseClient();
-  const { connections: webSearchConnections } = useWebSearchConnection();
+  const { connections: webSearchConnections, refetch: refetchWebSearchConnections } = useWebSearchConnection();
   const { integrations } = useIntegrationsByClassification('tool');
   
   // UI state
@@ -197,6 +197,9 @@ export function EnhancedToolsModal({
       setSaved(true);
       setSetupService(null);
       resetForm();
+      
+      // Refresh web search connections to show the new credential
+      await refetchWebSearchConnections();
       
       // Switch to connected tab to show the new connection
       setActiveTab('connected');

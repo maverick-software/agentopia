@@ -91,7 +91,7 @@ export function AgentIntegrationsManager({
     if (agentId && user) {
       fetchAgentPermissions();
     }
-  }, [agentId, user]);
+  }, [agentId, user, webSearchConnections, gmailConnections]);
 
   const fetchAgentPermissions = async () => {
     try {

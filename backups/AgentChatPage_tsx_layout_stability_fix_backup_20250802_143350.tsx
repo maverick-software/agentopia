@@ -102,31 +102,39 @@ export function AgentChatPage() {
     adjustTextareaHeight();
   }, [input, adjustTextareaHeight]);
 
-  // Auto-scroll to bottom when messages change - more controlled
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    if (!isHistoryLoading && messages.length > 0 && messagesEndRef.current) {
-      const container = messagesEndRef.current.closest('.overflow-y-auto');
-      if (container) {
-        // Only auto-scroll if user is near the bottom (within 100px)
-        const isNearBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 100;
-        
-        if (isNearBottom) {
-          requestAnimationFrame(() => {
-            if (messagesEndRef.current) {
-              messagesEndRef.current.scrollIntoView({ 
-                behavior: 'smooth',
-                block: 'end' 
-              });
-            }
+    // Only auto-scroll if we're not in loading state and have messages
+    if (!isHistoryLoading && messages.length > 0) {
+      // Use multiple methods to ensure scrolling works reliably
+      const scrollToBottomReliably = () => {
+        if (messagesEndRef.current) {
+          // Method 1: scrollIntoView with smooth behavior
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'end' 
           });
+          
+          // Method 2: Fallback with direct scroll
+          const container = messagesEndRef.current.parentElement;
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
         }
-      }
+      };
+
+      // Execute immediately
+      scrollToBottomReliably();
+      
+      // Also execute after a brief delay to handle late DOM updates
+      setTimeout(scrollToBottomReliably, 50);
     }
   }, [messages, isHistoryLoading]);
 
-  // Initial scroll when history loading completes - instant
+  // Ensure scroll to bottom when history loading completes
   useEffect(() => {
     if (!isHistoryLoading && messages.length > 0) {
+      // Additional scroll after loading state changes
       setTimeout(() => {
         if (messagesEndRef.current) {
           messagesEndRef.current.scrollIntoView({ 
@@ -136,7 +144,7 @@ export function AgentChatPage() {
         }
       }, 100);
     }
-  }, [isHistoryLoading]);
+  }, [isHistoryLoading, messages.length]);
 
   // AI State Management Functions
   const startAIProcessing = useCallback(() => {
@@ -700,7 +708,7 @@ export function AgentChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div className="flex flex-col h-screen bg-background">
       {/* Fixed Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-0.5 border-b border-border bg-card shadow-sm">
                   <div className="flex items-center space-x-3">
@@ -801,11 +809,12 @@ export function AgentChatPage() {
           </div>
       </div>
 
-      {/* Messages Container - Hidden scrollbar */}
-      <div className="flex-1 overflow-y-auto hide-scrollbar min-h-0 relative">
-        {/* Gradient fade effect at top of messages - Fixed positioning to prevent shifts */}
-        <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10 opacity-0 transition-opacity duration-300" 
-             style={{ opacity: messages.length > 0 ? 1 : 0 }} />
+      {/* Scrollable Messages Container */}
+      <div className="relative flex-1 overflow-y-auto min-h-0">
+        {/* Gradient fade effect at top of messages */}
+        {messages.length > 0 && (
+          <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10" />
+        )}
         {isHistoryLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -837,7 +846,7 @@ export function AgentChatPage() {
               </div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto px-4 py-6 pb-8 min-h-full">
+            <div className="max-w-4xl mx-auto px-4 py-6 pb-8">
               <div className="space-y-6">
                 {messages.map((message, index) => {
                   // Handle thinking messages with inline indicator
@@ -904,7 +913,7 @@ export function AgentChatPage() {
                                 </span>
                                 <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
                               </summary>
-                              <div className="absolute z-50 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
+                              <div className="absolute z-10 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
                                 <div className="space-y-3">
                                   {message.aiProcessDetails.steps.map((step, stepIndex) => (
                                     <div key={stepIndex} className="border border-border/30 rounded-md">
@@ -1092,7 +1101,7 @@ export function AgentChatPage() {
                   className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
                   disabled={sending || !agent}
                   rows={1}
-                  style={{ minHeight: '28px', maxHeight: '120px' }}
+                  style={{ minHeight: '28px', maxHeight: '200px' }}
                 />
               </div>
             </div>
