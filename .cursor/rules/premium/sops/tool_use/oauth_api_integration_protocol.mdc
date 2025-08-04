@@ -1,0 +1,854 @@
+# OAuth and API Key Integration Protocol
+
+**Standard Operating Procedure for Implementing Credential Type Differentiation in JavaScript Platforms**
+
+## Executive Summary
+
+This protocol provides comprehensive guidance for implementing a unified credentialing system that properly differentiates between OAuth tokens and API keys. It covers database design, backend services, frontend UI patterns, and user experience considerations for JavaScript platforms.
+
+## Table of Contents
+
+1. [Core Concepts](#core-concepts)
+2. [Database Schema Requirements](#database-schema-requirements)
+3. [Backend Service Patterns](#backend-service-patterns)
+4. [Frontend UI Implementation](#frontend-ui-implementation)
+5. [Integration Setup Workflows](#integration-setup-workflows)
+6. [Error Handling Strategies](#error-handling-strategies)
+7. [Migration and Data Management](#migration-and-data-management)
+8. [Testing and Validation](#testing-and-validation)
+9. [Security Considerations](#security-considerations)
+10. [Implementation Checklist](#implementation-checklist)
+
+## Core Concepts
+
+### Credential Type Differentiation
+
+**OAuth Tokens:**
+- Short-lived credentials with automatic expiration
+- Support refresh token mechanisms
+- Require user consent flows
+- Used for: Gmail, Slack, GitHub, Microsoft integrations
+- **Visual Identity:** Blue badges, Shield icons
+
+**API Keys:**
+- Long-lived credentials without automatic expiration
+- Cannot be refreshed programmatically
+- Simple key-value authentication
+- Used for: Search APIs, third-party services
+- **Visual Identity:** Yellow badges, Key icons
+
+### Unified Storage Architecture
+
+Both credential types use a single `user_oauth_connections` table with a `credential_type` discriminator field. This approach:
+- Reduces code duplication
+- Simplifies permission management
+- Maintains consistent data patterns
+- Enables unified querying with type-specific filtering
+
+## Database Schema Requirements
+
+### 1. Core Tables
+
+#### Credential Type Enum
+```sql
+CREATE TYPE "public"."connection_credential_type_enum" AS ENUM (
+    'oauth', 
+    'api_key'
+);
+```
+
+#### OAuth Providers Table
+```sql
+CREATE TABLE "public"."oauth_providers" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "name" TEXT NOT NULL UNIQUE,
+    "display_name" TEXT NOT NULL,
+    "authorization_url" TEXT,
+    "token_url" TEXT,
+    "user_info_url" TEXT,
+    "scopes" JSONB DEFAULT '[]'::jsonb,
+    "configuration" JSONB DEFAULT '{}'::jsonb,
+    "is_enabled" BOOLEAN DEFAULT true,
+    "created_at" TIMESTAMPTZ DEFAULT now(),
+    "updated_at" TIMESTAMPTZ DEFAULT now()
+);
+```
+
+#### Unified Connections Table
+```sql
+CREATE TABLE "public"."user_oauth_connections" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "user_id" UUID NOT NULL REFERENCES auth.users(id),
+    "oauth_provider_id" UUID NOT NULL REFERENCES oauth_providers(id),
+    "external_user_id" TEXT NOT NULL,
+    "external_username" TEXT,
+    "connection_name" TEXT,
+    "scopes_granted" JSONB DEFAULT '[]'::jsonb NOT NULL,
+    "credential_type" connection_credential_type_enum DEFAULT 'oauth' NOT NULL,
+    
+    -- Token storage (encrypted)
+    "vault_access_token_id" UUID,
+    "vault_refresh_token_id" UUID,
+    "token_expires_at" TIMESTAMPTZ,
+    
+    -- Status and metadata
+    "connection_status" TEXT DEFAULT 'active' CHECK (connection_status IN ('active', 'expired', 'revoked', 'error')),
+    "connection_metadata" JSONB,
+    "created_at" TIMESTAMPTZ DEFAULT now(),
+    "updated_at" TIMESTAMPTZ DEFAULT now(),
+    
+    -- Constraints
+    CONSTRAINT "chk_credential_type_consistency" CHECK (
+        (
+            -- OAuth connections require access token when active
+            (credential_type = 'oauth' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
+            OR
+            -- API key connections require access token when active
+            (credential_type = 'api_key' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
+            OR
+            -- Non-active connections have no token requirements
+            (connection_status != 'active')
+        )
+    )
+);
+```
+
+### 2. Essential Indexes
+```sql
+CREATE INDEX "idx_user_oauth_connections_credential_type" 
+ON "user_oauth_connections" ("credential_type", "connection_status");
+
+CREATE INDEX "idx_user_oauth_connections_user_provider" 
+ON "user_oauth_connections" ("user_id", "oauth_provider_id", "connection_status");
+```
+
+### 3. RPC Functions
+
+#### Get User Connections
+```sql
+CREATE OR REPLACE FUNCTION public.get_user_oauth_connections(p_user_id UUID DEFAULT auth.uid())
+RETURNS TABLE(
+    connection_id UUID,
+    provider_name TEXT,
+    provider_display_name TEXT,
+    external_username TEXT,
+    connection_name TEXT,
+    scopes_granted JSONB,
+    connection_status TEXT,
+    credential_type TEXT,
+    token_expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        uoc.id as connection_id,
+        op.name as provider_name,
+        op.display_name as provider_display_name,
+        uoc.external_username,
+        uoc.connection_name,
+        uoc.scopes_granted,
+        uoc.connection_status,
+        uoc.credential_type::TEXT as credential_type,
+        uoc.token_expires_at,
+        uoc.created_at,
+        uoc.updated_at
+    FROM user_oauth_connections uoc
+    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    WHERE uoc.user_id = p_user_id
+    ORDER BY uoc.created_at DESC;
+END;
+$$;
+```
+
+## Backend Service Patterns
+
+### 1. Credential Type Filtering
+
+**OAuth-Specific Queries:**
+```javascript
+const { data: oauthConnections } = await supabase
+  .from('user_oauth_connections')
+  .select(`
+    *,
+    oauth_providers!inner(name, display_name)
+  `)
+  .eq('user_id', userId)
+  .eq('credential_type', 'oauth')
+  .eq('connection_status', 'active');
+```
+
+**API Key-Specific Queries:**
+```javascript
+const { data: apiKeyConnections } = await supabase
+  .from('user_oauth_connections')
+  .select(`
+    *,
+    oauth_providers!inner(name, configuration)
+  `)
+  .eq('user_id', userId)
+  .eq('credential_type', 'api_key')
+  .eq('connection_status', 'active');
+```
+
+### 2. Token Refresh Service Pattern
+
+```javascript
+// OAuth Refresh Function
+async function refreshOAuthToken(supabase, userId, connectionId) {
+  // 1. Validate connection exists and is OAuth type
+  const { data: connection } = await supabase
+    .from('user_oauth_connections')
+    .select('credential_type, vault_refresh_token_id, oauth_providers!inner(name)')
+    .eq('id', connectionId)
+    .eq('user_id', userId)
+    .single();
+
+  // 2. Reject API key refresh attempts
+  if (connection.credential_type === 'api_key') {
+    throw new Error('API keys cannot be refreshed. Please update your API key if it has expired.');
+  }
+
+  // 3. Validate refresh token exists
+  if (!connection.vault_refresh_token_id) {
+    throw new Error('No refresh token found for this OAuth connection.');
+  }
+
+  // 4. Perform provider-specific token refresh
+  // 5. Update connection with new tokens
+  // 6. Return success with new expiry
+}
+```
+
+### 3. Service Integration Pattern
+
+```javascript
+// Function Calling Manager Pattern
+class FunctionCallingManager {
+  async getAvailableTools(agentId, userId) {
+    const tools = [];
+    
+    // OAuth-based tools (Gmail, Slack, etc.)
+    const oauthTools = await this.getOAuthTools(agentId, userId);
+    tools.push(...oauthTools);
+    
+    // API key-based tools (Web Search, etc.)
+    const apiKeyTools = await this.getAPIKeyTools(agentId, userId);
+    tools.push(...apiKeyTools);
+    
+    return tools;
+  }
+
+  async getOAuthTools(agentId, userId) {
+    const { data: permissions } = await this.supabaseClient
+      .from('agent_oauth_permissions')
+      .select(`
+        *,
+        user_oauth_connections!inner(
+          credential_type,
+          oauth_providers!inner(name)
+        )
+      `)
+      .eq('agent_id', agentId)
+      .eq('user_oauth_connections.user_id', userId)
+      .eq('user_oauth_connections.credential_type', 'oauth')
+      .eq('is_active', true);
+
+    return this.buildToolsFromPermissions(permissions);
+  }
+
+  async getAPIKeyTools(agentId, userId) {
+    const { data: permissions } = await this.supabaseClient
+      .from('agent_oauth_permissions')
+      .select(`
+        *,
+        user_oauth_connections!inner(
+          credential_type,
+          oauth_providers!inner(name)
+        )
+      `)
+      .eq('agent_id', agentId)
+      .eq('user_oauth_connections.user_id', userId)
+      .eq('user_oauth_connections.credential_type', 'api_key')
+      .eq('is_active', true);
+
+    return this.buildToolsFromPermissions(permissions);
+  }
+}
+```
+
+## Frontend UI Implementation
+
+### 1. TypeScript Interfaces
+
+```typescript
+interface OAuthConnection {
+  connection_id: string;
+  provider_name: string;
+  provider_display_name: string;
+  external_username: string;
+  connection_name: string;
+  scopes_granted: string[];
+  connection_status: string;
+  credential_type: 'oauth' | 'api_key';
+  token_expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+### 2. Visual Differentiation Components
+
+```jsx
+// Credential Type Badge
+function CredentialTypeBadge({ credentialType }) {
+  return (
+    <Badge 
+      variant="outline"
+      className={`text-xs ${
+        credentialType === 'oauth'
+          ? 'border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300'
+          : 'border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-300'
+      }`}
+    >
+      {credentialType === 'oauth' ? 'OAuth' : 'API Key'}
+    </Badge>
+  );
+}
+
+// Connection Status Icon
+function ConnectionStatusIcon({ credentialType }) {
+  if (credentialType === 'oauth') {
+    return <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />;
+  }
+  return <Key className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />;
+}
+```
+
+### 3. Conditional Action Buttons
+
+```jsx
+// Credentials Page Actions
+function ConnectionActions({ connection, refreshStatus, onRefreshToken }) {
+  return (
+    <div className="flex items-center space-x-2 pt-2">
+      {/* OAuth Refresh Button */}
+      {connection.connection_status === 'active' && connection.credential_type === 'oauth' && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onRefreshToken(connection.connection_id)}
+          disabled={refreshStatus[connection.connection_id]?.isRefreshing}
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          {refreshStatus[connection.connection_id]?.isRefreshing ? 'Refreshing...' : 'Refresh Token'}
+        </Button>
+      )}
+      
+      {/* API Key Status */}
+      {connection.connection_status === 'active' && connection.credential_type === 'api_key' && (
+        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+          <Key className="h-4 w-4" />
+          <span>API Key Active</span>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### 4. Expiry Information Display
+
+```jsx
+// Token/Key Expiry Information
+function ExpiryInformation({ connection }) {
+  if (connection.credential_type === 'oauth' && connection.token_expires_at) {
+    return (
+      <div className="flex items-center space-x-2 text-sm">
+        <Shield className="h-4 w-4 text-muted-foreground" />
+        <span className="text-muted-foreground">Token expires:</span>
+        <span className={getTokenExpiryColor(connection.token_expires_at)}>
+          {format(new Date(connection.token_expires_at), 'PPp')}
+        </span>
+      </div>
+    );
+  }
+  
+  if (connection.credential_type === 'api_key') {
+    return (
+      <div className="flex items-center space-x-2 text-sm">
+        <Key className="h-4 w-4 text-muted-foreground" />
+        <span className="text-muted-foreground">API Key:</span>
+        <span className="text-foreground">Long-lived credential (no expiry)</span>
+      </div>
+    );
+  }
+  
+  return null;
+}
+```
+
+## Integration Setup Workflows
+
+### 1. OAuth Integration Setup
+
+```javascript
+// OAuth Provider Setup
+async function setupOAuthIntegration(userId, providerId, tokens, scopes) {
+  // 1. Encrypt tokens using secure storage
+  const encryptedAccessToken = await encryptToken(tokens.access_token);
+  const encryptedRefreshToken = tokens.refresh_token ? await encryptToken(tokens.refresh_token) : null;
+  
+  // 2. Create connection record
+  const { error } = await supabase
+    .from('user_oauth_connections')
+    .insert({
+      user_id: userId,
+      oauth_provider_id: providerId,
+      external_user_id: tokens.user_id,
+      external_username: tokens.username,
+      connection_name: `${providerName} Connection`,
+      vault_access_token_id: encryptedAccessToken,
+      vault_refresh_token_id: encryptedRefreshToken,
+      scopes_granted: scopes,
+      credential_type: 'oauth', // Explicit OAuth type
+      connection_status: 'active',
+      token_expires_at: calculateExpiryDate(tokens.expires_in)
+    });
+}
+```
+
+### 2. API Key Integration Setup
+
+```javascript
+// API Key Provider Setup
+async function setupAPIKeyIntegration(userId, providerId, apiKey, connectionName) {
+  // 1. Encrypt API key using secure storage
+  const encryptedApiKey = await encryptToken(apiKey);
+  
+  // 2. Create connection record
+  const { error } = await supabase
+    .from('user_oauth_connections')
+    .insert({
+      user_id: userId,
+      oauth_provider_id: providerId,
+      external_user_id: userId, // Required field
+      external_username: connectionName,
+      connection_name: connectionName,
+      vault_access_token_id: encryptedApiKey,
+      // Note: No refresh token for API keys
+      scopes_granted: ['api_access'], // Provider-specific scopes
+      credential_type: 'api_key', // Explicit API key type
+      connection_status: 'active'
+      // Note: No expiry date for API keys
+    });
+}
+```
+
+### 3. Integration Setup UI Pattern
+
+```jsx
+// Unified Integration Setup Modal
+function IntegrationSetupModal({ integration, onComplete }) {
+  const [setupType, setSetupType] = useState(null);
+  
+  useEffect(() => {
+    // Determine setup type based on integration
+    if (integration.auth_type === 'oauth') {
+      setSetupType('oauth');
+    } else if (integration.auth_type === 'api_key') {
+      setSetupType('api_key');
+    }
+  }, [integration]);
+
+  const handleOAuthSetup = async () => {
+    // Redirect to OAuth flow
+    window.location.href = await generateOAuthUrl(integration.provider_id);
+  };
+
+  const handleAPIKeySetup = async (formData) => {
+    await setupAPIKeyIntegration(
+      user.id,
+      integration.provider_id,
+      formData.api_key,
+      formData.connection_name
+    );
+    onComplete();
+  };
+
+  if (setupType === 'oauth') {
+    return <OAuthSetupFlow onSetup={handleOAuthSetup} />;
+  }
+  
+  if (setupType === 'api_key') {
+    return <APIKeySetupForm onSetup={handleAPIKeySetup} />;
+  }
+  
+  return <LoadingState />;
+}
+```
+
+## Error Handling Strategies
+
+### 1. Credential Type Validation
+
+```javascript
+// Comprehensive Error Handling
+class CredentialError extends Error {
+  constructor(message, code, credentialType) {
+    super(message);
+    this.code = code;
+    this.credentialType = credentialType;
+  }
+}
+
+function validateCredentialOperation(connection, operation) {
+  if (operation === 'refresh' && connection.credential_type === 'api_key') {
+    throw new CredentialError(
+      'API keys cannot be refreshed. Please update your API key if it has expired.',
+      'INVALID_OPERATION_FOR_CREDENTIAL_TYPE',
+      'api_key'
+    );
+  }
+  
+  if (operation === 'oauth_flow' && connection.credential_type === 'api_key') {
+    throw new CredentialError(
+      'API key connections do not support OAuth flows.',
+      'INVALID_OPERATION_FOR_CREDENTIAL_TYPE',
+      'api_key'
+    );
+  }
+}
+```
+
+### 2. Frontend Error Display
+
+```jsx
+// Error Display Component
+function CredentialErrorDisplay({ error, credentialType }) {
+  const getErrorMessage = () => {
+    if (error.code === 'INVALID_OPERATION_FOR_CREDENTIAL_TYPE') {
+      if (credentialType === 'api_key') {
+        return {
+          title: 'API Key Cannot Be Refreshed',
+          message: 'API keys are long-lived credentials that cannot be refreshed automatically. Please update your API key manually if it has expired.',
+          action: 'Update API Key'
+        };
+      }
+    }
+    
+    return {
+      title: 'Connection Error',
+      message: error.message,
+      action: 'Retry'
+    };
+  };
+
+  const errorInfo = getErrorMessage();
+  
+  return (
+    <Alert variant="destructive">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle>{errorInfo.title}</AlertTitle>
+      <AlertDescription>{errorInfo.message}</AlertDescription>
+    </Alert>
+  );
+}
+```
+
+## Migration and Data Management
+
+### 1. Migration Strategy Template
+
+```sql
+-- Migration Template: Add Credential Type Differentiation
+BEGIN;
+
+-- 1. Create credential type enum
+CREATE TYPE connection_credential_type_enum AS ENUM ('oauth', 'api_key');
+
+-- 2. Add credential_type column with default
+ALTER TABLE user_oauth_connections 
+ADD COLUMN credential_type connection_credential_type_enum DEFAULT 'oauth' NOT NULL;
+
+-- 3. Update existing records based on provider patterns
+UPDATE user_oauth_connections 
+SET credential_type = 'api_key'
+WHERE oauth_provider_id IN (
+    SELECT id FROM oauth_providers 
+    WHERE name IN ('api_key_provider_1', 'api_key_provider_2', ...)
+);
+
+-- 4. Handle invalid states
+UPDATE user_oauth_connections 
+SET connection_status = 'error'
+WHERE connection_status = 'active' AND vault_access_token_id IS NULL;
+
+-- 5. Update constraints
+ALTER TABLE user_oauth_connections 
+DROP CONSTRAINT IF EXISTS old_token_constraint;
+
+ALTER TABLE user_oauth_connections 
+ADD CONSTRAINT chk_credential_type_consistency CHECK (
+    (
+        (credential_type = 'oauth' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
+        OR
+        (credential_type = 'api_key' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
+        OR
+        (connection_status != 'active')
+    )
+);
+
+-- 6. Update indexes
+CREATE INDEX idx_user_oauth_connections_credential_type 
+ON user_oauth_connections (credential_type, connection_status);
+
+COMMIT;
+```
+
+### 2. Data Validation Queries
+
+```sql
+-- Validation: Check credential type distribution
+SELECT credential_type, COUNT(*) as count
+FROM user_oauth_connections
+GROUP BY credential_type;
+
+-- Validation: Check for invalid states
+SELECT COUNT(*) as invalid_connections
+FROM user_oauth_connections
+WHERE connection_status = 'active' AND vault_access_token_id IS NULL;
+
+-- Validation: Check API keys with refresh tokens (should be 0)
+SELECT COUNT(*) as api_keys_with_refresh_tokens
+FROM user_oauth_connections
+WHERE credential_type = 'api_key' AND vault_refresh_token_id IS NOT NULL;
+```
+
+## Testing and Validation
+
+### 1. Unit Test Patterns
+
+```javascript
+// Jest Test Suite Example
+describe('Credential Type Differentiation', () => {
+  describe('OAuth Connections', () => {
+    test('should allow token refresh for active OAuth connections', async () => {
+      const connection = createMockConnection('oauth', 'active');
+      const result = await refreshToken(connection.id);
+      expect(result.success).toBe(true);
+    });
+
+    test('should show refresh button for OAuth connections', () => {
+      const connection = createMockConnection('oauth', 'active');
+      render(<ConnectionActions connection={connection} />);
+      expect(screen.getByText('Refresh Token')).toBeInTheDocument();
+    });
+  });
+
+  describe('API Key Connections', () => {
+    test('should reject token refresh for API key connections', async () => {
+      const connection = createMockConnection('api_key', 'active');
+      await expect(refreshToken(connection.id)).rejects.toThrow('API keys cannot be refreshed');
+    });
+
+    test('should not show refresh button for API key connections', () => {
+      const connection = createMockConnection('api_key', 'active');
+      render(<ConnectionActions connection={connection} />);
+      expect(screen.queryByText('Refresh Token')).not.toBeInTheDocument();
+    });
+
+    test('should show API key status for active API keys', () => {
+      const connection = createMockConnection('api_key', 'active');
+      render(<ConnectionActions connection={connection} />);
+      expect(screen.getByText('API Key Active')).toBeInTheDocument();
+    });
+  });
+});
+```
+
+### 2. Integration Test Scenarios
+
+```javascript
+// Integration Test Examples
+describe('Integration Setup Workflows', () => {
+  test('OAuth setup flow creates correct credential type', async () => {
+    const tokens = await mockOAuthFlow('gmail');
+    const connection = await setupOAuthIntegration(userId, 'gmail', tokens);
+    
+    expect(connection.credential_type).toBe('oauth');
+    expect(connection.vault_refresh_token_id).toBeTruthy();
+  });
+
+  test('API key setup flow creates correct credential type', async () => {
+    const connection = await setupAPIKeyIntegration(userId, 'serper', 'test-key');
+    
+    expect(connection.credential_type).toBe('api_key');
+    expect(connection.vault_refresh_token_id).toBeFalsy();
+  });
+});
+```
+
+### 3. Manual Testing Checklist
+
+**OAuth Connections:**
+- [ ] Shows blue badge with "OAuth" label
+- [ ] Displays token expiry information
+- [ ] Shows "Refresh Token" button for active connections
+- [ ] Refresh functionality works correctly
+- [ ] Error handling for failed refresh attempts
+
+**API Key Connections:**
+- [ ] Shows yellow badge with "API Key" label
+- [ ] Shows "Long-lived credential (no expiry)" message
+- [ ] Shows "API Key Active" status instead of refresh button
+- [ ] Proper error message when refresh is attempted
+- [ ] Setup flow correctly sets credential_type
+
+## Security Considerations
+
+### 1. Token Storage Security
+
+```javascript
+// Secure Token Storage Pattern
+class SecureCredentialManager {
+  async storeCredential(credentialType, tokens) {
+    // Always encrypt sensitive data
+    const encryptedAccessToken = await this.encrypt(tokens.access_token);
+    const encryptedRefreshToken = tokens.refresh_token ? 
+      await this.encrypt(tokens.refresh_token) : null;
+
+    return {
+      vault_access_token_id: encryptedAccessToken,
+      vault_refresh_token_id: encryptedRefreshToken,
+      credential_type: credentialType
+    };
+  }
+
+  async retrieveCredential(connectionId, credentialType) {
+    const connection = await this.getConnection(connectionId);
+    
+    // Validate credential type matches expectation
+    if (connection.credential_type !== credentialType) {
+      throw new Error('Credential type mismatch');
+    }
+
+    return {
+      access_token: await this.decrypt(connection.vault_access_token_id),
+      refresh_token: connection.vault_refresh_token_id ? 
+        await this.decrypt(connection.vault_refresh_token_id) : null
+    };
+  }
+}
+```
+
+### 2. Access Control Patterns
+
+```sql
+-- Row Level Security Policies
+CREATE POLICY "Users can only access their own connections" 
+ON user_oauth_connections 
+FOR ALL USING (user_id = auth.uid());
+
+CREATE POLICY "Service role can manage all connections" 
+ON user_oauth_connections 
+FOR ALL USING (auth.role() = 'service_role');
+```
+
+### 3. Audit Logging
+
+```javascript
+// Audit Trail for Credential Operations
+async function auditCredentialOperation(userId, connectionId, operation, result) {
+  await supabase.from('audit_logs').insert({
+    user_id: userId,
+    resource_type: 'credential',
+    resource_id: connectionId,
+    operation: operation,
+    result: result ? 'success' : 'failure',
+    metadata: {
+      timestamp: new Date().toISOString(),
+      user_agent: request.headers['user-agent']
+    }
+  });
+}
+```
+
+## Implementation Checklist
+
+### Database Setup
+- [ ] Create credential type enum
+- [ ] Add credential_type column to connections table
+- [ ] Update table constraints for different credential types
+- [ ] Create appropriate indexes
+- [ ] Update RPC functions to include credential_type
+- [ ] Set up Row Level Security policies
+
+### Backend Services
+- [ ] Update token refresh service to validate credential types
+- [ ] Modify API service queries to filter by credential_type
+- [ ] Update function calling managers to handle both types
+- [ ] Implement proper error handling for type mismatches
+- [ ] Add audit logging for credential operations
+
+### Frontend Components
+- [ ] Create credential type badge components
+- [ ] Update connection display with visual differentiation
+- [ ] Implement conditional action buttons
+- [ ] Add proper error handling and display
+- [ ] Update integration setup modals
+- [ ] Implement expiry information display logic
+
+### Integration Setup
+- [ ] OAuth flow sets credential_type = 'oauth'
+- [ ] API key setup sets credential_type = 'api_key'
+- [ ] Proper scope handling for both types
+- [ ] Validation of setup completion
+
+### Testing
+- [ ] Unit tests for credential type validation
+- [ ] Integration tests for setup workflows
+- [ ] Manual testing of UI components
+- [ ] Error handling validation
+- [ ] Migration testing with existing data
+
+### Documentation
+- [ ] Update API documentation
+- [ ] Create user guides for both credential types
+- [ ] Document troubleshooting procedures
+- [ ] Update deployment guides
+
+### Security Review
+- [ ] Validate token encryption
+- [ ] Review access control policies
+- [ ] Test audit logging
+- [ ] Verify no credential leakage in logs
+- [ ] Confirm proper error message handling
+
+## Common Pitfalls and Solutions
+
+### 1. Migration Issues
+**Problem:** Existing connections break after adding credential_type
+**Solution:** Use proper defaults and update existing data based on provider patterns
+
+### 2. UI Confusion
+**Problem:** Users try to refresh API keys
+**Solution:** Conditional UI elements and clear error messages
+
+### 3. Backend Type Mismatches
+**Problem:** Services query wrong credential types
+**Solution:** Always filter by credential_type in queries
+
+### 4. Token Storage Confusion
+**Problem:** API keys stored with refresh token fields
+**Solution:** Clear validation and null handling for unused fields
+
+## Conclusion
+
+This protocol provides a comprehensive framework for implementing credential type differentiation in JavaScript platforms. Follow the patterns and guidelines to ensure secure, user-friendly, and maintainable integration systems that properly handle both OAuth tokens and API keys.
+
+The key to success is maintaining clear separation of concerns while using unified storage and management patterns where appropriate. Always prioritize security, user experience, and clear error handling throughout the implementation.

@@ -1,0 +1,2608 @@
+# Agent Tool Recognition and Use Protocol
+
+**Standard Operating Procedure for Implementing Tool Recognition, Execution, and Response Formatting in JavaScript Chat Platforms**
+
+## Executive Summary
+
+This protocol provides comprehensive guidance for implementing agent tool recognition and execution within chat interfaces. It covers tool discovery, permission validation, OpenAI function calling integration, execution workflows, real-time feedback, and response formatting for JavaScript platforms.
+
+## Table of Contents
+
+1. [Architecture Overview](#architecture-overview)
+2. [Tool Definition and Registration](#tool-definition-and-registration)
+3. [Permission-Based Tool Discovery](#permission-based-tool-discovery)
+4. [OpenAI Function Calling Integration](#openai-function-calling-integration)
+5. [Tool Execution Workflow](#tool-execution-workflow)
+6. [Real-Time UI Feedback System](#real-time-ui-feedback-system)
+7. [Response Formatting and Display](#response-formatting-and-display)
+8. [Error Handling and Recovery](#error-handling-and-recovery)
+9. [Logging and Audit Trails](#logging-and-audit-trails)
+10. [Security and Validation](#security-and-validation)
+11. [Testing and Debugging](#testing-and-debugging)
+12. [Implementation Checklist](#implementation-checklist)
+
+## Architecture Overview
+
+### Core Components
+
+**Function Calling Manager:**
+- Discovers available tools based on agent permissions
+- Manages tool execution lifecycle
+- Handles authentication and authorization
+- Provides unified interface for all tool types
+
+**Tool Registry:**
+- Centralized tool definitions with OpenAI-compatible schemas
+- Provider-specific tool catalogs (Gmail, Web Search, etc.)
+- Dynamic tool loading based on user connections
+
+**Execution Engine:**
+- Asynchronous tool execution with timeout handling
+- Result processing and formatting
+- Error recovery and retry mechanisms
+- Resource management and cleanup
+
+**UI Feedback System:**
+- Real-time execution status indicators
+- Progressive loading states with detailed messaging
+- Result presentation with expandable details
+- Error display with actionable guidance
+
+### Data Flow Architecture
+
+```
+User Message → OpenAI Analysis → Tool Selection → Permission Check → Tool Execution → Result Processing → Response Formatting → UI Display
+     ↓              ↓               ↓              ↓               ↓               ↓                ↓              ↓
+Chat Input → Function Calling → Available Tools → Auth Validation → API Calls → Data Transform → UI Components → User Feedback
+```
+
+## Tool Definition and Registration
+
+### 1. Tool Schema Structure
+
+```javascript
+// MCP-Compatible Tool Definition
+interface MCPTool {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, JSONSchemaProperty>;
+    required?: string[];
+  };
+  required_scopes: string[];
+  provider: string;
+  category: string;
+  execution_timeout?: number;
+  rate_limit?: {
+    requests_per_minute: number;
+    requests_per_hour: number;
+  };
+}
+
+// Example Tool Definition
+const GMAIL_SEND_EMAIL: MCPTool = {
+  name: 'send_email',
+  description: 'Send an email via Gmail. Use this when the user asks to send an email.',
+  parameters: {
+    type: 'object',
+    properties: {
+      to: {
+        type: 'string',
+        description: 'Recipient email address',
+      },
+      subject: {
+        type: 'string',
+        description: 'Email subject line',
+      },
+      body: {
+        type: 'string',
+        description: 'Email body content (plain text)',
+      },
+      html: {
+        type: 'string',
+        description: 'Email body content (HTML format)',
+      },
+      attachments: {
+        type: 'array',
+        description: 'Email attachments',
+        items: {
+          type: 'object',
+          properties: {
+            filename: { type: 'string' },
+            content: { type: 'string', description: 'Base64 encoded content' },
+            contentType: { type: 'string' },
+          },
+        },
+      },
+    },
+    required: ['to', 'subject', 'body'],
+  },
+  required_scopes: ['https://www.googleapis.com/auth/gmail.send'],
+  provider: 'gmail',
+  category: 'communication',
+  execution_timeout: 30000,
+  rate_limit: {
+    requests_per_minute: 10,
+    requests_per_hour: 100
+  }
+};
+```
+
+### 2. Tool Registry Pattern
+
+```javascript
+// Centralized Tool Registry
+class ToolRegistry {
+  private tools: Map<string, MCPTool> = new Map();
+  private providerTools: Map<string, MCPTool[]> = new Map();
+
+  registerTool(tool: MCPTool): void {
+    this.tools.set(tool.name, tool);
+    
+    if (!this.providerTools.has(tool.provider)) {
+      this.providerTools.set(tool.provider, []);
+    }
+    this.providerTools.get(tool.provider)!.push(tool);
+  }
+
+  getToolsByProvider(provider: string): MCPTool[] {
+    return this.providerTools.get(provider) || [];
+  }
+
+  getToolByName(name: string): MCPTool | undefined {
+    return this.tools.get(name);
+  }
+
+  getAllTools(): MCPTool[] {
+    return Array.from(this.tools.values());
+  }
+}
+
+// Tool Registration
+const toolRegistry = new ToolRegistry();
+
+// Gmail Tools
+const GMAIL_TOOLS = {
+  send_email: GMAIL_SEND_EMAIL,
+  read_emails: GMAIL_READ_EMAILS,
+  search_emails: GMAIL_SEARCH_EMAILS,
+  // ... other Gmail tools
+};
+
+// Web Search Tools
+const WEB_SEARCH_TOOLS = {
+  web_search: WEB_SEARCH_TOOL,
+  news_search: NEWS_SEARCH_TOOL,
+  scrape_and_summarize: SCRAPE_SUMMARIZE_TOOL,
+  // ... other search tools
+};
+
+// Register all tools
+Object.values(GMAIL_TOOLS).forEach(tool => toolRegistry.registerTool(tool));
+Object.values(WEB_SEARCH_TOOLS).forEach(tool => toolRegistry.registerTool(tool));
+```
+
+### 3. Dynamic Tool Loading
+
+```javascript
+// Dynamic Tool Discovery Based on Connections
+class DynamicToolLoader {
+  constructor(private supabaseClient: SupabaseClient) {}
+
+  async getAvailableProviders(userId: string): Promise<string[]> {
+    const { data: connections } = await this.supabaseClient
+      .from('user_oauth_connections')
+      .select('oauth_providers!inner(name)')
+      .eq('user_id', userId)
+      .eq('connection_status', 'active');
+
+    return connections?.map(c => c.oauth_providers.name) || [];
+  }
+
+  async loadToolsForProviders(providers: string[]): Promise<MCPTool[]> {
+    const tools: MCPTool[] = [];
+    
+    for (const provider of providers) {
+      const providerTools = toolRegistry.getToolsByProvider(provider);
+      tools.push(...providerTools);
+    }
+    
+    return tools;
+  }
+}
+```
+
+## Permission-Based Tool Discovery
+
+### 1. Function Calling Manager
+
+```javascript
+export class FunctionCallingManager {
+  constructor(
+    private supabaseClient: SupabaseClient,
+    private authToken: string,
+    private toolRegistry: ToolRegistry
+  ) {}
+
+  async getAvailableTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      console.log(`[FunctionCalling] Getting available tools for agent ${agentId}`);
+      
+      const tools: OpenAIFunction[] = [];
+      
+      // Get Gmail tools if user has Gmail permissions
+      const gmailTools = await this.getGmailTools(agentId, userId);
+      tools.push(...gmailTools);
+      
+      // Get Web Search tools if user has web search permissions
+      const webSearchTools = await this.getWebSearchTools(agentId, userId);
+      tools.push(...webSearchTools);
+      
+      // Get additional provider tools
+      const additionalTools = await this.getAdditionalProviderTools(agentId, userId);
+      tools.push(...additionalTools);
+      
+      console.log(`[FunctionCalling] Found ${tools.length} available tools for agent ${agentId}`);
+      return tools;
+      
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting available tools:', error);
+      return [];
+    }
+  }
+
+  private async getGmailTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      // Check if agent has Gmail permissions
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          allowed_scopes,
+          is_active,
+          user_oauth_connections!inner(
+            oauth_provider_id,
+            credential_type,
+            oauth_providers!inner(name)
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+        .eq('user_oauth_connections.credential_type', 'oauth')
+        .eq('is_active', true)
+        .single();
+
+      if (!permissions) {
+        console.log(`[FunctionCalling] No Gmail permissions found for agent ${agentId}`);
+        return [];
+      }
+
+      const grantedScopes = permissions.allowed_scopes || [];
+      console.log(`[FunctionCalling] Agent ${agentId} has Gmail scopes:`, grantedScopes);
+      
+      // Filter tools based on granted scopes
+      const availableTools: OpenAIFunction[] = [];
+      const gmailTools = this.toolRegistry.getToolsByProvider('gmail');
+      
+      for (const tool of gmailTools) {
+        // Check if agent has required scopes for this tool
+        const hasRequiredScopes = tool.required_scopes.every(scope => 
+          grantedScopes.includes(scope)
+        );
+        
+        if (hasRequiredScopes) {
+          availableTools.push({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+          });
+        }
+      }
+
+      console.log(`[FunctionCalling] Available Gmail tools for agent ${agentId}:`, 
+        availableTools.map(t => t.name));
+      return availableTools;
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting Gmail tools:', error);
+      return [];
+    }
+  }
+
+  private async getWebSearchTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      // Check if agent has web search permissions using API key connections
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          *,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name),
+            credential_type
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('is_active', true);
+
+      if (!permissions || permissions.length === 0) {
+        console.log(`[FunctionCalling] No web search permissions found for agent ${agentId}`);
+        return [];
+      }
+
+      console.log(`[FunctionCalling] Agent ${agentId} has web search permissions`);
+      
+      // Filter tools based on granted scopes
+      const grantedScopes = permissions[0]?.allowed_scopes || [];
+      const webSearchTools = this.toolRegistry.getToolsByProvider('web_search');
+      
+      const availableTools: OpenAIFunction[] = webSearchTools
+        .filter(tool => tool.required_scopes.some(scope => grantedScopes.includes(scope)))
+        .map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        }));
+
+      console.log(`[FunctionCalling] Available web search tools for agent ${agentId}:`, 
+        availableTools.map(t => t.name));
+      return availableTools;
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting web search tools:', error);
+      return [];
+    }
+  }
+}
+```
+
+### 2. Permission Validation
+
+```javascript
+// Permission Validation Utilities
+class PermissionValidator {
+  constructor(private supabaseClient: SupabaseClient) {}
+
+  async validateToolPermission(
+    agentId: string,
+    userId: string,
+    toolName: string
+  ): Promise<boolean> {
+    const tool = toolRegistry.getToolByName(toolName);
+    if (!tool) {
+      console.error(`Tool ${toolName} not found in registry`);
+      return false;
+    }
+
+    // Check permissions based on tool provider
+    switch (tool.provider) {
+      case 'gmail':
+        return this.validateGmailPermissions(agentId, userId, tool);
+      case 'web_search':
+        return this.validateWebSearchPermissions(agentId, userId, tool);
+      default:
+        return this.validateGenericPermissions(agentId, userId, tool);
+    }
+  }
+
+  private async validateGmailPermissions(
+    agentId: string,
+    userId: string,
+    tool: MCPTool
+  ): Promise<boolean> {
+    const { data: permissions } = await this.supabaseClient
+      .from('agent_oauth_permissions')
+      .select('allowed_scopes')
+      .eq('agent_id', agentId)
+      .eq('user_oauth_connections.user_id', userId)
+      .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+      .eq('is_active', true)
+      .single();
+
+    if (!permissions) return false;
+
+    const grantedScopes = permissions.allowed_scopes || [];
+    return tool.required_scopes.every(scope => grantedScopes.includes(scope));
+  }
+
+  private async validateWebSearchPermissions(
+    agentId: string,
+    userId: string,
+    tool: MCPTool
+  ): Promise<boolean> {
+    const { data: permissions } = await this.supabaseClient
+      .from('agent_oauth_permissions')
+      .select('allowed_scopes')
+      .eq('agent_id', agentId)
+      .eq('user_oauth_connections.user_id', userId)
+      .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+      .eq('is_active', true);
+
+    return permissions && permissions.length > 0;
+  }
+}
+```
+
+## OpenAI Function Calling Integration
+
+### 1. Chat Integration Pattern
+
+```javascript
+// Chat Function with Tool Support
+export async function handleChatWithTools(request: Request): Promise<Response> {
+  try {
+    const { messages, agent_id, user_id } = await request.json();
+    
+    // Initialize function calling manager
+    const functionCallingManager = new FunctionCallingManager(
+      supabaseClient,
+      authToken,
+      toolRegistry
+    );
+    
+    // Get available tools for this agent
+    const availableTools = await functionCallingManager.getAvailableTools(agent_id, user_id);
+    
+    // Prepare OpenAI request with tools
+    const openaiRequest = {
+      model: 'gpt-4',
+      messages: messages,
+      tools: availableTools.map(tool => ({
+        type: 'function',
+        function: tool,
+      })),
+      tool_choice: 'auto',
+      stream: true,
+    };
+    
+    // Call OpenAI
+    const completion = await openai.chat.completions.create(openaiRequest);
+    
+    // Process tool calls if present
+    const toolCalls = completion.choices[0].message.tool_calls;
+    if (toolCalls && toolCalls.length > 0) {
+      return await handleToolCalls(toolCalls, functionCallingManager, agent_id, user_id, messages);
+    }
+    
+    // Return regular response if no tool calls
+    return new Response(JSON.stringify({
+      success: true,
+      message: completion.choices[0].message.content,
+      tool_calls: []
+    }));
+    
+  } catch (error) {
+    console.error('Chat error:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), { status: 500 });
+  }
+}
+
+// Tool Call Handler
+async function handleToolCalls(
+  toolCalls: any[],
+  functionCallingManager: FunctionCallingManager,
+  agentId: string,
+  userId: string,
+  messages: any[]
+): Promise<Response> {
+  
+  // Execute all tool calls in parallel
+  const functionResults = await Promise.all(
+    toolCalls.map(async (toolCall) => {
+      try {
+        const result = await functionCallingManager.executeFunction(
+          agentId,
+          userId,
+          toolCall.function.name,
+          JSON.parse(toolCall.function.arguments)
+        );
+        
+        return {
+          tool_call_id: toolCall.id,
+          success: result.success,
+          content: result.success ? 
+            JSON.stringify(result.data) : 
+            `Error: ${result.error}`,
+          metadata: result.metadata
+        };
+      } catch (error) {
+        return {
+          tool_call_id: toolCall.id,
+          success: false,
+          content: `Error: ${error.message}`,
+          metadata: { execution_time_ms: 0 }
+        };
+      }
+    })
+  );
+  
+  // Prepare messages for follow-up completion
+  const followUpMessages = [
+    ...messages,
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: toolCalls,
+    },
+    ...functionResults.map(result => ({
+      role: 'tool',
+      tool_call_id: result.tool_call_id,
+      content: result.content,
+    })),
+  ];
+  
+  // Get final response from OpenAI
+  const finalCompletion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: followUpMessages,
+  });
+  
+  return new Response(JSON.stringify({
+    success: true,
+    message: finalCompletion.choices[0].message.content,
+    tool_calls: functionResults.map(result => ({
+      ...result,
+      tool_name: toolCalls.find(tc => tc.id === result.tool_call_id)?.function.name,
+    }))
+  }));
+}
+```
+
+### 2. Streaming Support
+
+```javascript
+// Streaming Chat with Tool Calls
+export async function handleStreamingChatWithTools(request: Request): Promise<Response> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const { messages, agent_id, user_id } = await request.json();
+        
+        // Send initial status
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'status',
+          status: 'analyzing_tools',
+          message: 'Analyzing available tools...'
+        })}\n\n`));
+        
+        const functionCallingManager = new FunctionCallingManager(
+          supabaseClient,
+          authToken,
+          toolRegistry
+        );
+        
+        const availableTools = await functionCallingManager.getAvailableTools(agent_id, user_id);
+        
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'tools_discovered',
+          tools: availableTools.map(t => t.name),
+          count: availableTools.length
+        })}\n\n`));
+        
+        // Create OpenAI completion with streaming
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: messages,
+          tools: availableTools.map(tool => ({
+            type: 'function',
+            function: tool,
+          })),
+          tool_choice: 'auto',
+          stream: true,
+        });
+        
+        let toolCalls: any[] = [];
+        let assistantMessage = '';
+        
+        // Process streaming response
+        for await (const chunk of completion) {
+          const delta = chunk.choices[0]?.delta;
+          
+          if (delta?.content) {
+            assistantMessage += delta.content;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'content',
+              content: delta.content
+            })}\n\n`));
+          }
+          
+          if (delta?.tool_calls) {
+            // Handle tool call streaming
+            for (const toolCall of delta.tool_calls) {
+              if (!toolCalls[toolCall.index]) {
+                toolCalls[toolCall.index] = {
+                  id: toolCall.id,
+                  function: { name: '', arguments: '' }
+                };
+              }
+              
+              if (toolCall.function?.name) {
+                toolCalls[toolCall.index].function.name += toolCall.function.name;
+              }
+              
+              if (toolCall.function?.arguments) {
+                toolCalls[toolCall.index].function.arguments += toolCall.function.arguments;
+              }
+            }
+          }
+        }
+        
+        // Execute tool calls if present
+        if (toolCalls.length > 0) {
+          await executeToolCallsWithStreaming(
+            toolCalls,
+            functionCallingManager,
+            agent_id,
+            user_id,
+            controller,
+            encoder
+          );
+        }
+        
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'completed'
+        })}\n\n`));
+        
+        controller.close();
+        
+      } catch (error) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'error',
+          error: error.message
+        })}\n\n`));
+        controller.close();
+      }
+    }
+  });
+  
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+```
+
+## Tool Execution Workflow
+
+### 1. Tool Execution Engine
+
+```javascript
+export class ToolExecutionEngine {
+  constructor(
+    private supabaseClient: SupabaseClient,
+    private authToken: string
+  ) {}
+
+  async executeFunction(
+    agentId: string,
+    userId: string,
+    functionName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    
+    const startTime = Date.now();
+    
+    try {
+      // Log execution start
+      console.log(`[ToolExecution] Starting ${functionName} for agent ${agentId}`);
+      
+      // Validate permissions
+      const hasPermission = await this.validatePermissions(agentId, userId, functionName);
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: 'Agent does not have required permissions for this operation',
+          metadata: { execution_time_ms: Date.now() - startTime },
+        };
+      }
+      
+      // Route to appropriate executor
+      const tool = toolRegistry.getToolByName(functionName);
+      if (!tool) {
+        return {
+          success: false,
+          error: `Tool ${functionName} not found`,
+          metadata: { execution_time_ms: Date.now() - startTime },
+        };
+      }
+      
+      // Execute based on provider
+      let result: MCPToolResult;
+      switch (tool.provider) {
+        case 'gmail':
+          result = await this.executeGmailTool(agentId, userId, functionName, parameters);
+          break;
+        case 'web_search':
+          result = await this.executeWebSearchTool(agentId, userId, functionName, parameters);
+          break;
+        default:
+          result = await this.executeGenericTool(agentId, userId, functionName, parameters);
+      }
+      
+      // Log execution completion
+      await this.logToolExecution(agentId, userId, functionName, parameters, result, Date.now() - startTime);
+      
+      return result;
+      
+    } catch (error) {
+      console.error(`[ToolExecution] Error executing ${functionName}:`, error);
+      
+      const errorResult = {
+        success: false,
+        error: error.message,
+        metadata: { execution_time_ms: Date.now() - startTime },
+      };
+      
+      await this.logToolExecution(agentId, userId, functionName, parameters, errorResult, Date.now() - startTime);
+      return errorResult;
+    }
+  }
+
+  private async executeGmailTool(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    
+    const startTime = Date.now();
+    
+    try {
+      // Call Gmail API via Supabase Edge Function
+      const { data, error } = await this.supabaseClient.functions.invoke('gmail-api', {
+        body: {
+          action: toolName,
+          agent_id: agentId,
+          params: parameters,
+        },
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data && !data.success && data.error) {
+        throw new Error(data.error);
+      }
+
+      return {
+        success: true,
+        data: data,
+        metadata: {
+          provider: 'gmail',
+          execution_time_ms: Date.now() - startTime,
+          quota_consumed: this.getQuotaConsumption(toolName),
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        metadata: {
+          provider: 'gmail',
+          execution_time_ms: Date.now() - startTime,
+        },
+      };
+    }
+  }
+
+  private async executeWebSearchTool(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    
+    const startTime = Date.now();
+    
+    try {
+      // Call Web Search API via Supabase Edge Function
+      const { data, error } = await this.supabaseClient.functions.invoke('web-search-api', {
+        body: {
+          agent_id: agentId,
+          action: toolName,
+          parameters: parameters,
+        },
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return {
+        success: data.success,
+        data: data.success ? data.data : null,
+        error: data.success ? null : data.error,
+        metadata: {
+          provider: 'web_search',
+          execution_time_ms: Date.now() - startTime,
+          quota_consumed: data.metadata?.quota_consumed || 1,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        metadata: {
+          provider: 'web_search',
+          execution_time_ms: Date.now() - startTime,
+        },
+      };
+    }
+  }
+}
+```
+
+### 2. Execution Context Management
+
+```javascript
+// Execution Context for Tool Calls
+class ExecutionContext {
+  private contexts: Map<string, ToolExecutionContext> = new Map();
+
+  createContext(executionId: string, agentId: string, userId: string): ToolExecutionContext {
+    const context: ToolExecutionContext = {
+      executionId,
+      agentId,
+      userId,
+      startTime: Date.now(),
+      status: 'initializing',
+      activeCalls: new Map(),
+      results: new Map(),
+      errors: [],
+    };
+    
+    this.contexts.set(executionId, context);
+    return context;
+  }
+
+  updateCallStatus(executionId: string, callId: string, status: ToolCallStatus): void {
+    const context = this.contexts.get(executionId);
+    if (context) {
+      context.activeCalls.set(callId, {
+        callId,
+        toolName: status.toolName,
+        status: status.status,
+        startTime: status.startTime,
+        parameters: status.parameters,
+      });
+    }
+  }
+
+  completeCall(executionId: string, callId: string, result: MCPToolResult): void {
+    const context = this.contexts.get(executionId);
+    if (context) {
+      context.results.set(callId, result);
+      context.activeCalls.delete(callId);
+    }
+  }
+
+  getContext(executionId: string): ToolExecutionContext | undefined {
+    return this.contexts.get(executionId);
+  }
+
+  cleanup(executionId: string): void {
+    this.contexts.delete(executionId);
+  }
+}
+
+interface ToolExecutionContext {
+  executionId: string;
+  agentId: string;
+  userId: string;
+  startTime: number;
+  status: 'initializing' | 'discovering_tools' | 'executing' | 'completed' | 'failed';
+  activeCalls: Map<string, ToolCallInfo>;
+  results: Map<string, MCPToolResult>;
+  errors: string[];
+}
+
+interface ToolCallInfo {
+  callId: string;
+  toolName: string;
+  status: 'pending' | 'executing' | 'completed' | 'failed';
+  startTime: number;
+  parameters: Record<string, any>;
+}
+```
+
+## Real-Time UI Feedback System
+
+### 1. AI Thinking Indicator Component
+
+```jsx
+// AI Thinking Indicator with Tool Execution States
+export type AIState = 
+  | 'thinking' 
+  | 'analyzing_tools' 
+  | 'executing_tool' 
+  | 'processing_results' 
+  | 'generating_response' 
+  | 'completed' 
+  | 'failed';
+
+interface AIThinkingIndicatorProps {
+  state: AIState;
+  currentTool?: string;
+  executionTime?: number;
+  progress?: number;
+}
+
+export function AIThinkingIndicator({ 
+  state, 
+  currentTool, 
+  executionTime, 
+  progress 
+}: AIThinkingIndicatorProps) {
+  const getStateMessage = () => {
+    switch (state) {
+      case 'thinking':
+        return 'Thinking...';
+      case 'analyzing_tools':
+        return 'Checking available tools...';
+      case 'executing_tool':
+        return currentTool ? `Using ${currentTool}...` : 'Executing tool...';
+      case 'processing_results':
+        return 'Processing results...';
+      case 'generating_response':
+        return 'Generating response...';
+      case 'completed':
+        return 'Complete';
+      case 'failed':
+        return 'Failed';
+      default:
+        return 'Processing...';
+    }
+  };
+
+  const getStateIcon = () => {
+    switch (state) {
+      case 'thinking':
+        return <Brain className="h-4 w-4 animate-pulse" />;
+      case 'analyzing_tools':
+        return <Search className="h-4 w-4 animate-spin" />;
+      case 'executing_tool':
+        return <Zap className="h-4 w-4 animate-bounce" />;
+      case 'processing_results':
+        return <Loader2 className="h-4 w-4 animate-spin" />;
+      case 'generating_response':
+        return <MessageSquare className="h-4 w-4 animate-pulse" />;
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'failed':
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+      default:
+        return <Loader2 className="h-4 w-4 animate-spin" />;
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg">
+      {getStateIcon()}
+      <div className="flex-1">
+        <div className="text-sm font-medium">{getStateMessage()}</div>
+        {executionTime && (
+          <div className="text-xs text-muted-foreground">
+            {Math.round(executionTime / 1000)}s elapsed
+          </div>
+        )}
+        {progress !== undefined && (
+          <div className="w-full bg-gray-200 rounded-full h-1 mt-1">
+            <div 
+              className="bg-blue-600 h-1 rounded-full transition-all duration-300" 
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### 2. Tool Call Status Indicator
+
+```jsx
+// Tool Call Status Display
+interface ToolCall {
+  id: string;
+  tool_name: string;
+  tool_provider: string;
+  parameters: Record<string, any>;
+  status: 'pending' | 'executing' | 'completed' | 'failed';
+  execution_time_ms?: number;
+  error_message?: string;
+  result?: any;
+  created_at: string;
+}
+
+interface ToolCallIndicatorProps {
+  toolCall: ToolCall;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
+}
+
+export function ToolCallIndicator({ 
+  toolCall, 
+  isExpanded = false, 
+  onToggleExpanded 
+}: ToolCallIndicatorProps) {
+  
+  const getStatusIcon = () => {
+    switch (toolCall.status) {
+      case 'pending':
+        return <Clock className="h-4 w-4 text-yellow-500" />;
+      case 'executing':
+        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'failed':
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+    }
+  };
+
+  const getProviderIcon = () => {
+    switch (toolCall.tool_provider) {
+      case 'gmail':
+        return <Mail className="h-4 w-4" />;
+      case 'web_search':
+        return <Search className="h-4 w-4" />;
+      case 'slack':
+        return <MessageSquare className="h-4 w-4" />;
+      default:
+        return <Tool className="h-4 w-4" />;
+    }
+  };
+
+  return (
+    <div className="border rounded-lg p-3 bg-card">
+      <div 
+        className="flex items-center space-x-2 cursor-pointer"
+        onClick={onToggleExpanded}
+      >
+        {getStatusIcon()}
+        {getProviderIcon()}
+        <span className="font-medium">{toolCall.tool_name}</span>
+        <Badge variant="outline" className="text-xs">
+          {toolCall.tool_provider}
+        </Badge>
+        
+        {toolCall.execution_time_ms && (
+          <span className="text-xs text-muted-foreground ml-auto">
+            {toolCall.execution_time_ms}ms
+          </span>
+        )}
+        
+        <ChevronDown className={`h-4 w-4 transition-transform ${
+          isExpanded ? 'rotate-180' : ''
+        }`} />
+      </div>
+      
+      {isExpanded && (
+        <div className="mt-3 pt-3 border-t space-y-2">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Parameters:</label>
+            <pre className="text-xs bg-muted p-2 rounded mt-1 overflow-x-auto">
+              {JSON.stringify(toolCall.parameters, null, 2)}
+            </pre>
+          </div>
+          
+          {toolCall.status === 'completed' && toolCall.result && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Result:</label>
+              <pre className="text-xs bg-muted p-2 rounded mt-1 overflow-x-auto">
+                {JSON.stringify(toolCall.result, null, 2)}
+              </pre>
+            </div>
+          )}
+          
+          {toolCall.status === 'failed' && toolCall.error_message && (
+            <div>
+              <label className="text-xs font-medium text-red-600">Error:</label>
+              <div className="text-xs text-red-600 mt-1">
+                {toolCall.error_message}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### 3. Real-Time Status Updates
+
+```javascript
+// WebSocket-based Real-Time Updates
+class ToolExecutionTracker {
+  private eventEmitter: EventTarget = new EventTarget();
+  
+  emitStatusUpdate(executionId: string, status: ToolExecutionStatus): void {
+    // Emit to frontend via WebSocket or Server-Sent Events
+    window.dispatchEvent(new CustomEvent('tool-execution-status', {
+      detail: { executionId, status }
+    }));
+  }
+
+  emitToolStart(executionId: string, toolName: string, parameters: any): void {
+    window.dispatchEvent(new CustomEvent('tool-execution-start', {
+      detail: { executionId, toolName, parameters, timestamp: Date.now() }
+    }));
+  }
+
+  emitToolComplete(executionId: string, toolName: string, result: MCPToolResult): void {
+    window.dispatchEvent(new CustomEvent('tool-execution-complete', {
+      detail: { executionId, toolName, result, timestamp: Date.now() }
+    }));
+  }
+
+  emitToolError(executionId: string, toolName: string, error: string): void {
+    window.dispatchEvent(new CustomEvent('tool-execution-error', {
+      detail: { executionId, toolName, error, timestamp: Date.now() }
+    }));
+  }
+}
+
+// React Hook for Tool Execution Status
+export function useToolExecutionStatus() {
+  const [aiState, setAIState] = useState<AIState>('thinking');
+  const [currentTool, setCurrentTool] = useState<string | null>(null);
+  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
+  const [executionTime, setExecutionTime] = useState<number>(0);
+
+  useEffect(() => {
+    const handleStatusUpdate = (event: CustomEvent) => {
+      const { status } = event.detail;
+      setAIState(status);
+    };
+
+    const handleToolStart = (event: CustomEvent) => {
+      const { toolName, parameters } = event.detail;
+      setCurrentTool(toolName);
+      setAIState('executing_tool');
+      
+      setToolCalls(prev => [...prev, {
+        id: `tool_${Date.now()}`,
+        tool_name: toolName,
+        tool_provider: getProviderForTool(toolName),
+        parameters,
+        status: 'executing',
+        created_at: new Date().toISOString()
+      }]);
+    };
+
+    const handleToolComplete = (event: CustomEvent) => {
+      const { toolName, result } = event.detail;
+      
+      setToolCalls(prev => prev.map(call => 
+        call.tool_name === toolName && call.status === 'executing'
+          ? { ...call, status: 'completed', result, execution_time_ms: result.metadata?.execution_time_ms }
+          : call
+      ));
+      
+      setCurrentTool(null);
+      setAIState('processing_results');
+    };
+
+    const handleToolError = (event: CustomEvent) => {
+      const { toolName, error } = event.detail;
+      
+      setToolCalls(prev => prev.map(call => 
+        call.tool_name === toolName && call.status === 'executing'
+          ? { ...call, status: 'failed', error_message: error }
+          : call
+      ));
+      
+      setCurrentTool(null);
+      setAIState('failed');
+    };
+
+    window.addEventListener('tool-execution-status', handleStatusUpdate);
+    window.addEventListener('tool-execution-start', handleToolStart);
+    window.addEventListener('tool-execution-complete', handleToolComplete);
+    window.addEventListener('tool-execution-error', handleToolError);
+
+    return () => {
+      window.removeEventListener('tool-execution-status', handleStatusUpdate);
+      window.removeEventListener('tool-execution-start', handleToolStart);
+      window.removeEventListener('tool-execution-complete', handleToolComplete);
+      window.removeEventListener('tool-execution-error', handleToolError);
+    };
+  }, []);
+
+  return {
+    aiState,
+    currentTool,
+    toolCalls,
+    executionTime,
+  };
+}
+```
+
+## Response Formatting and Display
+
+### 1. Message Enhancement with Tool Results
+
+```jsx
+// Enhanced Chat Message with Tool Indicators
+interface ChatMessageProps {
+  message: ChatMessage;
+  isStreaming?: boolean;
+}
+
+interface ChatMessage {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  tool_calls?: ToolCall[];
+  created_at: string;
+}
+
+export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) {
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  
+  const toggleToolExpansion = (toolId: string) => {
+    setExpandedTools(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(toolId)) {
+        newSet.delete(toolId);
+      } else {
+        newSet.add(toolId);
+      }
+      return newSet;
+    });
+  };
+
+  const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
+  const hasSuccessfulToolCalls = message.tool_calls?.some(call => call.status === 'completed');
+
+  return (
+    <div className={`flex gap-3 ${
+      message.role === 'assistant' ? 'justify-start' : 'justify-end'
+    }`}>
+      {message.role === 'assistant' && (
+        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+          <Bot className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        </div>
+      )}
+      
+      <div className={`max-w-[70%] ${
+        message.role === 'user' ? 'order-1' : ''
+      }`}>
+        
+        {/* Tool Calls Display */}
+        {hasToolCalls && (
+          <div className="mb-3 space-y-2">
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <Tool className="h-4 w-4" />
+              <span>Used {message.tool_calls!.length} tool{message.tool_calls!.length > 1 ? 's' : ''}</span>
+              {hasSuccessfulToolCalls && (
+                <Badge variant="outline" className="text-green-600 border-green-300">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Success
+                </Badge>
+              )}
+            </div>
+            
+            {message.tool_calls!.map((toolCall) => (
+              <ToolCallIndicator
+                key={toolCall.id}
+                toolCall={toolCall}
+                isExpanded={expandedTools.has(toolCall.id)}
+                onToggleExpanded={() => toggleToolExpansion(toolCall.id)}
+              />
+            ))}
+          </div>
+        )}
+        
+        {/* Message Content */}
+        <div className={`rounded-lg px-4 py-2 ${
+          message.role === 'user'
+            ? 'bg-blue-500 text-white'
+            : 'bg-muted'
+        }`}>
+          <div className="whitespace-pre-wrap">
+            {isStreaming ? (
+              <StreamingText content={message.content} />
+            ) : (
+              <MarkdownRenderer content={message.content} />
+            )}
+          </div>
+          
+          <div className="text-xs opacity-70 mt-2">
+            {format(new Date(message.created_at), 'HH:mm')}
+          </div>
+        </div>
+      </div>
+      
+      {message.role === 'user' && (
+        <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+          <User className="h-4 w-4" />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### 2. Streaming Text with Tool Status
+
+```jsx
+// Streaming Text Component
+interface StreamingTextProps {
+  content: string;
+  speed?: number;
+}
+
+export function StreamingText({ content, speed = 50 }: StreamingTextProps) {
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (currentIndex < content.length) {
+      const timer = setTimeout(() => {
+        setDisplayedContent(prev => prev + content[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, speed);
+
+      return () => clearTimeout(timer);
+    }
+  }, [content, currentIndex, speed]);
+
+  return (
+    <span>
+      {displayedContent}
+      {currentIndex < content.length && (
+        <span className="animate-pulse">|</span>
+      )}
+    </span>
+  );
+}
+```
+
+### 3. Markdown Rendering with Tool Results
+
+```jsx
+// Enhanced Markdown Renderer
+interface MarkdownRendererProps {
+  content: string;
+  toolResults?: Record<string, any>;
+}
+
+export function MarkdownRenderer({ content, toolResults }: MarkdownRendererProps) {
+  // Process content to include tool result references
+  const processedContent = useMemo(() => {
+    if (!toolResults) return content;
+    
+    let processed = content;
+    
+    // Replace tool result placeholders with actual data
+    Object.entries(toolResults).forEach(([toolName, result]) => {
+      const placeholder = `{{${toolName}_result}}`;
+      if (processed.includes(placeholder)) {
+        const resultText = typeof result === 'object' 
+          ? JSON.stringify(result, null, 2)
+          : String(result);
+        processed = processed.replace(placeholder, resultText);
+      }
+    });
+    
+    return processed;
+  }, [content, toolResults]);
+
+  return (
+    <ReactMarkdown
+      components={{
+        code: ({ node, inline, className, children, ...props }) => {
+          const match = /language-(\w+)/.exec(className || '');
+          return !inline && match ? (
+            <SyntaxHighlighter
+              style={tomorrow}
+              language={match[1]}
+              PreTag="div"
+              {...props}
+            >
+              {String(children).replace(/\n$/, '')}
+            </SyntaxHighlighter>
+          ) : (
+            <code className={className} {...props}>
+              {children}
+            </code>
+          );
+        },
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 hover:underline"
+          >
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {processedContent}
+    </ReactMarkdown>
+  );
+}
+```
+
+## Error Handling and Recovery
+
+### 1. Comprehensive Error Classification
+
+```javascript
+// Tool Execution Error Types
+export enum ToolErrorType {
+  PERMISSION_DENIED = 'PERMISSION_DENIED',
+  TOOL_NOT_FOUND = 'TOOL_NOT_FOUND',
+  INVALID_PARAMETERS = 'INVALID_PARAMETERS',
+  RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
+  PROVIDER_ERROR = 'PROVIDER_ERROR',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
+  AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
+  QUOTA_EXCEEDED = 'QUOTA_EXCEEDED',
+}
+
+export class ToolExecutionError extends Error {
+  constructor(
+    public type: ToolErrorType,
+    message: string,
+    public toolName: string,
+    public provider: string,
+    public recoverable: boolean = false,
+    public retryAfter?: number
+  ) {
+    super(message);
+    this.name = 'ToolExecutionError';
+  }
+
+  toJSON() {
+    return {
+      type: this.type,
+      message: this.message,
+      toolName: this.toolName,
+      provider: this.provider,
+      recoverable: this.recoverable,
+      retryAfter: this.retryAfter,
+    };
+  }
+}
+
+// Error Handler
+export class ToolErrorHandler {
+  static createError(
+    error: any,
+    toolName: string,
+    provider: string
+  ): ToolExecutionError {
+    
+    // Network/timeout errors
+    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+      return new ToolExecutionError(
+        ToolErrorType.TIMEOUT_ERROR,
+        'Tool execution timed out. Please try again.',
+        toolName,
+        provider,
+        true,
+        5000 // Retry after 5 seconds
+      );
+    }
+    
+    // Rate limiting
+    if (error.status === 429) {
+      const retryAfter = error.headers?.['retry-after'] 
+        ? parseInt(error.headers['retry-after']) * 1000 
+        : 60000;
+      
+      return new ToolExecutionError(
+        ToolErrorType.RATE_LIMIT_EXCEEDED,
+        'Rate limit exceeded. Please wait before trying again.',
+        toolName,
+        provider,
+        true,
+        retryAfter
+      );
+    }
+    
+    // Authentication errors
+    if (error.status === 401 || error.status === 403) {
+      return new ToolExecutionError(
+        ToolErrorType.AUTHENTICATION_ERROR,
+        'Authentication failed. Please reconnect your account.',
+        toolName,
+        provider,
+        false
+      );
+    }
+    
+    // Provider-specific errors
+    if (error.status >= 500) {
+      return new ToolExecutionError(
+        ToolErrorType.PROVIDER_ERROR,
+        `${provider} service is temporarily unavailable.`,
+        toolName,
+        provider,
+        true,
+        30000 // Retry after 30 seconds
+      );
+    }
+    
+    // Default error
+    return new ToolExecutionError(
+      ToolErrorType.PROVIDER_ERROR,
+      error.message || 'An unexpected error occurred',
+      toolName,
+      provider,
+      false
+    );
+  }
+
+  static getErrorGuidance(error: ToolExecutionError): ErrorGuidance {
+    switch (error.type) {
+      case ToolErrorType.PERMISSION_DENIED:
+        return {
+          title: 'Permission Required',
+          message: `The agent needs additional permissions to use ${error.toolName}.`,
+          actions: [
+            { label: 'Grant Permissions', action: 'grant_permissions' },
+            { label: 'Choose Different Tool', action: 'suggest_alternatives' }
+          ]
+        };
+        
+      case ToolErrorType.AUTHENTICATION_ERROR:
+        return {
+          title: 'Account Reconnection Needed',
+          message: `Your ${error.provider} connection has expired.`,
+          actions: [
+            { label: 'Reconnect Account', action: 'reconnect_account' },
+            { label: 'Use Different Account', action: 'switch_account' }
+          ]
+        };
+        
+      case ToolErrorType.RATE_LIMIT_EXCEEDED:
+        return {
+          title: 'Rate Limit Reached',
+          message: `${error.provider} usage limit exceeded. ${
+            error.retryAfter ? `Try again in ${Math.ceil(error.retryAfter / 1000)} seconds.` : ''
+          }`,
+          actions: [
+            { label: 'Wait and Retry', action: 'retry_after_delay' },
+            { label: 'Use Alternative Tool', action: 'suggest_alternatives' }
+          ]
+        };
+        
+      default:
+        return {
+          title: 'Tool Execution Failed',
+          message: error.message,
+          actions: [
+            { label: 'Retry', action: 'retry' },
+            { label: 'Report Issue', action: 'report_issue' }
+          ]
+        };
+    }
+  }
+}
+
+interface ErrorGuidance {
+  title: string;
+  message: string;
+  actions: Array<{
+    label: string;
+    action: string;
+  }>;
+}
+```
+
+### 2. Retry Logic and Recovery
+
+```javascript
+// Retry Strategy
+export class RetryStrategy {
+  static async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    options: RetryOptions = {}
+  ): Promise<T> {
+    const {
+      maxAttempts = 3,
+      baseDelay = 1000,
+      maxDelay = 30000,
+      backoffMultiplier = 2,
+      retryCondition = (error) => error.recoverable
+    } = options;
+
+    let lastError: ToolExecutionError;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error instanceof ToolExecutionError 
+          ? error 
+          : new ToolExecutionError(
+              ToolErrorType.PROVIDER_ERROR,
+              error.message,
+              'unknown',
+              'unknown'
+            );
+
+        // Don't retry on final attempt or non-recoverable errors
+        if (attempt === maxAttempts || !retryCondition(lastError)) {
+          throw lastError;
+        }
+
+        // Calculate delay with exponential backoff
+        const delay = Math.min(
+          baseDelay * Math.pow(backoffMultiplier, attempt - 1),
+          maxDelay
+        );
+
+        console.log(`Tool execution failed (attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError!;
+  }
+}
+
+interface RetryOptions {
+  maxAttempts?: number;
+  baseDelay?: number;
+  maxDelay?: number;
+  backoffMultiplier?: number;
+  retryCondition?: (error: ToolExecutionError) => boolean;
+}
+```
+
+### 3. Error Display Components
+
+```jsx
+// Tool Error Display
+interface ToolErrorDisplayProps {
+  error: ToolExecutionError;
+  onRetry?: () => void;
+  onGrantPermissions?: () => void;
+  onReconnectAccount?: () => void;
+}
+
+export function ToolErrorDisplay({ 
+  error, 
+  onRetry, 
+  onGrantPermissions, 
+  onReconnectAccount 
+}: ToolErrorDisplayProps) {
+  const guidance = ToolErrorHandler.getErrorGuidance(error);
+
+  const handleAction = (action: string) => {
+    switch (action) {
+      case 'retry':
+        onRetry?.();
+        break;
+      case 'grant_permissions':
+        onGrantPermissions?.();
+        break;
+      case 'reconnect_account':
+        onReconnectAccount?.();
+        break;
+      case 'retry_after_delay':
+        if (error.retryAfter) {
+          setTimeout(() => onRetry?.(), error.retryAfter);
+        }
+        break;
+    }
+  };
+
+  return (
+    <Alert variant="destructive" className="mb-4">
+      <AlertCircle className="h-4 w-4" />
+      <AlertTitle className="flex items-center space-x-2">
+        <span>{guidance.title}</span>
+        <Badge variant="outline" className="text-xs">
+          {error.toolName}
+        </Badge>
+      </AlertTitle>
+      <AlertDescription className="space-y-3">
+        <p>{guidance.message}</p>
+        
+        {guidance.actions.length > 0 && (
+          <div className="flex space-x-2">
+            {guidance.actions.map((action, index) => (
+              <Button
+                key={index}
+                variant={index === 0 ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleAction(action.action)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        )}
+        
+        {error.retryAfter && (
+          <div className="text-xs text-muted-foreground">
+            Retry available in {Math.ceil(error.retryAfter / 1000)} seconds
+          </div>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
+```
+
+## Logging and Audit Trails
+
+### 1. Comprehensive Tool Execution Logging
+
+```javascript
+// Tool Execution Logger
+export class ToolExecutionLogger {
+  constructor(private supabaseClient: SupabaseClient) {}
+
+  async logExecution(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>,
+    result: MCPToolResult,
+    executionTimeMs: number
+  ): Promise<void> {
+    try {
+      // Log to general tool execution table
+      await this.supabaseClient
+        .from('tool_execution_logs')
+        .insert({
+          agent_id: agentId,
+          user_id: userId,
+          tool_name: toolName,
+          tool_provider: this.getProviderForTool(toolName),
+          parameters: parameters,
+          result_data: result.data,
+          success: result.success,
+          error_message: result.error,
+          execution_time_ms: executionTimeMs,
+          quota_consumed: result.metadata?.quota_consumed || 0,
+        });
+
+      // Log to provider-specific tables if needed
+      await this.logProviderSpecific(agentId, userId, toolName, parameters, result, executionTimeMs);
+      
+    } catch (error) {
+      console.error('Failed to log tool execution:', error);
+      // Don't throw - logging failure shouldn't break tool execution
+    }
+  }
+
+  private async logProviderSpecific(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>,
+    result: MCPToolResult,
+    executionTimeMs: number
+  ): Promise<void> {
+    
+    const provider = this.getProviderForTool(toolName);
+    
+    switch (provider) {
+      case 'gmail':
+        await this.supabaseClient
+          .from('gmail_operation_logs')
+          .insert({
+            agent_id: agentId,
+            user_id: userId,
+            operation_type: toolName,
+            operation_params: parameters,
+            operation_result: result.data,
+            status: result.success ? 'success' : 'failed',
+            error_message: result.error,
+            execution_time_ms: executionTimeMs,
+            quota_consumed: result.metadata?.quota_consumed || 0,
+          });
+        break;
+        
+      case 'web_search':
+        await this.supabaseClient
+          .from('web_search_operation_logs')
+          .insert({
+            agent_id: agentId,
+            user_id: userId,
+            provider_name: result.metadata?.provider || 'unknown',
+            operation_type: toolName,
+            search_query: parameters.query || JSON.stringify(parameters),
+            search_parameters: parameters,
+            results_data: result.data,
+            success: result.success,
+            execution_time_ms: executionTimeMs,
+            tokens_used: result.metadata?.tokens_used || 0,
+            quota_consumed: result.metadata?.quota_consumed || 1,
+          });
+        break;
+    }
+  }
+
+  async getExecutionHistory(
+    agentId: string,
+    userId: string,
+    limit: number = 50
+  ): Promise<ToolExecutionLog[]> {
+    const { data } = await this.supabaseClient
+      .from('tool_execution_logs')
+      .select('*')
+      .eq('agent_id', agentId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    return data || [];
+  }
+
+  async getExecutionStats(
+    agentId: string,
+    userId: string,
+    timeRange: string = '24h'
+  ): Promise<ToolExecutionStats> {
+    // Implementation for getting execution statistics
+    const { data } = await this.supabaseClient
+      .rpc('get_tool_execution_stats', {
+        p_agent_id: agentId,
+        p_user_id: userId,
+        p_time_range: timeRange
+      });
+
+    return data || {
+      total_executions: 0,
+      successful_executions: 0,
+      failed_executions: 0,
+      average_execution_time: 0,
+      quota_consumed: 0,
+      most_used_tools: [],
+    };
+  }
+}
+
+interface ToolExecutionLog {
+  id: string;
+  agent_id: string;
+  user_id: string;
+  tool_name: string;
+  tool_provider: string;
+  parameters: Record<string, any>;
+  result_data: any;
+  success: boolean;
+  error_message?: string;
+  execution_time_ms: number;
+  quota_consumed: number;
+  created_at: string;
+}
+
+interface ToolExecutionStats {
+  total_executions: number;
+  successful_executions: number;
+  failed_executions: number;
+  average_execution_time: number;
+  quota_consumed: number;
+  most_used_tools: Array<{
+    tool_name: string;
+    count: number;
+  }>;
+}
+```
+
+### 2. Performance Monitoring
+
+```javascript
+// Performance Monitor
+export class ToolPerformanceMonitor {
+  private metrics: Map<string, ToolMetrics> = new Map();
+
+  recordExecution(
+    toolName: string,
+    executionTimeMs: number,
+    success: boolean,
+    quotaConsumed: number = 1
+  ): void {
+    const key = toolName;
+    const existing = this.metrics.get(key) || {
+      toolName,
+      totalExecutions: 0,
+      successfulExecutions: 0,
+      totalExecutionTime: 0,
+      totalQuotaConsumed: 0,
+      averageExecutionTime: 0,
+      successRate: 0,
+      lastExecuted: null,
+    };
+
+    existing.totalExecutions++;
+    if (success) existing.successfulExecutions++;
+    existing.totalExecutionTime += executionTimeMs;
+    existing.totalQuotaConsumed += quotaConsumed;
+    existing.averageExecutionTime = existing.totalExecutionTime / existing.totalExecutions;
+    existing.successRate = existing.successfulExecutions / existing.totalExecutions;
+    existing.lastExecuted = new Date().toISOString();
+
+    this.metrics.set(key, existing);
+  }
+
+  getMetrics(toolName?: string): ToolMetrics | ToolMetrics[] {
+    if (toolName) {
+      return this.metrics.get(toolName) || null;
+    }
+    return Array.from(this.metrics.values());
+  }
+
+  generatePerformanceReport(): PerformanceReport {
+    const allMetrics = Array.from(this.metrics.values());
+    
+    return {
+      totalTools: allMetrics.length,
+      totalExecutions: allMetrics.reduce((sum, m) => sum + m.totalExecutions, 0),
+      overallSuccessRate: allMetrics.reduce((sum, m) => sum + m.successRate, 0) / allMetrics.length,
+      averageExecutionTime: allMetrics.reduce((sum, m) => sum + m.averageExecutionTime, 0) / allMetrics.length,
+      slowestTools: allMetrics
+        .sort((a, b) => b.averageExecutionTime - a.averageExecutionTime)
+        .slice(0, 5),
+      mostUsedTools: allMetrics
+        .sort((a, b) => b.totalExecutions - a.totalExecutions)
+        .slice(0, 5),
+      problemTools: allMetrics
+        .filter(m => m.successRate < 0.8)
+        .sort((a, b) => a.successRate - b.successRate),
+    };
+  }
+}
+
+interface ToolMetrics {
+  toolName: string;
+  totalExecutions: number;
+  successfulExecutions: number;
+  totalExecutionTime: number;
+  totalQuotaConsumed: number;
+  averageExecutionTime: number;
+  successRate: number;
+  lastExecuted: string | null;
+}
+```
+
+## Security and Validation
+
+### 1. Input Validation and Sanitization
+
+```javascript
+// Tool Parameter Validator
+export class ToolParameterValidator {
+  static validateParameters(
+    tool: MCPTool,
+    parameters: Record<string, any>
+  ): ValidationResult {
+    const errors: string[] = [];
+    
+    // Check required parameters
+    if (tool.parameters.required) {
+      for (const requiredParam of tool.parameters.required) {
+        if (!(requiredParam in parameters) || parameters[requiredParam] == null) {
+          errors.push(`Missing required parameter: ${requiredParam}`);
+        }
+      }
+    }
+    
+    // Validate parameter types and constraints
+    for (const [paramName, paramValue] of Object.entries(parameters)) {
+      const paramSchema = tool.parameters.properties[paramName];
+      if (!paramSchema) {
+        errors.push(`Unknown parameter: ${paramName}`);
+        continue;
+      }
+      
+      const paramErrors = this.validateParameter(paramName, paramValue, paramSchema);
+      errors.push(...paramErrors);
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+
+  private static validateParameter(
+    name: string,
+    value: any,
+    schema: JSONSchemaProperty
+  ): string[] {
+    const errors: string[] = [];
+    
+    // Type validation
+    switch (schema.type) {
+      case 'string':
+        if (typeof value !== 'string') {
+          errors.push(`Parameter ${name} must be a string`);
+        } else {
+          // String-specific validations
+          if (schema.minLength && value.length < schema.minLength) {
+            errors.push(`Parameter ${name} must be at least ${schema.minLength} characters`);
+          }
+          if (schema.maxLength && value.length > schema.maxLength) {
+            errors.push(`Parameter ${name} cannot exceed ${schema.maxLength} characters`);
+          }
+          if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
+            errors.push(`Parameter ${name} does not match required pattern`);
+          }
+        }
+        break;
+        
+      case 'number':
+      case 'integer':
+        if (typeof value !== 'number' || (schema.type === 'integer' && !Number.isInteger(value))) {
+          errors.push(`Parameter ${name} must be ${schema.type === 'integer' ? 'an integer' : 'a number'}`);
+        } else {
+          if (schema.minimum !== undefined && value < schema.minimum) {
+            errors.push(`Parameter ${name} must be at least ${schema.minimum}`);
+          }
+          if (schema.maximum !== undefined && value > schema.maximum) {
+            errors.push(`Parameter ${name} cannot exceed ${schema.maximum}`);
+          }
+        }
+        break;
+        
+      case 'boolean':
+        if (typeof value !== 'boolean') {
+          errors.push(`Parameter ${name} must be a boolean`);
+        }
+        break;
+        
+      case 'array':
+        if (!Array.isArray(value)) {
+          errors.push(`Parameter ${name} must be an array`);
+        } else {
+          if (schema.minItems && value.length < schema.minItems) {
+            errors.push(`Parameter ${name} must have at least ${schema.minItems} items`);
+          }
+          if (schema.maxItems && value.length > schema.maxItems) {
+            errors.push(`Parameter ${name} cannot have more than ${schema.maxItems} items`);
+          }
+        }
+        break;
+    }
+    
+    return errors;
+  }
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+```
+
+### 2. Rate Limiting and Quota Management
+
+```javascript
+// Rate Limiter
+export class ToolRateLimiter {
+  private usage: Map<string, UsageTracker> = new Map();
+
+  async checkRateLimit(
+    userId: string,
+    toolName: string,
+    tool: MCPTool
+  ): Promise<RateLimitResult> {
+    const key = `${userId}:${toolName}`;
+    const now = Date.now();
+    
+    let tracker = this.usage.get(key);
+    if (!tracker) {
+      tracker = {
+        requests: [],
+        quotaUsed: 0,
+        resetTime: now + (24 * 60 * 60 * 1000), // 24 hours
+      };
+      this.usage.set(key, tracker);
+    }
+    
+    // Clean old requests
+    const oneHourAgo = now - (60 * 60 * 1000);
+    const oneMinuteAgo = now - (60 * 1000);
+    
+    tracker.requests = tracker.requests.filter(time => time > oneHourAgo);
+    
+    const requestsInLastHour = tracker.requests.length;
+    const requestsInLastMinute = tracker.requests.filter(time => time > oneMinuteAgo).length;
+    
+    // Check rate limits if defined
+    if (tool.rate_limit) {
+      if (tool.rate_limit.requests_per_minute && requestsInLastMinute >= tool.rate_limit.requests_per_minute) {
+        return {
+          allowed: false,
+          reason: 'Per-minute rate limit exceeded',
+          resetTime: oneMinuteAgo + (60 * 1000),
+        };
+      }
+      
+      if (tool.rate_limit.requests_per_hour && requestsInLastHour >= tool.rate_limit.requests_per_hour) {
+        return {
+          allowed: false,
+          reason: 'Per-hour rate limit exceeded',
+          resetTime: oneHourAgo + (60 * 60 * 1000),
+        };
+      }
+    }
+    
+    return {
+      allowed: true,
+      currentUsage: {
+        requestsInLastMinute,
+        requestsInLastHour,
+        quotaUsed: tracker.quotaUsed,
+      },
+    };
+  }
+
+  recordUsage(userId: string, toolName: string, quotaConsumed: number = 1): void {
+    const key = `${userId}:${toolName}`;
+    const tracker = this.usage.get(key);
+    
+    if (tracker) {
+      tracker.requests.push(Date.now());
+      tracker.quotaUsed += quotaConsumed;
+    }
+  }
+}
+
+interface UsageTracker {
+  requests: number[];
+  quotaUsed: number;
+  resetTime: number;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  reason?: string;
+  resetTime?: number;
+  currentUsage?: {
+    requestsInLastMinute: number;
+    requestsInLastHour: number;
+    quotaUsed: number;
+  };
+}
+```
+
+### 3. Security Audit Logging
+
+```javascript
+// Security Audit Logger
+export class SecurityAuditLogger {
+  constructor(private supabaseClient: SupabaseClient) {}
+
+  async logSecurityEvent(
+    userId: string,
+    agentId: string | null,
+    eventType: SecurityEventType,
+    details: Record<string, any>,
+    severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
+  ): Promise<void> {
+    try {
+      await this.supabaseClient
+        .from('security_audit_logs')
+        .insert({
+          user_id: userId,
+          agent_id: agentId,
+          event_type: eventType,
+          severity,
+          details,
+          ip_address: this.getCurrentIP(),
+          user_agent: this.getCurrentUserAgent(),
+        });
+    } catch (error) {
+      console.error('Failed to log security event:', error);
+    }
+  }
+
+  async logPermissionViolation(
+    userId: string,
+    agentId: string,
+    toolName: string,
+    requiredScopes: string[],
+    availableScopes: string[]
+  ): Promise<void> {
+    await this.logSecurityEvent(
+      userId,
+      agentId,
+      SecurityEventType.PERMISSION_VIOLATION,
+      {
+        tool_name: toolName,
+        required_scopes: requiredScopes,
+        available_scopes: availableScopes,
+        violation_type: 'insufficient_permissions',
+      },
+      'high'
+    );
+  }
+
+  async logRateLimitViolation(
+    userId: string,
+    toolName: string,
+    currentUsage: any
+  ): Promise<void> {
+    await this.logSecurityEvent(
+      userId,
+      null,
+      SecurityEventType.RATE_LIMIT_VIOLATION,
+      {
+        tool_name: toolName,
+        current_usage: currentUsage,
+        violation_type: 'rate_limit_exceeded',
+      },
+      'medium'
+    );
+  }
+
+  private getCurrentIP(): string {
+    // Implementation to get current IP
+    return '0.0.0.0';
+  }
+
+  private getCurrentUserAgent(): string {
+    // Implementation to get current user agent
+    return 'unknown';
+  }
+}
+
+enum SecurityEventType {
+  PERMISSION_VIOLATION = 'permission_violation',
+  RATE_LIMIT_VIOLATION = 'rate_limit_violation',
+  SUSPICIOUS_ACTIVITY = 'suspicious_activity',
+  AUTHENTICATION_FAILURE = 'authentication_failure',
+  UNAUTHORIZED_ACCESS = 'unauthorized_access',
+}
+```
+
+## Testing and Debugging
+
+### 1. Tool Testing Framework
+
+```javascript
+// Tool Testing Framework
+export class ToolTestFramework {
+  constructor(
+    private functionCallingManager: FunctionCallingManager,
+    private toolRegistry: ToolRegistry
+  ) {}
+
+  async testTool(
+    toolName: string,
+    testCases: ToolTestCase[]
+  ): Promise<ToolTestResults> {
+    const tool = this.toolRegistry.getToolByName(toolName);
+    if (!tool) {
+      throw new Error(`Tool ${toolName} not found in registry`);
+    }
+
+    const results: ToolTestResult[] = [];
+
+    for (const testCase of testCases) {
+      const result = await this.runTestCase(toolName, testCase);
+      results.push(result);
+    }
+
+    return {
+      toolName,
+      totalTests: testCases.length,
+      passedTests: results.filter(r => r.passed).length,
+      failedTests: results.filter(r => !r.passed).length,
+      results,
+    };
+  }
+
+  private async runTestCase(
+    toolName: string,
+    testCase: ToolTestCase
+  ): Promise<ToolTestResult> {
+    const startTime = Date.now();
+    
+    try {
+      const result = await this.functionCallingManager.executeFunction(
+        testCase.agentId,
+        testCase.userId,
+        toolName,
+        testCase.parameters
+      );
+      
+      const executionTime = Date.now() - startTime;
+      
+      // Validate result against expectations
+      const passed = this.validateResult(result, testCase.expectedResult);
+      
+      return {
+        testCase: testCase.name,
+        passed,
+        executionTime,
+        result,
+        error: passed ? null : 'Result did not match expectations',
+      };
+      
+    } catch (error) {
+      return {
+        testCase: testCase.name,
+        passed: false,
+        executionTime: Date.now() - startTime,
+        result: null,
+        error: error.message,
+      };
+    }
+  }
+
+  private validateResult(
+    actual: MCPToolResult,
+    expected: Partial<MCPToolResult>
+  ): boolean {
+    if (expected.success !== undefined && actual.success !== expected.success) {
+      return false;
+    }
+    
+    if (expected.error && !actual.error?.includes(expected.error)) {
+      return false;
+    }
+    
+    if (expected.data && !this.deepCompare(actual.data, expected.data)) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  private deepCompare(obj1: any, obj2: any): boolean {
+    // Simple deep comparison implementation
+    return JSON.stringify(obj1) === JSON.stringify(obj2);
+  }
+}
+
+interface ToolTestCase {
+  name: string;
+  agentId: string;
+  userId: string;
+  parameters: Record<string, any>;
+  expectedResult: Partial<MCPToolResult>;
+}
+
+interface ToolTestResult {
+  testCase: string;
+  passed: boolean;
+  executionTime: number;
+  result: MCPToolResult | null;
+  error: string | null;
+}
+
+interface ToolTestResults {
+  toolName: string;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  results: ToolTestResult[];
+}
+```
+
+### 2. Debug Utilities
+
+```javascript
+// Debug Utilities
+export class ToolDebugger {
+  private static logs: DebugLog[] = [];
+  private static enabled: boolean = process.env.NODE_ENV === 'development';
+
+  static log(
+    level: LogLevel,
+    category: string,
+    message: string,
+    data?: any
+  ): void {
+    if (!this.enabled) return;
+
+    const logEntry: DebugLog = {
+      timestamp: new Date().toISOString(),
+      level,
+      category,
+      message,
+      data,
+    };
+
+    this.logs.push(logEntry);
+    
+    // Keep only last 1000 logs
+    if (this.logs.length > 1000) {
+      this.logs = this.logs.slice(-1000);
+    }
+
+    // Output to console with appropriate styling
+    const style = this.getLogStyle(level);
+    console.log(`%c[${category}] ${message}`, style, data || '');
+  }
+
+  static getLogs(category?: string, level?: LogLevel): DebugLog[] {
+    let filtered = this.logs;
+    
+    if (category) {
+      filtered = filtered.filter(log => log.category === category);
+    }
+    
+    if (level) {
+      filtered = filtered.filter(log => log.level === level);
+    }
+    
+    return filtered;
+  }
+
+  static exportLogs(): string {
+    return JSON.stringify(this.logs, null, 2);
+  }
+
+  static clearLogs(): void {
+    this.logs = [];
+  }
+
+  private static getLogStyle(level: LogLevel): string {
+    switch (level) {
+      case LogLevel.ERROR:
+        return 'color: red; font-weight: bold;';
+      case LogLevel.WARN:
+        return 'color: orange; font-weight: bold;';
+      case LogLevel.INFO:
+        return 'color: blue;';
+      case LogLevel.DEBUG:
+        return 'color: gray;';
+      default:
+        return '';
+    }
+  }
+}
+
+enum LogLevel {
+  ERROR = 'error',
+  WARN = 'warn',
+  INFO = 'info',
+  DEBUG = 'debug',
+}
+
+interface DebugLog {
+  timestamp: string;
+  level: LogLevel;
+  category: string;
+  message: string;
+  data?: any;
+}
+
+// Debug React Hook
+export function useToolDebugger() {
+  const [logs, setLogs] = useState<DebugLog[]>([]);
+  const [filter, setFilter] = useState<{ category?: string; level?: LogLevel }>({});
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newLogs = ToolDebugger.getLogs(filter.category, filter.level);
+      setLogs(newLogs);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [filter]);
+
+  return {
+    logs,
+    setFilter,
+    exportLogs: ToolDebugger.exportLogs,
+    clearLogs: ToolDebugger.clearLogs,
+  };
+}
+```
+
+## Implementation Checklist
+
+### Core Infrastructure
+- [ ] Set up tool registry with MCP-compatible schemas
+- [ ] Implement function calling manager with permission validation
+- [ ] Create tool execution engine with timeout and retry logic
+- [ ] Set up comprehensive error handling and classification
+- [ ] Implement rate limiting and quota management
+
+### OpenAI Integration
+- [ ] Configure OpenAI client with tool support
+- [ ] Implement tool discovery and schema conversion
+- [ ] Handle function calling in chat responses
+- [ ] Support streaming responses with tool calls
+- [ ] Process tool results and format for follow-up
+
+### Permission System
+- [ ] Validate agent permissions for each tool
+- [ ] Check user OAuth/API key connections
+- [ ] Filter available tools based on granted scopes
+- [ ] Handle permission errors gracefully
+- [ ] Provide permission grant workflows
+
+### UI Components
+- [ ] Create AI thinking indicator with tool states
+- [ ] Implement tool call status indicators
+- [ ] Build expandable tool result displays
+- [ ] Add error displays with actionable guidance
+- [ ] Support real-time status updates
+
+### Provider Integration
+- [ ] Gmail tool integration with OAuth
+- [ ] Web search tool integration with API keys
+- [ ] Generic tool execution patterns
+- [ ] Provider-specific error handling
+- [ ] Credential validation and refresh
+
+### Logging and Monitoring
+- [ ] Tool execution logging to database
+- [ ] Performance metrics collection
+- [ ] Security audit trail
+- [ ] Debug logging framework
+- [ ] Execution history and statistics
+
+### Testing
+- [ ] Unit tests for tool execution
+- [ ] Integration tests for end-to-end flows
+- [ ] Mock providers for testing
+- [ ] Tool testing framework
+- [ ] Error scenario testing
+
+### Security
+- [ ] Input validation and sanitization
+- [ ] Rate limiting implementation
+- [ ] Security audit logging
+- [ ] Permission validation
+- [ ] Credential protection
+
+## Common Pitfalls and Solutions
+
+### 1. Tool Discovery Issues
+**Problem:** Tools not appearing in OpenAI function calls
+**Solution:** Verify permission queries, check scope matching, validate tool schema format
+
+### 2. Execution Timeouts
+**Problem:** Long-running tools causing timeouts
+**Solution:** Implement proper timeout handling, async execution patterns, progress updates
+
+### 3. Permission Confusion
+**Problem:** Users don't understand why tools aren't available
+**Solution:** Clear error messages, permission grant workflows, tool availability indicators
+
+### 4. Rate Limiting Problems
+**Problem:** Users hitting rate limits unexpectedly
+**Solution:** Clear rate limit communication, usage tracking, alternative suggestions
+
+### 5. Error Recovery
+**Problem:** Tools failing without clear recovery path
+**Solution:** Comprehensive error classification, retry strategies, user guidance
+
+## Conclusion
+
+This protocol provides a comprehensive framework for implementing tool recognition, execution, and response formatting in JavaScript chat platforms. The key to success is:
+
+1. **Clear Tool Definition**: Well-structured schemas with proper scopes
+2. **Robust Permission System**: Granular validation with clear error handling
+3. **Excellent User Experience**: Real-time feedback and intuitive error recovery
+4. **Comprehensive Testing**: Thorough validation of all execution paths
+5. **Security First**: Input validation, rate limiting, and audit trails
+
+Follow this protocol to build a reliable, secure, and user-friendly tool execution system that enhances agent capabilities while maintaining proper security boundaries.

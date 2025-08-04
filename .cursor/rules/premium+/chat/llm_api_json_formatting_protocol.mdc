@@ -1,0 +1,2854 @@
+# LLM API JSON Chat Formatting Protocol
+
+**Standard Operating Procedure for Implementing LLM API JSON Chat Formatting in JavaScript Platforms**
+
+## Executive Summary
+
+This protocol provides comprehensive guidance for implementing standardized JSON chat formatting across all LLM APIs (OpenAI, Anthropic, etc.) in JavaScript platforms. It covers message structures, role management, tool calling, streaming, error handling, and security considerations.
+
+## Table of Contents
+
+1. [Core Message Schema](#core-message-schema)
+2. [Role Management](#role-management)
+3. [Content Types and Multimodal Support](#content-types-and-multimodal-support)
+4. [Tool/Function Calling Format](#tool-function-calling-format)
+5. [Streaming Response Patterns](#streaming-response-patterns)
+6. [Error Handling and Formatting](#error-handling-and-formatting)
+7. [Conversation Context Management](#conversation-context-management)
+8. [Provider-Specific Adaptations](#provider-specific-adaptations)
+9. [Security and Sanitization](#security-and-sanitization)
+10. [Performance Optimization](#performance-optimization)
+11. [Validation and Testing](#validation-and-testing)
+12. [Implementation Examples](#implementation-examples)
+13. [Implementation Checklist](#implementation-checklist)
+
+## Core Message Schema
+
+### 1. Universal Message Structure
+
+```typescript
+// Base Message Interface - Universal across all LLM providers
+interface ChatMessage {
+  id: string;                          // Unique message identifier
+  role: MessageRole;                   // Message role (user, assistant, system, tool)
+  content: MessageContent;             // Message content (string or multimodal)
+  timestamp: string;                   // ISO 8601 timestamp
+  metadata?: MessageMetadata;          // Additional message metadata
+  tool_calls?: ToolCall[];            // Tool/function calls (if applicable)
+  tool_call_id?: string;              // Reference to tool call (for tool responses)
+  name?: string;                       // Name identifier (for function responses)
+}
+
+// Message Role Types
+type MessageRole = 
+  | 'user'           // User input
+  | 'assistant'      // AI assistant response
+  | 'system'         // System instructions/context
+  | 'tool'           // Tool execution results
+  | 'function';      // Legacy function calling (OpenAI)
+
+// Content Types
+type MessageContent = 
+  | string                           // Simple text content
+  | MultimodalContent[]              // Array of content blocks
+  | null;                           // Null content for tool calls
+
+interface MultimodalContent {
+  type: 'text' | 'image' | 'audio' | 'video' | 'file';
+  text?: string;                     // Text content
+  image_url?: {                      // Image content
+    url: string;
+    detail?: 'low' | 'high' | 'auto';
+  };
+  audio_url?: {                      // Audio content
+    url: string;
+    format?: string;
+  };
+  file_url?: {                       // File attachment
+    url: string;
+    filename: string;
+    mime_type: string;
+  };
+}
+
+// Message Metadata
+interface MessageMetadata {
+  agent_id?: string;                 // Associated agent ID
+  user_id?: string;                  // Associated user ID
+  conversation_id?: string;          // Conversation identifier
+  parent_message_id?: string;        // Parent message for threading
+  processing_time_ms?: number;       // Processing time
+  token_usage?: TokenUsage;          // Token consumption
+  model?: string;                    // Model used for generation
+  temperature?: number;              // Generation parameters
+  provider?: string;                 // LLM provider used
+  status?: MessageStatus;            // Message status
+  error?: MessageError;              // Error information
+  edited_at?: string;               // Last edit timestamp
+  version?: number;                  // Message version for edits
+}
+
+type MessageStatus = 
+  | 'pending'        // Message being processed
+  | 'streaming'      // Message being streamed
+  | 'completed'      // Message completed successfully
+  | 'failed'         // Message failed to process
+  | 'cancelled'      // Message processing cancelled
+  | 'edited';        // Message was edited
+
+interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cached_tokens?: number;            // For caching-enabled models
+}
+
+interface MessageError {
+  code: string;                      // Error code
+  message: string;                   // Human-readable error message
+  type: 'rate_limit' | 'invalid_request' | 'authentication' | 'server_error' | 'content_filter';
+  details?: Record<string, any>;     // Additional error details
+}
+```
+
+### 2. Conversation Structure
+
+```typescript
+// Complete Conversation Structure
+interface Conversation {
+  id: string;                        // Unique conversation ID
+  title?: string;                    // Optional conversation title
+  messages: ChatMessage[];           // Array of messages in chronological order
+  context?: ConversationContext;     // Conversation-level context
+  settings?: ConversationSettings;   // Conversation settings
+  created_at: string;               // Creation timestamp
+  updated_at: string;               // Last update timestamp
+  archived?: boolean;               // Archive status
+}
+
+interface ConversationContext {
+  system_prompt?: string;           // System instructions
+  agent_config?: AgentConfiguration; // Agent configuration
+  user_preferences?: UserPreferences; // User preferences
+  active_tools?: string[];          // Available tools for this conversation
+  context_window_size?: number;     // Maximum context window
+  memory?: ConversationMemory[];    // Long-term memory items
+}
+
+interface ConversationSettings {
+  model?: string;                   // Default model
+  temperature?: number;             // Default temperature
+  max_tokens?: number;              // Maximum response tokens
+  stream?: boolean;                 // Enable streaming
+  tools_enabled?: boolean;          // Enable tool calling
+  multimodal_enabled?: boolean;     // Enable multimodal input
+}
+
+interface ConversationMemory {
+  id: string;
+  content: string;
+  relevance_score?: number;
+  created_at: string;
+  last_accessed?: string;
+}
+```
+
+## Role Management
+
+### 1. Role-Specific Formatting Rules
+
+```typescript
+// Role-specific message creation utilities
+class MessageFormatter {
+  
+  // User Message
+  static createUserMessage(
+    content: string | MultimodalContent[],
+    metadata?: Partial<MessageMetadata>
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role: 'user',
+      content,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        ...metadata,
+        status: 'completed'
+      }
+    };
+  }
+
+  // Assistant Message (with optional tool calls)
+  static createAssistantMessage(
+    content: string | null,
+    toolCalls?: ToolCall[],
+    metadata?: Partial<MessageMetadata>
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role: 'assistant',
+      content,
+      timestamp: new Date().toISOString(),
+      tool_calls: toolCalls,
+      metadata: {
+        ...metadata,
+        status: 'completed'
+      }
+    };
+  }
+
+  // System Message
+  static createSystemMessage(
+    content: string,
+    metadata?: Partial<MessageMetadata>
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role: 'system',
+      content,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        ...metadata,
+        status: 'completed'
+      }
+    };
+  }
+
+  // Tool Response Message
+  static createToolMessage(
+    toolCallId: string,
+    content: string,
+    metadata?: Partial<MessageMetadata>
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role: 'tool',
+      content,
+      tool_call_id: toolCallId,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        ...metadata,
+        status: 'completed'
+      }
+    };
+  }
+
+  // Function Response Message (Legacy OpenAI)
+  static createFunctionMessage(
+    name: string,
+    content: string,
+    metadata?: Partial<MessageMetadata>
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role: 'function',
+      content,
+      name,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        ...metadata,
+        status: 'completed'
+      }
+    };
+  }
+}
+
+// Role Validation
+class RoleValidator {
+  static validateMessage(message: ChatMessage): ValidationResult {
+    const errors: string[] = [];
+
+    // Role-specific validations
+    switch (message.role) {
+      case 'user':
+        if (!message.content) {
+          errors.push('User messages must have content');
+        }
+        if (message.tool_calls) {
+          errors.push('User messages cannot have tool calls');
+        }
+        break;
+
+      case 'assistant':
+        if (!message.content && !message.tool_calls) {
+          errors.push('Assistant messages must have content or tool calls');
+        }
+        break;
+
+      case 'system':
+        if (typeof message.content !== 'string') {
+          errors.push('System messages must have string content');
+        }
+        if (message.tool_calls) {
+          errors.push('System messages cannot have tool calls');
+        }
+        break;
+
+      case 'tool':
+        if (!message.tool_call_id) {
+          errors.push('Tool messages must have tool_call_id');
+        }
+        if (!message.content) {
+          errors.push('Tool messages must have content');
+        }
+        break;
+
+      case 'function':
+        if (!message.name) {
+          errors.push('Function messages must have name');
+        }
+        if (!message.content) {
+          errors.push('Function messages must have content');
+        }
+        break;
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+}
+```
+
+### 2. Context Window Management
+
+```typescript
+// Context window management for different roles
+class ContextWindowManager {
+  constructor(private maxTokens: number = 4000) {}
+
+  // Prioritize messages based on role importance
+  prioritizeMessages(messages: ChatMessage[]): ChatMessage[] {
+    const priority = {
+      'system': 100,      // Always include system messages
+      'user': 80,         // High priority for user messages
+      'assistant': 70,    // High priority for assistant responses
+      'tool': 60,         // Medium priority for tool results
+      'function': 60      // Medium priority for function results
+    };
+
+    return messages.sort((a, b) => {
+      const priorityA = priority[a.role] || 0;
+      const priorityB = priority[b.role] || 0;
+      
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA; // Higher priority first
+      }
+      
+      // Same priority, sort by timestamp
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+  }
+
+  // Estimate token count for context management
+  estimateTokenCount(message: ChatMessage): number {
+    let tokens = 0;
+    
+    // Base tokens for message structure
+    tokens += 10;
+    
+    // Content tokens
+    if (typeof message.content === 'string') {
+      tokens += Math.ceil(message.content.length / 4); // Rough estimation
+    } else if (Array.isArray(message.content)) {
+      message.content.forEach(content => {
+        if (content.text) {
+          tokens += Math.ceil(content.text.length / 4);
+        }
+        if (content.image_url) {
+          tokens += 500; // Rough estimate for image processing
+        }
+      });
+    }
+    
+    // Tool call tokens
+    if (message.tool_calls) {
+      message.tool_calls.forEach(call => {
+        tokens += 50; // Base tool call overhead
+        tokens += Math.ceil(JSON.stringify(call.function.arguments).length / 4);
+      });
+    }
+    
+    return tokens;
+  }
+
+  // Trim messages to fit context window
+  trimToContextWindow(messages: ChatMessage[]): ChatMessage[] {
+    const prioritized = this.prioritizeMessages([...messages]);
+    const result: ChatMessage[] = [];
+    let totalTokens = 0;
+
+    for (const message of prioritized) {
+      const messageTokens = this.estimateTokenCount(message);
+      
+      if (totalTokens + messageTokens <= this.maxTokens) {
+        result.push(message);
+        totalTokens += messageTokens;
+      } else if (message.role === 'system') {
+        // Always include system messages, even if they exceed limit
+        result.push(message);
+      }
+    }
+
+    // Return in chronological order
+    return result.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  }
+}
+```
+
+## Content Types and Multimodal Support
+
+### 1. Multimodal Content Handling
+
+```typescript
+// Multimodal content utilities
+class MultimodalContentHandler {
+  
+  // Create text content
+  static createTextContent(text: string): MultimodalContent {
+    return {
+      type: 'text',
+      text
+    };
+  }
+
+  // Create image content
+  static createImageContent(
+    url: string, 
+    detail: 'low' | 'high' | 'auto' = 'auto'
+  ): MultimodalContent {
+    return {
+      type: 'image',
+      image_url: {
+        url,
+        detail
+      }
+    };
+  }
+
+  // Create file attachment content
+  static createFileContent(
+    url: string,
+    filename: string,
+    mimeType: string
+  ): MultimodalContent {
+    return {
+      type: 'file',
+      file_url: {
+        url,
+        filename,
+        mime_type: mimeType
+      }
+    };
+  }
+
+  // Convert mixed content to standardized format
+  static normalizeContent(content: any): MessageContent {
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    if (Array.isArray(content)) {
+      return content.map(item => {
+        if (typeof item === 'string') {
+          return this.createTextContent(item);
+        }
+        return item as MultimodalContent;
+      });
+    }
+    
+    return null;
+  }
+
+  // Validate multimodal content
+  static validateContent(content: MultimodalContent[]): ValidationResult {
+    const errors: string[] = [];
+    
+    content.forEach((item, index) => {
+      switch (item.type) {
+        case 'text':
+          if (!item.text) {
+            errors.push(`Text content at index ${index} is missing text field`);
+          }
+          break;
+          
+        case 'image':
+          if (!item.image_url?.url) {
+            errors.push(`Image content at index ${index} is missing URL`);
+          }
+          break;
+          
+        case 'file':
+          if (!item.file_url?.url || !item.file_url?.filename) {
+            errors.push(`File content at index ${index} is missing required fields`);
+          }
+          break;
+      }
+    });
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  // Extract text from multimodal content
+  static extractText(content: MessageContent): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    if (Array.isArray(content)) {
+      return content
+        .filter(item => item.type === 'text')
+        .map(item => item.text)
+        .join(' ');
+    }
+    
+    return '';
+  }
+}
+```
+
+### 2. Content Sanitization
+
+```typescript
+// Content sanitization for security
+class ContentSanitizer {
+  private static readonly DANGEROUS_PATTERNS = [
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    /javascript:/gi,
+    /on\w+\s*=/gi,
+    /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi
+  ];
+
+  private static readonly ALLOWED_HTML_TAGS = [
+    'p', 'br', 'strong', 'em', 'u', 'code', 'pre', 'blockquote',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a'
+  ];
+
+  // Sanitize text content
+  static sanitizeText(text: string): string {
+    if (!text) return text;
+    
+    // Remove dangerous patterns
+    let sanitized = text;
+    this.DANGEROUS_PATTERNS.forEach(pattern => {
+      sanitized = sanitized.replace(pattern, '');
+    });
+    
+    // Additional XSS protection
+    sanitized = sanitized
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+    
+    return sanitized;
+  }
+
+  // Sanitize multimodal content
+  static sanitizeContent(content: MessageContent): MessageContent {
+    if (typeof content === 'string') {
+      return this.sanitizeText(content);
+    }
+    
+    if (Array.isArray(content)) {
+      return content.map(item => ({
+        ...item,
+        text: item.text ? this.sanitizeText(item.text) : item.text
+      }));
+    }
+    
+    return content;
+  }
+
+  // Validate URLs for security
+  static validateUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      // Only allow HTTP/HTTPS and data URLs
+      return ['http:', 'https:', 'data:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  }
+}
+```
+
+## Tool/Function Calling Format
+
+### 1. Tool Call Structure
+
+```typescript
+// Tool/Function call interfaces
+interface ToolCall {
+  id: string;                        // Unique tool call identifier
+  type: 'function';                  // Always 'function' for current spec
+  function: {
+    name: string;                    // Function/tool name
+    arguments: string;               // JSON string of arguments
+  };
+}
+
+// Parsed tool call for easier handling
+interface ParsedToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, any>;    // Parsed arguments object
+  status?: ToolCallStatus;
+  result?: any;
+  error?: string;
+  execution_time_ms?: number;
+}
+
+type ToolCallStatus = 'pending' | 'executing' | 'completed' | 'failed';
+
+// Tool call utilities
+class ToolCallHandler {
+  
+  // Create a tool call
+  static createToolCall(
+    name: string,
+    args: Record<string, any>
+  ): ToolCall {
+    return {
+      id: `call_${generateId()}`,
+      type: 'function',
+      function: {
+        name,
+        arguments: JSON.stringify(args)
+      }
+    };
+  }
+
+  // Parse tool call arguments safely
+  static parseToolCall(toolCall: ToolCall): ParsedToolCall {
+    try {
+      const arguments_obj = JSON.parse(toolCall.function.arguments);
+      return {
+        id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: arguments_obj,
+        status: 'pending'
+      };
+    } catch (error) {
+      return {
+        id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: {},
+        status: 'failed',
+        error: `Failed to parse arguments: ${error.message}`
+      };
+    }
+  }
+
+  // Validate tool call structure
+  static validateToolCall(toolCall: ToolCall): ValidationResult {
+    const errors: string[] = [];
+
+    if (!toolCall.id) {
+      errors.push('Tool call missing id');
+    }
+
+    if (toolCall.type !== 'function') {
+      errors.push('Tool call type must be "function"');
+    }
+
+    if (!toolCall.function?.name) {
+      errors.push('Tool call missing function name');
+    }
+
+    if (typeof toolCall.function?.arguments !== 'string') {
+      errors.push('Tool call arguments must be a JSON string');
+    } else {
+      try {
+        JSON.parse(toolCall.function.arguments);
+      } catch {
+        errors.push('Tool call arguments must be valid JSON');
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+
+  // Create tool response message
+  static createToolResponse(
+    toolCallId: string,
+    result: any,
+    error?: string
+  ): ChatMessage {
+    const content = error 
+      ? `Error: ${error}`
+      : typeof result === 'string' 
+        ? result 
+        : JSON.stringify(result);
+
+    return MessageFormatter.createToolMessage(toolCallId, content, {
+      status: error ? 'failed' : 'completed'
+    });
+  }
+}
+```
+
+### 2. Tool Execution Flow
+
+```typescript
+// Complete tool execution workflow
+class ToolExecutionWorkflow {
+  
+  // Process assistant message with tool calls
+  static async processToolCalls(
+    assistantMessage: ChatMessage,
+    toolExecutor: (name: string, args: any) => Promise<any>
+  ): Promise<ChatMessage[]> {
+    
+    if (!assistantMessage.tool_calls?.length) {
+      return [assistantMessage];
+    }
+
+    const messages: ChatMessage[] = [assistantMessage];
+    
+    // Execute all tool calls in parallel
+    const toolResults = await Promise.all(
+      assistantMessage.tool_calls.map(async (toolCall) => {
+        const parsed = ToolCallHandler.parseToolCall(toolCall);
+        
+        if (parsed.status === 'failed') {
+          return ToolCallHandler.createToolResponse(
+            toolCall.id,
+            null,
+            parsed.error
+          );
+        }
+
+        try {
+          const result = await toolExecutor(parsed.name, parsed.arguments);
+          return ToolCallHandler.createToolResponse(toolCall.id, result);
+        } catch (error) {
+          return ToolCallHandler.createToolResponse(
+            toolCall.id,
+            null,
+            error.message
+          );
+        }
+      })
+    );
+
+    messages.push(...toolResults);
+    return messages;
+  }
+
+  // Format for provider API
+  static formatForProvider(
+    messages: ChatMessage[],
+    provider: 'openai' | 'anthropic' | 'generic'
+  ): any[] {
+    
+    switch (provider) {
+      case 'openai':
+        return this.formatForOpenAI(messages);
+      case 'anthropic':
+        return this.formatForAnthropic(messages);
+      default:
+        return this.formatGeneric(messages);
+    }
+  }
+
+  private static formatForOpenAI(messages: ChatMessage[]): any[] {
+    return messages.map(msg => {
+      const formatted: any = {
+        role: msg.role,
+        content: msg.content
+      };
+
+      if (msg.tool_calls) {
+        formatted.tool_calls = msg.tool_calls;
+      }
+
+      if (msg.tool_call_id) {
+        formatted.tool_call_id = msg.tool_call_id;
+      }
+
+      if (msg.name) {
+        formatted.name = msg.name;
+      }
+
+      return formatted;
+    });
+  }
+
+  private static formatForAnthropic(messages: ChatMessage[]): any[] {
+    // Anthropic-specific formatting
+    return messages.map(msg => {
+      if (msg.role === 'tool') {
+        return {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: msg.tool_call_id,
+            content: msg.content
+          }]
+        };
+      }
+
+      return {
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: typeof msg.content === 'string' 
+          ? msg.content 
+          : JSON.stringify(msg.content)
+      };
+    });
+  }
+
+  private static formatGeneric(messages: ChatMessage[]): any[] {
+    return messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      ...(msg.tool_calls && { tool_calls: msg.tool_calls }),
+      ...(msg.tool_call_id && { tool_call_id: msg.tool_call_id }),
+      ...(msg.name && { name: msg.name })
+    }));
+  }
+}
+```
+
+## Streaming Response Patterns
+
+### 1. Server-Sent Events (SSE) Format
+
+```typescript
+// SSE streaming format for chat responses
+interface StreamingChatEvent {
+  type: StreamEventType;
+  data: any;
+  id?: string;
+  timestamp: string;
+}
+
+type StreamEventType =
+  | 'message_start'      // Message generation started
+  | 'content_delta'      // Incremental content update
+  | 'tool_call_start'    // Tool call detected
+  | 'tool_call_delta'    // Tool call argument streaming
+  | 'tool_call_complete' // Tool call finished
+  | 'tool_execution'     // Tool execution status
+  | 'message_complete'   // Message generation finished
+  | 'error'              // Error occurred
+  | 'status';            // Status update
+
+class StreamingFormatter {
+  
+  // Format SSE event
+  static formatSSE(event: StreamingChatEvent): string {
+    const lines: string[] = [];
+    
+    if (event.id) {
+      lines.push(`id: ${event.id}`);
+    }
+    
+    lines.push(`event: ${event.type}`);
+    lines.push(`data: ${JSON.stringify(event.data)}`);
+    lines.push(''); // Empty line to end event
+    
+    return lines.join('\n');
+  }
+
+  // Create message start event
+  static createMessageStart(messageId: string): StreamingChatEvent {
+    return {
+      type: 'message_start',
+      data: {
+        message_id: messageId,
+        role: 'assistant',
+        status: 'streaming'
+      },
+      id: messageId,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // Create content delta event
+  static createContentDelta(
+    messageId: string,
+    deltaText: string,
+    index: number = 0
+  ): StreamingChatEvent {
+    return {
+      type: 'content_delta',
+      data: {
+        message_id: messageId,
+        delta: deltaText,
+        index
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // Create tool call start event
+  static createToolCallStart(
+    messageId: string,
+    toolCallId: string,
+    functionName: string
+  ): StreamingChatEvent {
+    return {
+      type: 'tool_call_start',
+      data: {
+        message_id: messageId,
+        tool_call_id: toolCallId,
+        function_name: functionName
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // Create tool execution event
+  static createToolExecution(
+    messageId: string,
+    toolCallId: string,
+    status: ToolCallStatus,
+    result?: any,
+    error?: string
+  ): StreamingChatEvent {
+    return {
+      type: 'tool_execution',
+      data: {
+        message_id: messageId,
+        tool_call_id: toolCallId,
+        status,
+        result,
+        error
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // Create message complete event
+  static createMessageComplete(
+    message: ChatMessage
+  ): StreamingChatEvent {
+    return {
+      type: 'message_complete',
+      data: message,
+      id: message.id,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // Create error event
+  static createError(
+    messageId: string,
+    error: MessageError
+  ): StreamingChatEvent {
+    return {
+      type: 'error',
+      data: {
+        message_id: messageId,
+        error
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+```
+
+### 2. WebSocket Format
+
+```typescript
+// WebSocket message format for real-time chat
+interface WebSocketChatMessage {
+  type: WebSocketMessageType;
+  conversation_id: string;
+  message_id?: string;
+  data: any;
+  timestamp: string;
+}
+
+type WebSocketMessageType =
+  | 'chat_message'       // New chat message
+  | 'message_update'     // Message update/edit
+  | 'typing_start'       // User/agent started typing
+  | 'typing_stop'        // User/agent stopped typing
+  | 'tool_execution'     // Tool execution update
+  | 'conversation_update' // Conversation metadata update
+  | 'error'              // Error message
+  | 'ping'               // Keep-alive ping
+  | 'pong';              // Keep-alive pong
+
+class WebSocketFormatter {
+  
+  // Format WebSocket message
+  static formatMessage(
+    type: WebSocketMessageType,
+    conversationId: string,
+    data: any,
+    messageId?: string
+  ): string {
+    const wsMessage: WebSocketChatMessage = {
+      type,
+      conversation_id: conversationId,
+      message_id: messageId,
+      data,
+      timestamp: new Date().toISOString()
+    };
+    
+    return JSON.stringify(wsMessage);
+  }
+
+  // Create chat message update
+  static createChatMessage(
+    conversationId: string,
+    message: ChatMessage
+  ): string {
+    return this.formatMessage(
+      'chat_message',
+      conversationId,
+      message,
+      message.id
+    );
+  }
+
+  // Create typing indicator
+  static createTypingIndicator(
+    conversationId: string,
+    userId: string,
+    isTyping: boolean
+  ): string {
+    return this.formatMessage(
+      isTyping ? 'typing_start' : 'typing_stop',
+      conversationId,
+      { user_id: userId }
+    );
+  }
+
+  // Create tool execution update
+  static createToolExecutionUpdate(
+    conversationId: string,
+    messageId: string,
+    toolCallId: string,
+    status: ToolCallStatus,
+    result?: any
+  ): string {
+    return this.formatMessage(
+      'tool_execution',
+      conversationId,
+      {
+        tool_call_id: toolCallId,
+        status,
+        result
+      },
+      messageId
+    );
+  }
+}
+```
+
+### 3. Streaming Response Handler
+
+```typescript
+// Client-side streaming response handler
+class StreamingResponseHandler {
+  private currentMessage: Partial<ChatMessage> = {};
+  private messageHandlers: Map<string, (message: ChatMessage) => void> = new Map();
+  private errorHandlers: Map<string, (error: MessageError) => void> = new Map();
+
+  // Handle SSE stream
+  handleSSEStream(eventSource: EventSource, conversationId: string): void {
+    
+    eventSource.addEventListener('message_start', (event) => {
+      const data = JSON.parse(event.data);
+      this.currentMessage = {
+        id: data.message_id,
+        role: 'assistant',
+        content: '',
+        timestamp: data.timestamp || new Date().toISOString(),
+        metadata: { status: 'streaming' }
+      };
+    });
+
+    eventSource.addEventListener('content_delta', (event) => {
+      const data = JSON.parse(event.data);
+      if (typeof this.currentMessage.content === 'string') {
+        this.currentMessage.content += data.delta;
+      } else {
+        this.currentMessage.content = data.delta;
+      }
+      
+      // Trigger real-time update
+      this.emitMessageUpdate(conversationId);
+    });
+
+    eventSource.addEventListener('tool_call_start', (event) => {
+      const data = JSON.parse(event.data);
+      if (!this.currentMessage.tool_calls) {
+        this.currentMessage.tool_calls = [];
+      }
+      
+      this.currentMessage.tool_calls.push({
+        id: data.tool_call_id,
+        type: 'function',
+        function: {
+          name: data.function_name,
+          arguments: ''
+        }
+      });
+    });
+
+    eventSource.addEventListener('tool_call_delta', (event) => {
+      const data = JSON.parse(event.data);
+      const toolCall = this.currentMessage.tool_calls?.find(tc => tc.id === data.tool_call_id);
+      if (toolCall) {
+        toolCall.function.arguments += data.delta;
+      }
+    });
+
+    eventSource.addEventListener('message_complete', (event) => {
+      const data = JSON.parse(event.data);
+      this.currentMessage = { ...this.currentMessage, ...data };
+      this.currentMessage.metadata!.status = 'completed';
+      
+      // Emit final message
+      this.emitMessageComplete(conversationId);
+      this.currentMessage = {};
+    });
+
+    eventSource.addEventListener('error', (event) => {
+      const data = JSON.parse(event.data);
+      this.emitError(conversationId, data.error);
+    });
+  }
+
+  // Register message handler
+  onMessage(conversationId: string, handler: (message: ChatMessage) => void): void {
+    this.messageHandlers.set(conversationId, handler);
+  }
+
+  // Register error handler
+  onError(conversationId: string, handler: (error: MessageError) => void): void {
+    this.errorHandlers.set(conversationId, handler);
+  }
+
+  private emitMessageUpdate(conversationId: string): void {
+    const handler = this.messageHandlers.get(conversationId);
+    if (handler && this.currentMessage.id) {
+      handler(this.currentMessage as ChatMessage);
+    }
+  }
+
+  private emitMessageComplete(conversationId: string): void {
+    const handler = this.messageHandlers.get(conversationId);
+    if (handler && this.currentMessage.id) {
+      handler(this.currentMessage as ChatMessage);
+    }
+  }
+
+  private emitError(conversationId: string, error: MessageError): void {
+    const handler = this.errorHandlers.get(conversationId);
+    if (handler) {
+      handler(error);
+    }
+  }
+}
+```
+
+## Error Handling and Formatting
+
+### 1. Comprehensive Error Types
+
+```typescript
+// Error classification and formatting
+enum ChatErrorType {
+  VALIDATION_ERROR = 'validation_error',
+  AUTHENTICATION_ERROR = 'authentication_error',
+  AUTHORIZATION_ERROR = 'authorization_error',
+  RATE_LIMIT_ERROR = 'rate_limit_error',
+  CONTENT_FILTER_ERROR = 'content_filter_error',
+  MODEL_ERROR = 'model_error',
+  TOOL_EXECUTION_ERROR = 'tool_execution_error',
+  NETWORK_ERROR = 'network_error',
+  TIMEOUT_ERROR = 'timeout_error',
+  UNKNOWN_ERROR = 'unknown_error'
+}
+
+interface ChatError extends MessageError {
+  type: ChatErrorType;
+  code: string;
+  message: string;
+  details?: {
+    field?: string;           // Field causing validation error
+    retry_after?: number;     // Seconds until retry allowed
+    tool_name?: string;       // Tool that caused error
+    provider?: string;        // Provider that failed
+    http_status?: number;     // HTTP status code
+    request_id?: string;      // Request ID for tracking
+  };
+  recoverable: boolean;       // Whether error can be recovered from
+  user_message?: string;      // User-friendly error message
+}
+
+class ChatErrorHandler {
+  
+  // Create standardized error
+  static createError(
+    type: ChatErrorType,
+    code: string,
+    message: string,
+    details?: ChatError['details'],
+    recoverable: boolean = false
+  ): ChatError {
+    return {
+      type,
+      code,
+      message,
+      details,
+      recoverable,
+      user_message: this.getUserFriendlyMessage(type, message)
+    };
+  }
+
+  // Convert provider errors to standard format
+  static fromProviderError(error: any, provider: string): ChatError {
+    
+    if (error.status === 401) {
+      return this.createError(
+        ChatErrorType.AUTHENTICATION_ERROR,
+        'authentication_failed',
+        'Authentication failed',
+        { provider, http_status: 401 },
+        true
+      );
+    }
+
+    if (error.status === 403) {
+      return this.createError(
+        ChatErrorType.AUTHORIZATION_ERROR,
+        'insufficient_permissions',
+        'Insufficient permissions',
+        { provider, http_status: 403 }
+      );
+    }
+
+    if (error.status === 429) {
+      return this.createError(
+        ChatErrorType.RATE_LIMIT_ERROR,
+        'rate_limit_exceeded',
+        'Rate limit exceeded',
+        { 
+          provider, 
+          http_status: 429,
+          retry_after: error.headers?.['retry-after'] || 60
+        },
+        true
+      );
+    }
+
+    if (error.status >= 500) {
+      return this.createError(
+        ChatErrorType.MODEL_ERROR,
+        'provider_error',
+        `${provider} service unavailable`,
+        { provider, http_status: error.status },
+        true
+      );
+    }
+
+    return this.createError(
+      ChatErrorType.UNKNOWN_ERROR,
+      'unknown_error',
+      error.message || 'An unknown error occurred',
+      { provider }
+    );
+  }
+
+  // Get user-friendly error message
+  static getUserFriendlyMessage(type: ChatErrorType, originalMessage: string): string {
+    switch (type) {
+      case ChatErrorType.AUTHENTICATION_ERROR:
+        return 'Please check your authentication credentials and try again.';
+      
+      case ChatErrorType.AUTHORIZATION_ERROR:
+        return 'You don\'t have permission to perform this action.';
+      
+      case ChatErrorType.RATE_LIMIT_ERROR:
+        return 'You\'ve made too many requests. Please wait a moment and try again.';
+      
+      case ChatErrorType.CONTENT_FILTER_ERROR:
+        return 'Your message was blocked by content filters. Please rephrase and try again.';
+      
+      case ChatErrorType.MODEL_ERROR:
+        return 'The AI service is temporarily unavailable. Please try again in a moment.';
+      
+      case ChatErrorType.TOOL_EXECUTION_ERROR:
+        return 'A tool failed to execute properly. The conversation can continue.';
+      
+      case ChatErrorType.NETWORK_ERROR:
+        return 'Network connection failed. Please check your internet connection.';
+      
+      case ChatErrorType.TIMEOUT_ERROR:
+        return 'The request timed out. Please try again.';
+      
+      default:
+        return originalMessage || 'An unexpected error occurred.';
+    }
+  }
+
+  // Format error for client display
+  static formatForClient(error: ChatError): any {
+    return {
+      type: error.type,
+      code: error.code,
+      message: error.user_message || error.message,
+      recoverable: error.recoverable,
+      retry_after: error.details?.retry_after,
+      request_id: error.details?.request_id
+    };
+  }
+
+  // Create error message
+  static createErrorMessage(
+    conversationId: string,
+    error: ChatError,
+    parentMessageId?: string
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role: 'assistant',
+      content: error.user_message || error.message,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        conversation_id: conversationId,
+        parent_message_id: parentMessageId,
+        status: 'failed',
+        error: error
+      }
+    };
+  }
+}
+```
+
+### 2. Error Recovery Strategies
+
+```typescript
+// Error recovery and retry logic
+class ErrorRecoveryManager {
+  private retryAttempts: Map<string, number> = new Map();
+  private readonly maxRetries = 3;
+  private readonly baseDelay = 1000; // 1 second
+
+  // Determine if error is recoverable
+  canRecover(error: ChatError): boolean {
+    return error.recoverable && this.getRemainingRetries(error.code) > 0;
+  }
+
+  // Get remaining retry attempts
+  getRemainingRetries(errorCode: string): number {
+    const attempts = this.retryAttempts.get(errorCode) || 0;
+    return Math.max(0, this.maxRetries - attempts);
+  }
+
+  // Calculate retry delay
+  calculateRetryDelay(error: ChatError, attempt: number): number {
+    if (error.details?.retry_after) {
+      return error.details.retry_after * 1000;
+    }
+
+    // Exponential backoff
+    return this.baseDelay * Math.pow(2, attempt - 1);
+  }
+
+  // Execute with retry logic
+  async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    errorHandler: (error: any) => ChatError
+  ): Promise<T> {
+    
+    let lastError: ChatError;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const result = await operation();
+        
+        // Reset retry count on success
+        this.retryAttempts.clear();
+        return result;
+        
+      } catch (error) {
+        lastError = errorHandler(error);
+        
+        // Track retry attempts
+        this.retryAttempts.set(lastError.code, attempt);
+        
+        // Don't retry if not recoverable or max attempts reached
+        if (!lastError.recoverable || attempt === this.maxRetries) {
+          throw lastError;
+        }
+        
+        // Wait before retry
+        const delay = this.calculateRetryDelay(lastError, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw lastError!;
+  }
+
+  // Create recovery suggestions
+  getRecoverySuggestions(error: ChatError): RecoverySuggestion[] {
+    const suggestions: RecoverySuggestion[] = [];
+
+    switch (error.type) {
+      case ChatErrorType.AUTHENTICATION_ERROR:
+        suggestions.push({
+          action: 'reauthenticate',
+          label: 'Sign in again',
+          description: 'Your session may have expired'
+        });
+        break;
+
+      case ChatErrorType.RATE_LIMIT_ERROR:
+        suggestions.push({
+          action: 'wait_and_retry',
+          label: 'Wait and retry',
+          description: `Wait ${error.details?.retry_after || 60} seconds and try again`,
+          delay: (error.details?.retry_after || 60) * 1000
+        });
+        break;
+
+      case ChatErrorType.CONTENT_FILTER_ERROR:
+        suggestions.push({
+          action: 'rephrase_message',
+          label: 'Rephrase your message',
+          description: 'Try using different words or phrasing'
+        });
+        break;
+
+      case ChatErrorType.TOOL_EXECUTION_ERROR:
+        suggestions.push({
+          action: 'retry_without_tools',
+          label: 'Continue without tools',
+          description: 'Continue the conversation without using tools'
+        });
+        break;
+
+      case ChatErrorType.NETWORK_ERROR:
+        suggestions.push({
+          action: 'check_connection',
+          label: 'Check connection',
+          description: 'Verify your internet connection and try again'
+        });
+        break;
+    }
+
+    if (error.recoverable && this.getRemainingRetries(error.code) > 0) {
+      suggestions.push({
+        action: 'retry',
+        label: 'Try again',
+        description: `${this.getRemainingRetries(error.code)} attempts remaining`
+      });
+    }
+
+    return suggestions;
+  }
+}
+
+interface RecoverySuggestion {
+  action: string;
+  label: string;
+  description: string;
+  delay?: number;
+}
+```
+
+## Conversation Context Management
+
+### 1. Context Preservation
+
+```typescript
+// Context management for conversations
+class ConversationContextManager {
+  private contexts: Map<string, ConversationContext> = new Map();
+
+  // Initialize conversation context
+  initializeContext(
+    conversationId: string,
+    systemPrompt?: string,
+    agentConfig?: AgentConfiguration
+  ): ConversationContext {
+    const context: ConversationContext = {
+      system_prompt: systemPrompt,
+      agent_config: agentConfig,
+      context_window_size: agentConfig?.context_window || 4000,
+      active_tools: agentConfig?.available_tools || [],
+      memory: []
+    };
+
+    this.contexts.set(conversationId, context);
+    return context;
+  }
+
+  // Add memory item
+  addMemory(
+    conversationId: string,
+    content: string,
+    relevanceScore: number = 0.5
+  ): void {
+    const context = this.contexts.get(conversationId);
+    if (context) {
+      context.memory = context.memory || [];
+      context.memory.push({
+        id: generateId(),
+        content,
+        relevance_score: relevanceScore,
+        created_at: new Date().toISOString()
+      });
+
+      // Keep only top 10 most relevant memories
+      context.memory = context.memory
+        .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0))
+        .slice(0, 10);
+    }
+  }
+
+  // Get relevant context for message
+  getRelevantContext(
+    conversationId: string,
+    currentMessage: string
+  ): ConversationContext | null {
+    const context = this.contexts.get(conversationId);
+    if (!context) return null;
+
+    // Update memory access times and relevance
+    if (context.memory) {
+      context.memory.forEach(memory => {
+        if (this.isRelevant(memory.content, currentMessage)) {
+          memory.last_accessed = new Date().toISOString();
+          memory.relevance_score = (memory.relevance_score || 0) + 0.1;
+        }
+      });
+    }
+
+    return context;
+  }
+
+  // Check if memory is relevant to current message
+  private isRelevant(memoryContent: string, currentMessage: string): boolean {
+    // Simple keyword matching - in production, use more sophisticated methods
+    const memoryWords = memoryContent.toLowerCase().split(/\s+/);
+    const messageWords = currentMessage.toLowerCase().split(/\s+/);
+    
+    const commonWords = memoryWords.filter(word => 
+      messageWords.includes(word) && word.length > 3
+    );
+    
+    return commonWords.length > 0;
+  }
+
+  // Format context for LLM
+  formatContextForLLM(context: ConversationContext): string {
+    let contextString = '';
+
+    if (context.system_prompt) {
+      contextString += `System: ${context.system_prompt}\n\n`;
+    }
+
+    if (context.memory && context.memory.length > 0) {
+      contextString += 'Relevant context from conversation history:\n';
+      context.memory
+        .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0))
+        .slice(0, 5)
+        .forEach(memory => {
+          contextString += `- ${memory.content}\n`;
+        });
+      contextString += '\n';
+    }
+
+    if (context.active_tools && context.active_tools.length > 0) {
+      contextString += `Available tools: ${context.active_tools.join(', ')}\n\n`;
+    }
+
+    return contextString.trim();
+  }
+}
+```
+
+### 2. Message Threading and References
+
+```typescript
+// Message threading and reference management
+class MessageThreadManager {
+  
+  // Create threaded message
+  static createThreadedMessage(
+    content: MessageContent,
+    role: MessageRole,
+    parentMessageId?: string,
+    threadId?: string
+  ): ChatMessage {
+    return {
+      id: generateMessageId(),
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        parent_message_id: parentMessageId,
+        thread_id: threadId || parentMessageId,
+        status: 'completed'
+      }
+    };
+  }
+
+  // Build message thread
+  static buildThread(
+    messages: ChatMessage[],
+    rootMessageId: string
+  ): ChatMessage[] {
+    const threadMessages: ChatMessage[] = [];
+    const messageMap = new Map(messages.map(msg => [msg.id, msg]));
+    
+    // Find root message
+    const rootMessage = messageMap.get(rootMessageId);
+    if (!rootMessage) return [];
+    
+    threadMessages.push(rootMessage);
+    
+    // Build thread recursively
+    this.buildThreadRecursive(messages, rootMessageId, threadMessages);
+    
+    return threadMessages.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  }
+
+  private static buildThreadRecursive(
+    allMessages: ChatMessage[],
+    parentId: string,
+    thread: ChatMessage[]
+  ): void {
+    const children = allMessages.filter(msg => 
+      msg.metadata?.parent_message_id === parentId
+    );
+    
+    children.forEach(child => {
+      thread.push(child);
+      this.buildThreadRecursive(allMessages, child.id, thread);
+    });
+  }
+
+  // Get conversation branches
+  static getConversationBranches(messages: ChatMessage[]): ConversationBranch[] {
+    const branches: ConversationBranch[] = [];
+    const rootMessages = messages.filter(msg => !msg.metadata?.parent_message_id);
+    
+    rootMessages.forEach(root => {
+      const thread = this.buildThread(messages, root.id);
+      branches.push({
+        id: generateId(),
+        root_message_id: root.id,
+        messages: thread,
+        created_at: root.timestamp,
+        last_message_at: thread[thread.length - 1]?.timestamp || root.timestamp
+      });
+    });
+    
+    return branches;
+  }
+}
+
+interface ConversationBranch {
+  id: string;
+  root_message_id: string;
+  messages: ChatMessage[];
+  created_at: string;
+  last_message_at: string;
+}
+```
+
+## Provider-Specific Adaptations
+
+### 1. OpenAI Format Adapter
+
+```typescript
+// OpenAI-specific formatting
+class OpenAIAdapter {
+  
+  // Convert to OpenAI format
+  static toOpenAI(messages: ChatMessage[]): any[] {
+    return messages.map(msg => {
+      const openaiMessage: any = {
+        role: msg.role,
+        content: this.formatContent(msg.content)
+      };
+
+      // Add tool calls if present
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        openaiMessage.tool_calls = msg.tool_calls;
+      }
+
+      // Add tool call ID for tool responses
+      if (msg.tool_call_id) {
+        openaiMessage.tool_call_id = msg.tool_call_id;
+      }
+
+      // Add name for function responses
+      if (msg.name) {
+        openaiMessage.name = msg.name;
+      }
+
+      return openaiMessage;
+    });
+  }
+
+  // Convert from OpenAI format
+  static fromOpenAI(openaiMessage: any, messageId?: string): ChatMessage {
+    return {
+      id: messageId || generateMessageId(),
+      role: openaiMessage.role,
+      content: openaiMessage.content,
+      timestamp: new Date().toISOString(),
+      tool_calls: openaiMessage.tool_calls,
+      tool_call_id: openaiMessage.tool_call_id,
+      name: openaiMessage.name,
+      metadata: {
+        provider: 'openai',
+        status: 'completed'
+      }
+    };
+  }
+
+  private static formatContent(content: MessageContent): any {
+    if (typeof content === 'string' || content === null) {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      return content.map(item => {
+        switch (item.type) {
+          case 'text':
+            return { type: 'text', text: item.text };
+          case 'image':
+            return { type: 'image_url', image_url: item.image_url };
+          default:
+            return item;
+        }
+      });
+    }
+
+    return content;
+  }
+}
+```
+
+### 2. Anthropic Format Adapter
+
+```typescript
+// Anthropic-specific formatting
+class AnthropicAdapter {
+  
+  // Convert to Anthropic format
+  static toAnthropic(messages: ChatMessage[]): { system?: string; messages: any[] } {
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    const conversationMessages = messages.filter(msg => msg.role !== 'system');
+
+    return {
+      system: systemMessage?.content as string,
+      messages: conversationMessages.map(msg => this.formatMessage(msg))
+    };
+  }
+
+  private static formatMessage(msg: ChatMessage): any {
+    // Convert tool messages to user messages with tool_result
+    if (msg.role === 'tool') {
+      return {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: msg.tool_call_id,
+          content: msg.content
+        }]
+      };
+    }
+
+    // Convert assistant messages with tool calls
+    if (msg.role === 'assistant' && msg.tool_calls) {
+      const content: any[] = [];
+      
+      if (msg.content) {
+        content.push({ type: 'text', text: msg.content });
+      }
+      
+      msg.tool_calls.forEach(toolCall => {
+        content.push({
+          type: 'tool_use',
+          id: toolCall.id,
+          name: toolCall.function.name,
+          input: JSON.parse(toolCall.function.arguments)
+        });
+      });
+      
+      return {
+        role: 'assistant',
+        content
+      };
+    }
+
+    // Handle multimodal content
+    if (Array.isArray(msg.content)) {
+      return {
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: msg.content.map(item => {
+          if (item.type === 'image') {
+            return {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg', // Assume JPEG
+                data: item.image_url?.url.split(',')[1] // Extract base64 data
+              }
+            };
+          }
+          return item;
+        })
+      };
+    }
+
+    return {
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content
+    };
+  }
+
+  // Convert from Anthropic format
+  static fromAnthropic(anthropicMessage: any, messageId?: string): ChatMessage {
+    const message: ChatMessage = {
+      id: messageId || generateMessageId(),
+      role: anthropicMessage.role,
+      content: '',
+      timestamp: new Date().toISOString(),
+      metadata: {
+        provider: 'anthropic',
+        status: 'completed'
+      }
+    };
+
+    if (typeof anthropicMessage.content === 'string') {
+      message.content = anthropicMessage.content;
+    } else if (Array.isArray(anthropicMessage.content)) {
+      const textContent: string[] = [];
+      const toolCalls: ToolCall[] = [];
+
+      anthropicMessage.content.forEach((item: any) => {
+        if (item.type === 'text') {
+          textContent.push(item.text);
+        } else if (item.type === 'tool_use') {
+          toolCalls.push({
+            id: item.id,
+            type: 'function',
+            function: {
+              name: item.name,
+              arguments: JSON.stringify(item.input)
+            }
+          });
+        }
+      });
+
+      message.content = textContent.join('');
+      if (toolCalls.length > 0) {
+        message.tool_calls = toolCalls;
+      }
+    }
+
+    return message;
+  }
+}
+```
+
+## Security and Sanitization
+
+### 1. Input Validation
+
+```typescript
+// Comprehensive input validation
+class ChatInputValidator {
+  
+  private static readonly MAX_MESSAGE_LENGTH = 50000;
+  private static readonly MAX_MESSAGES_PER_CONVERSATION = 1000;
+  private static readonly BLOCKED_PATTERNS = [
+    /\b(?:exec|eval|system|shell_exec)\s*\(/gi,
+    /<script[^>]*>.*?<\/script>/gis,
+    /javascript:/gi,
+    /data:text\/html/gi,
+    /vbscript:/gi
+  ];
+
+  // Validate single message
+  static validateMessage(message: ChatMessage): ValidationResult {
+    const errors: string[] = [];
+
+    // Basic structure validation
+    if (!message.id || typeof message.id !== 'string') {
+      errors.push('Message must have a valid ID');
+    }
+
+    if (!message.role || !['user', 'assistant', 'system', 'tool', 'function'].includes(message.role)) {
+      errors.push('Message must have a valid role');
+    }
+
+    if (!message.timestamp || !this.isValidTimestamp(message.timestamp)) {
+      errors.push('Message must have a valid timestamp');
+    }
+
+    // Content validation
+    const contentValidation = this.validateContent(message.content);
+    if (!contentValidation.valid) {
+      errors.push(...contentValidation.errors);
+    }
+
+    // Tool call validation
+    if (message.tool_calls) {
+      message.tool_calls.forEach((toolCall, index) => {
+        const toolValidation = ToolCallHandler.validateToolCall(toolCall);
+        if (!toolValidation.valid) {
+          errors.push(...toolValidation.errors.map(e => `Tool call ${index}: ${e}`));
+        }
+      });
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  // Validate message content
+  static validateContent(content: MessageContent): ValidationResult {
+    const errors: string[] = [];
+
+    if (content === null) {
+      return { valid: true, errors: [] };
+    }
+
+    if (typeof content === 'string') {
+      // Length validation
+      if (content.length > this.MAX_MESSAGE_LENGTH) {
+        errors.push(`Message content exceeds maximum length of ${this.MAX_MESSAGE_LENGTH} characters`);
+      }
+
+      // Pattern validation
+      this.BLOCKED_PATTERNS.forEach(pattern => {
+        if (pattern.test(content)) {
+          errors.push('Message contains blocked content');
+        }
+      });
+    } else if (Array.isArray(content)) {
+      // Multimodal content validation
+      content.forEach((item, index) => {
+        const itemValidation = MultimodalContentHandler.validateContent([item]);
+        if (!itemValidation.valid) {
+          errors.push(...itemValidation.errors.map(e => `Content item ${index}: ${e}`));
+        }
+      });
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  // Validate conversation
+  static validateConversation(conversation: Conversation): ValidationResult {
+    const errors: string[] = [];
+
+    if (!conversation.id || typeof conversation.id !== 'string') {
+      errors.push('Conversation must have a valid ID');
+    }
+
+    if (!Array.isArray(conversation.messages)) {
+      errors.push('Conversation must have a messages array');
+    } else {
+      if (conversation.messages.length > this.MAX_MESSAGES_PER_CONVERSATION) {
+        errors.push(`Conversation exceeds maximum of ${this.MAX_MESSAGES_PER_CONVERSATION} messages`);
+      }
+
+      conversation.messages.forEach((message, index) => {
+        const messageValidation = this.validateMessage(message);
+        if (!messageValidation.valid) {
+          errors.push(...messageValidation.errors.map(e => `Message ${index}: ${e}`));
+        }
+      });
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  private static isValidTimestamp(timestamp: string): boolean {
+    try {
+      const date = new Date(timestamp);
+      return date instanceof Date && !isNaN(date.getTime());
+    } catch {
+      return false;
+    }
+  }
+}
+```
+
+### 2. Content Filtering
+
+```typescript
+// Content filtering and moderation
+class ContentFilter {
+  private static readonly TOXICITY_THRESHOLD = 0.7;
+  private static readonly SPAM_PATTERNS = [
+    /(.)\1{20,}/g,        // Repeated characters
+    /\b\w+\b(?:\s+\1){5,}/g, // Repeated words
+    /[A-Z]{20,}/g,        // All caps spam
+  ];
+
+  // Filter message content
+  static async filterMessage(message: ChatMessage): Promise<FilterResult> {
+    const issues: string[] = [];
+    let filtered = false;
+
+    if (typeof message.content === 'string') {
+      // Check for spam patterns
+      const spamCheck = this.checkSpam(message.content);
+      if (!spamCheck.passed) {
+        issues.push('Content appears to be spam');
+        filtered = true;
+      }
+
+      // Check for toxicity (would integrate with external service)
+      const toxicityCheck = await this.checkToxicity(message.content);
+      if (!toxicityCheck.passed) {
+        issues.push('Content may be inappropriate');
+        filtered = true;
+      }
+
+      // Check for PII
+      const piiCheck = this.checkPII(message.content);
+      if (!piiCheck.passed) {
+        issues.push('Content may contain personal information');
+        // Don't automatically filter PII, just warn
+      }
+    }
+
+    return {
+      passed: !filtered,
+      issues,
+      filtered_content: filtered ? this.createFilteredContent(message) : message.content
+    };
+  }
+
+  private static checkSpam(content: string): { passed: boolean; issues: string[] } {
+    const issues: string[] = [];
+
+    this.SPAM_PATTERNS.forEach(pattern => {
+      if (pattern.test(content)) {
+        issues.push('Spam pattern detected');
+      }
+    });
+
+    return {
+      passed: issues.length === 0,
+      issues
+    };
+  }
+
+  private static async checkToxicity(content: string): Promise<{ passed: boolean; score: number }> {
+    // Mock implementation - would integrate with Perspective API or similar
+    const mockScore = Math.random();
+    
+    return {
+      passed: mockScore < this.TOXICITY_THRESHOLD,
+      score: mockScore
+    };
+  }
+
+  private static checkPII(content: string): { passed: boolean; types: string[] } {
+    const piiTypes: string[] = [];
+
+    // Email pattern
+    if (/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g.test(content)) {
+      piiTypes.push('email');
+    }
+
+    // Phone pattern
+    if (/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g.test(content)) {
+      piiTypes.push('phone');
+    }
+
+    // SSN pattern
+    if (/\b\d{3}-\d{2}-\d{4}\b/g.test(content)) {
+      piiTypes.push('ssn');
+    }
+
+    return {
+      passed: piiTypes.length === 0,
+      types: piiTypes
+    };
+  }
+
+  private static createFilteredContent(message: ChatMessage): MessageContent {
+    return '[Content filtered by moderation system]';
+  }
+}
+
+interface FilterResult {
+  passed: boolean;
+  issues: string[];
+  filtered_content: MessageContent;
+}
+```
+
+## Performance Optimization
+
+### 1. Message Batching and Compression
+
+```typescript
+// Performance optimization utilities
+class ChatPerformanceOptimizer {
+  
+  // Batch multiple messages for efficient transmission
+  static batchMessages(messages: ChatMessage[]): MessageBatch {
+    return {
+      id: generateId(),
+      messages,
+      count: messages.length,
+      created_at: new Date().toISOString(),
+      compressed: false
+    };
+  }
+
+  // Compress message batch
+  static async compressBatch(batch: MessageBatch): Promise<MessageBatch> {
+    try {
+      const jsonString = JSON.stringify(batch.messages);
+      
+      // Simple compression simulation - in production use gzip or brotli
+      const compressed = this.simpleCompress(jsonString);
+      
+      return {
+        ...batch,
+        messages: compressed as any,
+        compressed: true,
+        compression_ratio: jsonString.length / compressed.length
+      };
+    } catch (error) {
+      console.warn('Compression failed:', error);
+      return batch;
+    }
+  }
+
+  // Decompress message batch
+  static async decompressBatch(batch: MessageBatch): Promise<ChatMessage[]> {
+    if (!batch.compressed) {
+      return batch.messages;
+    }
+
+    try {
+      const decompressed = this.simpleDecompress(batch.messages as any);
+      return JSON.parse(decompressed);
+    } catch (error) {
+      console.error('Decompression failed:', error);
+      throw new Error('Failed to decompress message batch');
+    }
+  }
+
+  // Optimize message for storage/transmission
+  static optimizeMessage(message: ChatMessage): ChatMessage {
+    const optimized = { ...message };
+
+    // Remove empty metadata fields
+    if (optimized.metadata) {
+      Object.keys(optimized.metadata).forEach(key => {
+        if (optimized.metadata![key] === null || optimized.metadata![key] === undefined) {
+          delete optimized.metadata![key];
+        }
+      });
+
+      if (Object.keys(optimized.metadata).length === 0) {
+        delete optimized.metadata;
+      }
+    }
+
+    // Truncate very long content for summaries
+    if (typeof optimized.content === 'string' && optimized.content.length > 10000) {
+      optimized.content = optimized.content.substring(0, 10000) + '...';
+    }
+
+    return optimized;
+  }
+
+  private static simpleCompress(input: string): string {
+    // Mock compression - use real compression library in production
+    return btoa(input);
+  }
+
+  private static simpleDecompress(input: string): string {
+    // Mock decompression - use real compression library in production
+    return atob(input);
+  }
+}
+
+interface MessageBatch {
+  id: string;
+  messages: ChatMessage[] | any;
+  count: number;
+  created_at: string;
+  compressed: boolean;
+  compression_ratio?: number;
+}
+```
+
+### 2. Caching and Memoization
+
+```typescript
+// Caching strategies for chat data
+class ChatCacheManager {
+  private messageCache: Map<string, ChatMessage> = new Map();
+  private conversationCache: Map<string, Conversation> = new Map();
+  private contextCache: Map<string, ConversationContext> = new Map();
+
+  // Cache message with TTL
+  cacheMessage(message: ChatMessage, ttl: number = 3600000): void {
+    this.messageCache.set(message.id, message);
+    
+    // Set expiration
+    setTimeout(() => {
+      this.messageCache.delete(message.id);
+    }, ttl);
+  }
+
+  // Get cached message
+  getCachedMessage(messageId: string): ChatMessage | null {
+    return this.messageCache.get(messageId) || null;
+  }
+
+  // Cache conversation
+  cacheConversation(conversation: Conversation, ttl: number = 1800000): void {
+    this.conversationCache.set(conversation.id, conversation);
+    
+    setTimeout(() => {
+      this.conversationCache.delete(conversation.id);
+    }, ttl);
+  }
+
+  // Get cached conversation
+  getCachedConversation(conversationId: string): Conversation | null {
+    return this.conversationCache.get(conversationId) || null;
+  }
+
+  // Memoize expensive operations
+  memoizeOperation<T>(
+    key: string,
+    operation: () => T,
+    ttl: number = 300000
+  ): T {
+    const cached = this.operationCache.get(key);
+    if (cached && Date.now() - cached.timestamp < ttl) {
+      return cached.result;
+    }
+
+    const result = operation();
+    this.operationCache.set(key, {
+      result,
+      timestamp: Date.now()
+    });
+
+    return result;
+  }
+
+  private operationCache: Map<string, { result: any; timestamp: number }> = new Map();
+
+  // Clear expired cache entries
+  cleanup(): void {
+    const now = Date.now();
+    
+    this.operationCache.forEach((value, key) => {
+      if (now - value.timestamp > 300000) { // 5 minutes
+        this.operationCache.delete(key);
+      }
+    });
+  }
+}
+```
+
+## Validation and Testing
+
+### 1. JSON Schema Validation
+
+```typescript
+// JSON Schema definitions for validation
+const ChatMessageSchema = {
+  type: 'object',
+  required: ['id', 'role', 'content', 'timestamp'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    role: { 
+      type: 'string', 
+      enum: ['user', 'assistant', 'system', 'tool', 'function'] 
+    },
+    content: {
+      oneOf: [
+        { type: 'string' },
+        { type: 'null' },
+        {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              type: { 
+                type: 'string', 
+                enum: ['text', 'image', 'audio', 'video', 'file'] 
+              }
+            }
+          }
+        }
+      ]
+    },
+    timestamp: { type: 'string', format: 'date-time' },
+    tool_calls: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id', 'type', 'function'],
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string', enum: ['function'] },
+          function: {
+            type: 'object',
+            required: ['name', 'arguments'],
+            properties: {
+              name: { type: 'string' },
+              arguments: { type: 'string' }
+            }
+          }
+        }
+      }
+    },
+    metadata: { type: 'object' }
+  }
+};
+
+const ConversationSchema = {
+  type: 'object',
+  required: ['id', 'messages', 'created_at', 'updated_at'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    title: { type: 'string' },
+    messages: {
+      type: 'array',
+      items: ChatMessageSchema
+    },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' }
+  }
+};
+
+// Schema validator
+class SchemaValidator {
+  private static ajv = new Ajv({ formats: require('ajv-formats') });
+
+  static validateMessage(message: any): ValidationResult {
+    const validate = this.ajv.compile(ChatMessageSchema);
+    const valid = validate(message);
+    
+    return {
+      valid,
+      errors: valid ? [] : validate.errors?.map(e => e.message || 'Validation error') || []
+    };
+  }
+
+  static validateConversation(conversation: any): ValidationResult {
+    const validate = this.ajv.compile(ConversationSchema);
+    const valid = validate(conversation);
+    
+    return {
+      valid,
+      errors: valid ? [] : validate.errors?.map(e => e.message || 'Validation error') || []
+    };
+  }
+}
+```
+
+### 2. Testing Framework
+
+```typescript
+// Testing utilities for chat formatting
+class ChatFormattingTester {
+  
+  // Test message creation
+  static testMessageCreation(): TestResults {
+    const tests: TestCase[] = [
+      {
+        name: 'Create user message',
+        test: () => {
+          const message = MessageFormatter.createUserMessage('Hello world');
+          return message.role === 'user' && message.content === 'Hello world';
+        }
+      },
+      {
+        name: 'Create assistant message with tool calls',
+        test: () => {
+          const toolCall = ToolCallHandler.createToolCall('test_tool', { param: 'value' });
+          const message = MessageFormatter.createAssistantMessage(null, [toolCall]);
+          return message.role === 'assistant' && message.tool_calls?.length === 1;
+        }
+      },
+      {
+        name: 'Create multimodal message',
+        test: () => {
+          const content = [
+            MultimodalContentHandler.createTextContent('Check this image:'),
+            MultimodalContentHandler.createImageContent('data:image/png;base64,iVBOR...')
+          ];
+          const message = MessageFormatter.createUserMessage(content);
+          return Array.isArray(message.content) && message.content.length === 2;
+        }
+      }
+    ];
+
+    return this.runTests(tests);
+  }
+
+  // Test provider format conversion
+  static testProviderFormats(): TestResults {
+    const tests: TestCase[] = [
+      {
+        name: 'Convert to OpenAI format',
+        test: () => {
+          const message = MessageFormatter.createUserMessage('Test message');
+          const openaiFormat = OpenAIAdapter.toOpenAI([message]);
+          return openaiFormat.length === 1 && openaiFormat[0].role === 'user';
+        }
+      },
+      {
+        name: 'Convert to Anthropic format',
+        test: () => {
+          const messages = [
+            MessageFormatter.createSystemMessage('You are helpful'),
+            MessageFormatter.createUserMessage('Hello')
+          ];
+          const anthropicFormat = AnthropicAdapter.toAnthropic(messages);
+          return anthropicFormat.system === 'You are helpful' && anthropicFormat.messages.length === 1;
+        }
+      }
+    ];
+
+    return this.runTests(tests);
+  }
+
+  // Test error handling
+  static testErrorHandling(): TestResults {
+    const tests: TestCase[] = [
+      {
+        name: 'Handle validation error',
+        test: () => {
+          const invalidMessage = { role: 'invalid' } as any;
+          const validation = ChatInputValidator.validateMessage(invalidMessage);
+          return !validation.valid && validation.errors.length > 0;
+        }
+      },
+      {
+        name: 'Create error from provider response',
+        test: () => {
+          const providerError = { status: 429, message: 'Rate limit exceeded' };
+          const chatError = ChatErrorHandler.fromProviderError(providerError, 'openai');
+          return chatError.type === ChatErrorType.RATE_LIMIT_ERROR;
+        }
+      }
+    ];
+
+    return this.runTests(tests);
+  }
+
+  // Test streaming functionality
+  static testStreaming(): TestResults {
+    const tests: TestCase[] = [
+      {
+        name: 'Format SSE event',
+        test: () => {
+          const event = StreamingFormatter.createContentDelta('msg_123', 'Hello', 0);
+          const sseString = StreamingFormatter.formatSSE(event);
+          return sseString.includes('event: content_delta') && sseString.includes('Hello');
+        }
+      },
+      {
+        name: 'Format WebSocket message',
+        test: () => {
+          const wsMessage = WebSocketFormatter.createChatMessage(
+            'conv_123',
+            MessageFormatter.createUserMessage('Test')
+          );
+          const parsed = JSON.parse(wsMessage);
+          return parsed.type === 'chat_message' && parsed.conversation_id === 'conv_123';
+        }
+      }
+    ];
+
+    return this.runTests(tests);
+  }
+
+  private static runTests(tests: TestCase[]): TestResults {
+    const results: TestResults = {
+      total: tests.length,
+      passed: 0,
+      failed: 0,
+      failures: []
+    };
+
+    tests.forEach(test => {
+      try {
+        if (test.test()) {
+          results.passed++;
+        } else {
+          results.failed++;
+          results.failures.push(`${test.name}: Test returned false`);
+        }
+      } catch (error) {
+        results.failed++;
+        results.failures.push(`${test.name}: ${error.message}`);
+      }
+    });
+
+    return results;
+  }
+}
+
+interface TestCase {
+  name: string;
+  test: () => boolean;
+}
+
+interface TestResults {
+  total: number;
+  passed: number;
+  failed: number;
+  failures: string[];
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+```
+
+## Implementation Examples
+
+### 1. Complete Chat Implementation
+
+```typescript
+// Complete chat implementation example
+class ChatSystem {
+  private contextManager: ConversationContextManager;
+  private errorHandler: ChatErrorHandler;
+  private validator: ChatInputValidator;
+  private cache: ChatCacheManager;
+
+  constructor() {
+    this.contextManager = new ConversationContextManager();
+    this.errorHandler = new ChatErrorHandler();
+    this.validator = new ChatInputValidator();
+    this.cache = new ChatCacheManager();
+  }
+
+  // Send message and get response
+  async sendMessage(
+    conversationId: string,
+    content: string,
+    userId: string,
+    provider: 'openai' | 'anthropic' = 'openai'
+  ): Promise<Conversation> {
+    try {
+      // Create user message
+      const userMessage = MessageFormatter.createUserMessage(content, {
+        user_id: userId,
+        conversation_id: conversationId
+      });
+
+      // Validate message
+      const validation = this.validator.validateMessage(userMessage);
+      if (!validation.valid) {
+        throw new Error(`Invalid message: ${validation.errors.join(', ')}`);
+      }
+
+      // Get conversation
+      let conversation = this.cache.getCachedConversation(conversationId) || 
+                        await this.loadConversation(conversationId);
+
+      // Add user message
+      conversation.messages.push(userMessage);
+
+      // Get AI response
+      const aiResponse = await this.generateResponse(conversation, provider);
+      conversation.messages.push(aiResponse);
+
+      // Update cache and storage
+      this.cache.cacheConversation(conversation);
+      await this.saveConversation(conversation);
+
+      return conversation;
+
+    } catch (error) {
+      const chatError = this.errorHandler.fromProviderError(error, provider);
+      throw chatError;
+    }
+  }
+
+  // Generate AI response
+  private async generateResponse(
+    conversation: Conversation,
+    provider: 'openai' | 'anthropic'
+  ): Promise<ChatMessage> {
+    
+    // Format messages for provider
+    const messages = provider === 'openai' 
+      ? OpenAIAdapter.toOpenAI(conversation.messages)
+      : AnthropicAdapter.toAnthropic(conversation.messages).messages;
+
+    // Call LLM API (mock implementation)
+    const response = await this.callLLMAPI(messages, provider);
+
+    // Convert response back to standard format
+    return provider === 'openai'
+      ? OpenAIAdapter.fromOpenAI(response)
+      : AnthropicAdapter.fromAnthropic(response);
+  }
+
+  private async callLLMAPI(messages: any[], provider: string): Promise<any> {
+    // Mock LLM API call
+    return {
+      role: 'assistant',
+      content: 'This is a mock response from the AI.'
+    };
+  }
+
+  private async loadConversation(conversationId: string): Promise<Conversation> {
+    // Mock conversation loading
+    return {
+      id: conversationId,
+      messages: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  private async saveConversation(conversation: Conversation): Promise<void> {
+    // Mock conversation saving
+    console.log('Saving conversation:', conversation.id);
+  }
+}
+```
+
+### 2. Streaming Chat Implementation
+
+```typescript
+// Streaming chat implementation
+class StreamingChatSystem {
+  
+  // Create streaming response
+  async createStreamingResponse(
+    conversationId: string,
+    messages: ChatMessage[],
+    provider: 'openai' | 'anthropic' = 'openai'
+  ): Promise<ReadableStream> {
+    
+    return new ReadableStream({
+      async start(controller) {
+        try {
+          const messageId = generateMessageId();
+          
+          // Send message start event
+          const startEvent = StreamingFormatter.createMessageStart(messageId);
+          controller.enqueue(StreamingFormatter.formatSSE(startEvent));
+
+          // Mock streaming response
+          const responseText = "This is a streaming response from the AI assistant.";
+          
+          for (let i = 0; i < responseText.length; i++) {
+            const char = responseText[i];
+            const deltaEvent = StreamingFormatter.createContentDelta(messageId, char, i);
+            controller.enqueue(StreamingFormatter.formatSSE(deltaEvent));
+            
+            // Add delay to simulate real streaming
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
+          // Send completion event
+          const finalMessage = MessageFormatter.createAssistantMessage(responseText, undefined, {
+            conversation_id: conversationId,
+            provider
+          });
+          const completeEvent = StreamingFormatter.createMessageComplete(finalMessage);
+          controller.enqueue(StreamingFormatter.formatSSE(completeEvent));
+
+          controller.close();
+          
+        } catch (error) {
+          const errorEvent = StreamingFormatter.createError(
+            'unknown',
+            ChatErrorHandler.fromProviderError(error, provider)
+          );
+          controller.enqueue(StreamingFormatter.formatSSE(errorEvent));
+          controller.close();
+        }
+      }
+    });
+  }
+
+  // Handle streaming with tool calls
+  async createStreamingResponseWithTools(
+    conversationId: string,
+    messages: ChatMessage[],
+    availableTools: string[]
+  ): Promise<ReadableStream> {
+    
+    return new ReadableStream({
+      async start(controller) {
+        const messageId = generateMessageId();
+        
+        // Start message
+        controller.enqueue(StreamingFormatter.formatSSE(
+          StreamingFormatter.createMessageStart(messageId)
+        ));
+
+        // Simulate tool call detection
+        const toolCallId = `call_${generateId()}`;
+        controller.enqueue(StreamingFormatter.formatSSE(
+          StreamingFormatter.createToolCallStart(messageId, toolCallId, 'web_search')
+        ));
+
+        // Execute tool
+        controller.enqueue(StreamingFormatter.formatSSE(
+          StreamingFormatter.createToolExecution(messageId, toolCallId, 'executing')
+        ));
+
+        // Simulate tool execution delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Tool completion
+        const toolResult = { results: ['Mock search result 1', 'Mock search result 2'] };
+        controller.enqueue(StreamingFormatter.formatSSE(
+          StreamingFormatter.createToolExecution(messageId, toolCallId, 'completed', toolResult)
+        ));
+
+        // Stream final response
+        const responseText = "Based on the search results, I found some relevant information...";
+        for (const char of responseText) {
+          controller.enqueue(StreamingFormatter.formatSSE(
+            StreamingFormatter.createContentDelta(messageId, char)
+          ));
+          await new Promise(resolve => setTimeout(resolve, 30));
+        }
+
+        // Complete message
+        const finalMessage = MessageFormatter.createAssistantMessage(responseText, [{
+          id: toolCallId,
+          type: 'function',
+          function: { name: 'web_search', arguments: '{"query":"test"}' }
+        }]);
+        
+        controller.enqueue(StreamingFormatter.formatSSE(
+          StreamingFormatter.createMessageComplete(finalMessage)
+        ));
+
+        controller.close();
+      }
+    });
+  }
+}
+```
+
+## Implementation Checklist
+
+### Core Infrastructure
+- [ ] Implement base ChatMessage interface with all required fields
+- [ ] Create MessageFormatter utility class with role-specific methods
+- [ ] Set up ConversationContextManager for context preservation
+- [ ] Implement ToolCallHandler for function calling support
+- [ ] Create comprehensive error handling with ChatErrorHandler
+
+### Content Handling
+- [ ] Support multimodal content with MultimodalContentHandler
+- [ ] Implement content sanitization with ContentSanitizer
+- [ ] Add input validation with ChatInputValidator
+- [ ] Create content filtering system with ContentFilter
+- [ ] Handle file attachments and media content
+
+### Provider Integration
+- [ ] Create OpenAI format adapter with bidirectional conversion
+- [ ] Create Anthropic format adapter with bidirectional conversion
+- [ ] Implement generic provider interface
+- [ ] Handle provider-specific tool calling formats
+- [ ] Support provider-specific error handling
+
+### Streaming Support
+- [ ] Implement SSE streaming with StreamingFormatter
+- [ ] Create WebSocket messaging with WebSocketFormatter
+- [ ] Build client-side streaming handler
+- [ ] Support real-time tool execution updates
+- [ ] Handle streaming errors and recovery
+
+### Performance Optimization
+- [ ] Implement message batching and compression
+- [ ] Create caching system with ChatCacheManager
+- [ ] Add context window management
+- [ ] Optimize JSON serialization/deserialization
+- [ ] Implement efficient storage patterns
+
+### Security and Validation
+- [ ] Create comprehensive input validation
+- [ ] Implement content filtering and moderation
+- [ ] Add PII detection and handling
+- [ ] Create security audit logging
+- [ ] Implement rate limiting and abuse prevention
+
+### Testing and Quality
+- [ ] Write unit tests for all core components
+- [ ] Create integration tests for provider adapters
+- [ ] Test streaming functionality thoroughly
+- [ ] Validate error handling scenarios
+- [ ] Performance test with large conversations
+
+### Documentation and Examples
+- [ ] Document all interfaces and schemas
+- [ ] Provide implementation examples
+- [ ] Create migration guides for existing systems
+- [ ] Write troubleshooting documentation
+- [ ] Maintain API reference documentation
+
+## Common Pitfalls and Solutions
+
+### 1. Message Format Inconsistencies
+**Problem:** Different providers expect different message formats
+**Solution:** Use adapter pattern with bidirectional conversion, maintain internal standard format
+
+### 2. Tool Call Parsing Errors
+**Problem:** JSON parsing failures in tool call arguments
+**Solution:** Implement robust parsing with error handling, validate arguments before execution
+
+### 3. Context Window Overflow
+**Problem:** Conversations exceeding model context limits
+**Solution:** Implement intelligent message prioritization and context trimming
+
+### 4. Streaming Interruptions
+**Problem:** Streaming connections dropping or failing
+**Solution:** Implement reconnection logic, buffer important events, provide fallback modes
+
+### 5. Memory Leaks in Long Conversations
+**Problem:** Cached data growing indefinitely
+**Solution:** Implement TTL-based caching, periodic cleanup, conversation archiving
+
+## Conclusion
+
+This protocol provides a comprehensive framework for implementing LLM API JSON chat formatting in JavaScript platforms. The key principles are:
+
+1. **Standardization**: Consistent internal format across all providers
+2. **Flexibility**: Support for multimodal content and extensible metadata
+3. **Security**: Comprehensive validation and content filtering
+4. **Performance**: Efficient caching, streaming, and optimization
+5. **Reliability**: Robust error handling and recovery mechanisms
+
+Follow this protocol to build scalable, secure, and maintainable chat systems that work seamlessly across different LLM providers while providing excellent user experiences.

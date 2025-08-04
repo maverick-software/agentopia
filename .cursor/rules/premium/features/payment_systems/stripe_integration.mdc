@@ -1,0 +1,1109 @@
+# Stripe Integration SOP - OfferGen AI Platform
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [Backend Setup](#backend-setup)
+4. [Database Schema](#database-schema)
+5. [Stripe Webhook Configuration](#stripe-webhook-configuration)
+6. [Frontend Implementation](#frontend-implementation)
+7. [Admin Panel Integration](#admin-panel-integration)
+8. [Testing Procedures](#testing-procedures)
+9. [Deployment Checklist](#deployment-checklist)
+10. [Troubleshooting](#troubleshooting)
+
+## Overview
+
+This SOP covers the complete implementation of Stripe integration for the OfferGen AI platform, including:
+- Subscription management (Free, Solo, Agency plans)
+- One-time token purchases
+- Checkout flow and payment processing
+- Account upgrades and downgrades
+- Admin panel for Stripe management
+- Automatic product synchronization
+- Webhook handling for real-time updates
+
+## Prerequisites
+
+### Required Accounts & Access
+- [ ] Stripe account (Test and Live modes)
+- [ ] Supabase project with admin access
+- [ ] Environment variables configured
+- [ ] Domain configured for webhooks
+
+### Required Stripe Products
+Create these products in your Stripe dashboard:
+
+#### Subscription Plans
+```
+1. Free Plan
+   - Product ID: prod_SXjwJhVzCZnLDe
+   - Price ID: price_1RceSGG3zEsLeiUuv6duIOhp
+   - Price: $0/month
+   - Features: Basic access
+
+2. Solo Plan
+   - Product ID: prod_QSoPrG1AcC53jZ
+   - Price ID: price_1PbsmIG3zEsLeiUuhFTG5VqW
+   - Price: $59/month
+   - Features: Individual use
+
+3. Agency Plan
+   - Product ID: prod_QSoPJRWsnjuMhz
+   - Price ID: price_1PbsmdG3zEsLeiUuOB1148wR
+   - Price: $99/month
+   - Features: Team collaboration
+```
+
+#### Token Packages
+```
+1. 100 AI Tokens
+   - Product ID: prod_SbkjOsn8wvc8Fe
+   - Price ID: price_1RgXEBG3zEsLeiUuWAnf21S2
+   - Price: $5
+   - Tokens: 100
+
+2. 250 AI Tokens
+   - Product ID: prod_SbkjScmpVUcVJu
+   - Price ID: price_1RgXEUG3zEsLeiUuh3ZSgDBa
+   - Price: $12
+   - Tokens: 250 + 25 bonus
+
+3. 500 AI Tokens
+   - Product ID: prod_SbkkhfxpIoH4Qh
+   - Price ID: price_1RgXElG3zEsLeiUuTuLtPnzo
+   - Price: $20
+   - Tokens: 500 + 75 bonus
+
+4. 1,000 AI Tokens
+   - Product ID: prod_SbkkwJ93G5K6VQ
+   - Price ID: price_1RgXF4G3zEsLeiUuG1QQ2WAT
+   - Price: $38
+   - Tokens: 1000 + 200 bonus
+
+5. 5,000 AI Tokens
+   - Product ID: prod_Sbkl6dkBPGGt3h
+   - Price ID: price_1RgXFWG3zEsLeiUu5PH0rhu8
+   - Price: $99
+   - Tokens: 5000 + 1500 bonus
+```
+
+## Backend Setup
+
+### 1. Environment Variables
+
+Add these to your Supabase Edge Functions environment:
+
+```bash
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_... # Test key, replace with live key for production
+STRIPE_WEBHOOK_SECRET=whsec_... # Webhook endpoint secret
+STRIPE_PUBLISHABLE_KEY=pk_test_... # For frontend
+
+# Supabase Configuration (already configured)
+SUPABASE_URL=your-supabase-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+### 2. Stripe Edge Functions
+
+The platform uses these Stripe edge functions:
+
+#### A. Checkout Session Creation (`stripe-checkout`)
+**Purpose**: Creates Stripe checkout sessions for subscriptions and token purchases
+**Location**: `supabase/functions/stripe-checkout/index.ts`
+**Features**:
+- Subscription checkout (monthly billing)
+- One-time payment checkout (token purchases)
+- Customer creation and management
+- Success/cancel URL handling
+
+#### B. Webhook Handler (`stripe-webhook`)
+**Purpose**: Processes Stripe webhooks for real-time updates
+**Location**: `supabase/functions/stripe-webhook/index.ts`
+**Events Handled**:
+- `checkout.session.completed` - Subscription activation
+- `payment_intent.succeeded` - Token purchase completion
+- `invoice.created/updated/paid` - Invoice management
+- `customer.subscription.updated` - Subscription changes
+
+### 3. Database Functions
+
+#### Token Purchase Processing
+```sql
+-- Function to process token purchases
+CREATE OR REPLACE FUNCTION process_token_purchase(
+  p_payment_intent_id TEXT,
+  p_token_purchase_id UUID
+) RETURNS BOOLEAN AS $$
+BEGIN
+  -- Update token purchase status
+  UPDATE token_purchases 
+  SET status = 'completed',
+      stripe_payment_intent_id = p_payment_intent_id,
+      updated_at = NOW()
+  WHERE id = p_token_purchase_id;
+  
+  -- Add tokens to user account
+  INSERT INTO token_transactions (
+    user_id,
+    transaction_type,
+    amount,
+    description,
+    metadata
+  )
+  SELECT 
+    user_id,
+    'purchase',
+    token_amount,
+    'Token purchase completed',
+    jsonb_build_object('purchase_id', id, 'payment_intent_id', p_payment_intent_id)
+  FROM token_purchases 
+  WHERE id = p_token_purchase_id;
+  
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+## Database Schema
+
+### Core Stripe Tables
+
+The platform uses these tables for Stripe integration:
+
+```sql
+-- Stripe Customers
+CREATE TABLE stripe_customers (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) UNIQUE,
+  customer_id TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+-- Stripe Subscriptions
+CREATE TABLE stripe_subscriptions (
+  id BIGSERIAL PRIMARY KEY,
+  customer_id TEXT UNIQUE NOT NULL,
+  subscription_id TEXT,
+  price_id TEXT,
+  current_period_start BIGINT,
+  current_period_end BIGINT,
+  cancel_at_period_end BOOLEAN DEFAULT FALSE,
+  payment_method_brand TEXT,
+  payment_method_last4 TEXT,
+  status stripe_subscription_status NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+-- Stripe Orders (One-time purchases)
+CREATE TABLE stripe_orders (
+  id BIGSERIAL PRIMARY KEY,
+  checkout_session_id TEXT NOT NULL,
+  payment_intent_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  amount_subtotal BIGINT NOT NULL,
+  amount_total BIGINT NOT NULL,
+  currency TEXT NOT NULL,
+  payment_status TEXT NOT NULL,
+  status stripe_order_status DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+-- Stripe Invoices
+CREATE TABLE stripe_invoices (
+  id BIGINT PRIMARY KEY,
+  invoice_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  subscription_id TEXT,
+  status TEXT NOT NULL,
+  amount_due BIGINT NOT NULL,
+  amount_paid BIGINT NOT NULL,
+  created BIGINT NOT NULL,
+  period_start BIGINT,
+  period_end BIGINT,
+  invoice_pdf TEXT,
+  billing_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+-- Token Purchases
+CREATE TABLE token_purchases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  limit_type limit_type NOT NULL,
+  token_amount INTEGER NOT NULL,
+  price_paid NUMERIC(10,2) NOT NULL,
+  stripe_payment_intent_id TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+## Stripe Webhook Configuration
+
+### 1. Webhook Endpoint Setup
+
+**Endpoint URL**: `https://your-project.supabase.co/functions/v1/stripe-webhook`
+
+**Required Events**:
+```
+checkout.session.completed
+payment_intent.succeeded
+invoice.created
+invoice.updated
+invoice.paid
+customer.subscription.created
+customer.subscription.updated
+customer.subscription.deleted
+```
+
+### 2. Webhook Security
+
+The webhook handler verifies signatures using:
+```typescript
+const signature = req.headers.get('stripe-signature');
+const event = await stripe.webhooks.constructEventAsync(
+  body, 
+  signature, 
+  stripeWebhookSecret
+);
+```
+
+### 3. Event Processing Flow
+
+```mermaid
+graph TD
+    A[Stripe Event] --> B[Webhook Received]
+    B --> C[Verify Signature]
+    C --> D[Process Event Type]
+    D --> E[Update Database]
+    E --> F[Send Response]
+    
+    D --> G[checkout.session.completed]
+    D --> H[payment_intent.succeeded]
+    D --> I[invoice.paid]
+    
+    G --> J[Create/Update Subscription]
+    H --> K[Process Token Purchase]
+    I --> L[Update Invoice Record]
+```
+
+## Frontend Implementation
+
+### 1. Stripe Configuration
+
+**File**: `src/stripe-config.ts`
+
+This file contains all Stripe product configurations:
+- Subscription plans with pricing
+- Token packages with bonus structures
+- Helper functions for product lookup
+
+### 2. Checkout Integration
+
+#### Subscription Checkout
+```typescript
+// Usage in PricingPage component
+const handleSelectPlan = async (priceId: string, planName: string) => {
+  await createCheckoutSession({
+    priceId,
+    mode: 'subscription',
+    successUrl: `${window.location.origin}/success`,
+    cancelUrl: window.location.href
+  });
+};
+```
+
+#### Token Purchase Checkout
+```typescript
+// Usage in TokensPage component
+const purchaseTokens = async (packageId: string) => {
+  const tokenPackage = tokenPackages.find(pkg => pkg.id === packageId);
+  const configPackage = configTokenPackages.find(pkg => pkg.id === packageId);
+  
+  await createCheckoutSession({
+    priceId: configPackage.priceId,
+    mode: 'payment',
+    successUrl: `${window.location.origin}/success?purchase=${purchaseData.id}`,
+    cancelUrl: window.location.href
+  });
+};
+```
+
+### 3. Subscription Management
+
+#### Current Subscription Display
+```typescript
+// useSubscription hook provides:
+const { 
+  subscription,     // Current subscription data
+  planName,        // Human-readable plan name
+  isActive,        // Boolean subscription status
+  refreshSubscription // Manual refresh function
+} = useSubscription();
+```
+
+#### Plan Upgrade Flow
+```typescript
+// In Settings component
+const handleUpgradePlan = async (priceId: string) => {
+  await createCheckoutSession({
+    priceId,
+    mode: 'subscription',
+    successUrl: `${window.location.origin}/success`,
+    cancelUrl: window.location.href
+  });
+};
+```
+
+### 4. Token System Integration
+
+#### Token Balance Display
+```typescript
+// useTokens hook provides:
+const {
+  balance,          // Current token balance
+  transactions,     // Transaction history
+  tokenPackages,    // Available packages
+  purchaseTokens,   // Purchase function
+  useTokens        // Spend tokens function
+} = useTokens();
+```
+
+#### Token Usage
+```typescript
+// Example: Using tokens for AI features
+const generateContent = async () => {
+  const tokenCost = getTokenCost('ai_chat');
+  const success = await useTokens(
+    tokenCost,
+    'ai_chat',
+    'AI Content Generation'
+  );
+  
+  if (!success) {
+    setError('Insufficient tokens');
+    return;
+  }
+  
+  // Proceed with AI generation
+};
+```
+
+## Admin Panel Integration
+
+### 1. Stripe Management Dashboard
+
+**Location**: Admin Panel → Plan Management
+
+**Features**:
+- View all subscriptions
+- Manage plan limits
+- Process refunds
+- View customer details
+- Sync with Stripe data
+
+### 2. Product Management
+
+#### Automatic Product Sync
+```typescript
+// Admin function to sync products from Stripe
+const syncStripeProducts = async () => {
+  const stripeProducts = await stripe.products.list({
+    active: true,
+    expand: ['data.default_price']
+  });
+  
+  // Update local product configuration
+  for (const product of stripeProducts.data) {
+    await updateProductConfig(product);
+  }
+};
+```
+
+#### Manual Product Creation
+```typescript
+// Create product in Stripe and update config
+const createStripeProduct = async (productData) => {
+  // Create in Stripe
+  const product = await stripe.products.create({
+    name: productData.name,
+    description: productData.description,
+    metadata: {
+      platform: 'offergen-ai'
+    }
+  });
+  
+  // Create price
+  const price = await stripe.prices.create({
+    product: product.id,
+    unit_amount: productData.price * 100,
+    currency: 'usd',
+    recurring: productData.mode === 'subscription' ? {
+      interval: 'month'
+    } : undefined
+  });
+  
+  // Update local configuration
+  await updateStripeConfig(product, price);
+};
+```
+
+### 3. Customer Management
+
+#### Customer Lookup
+```typescript
+// Admin panel customer search
+const searchCustomers = async (query: string) => {
+  const { data: users } = await supabase
+    .from('stripe_user_subscriptions')
+    .select('*')
+    .or(`customer_email.ilike.%${query}%,customer_name.ilike.%${query}%`);
+    
+  return users;
+};
+```
+
+#### Subscription Management
+```typescript
+// Admin actions for subscriptions
+const adminSubscriptionActions = {
+  // Cancel subscription
+  cancelSubscription: async (subscriptionId: string) => {
+    await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true
+    });
+  },
+  
+  // Immediate cancellation
+  cancelImmediately: async (subscriptionId: string) => {
+    await stripe.subscriptions.cancel(subscriptionId);
+  },
+  
+  // Change plan
+  changePlan: async (subscriptionId: string, newPriceId: string) => {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    await stripe.subscriptions.update(subscriptionId, {
+      items: [{
+        id: subscription.items.data[0].id,
+        price: newPriceId
+      }]
+    });
+  }
+};
+```
+
+## Testing Procedures
+
+### 1. Test Mode Setup
+
+#### Stripe Test Cards
+```
+# Successful payments
+4242424242424242 - Visa
+4000056655665556 - Visa (debit)
+5555555555554444 - Mastercard
+
+# Failed payments
+4000000000000002 - Card declined
+4000000000009995 - Insufficient funds
+4000000000000069 - Expired card
+```
+
+#### Test Scenarios
+- [ ] Free plan signup
+- [ ] Solo plan upgrade
+- [ ] Agency plan upgrade
+- [ ] Token purchase (each package)
+- [ ] Subscription cancellation
+- [ ] Failed payment handling
+- [ ] Webhook delivery
+- [ ] Customer portal access
+
+### 2. Integration Testing
+
+#### Checkout Flow Testing
+```typescript
+// Test checkout session creation
+const testCheckout = async () => {
+  try {
+    // Test subscription checkout
+    const subscriptionSession = await createCheckoutSession({
+      priceId: 'price_1PbsmIG3zEsLeiUuhFTG5VqW',
+      mode: 'subscription',
+      successUrl: 'http://localhost:3000/success',
+      cancelUrl: 'http://localhost:3000/cancel'
+    });
+    
+    // Test token purchase checkout
+    const tokenSession = await createCheckoutSession({
+      priceId: 'price_1RgXEBG3zEsLeiUuWAnf21S2',
+      mode: 'payment',
+      successUrl: 'http://localhost:3000/success',
+      cancelUrl: 'http://localhost:3000/cancel'
+    });
+    
+    console.log('Checkout sessions created successfully');
+  } catch (error) {
+    console.error('Checkout test failed:', error);
+  }
+};
+```
+
+#### Webhook Testing
+```bash
+# Install Stripe CLI
+stripe login
+
+# Forward webhooks to local development
+stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook
+
+# Trigger test events
+stripe trigger checkout.session.completed
+stripe trigger payment_intent.succeeded
+stripe trigger invoice.paid
+```
+
+### 3. Database Validation
+
+#### Verify Data Sync
+```sql
+-- Check subscription sync
+SELECT 
+  u.email,
+  sc.customer_id,
+  ss.subscription_status,
+  ss.price_id,
+  ss.current_period_end
+FROM users u
+JOIN stripe_customers sc ON u.id = sc.user_id
+LEFT JOIN stripe_subscriptions ss ON sc.customer_id = ss.customer_id
+WHERE ss.deleted_at IS NULL;
+
+-- Check token purchases
+SELECT 
+  u.email,
+  tp.token_amount,
+  tp.price_paid,
+  tp.status,
+  tp.created_at
+FROM users u
+JOIN token_purchases tp ON u.id = tp.user_id
+ORDER BY tp.created_at DESC;
+```
+
+## Deployment Checklist
+
+### 1. Pre-Deployment
+
+- [ ] All Stripe products created in live mode
+- [ ] Webhook endpoints configured for production
+- [ ] Environment variables updated with live keys
+- [ ] Database migrations applied
+- [ ] Edge functions deployed
+
+### 2. Stripe Dashboard Configuration
+
+#### Webhook Configuration
+1. Go to Stripe Dashboard → Developers → Webhooks
+2. Add endpoint: `https://your-project.supabase.co/functions/v1/stripe-webhook`
+3. Select events:
+   - `checkout.session.completed`
+   - `payment_intent.succeeded`
+   - `invoice.created`
+   - `invoice.updated`
+   - `invoice.paid`
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+4. Copy webhook secret to environment variables
+
+#### Customer Portal
+1. Go to Stripe Dashboard → Settings → Billing → Customer portal
+2. Enable customer portal
+3. Configure allowed actions:
+   - [ ] Update payment method
+   - [ ] Download invoices
+   - [ ] Cancel subscription
+   - [ ] Update billing information
+
+### 3. Production Validation
+
+#### Live Transaction Testing
+```typescript
+// Production smoke tests
+const productionTests = {
+  // Test with small amount
+  testTokenPurchase: async () => {
+    // Purchase smallest token package
+    await purchaseTokens('prod_SbkjOsn8wvc8Fe'); // 100 tokens for $5
+  },
+  
+  // Test subscription
+  testSubscription: async () => {
+    // Subscribe to Solo plan
+    await createCheckoutSession({
+      priceId: 'price_1PbsmIG3zEsLeiUuhFTG5VqW',
+      mode: 'subscription'
+    });
+  }
+};
+```
+
+## Admin Panel Features
+
+### 1. Stripe Integration Status
+
+**Location**: Admin Panel → System Settings → Stripe Integration
+
+**Display**:
+- [ ] Connection status
+- [ ] Webhook status
+- [ ] Last sync time
+- [ ] Error logs
+- [ ] Test mode indicator
+
+### 2. Product Management
+
+**Location**: Admin Panel → Plan Management
+
+**Features**:
+- [ ] View all Stripe products
+- [ ] Sync products from Stripe
+- [ ] Create new products
+- [ ] Update pricing
+- [ ] Manage plan limits
+
+### 3. Customer Management
+
+**Location**: Admin Panel → User Management
+
+**Enhanced Features**:
+- [ ] View customer Stripe data
+- [ ] Subscription status
+- [ ] Payment history
+- [ ] Issue refunds
+- [ ] Cancel subscriptions
+- [ ] Update billing
+
+### 4. Revenue Analytics
+
+**Location**: Admin Panel → Analytics
+
+**Metrics**:
+- [ ] Monthly recurring revenue (MRR)
+- [ ] Customer lifetime value (CLV)
+- [ ] Churn rate
+- [ ] Token sales revenue
+- [ ] Plan distribution
+- [ ] Payment success rates
+
+## Error Handling
+
+### 1. Common Errors
+
+#### Checkout Errors
+```typescript
+// Handle checkout session creation errors
+try {
+  const session = await createCheckoutSession(params);
+} catch (error) {
+  if (error.code === 'resource_missing') {
+    // Price ID not found
+    setError('Invalid pricing plan selected');
+  } else if (error.code === 'customer_creation_failed') {
+    // Customer creation failed
+    setError('Unable to create customer account');
+  } else {
+    // Generic error
+    setError('Payment processing unavailable');
+  }
+}
+```
+
+#### Webhook Errors
+```typescript
+// Webhook error handling
+try {
+  const event = await stripe.webhooks.constructEventAsync(body, signature, secret);
+  await processEvent(event);
+} catch (error) {
+  if (error.type === 'StripeSignatureVerificationError') {
+    console.error('Invalid webhook signature');
+    return new Response('Invalid signature', { status: 400 });
+  }
+  
+  console.error('Webhook processing error:', error);
+  return new Response('Webhook error', { status: 500 });
+}
+```
+
+### 2. Retry Logic
+
+#### Failed Webhook Processing
+```typescript
+// Implement exponential backoff for failed webhooks
+const processWebhookWithRetry = async (event, maxRetries = 3) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await processEvent(event);
+      return;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+```
+
+## Security Considerations
+
+### 1. API Key Management
+
+- [ ] Use environment variables for all keys
+- [ ] Separate test and live keys
+- [ ] Rotate keys regularly
+- [ ] Monitor key usage
+
+### 2. Webhook Security
+
+- [ ] Verify webhook signatures
+- [ ] Use HTTPS endpoints only
+- [ ] Implement rate limiting
+- [ ] Log all webhook events
+
+### 3. Customer Data Protection
+
+- [ ] Encrypt sensitive data
+- [ ] Implement proper access controls
+- [ ] Regular security audits
+- [ ] GDPR compliance measures
+
+## Monitoring and Maintenance
+
+### 1. Health Checks
+
+#### Stripe Connection Health
+```typescript
+// Regular health check
+const checkStripeHealth = async () => {
+  try {
+    await stripe.accounts.retrieve();
+    return { status: 'healthy', timestamp: new Date() };
+  } catch (error) {
+    return { status: 'error', error: error.message, timestamp: new Date() };
+  }
+};
+```
+
+#### Webhook Delivery Monitoring
+```typescript
+// Monitor webhook delivery success
+const monitorWebhooks = async () => {
+  const events = await stripe.events.list({
+    limit: 100,
+    created: { gte: Math.floor(Date.now() / 1000) - 3600 } // Last hour
+  });
+  
+  const failedEvents = events.data.filter(event => 
+    event.pending_webhooks > 0
+  );
+  
+  if (failedEvents.length > 0) {
+    // Alert administrators
+    await sendAlert(`${failedEvents.length} webhook deliveries failed`);
+  }
+};
+```
+
+### 2. Data Synchronization
+
+#### Daily Sync Job
+```typescript
+// Sync Stripe data with local database
+const dailyStripeSync = async () => {
+  // Sync subscriptions
+  const subscriptions = await stripe.subscriptions.list({
+    status: 'all',
+    limit: 100
+  });
+  
+  for (const subscription of subscriptions.data) {
+    await syncSubscriptionToDatabase(subscription);
+  }
+  
+  // Sync customers
+  const customers = await stripe.customers.list({ limit: 100 });
+  
+  for (const customer of customers.data) {
+    await syncCustomerToDatabase(customer);
+  }
+};
+```
+
+## Troubleshooting Guide
+
+### 1. Common Issues
+
+#### Issue: Webhook not receiving events
+**Solution**:
+1. Check webhook URL is correct
+2. Verify endpoint is accessible
+3. Check webhook secret matches
+4. Review Stripe dashboard for delivery attempts
+
+#### Issue: Checkout session creation fails
+**Solution**:
+1. Verify price IDs are correct
+2. Check customer creation
+3. Validate success/cancel URLs
+4. Review Stripe logs
+
+#### Issue: Token purchases not processing
+**Solution**:
+1. Check payment_intent metadata
+2. Verify token_purchase_id is set
+3. Review webhook processing logs
+4. Check database constraints
+
+### 2. Debug Tools
+
+#### Stripe CLI Commands
+```bash
+# View recent events
+stripe events list
+
+# Resend webhook
+stripe events resend evt_1234567890
+
+# Test webhook locally
+stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook
+
+# Trigger test events
+stripe trigger payment_intent.succeeded
+```
+
+#### Database Queries
+```sql
+-- Check recent webhook processing
+SELECT 
+  event_type,
+  processed_at,
+  success,
+  error_message
+FROM webhook_logs 
+ORDER BY processed_at DESC 
+LIMIT 10;
+
+-- Verify subscription sync
+SELECT 
+  u.email,
+  ss.subscription_status,
+  ss.price_id,
+  ss.updated_at
+FROM stripe_subscriptions ss
+JOIN stripe_customers sc ON ss.customer_id = sc.customer_id
+JOIN users u ON sc.user_id = u.id
+WHERE ss.updated_at > NOW() - INTERVAL '1 day';
+```
+
+## Performance Optimization
+
+### 1. Database Optimization
+
+#### Indexes
+```sql
+-- Critical indexes for Stripe operations
+CREATE INDEX idx_stripe_customers_user_id ON stripe_customers(user_id);
+CREATE INDEX idx_stripe_subscriptions_customer_id ON stripe_subscriptions(customer_id);
+CREATE INDEX idx_token_purchases_user_id ON token_purchases(user_id);
+CREATE INDEX idx_stripe_orders_customer_id ON stripe_orders(customer_id);
+```
+
+#### Query Optimization
+```sql
+-- Optimized subscription lookup
+CREATE VIEW stripe_user_subscriptions AS
+SELECT 
+  sc.customer_id,
+  ss.subscription_id,
+  ss.subscription_status,
+  ss.price_id,
+  ss.current_period_start,
+  ss.current_period_end,
+  ss.cancel_at_period_end,
+  ss.payment_method_brand,
+  ss.payment_method_last4
+FROM stripe_customers sc
+LEFT JOIN stripe_subscriptions ss ON sc.customer_id = ss.customer_id
+WHERE sc.deleted_at IS NULL AND ss.deleted_at IS NULL;
+```
+
+### 2. Caching Strategy
+
+#### Subscription Data Caching
+```typescript
+// Cache subscription data for performance
+const subscriptionCache = new Map();
+
+const getCachedSubscription = async (userId: string) => {
+  if (subscriptionCache.has(userId)) {
+    const cached = subscriptionCache.get(userId);
+    if (Date.now() - cached.timestamp < 300000) { // 5 minutes
+      return cached.data;
+    }
+  }
+  
+  const subscription = await fetchSubscriptionFromDB(userId);
+  subscriptionCache.set(userId, {
+    data: subscription,
+    timestamp: Date.now()
+  });
+  
+  return subscription;
+};
+```
+
+## Compliance and Legal
+
+### 1. PCI Compliance
+
+- [ ] Never store card data
+- [ ] Use Stripe's secure checkout
+- [ ] Implement proper logging
+- [ ] Regular security reviews
+
+### 2. Tax Handling
+
+#### Stripe Tax Integration
+```typescript
+// Enable automatic tax calculation
+const createCheckoutWithTax = async (params) => {
+  return await stripe.checkout.sessions.create({
+    ...params,
+    automatic_tax: { enabled: true },
+    tax_id_collection: { enabled: true }
+  });
+};
+```
+
+### 3. Subscription Compliance
+
+- [ ] Clear cancellation policy
+- [ ] Prorated billing
+- [ ] Grace periods
+- [ ] Dunning management
+
+## Maintenance Schedule
+
+### Daily Tasks
+- [ ] Monitor webhook delivery
+- [ ] Check failed payments
+- [ ] Review error logs
+- [ ] Validate sync status
+
+### Weekly Tasks
+- [ ] Reconcile revenue data
+- [ ] Review subscription metrics
+- [ ] Update product configurations
+- [ ] Security audit
+
+### Monthly Tasks
+- [ ] Full data synchronization
+- [ ] Performance optimization
+- [ ] Backup verification
+- [ ] Compliance review
+
+## Support Procedures
+
+### 1. Customer Support
+
+#### Common Support Requests
+```typescript
+// Support helper functions
+const supportHelpers = {
+  // Find customer by email
+  findCustomer: async (email: string) => {
+    const { data } = await supabase
+      .from('users')
+      .select(`
+        *,
+        stripe_customers(customer_id),
+        stripe_subscriptions(*)
+      `)
+      .eq('email', email)
+      .single();
+    return data;
+  },
+  
+  // Issue refund
+  issueRefund: async (paymentIntentId: string, amount?: number) => {
+    return await stripe.refunds.create({
+      payment_intent: paymentIntentId,
+      amount: amount // Optional partial refund
+    });
+  },
+  
+  // Update subscription
+  updateSubscription: async (subscriptionId: string, updates: any) => {
+    return await stripe.subscriptions.update(subscriptionId, updates);
+  }
+};
+```
+
+### 2. Escalation Procedures
+
+#### Technical Issues
+1. Check Stripe dashboard for errors
+2. Review webhook delivery logs
+3. Validate database consistency
+4. Contact Stripe support if needed
+
+#### Billing Disputes
+1. Gather transaction details
+2. Review customer communication
+3. Process refund if appropriate
+4. Update internal records
+
+## Documentation Updates
+
+### 1. API Documentation
+
+Keep these documents updated:
+- [ ] Stripe integration endpoints
+- [ ] Webhook event handling
+- [ ] Error code references
+- [ ] Rate limiting information
+
+### 2. User Documentation
+
+- [ ] Billing FAQ
+- [ ] Plan comparison
+- [ ] Upgrade/downgrade process
+- [ ] Token system explanation
+
+## Conclusion
+
+This SOP provides a comprehensive guide for implementing and maintaining Stripe integration in the OfferGen AI platform. Follow these procedures to ensure reliable payment processing, proper data synchronization, and excellent customer experience.
+
+For questions or issues not covered in this SOP, consult the Stripe documentation or contact the development team.
+
+---
+
+**Last Updated**: January 2025
+**Version**: 1.0
+**Next Review**: March 2025
