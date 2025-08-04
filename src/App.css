@@ -41,9 +41,7 @@
     transparent 100%);
 }
 
-/* Improved placeholder centering for mobile */
-@media (max-width: 640px) {
-  .placeholder-center::placeholder {
-    text-align: center;
-  }
+/* Centered placeholder text for all devices */
+.placeholder-center::placeholder {
+  text-align: center;
 } 

@@ -318,12 +318,14 @@ export class FunctionCallingManager {
           is_active,
           user_oauth_connections!inner(
             oauth_provider_id,
+            credential_type,
             oauth_providers!inner(name)
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_oauth_connections.user_id', userId)
         .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+        .eq('user_oauth_connections.credential_type', 'oauth')
         .eq('is_active', true)
         .single();
 
@@ -382,12 +384,14 @@ export class FunctionCallingManager {
         .select(`
           *,
           user_oauth_connections!inner(
-            oauth_providers!inner(name)
+            oauth_providers!inner(name),
+            credential_type
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_oauth_connections.user_id', userId)
         .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('user_oauth_connections.credential_type', 'api_key')
         .eq('is_active', true);
 
       if (!permissions || permissions.length === 0) {
@@ -616,12 +620,14 @@ export class FunctionCallingManager {
         .select(`
           *,
           user_oauth_connections!inner(
-            oauth_providers!inner(name)
+            oauth_providers!inner(name),
+            credential_type
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_oauth_connections.user_id', userId)
         .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('user_oauth_connections.credential_type', 'api_key')
         .eq('is_active', true);
 
       return permissions && permissions.length > 0;

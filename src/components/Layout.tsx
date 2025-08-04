@@ -41,15 +41,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Apply w-full only if sidebar is hidden to take full width */} 
       <div className={`flex-1 flex flex-col overflow-hidden ${!showMainSidebar ? 'w-full' : ''}`}>
         <Header />
-        <main className="flex-1 overflow-y-auto">
+        <main className={`flex-1 ${location.pathname.includes('/chat') ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {isTransitioning ? (
             <div className="fixed inset-0 z-50 flex justify-center items-center bg-background transition-opacity duration-300">
               <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
             </div>
           ) : (
-            <div className="p-6">
-              {children}
-            </div>
+            // Remove padding for full-screen chat pages
+            location.pathname.includes('/chat') ? (
+              children
+            ) : (
+              <div className="p-6">
+                {children}
+              </div>
+            )
           )}
         </main>
       </div>

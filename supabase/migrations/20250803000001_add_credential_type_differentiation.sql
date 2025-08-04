@@ -34,6 +34,12 @@ WHERE "oauth_provider_id" IN (
 ALTER TABLE "public"."user_oauth_connections" 
 DROP CONSTRAINT IF EXISTS "chk_oauth_token_consistency";
 
+-- First, let's see what records might violate the constraint and fix them
+-- Set any records with null vault_access_token_id to 'error' status if they're active
+UPDATE "public"."user_oauth_connections" 
+SET connection_status = 'error'
+WHERE connection_status = 'active' AND vault_access_token_id IS NULL;
+
 -- Add new constraint that allows API keys to not have refresh tokens
 ALTER TABLE "public"."user_oauth_connections" 
 ADD CONSTRAINT "chk_credential_type_consistency" CHECK (

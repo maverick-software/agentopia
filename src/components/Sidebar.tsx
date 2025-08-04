@@ -7,7 +7,7 @@ import {
   GitBranch, FolderKanban,
   Building2,
   User as UserIcon,
-  Server, Key
+  Server, Key, Zap
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -38,6 +38,7 @@ const getIconColorClass = (route: string, label: string): string => {
   if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
   if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
   if (route.includes('/workflows') || label.includes('Workflows')) return 'text-icon-workflows';
+  if (route.includes('/automations') || label.includes('Automations')) return 'text-purple-500';
   if (route.includes('/integrations') || label.includes('Integrations')) return 'text-icon-integrations';
   if (route.includes('/credentials') || label.includes('Credentials')) return 'text-icon-credentials';
   if (route.includes('/teams') || label.includes('Team')) return 'text-icon-teams';
@@ -59,6 +60,7 @@ const navItems: NavItem[] = [
   },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
+  { to: '/workflows/automations', icon: Zap, label: 'Automations' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item
@@ -235,6 +237,24 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
               <span className="font-medium truncate">{agent.name || 'Unnamed Agent'}</span>
             </NavLink>
           ))}
+          
+          {/* Create New Agent Button */}
+          <NavLink
+            to="/agents/new"
+            className={({ isActive }): string =>
+              `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
+                isActive
+                  ? 'bg-sidebar-accent/20 text-sidebar-foreground'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent'
+              }`
+            }
+            style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
+          >
+            <div className="w-4 h-4 rounded bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-xs font-bold">+</span>
+            </div>
+            <span className="font-medium truncate text-green-600 dark:text-green-400">Create New</span>
+          </NavLink>
 
         </div>
       )}

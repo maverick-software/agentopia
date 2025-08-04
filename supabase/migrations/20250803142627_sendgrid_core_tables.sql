@@ -1,5 +1,5 @@
 -- SendGrid Integration Core Tables
--- Date: August 2, 2025
+-- Date: August 3, 2025
 -- Purpose: Create core SendGrid integration tables and functions
 
 -- Create sendgrid_configurations table
@@ -241,7 +241,6 @@ RETURNS JSONB AS $$
 DECLARE
     v_tools JSONB = '[]'::jsonb;
     v_permission RECORD;
-    v_config RECORD;
 BEGIN
     -- Get agent permissions and config
     SELECT 
@@ -422,3 +421,35 @@ ALTER TABLE agent_email_addresses
 
 ALTER TABLE sendgrid_configurations 
     ADD CONSTRAINT check_valid_from_email CHECK (from_email ~ '^[^@]+@[^@]+\.[^@]+$');
+
+-- Add SendGrid to oauth_providers table (as API key type)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM oauth_providers WHERE name = 'sendgrid') THEN
+        INSERT INTO oauth_providers (
+            name, 
+            display_name, 
+            authorization_url, 
+            token_url, 
+            user_info_url,
+            scopes, 
+            configuration, 
+            is_enabled
+        ) VALUES (
+            'sendgrid',
+            'SendGrid',
+            '',  -- No OAuth URL for API key
+            '',  -- No token URL for API key
+            '',  -- No user info URL
+            '[]'::jsonb,  -- No scopes for API key
+            '{
+                "type": "api_key",
+                "requires_client_secret": false,
+                "flow_type": "api_key"
+            }'::jsonb,
+            true
+        );
+    END IF;
+END $$;
+
+

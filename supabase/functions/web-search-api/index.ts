@@ -274,7 +274,7 @@ serve(async (req) => {
       throw new Error('Agent does not have web search permissions');
     }
 
-    // Get available API keys
+    // Get available API keys (filtering by credential_type)
     const { data: connections } = await supabase
       .from('user_oauth_connections')
       .select(`
@@ -283,7 +283,8 @@ serve(async (req) => {
       `)
       .eq('user_id', user.id)
       .in('oauth_providers.name', ['serper', 'serpapi', 'brave_search'])
-      .eq('is_active', true);
+      .eq('connection_status', 'active')
+      .eq('credential_type', 'api_key');
 
     if (!connections || connections.length === 0) {
       throw new Error('No web search API keys configured');

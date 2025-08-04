@@ -178,7 +178,8 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
           connection_name: `${selectedProvider} Connection`,
           encrypted_access_token: encryptedKey,
           scopes_granted: ['web_search', 'news_search', 'image_search'],
-          connection_status: 'active'
+          connection_status: 'active',
+          credential_type: 'api_key' // Specify this is an API key connection
         });
 
       if (insertError) throw insertError;

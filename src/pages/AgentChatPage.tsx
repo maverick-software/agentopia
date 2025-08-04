@@ -700,9 +700,9 @@ export function AgentChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Fixed Header */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-0.5 border-b border-border bg-card shadow-sm">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
                   <div className="flex items-center space-x-3">
             <button
               onClick={() => navigate('/agents')}
@@ -1077,28 +1077,28 @@ export function AgentChatPage() {
       </div>
 
       {/* Fixed Input Area - Claude Style (Tools Outside Text Area) */}
-      <div className="flex-shrink-0 bg-background border-t border-border/20">
-        <div className="max-w-3xl mx-auto px-4 py-4">
+      <div className="flex-shrink-0 bg-background">
+        <div className="max-w-3xl mx-auto px-4 py-2">
           <form onSubmit={handleSubmit} className="relative">
             {/* Text input container - Clean text area only */}
             <div className="relative bg-card border border-border/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md">
-              <div className="px-5 py-4">
+              <div className="px-4 py-2 flex items-center">
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`Message ${agent?.name || 'Agent'}...`}
-                  className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
+                  className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-normal disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
                   disabled={sending || !agent}
                   rows={1}
-                  style={{ minHeight: '28px', maxHeight: '120px' }}
+                  style={{ minHeight: '22px', maxHeight: '120px' }}
                 />
               </div>
             </div>
 
             {/* Bottom controls - Outside the text area like Claude */}
-            <div className="flex items-center justify-between mt-3 px-2">
+            <div className="flex items-center justify-between mt-2 px-2">
               {/* Left side - Tools */}
               <div className="flex items-center">
                 <DropdownMenu>
@@ -1149,7 +1149,7 @@ export function AgentChatPage() {
                 <button
                   type="submit"
                   disabled={sending || !agent || !input.trim()}
-                  className="p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[40px] min-h-[40px] shadow-sm hover:scale-105 disabled:hover:scale-100"
+                  className="p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[36px] min-h-[36px] shadow-sm hover:scale-105 disabled:hover:scale-100"
                 >
                   {sending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1162,7 +1162,7 @@ export function AgentChatPage() {
           </form>
           
           {/* Discreet help text */}
-          <div className="text-xs text-muted-foreground/70 text-center mt-3 opacity-0 hover:opacity-100 transition-opacity duration-300">
+          <div className="text-xs text-muted-foreground/70 text-center mt-1 opacity-0 hover:opacity-100 transition-opacity duration-300">
             Press <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">⇧</kbd>+<kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> for new line
           </div>
         </div>

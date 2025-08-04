@@ -15,6 +15,7 @@ interface OAuthConnection {
   connection_name: string;
   scopes_granted: string[];
   connection_status: string;
+  credential_type: string;
   token_expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -266,9 +267,21 @@ export function CredentialsPage() {
                   <div className="flex items-center space-x-3">
                     <div className="text-2xl">{getProviderIcon(connection.provider_name)}</div>
                     <div>
-                      <CardTitle className="text-foreground">
-                        {connection.provider_display_name}
-                      </CardTitle>
+                      <div className="flex items-center space-x-2">
+                        <CardTitle className="text-foreground">
+                          {connection.provider_display_name}
+                        </CardTitle>
+                        <Badge 
+                          variant="outline"
+                          className={`text-xs ${
+                            connection.credential_type === 'oauth'
+                              ? 'border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300'
+                              : 'border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-300'
+                          }`}
+                        >
+                          {connection.credential_type === 'oauth' ? 'OAuth' : 'API Key'}
+                        </Badge>
+                      </div>
                       <CardDescription className="text-muted-foreground">
                         {connection.external_username || connection.connection_name || 'Connected Account'}
                       </CardDescription>
@@ -292,13 +305,21 @@ export function CredentialsPage() {
                     </span>
                   </div>
                   
-                  {connection.token_expires_at && (
+                  {connection.credential_type === 'oauth' && connection.token_expires_at && (
                     <div className="flex items-center space-x-2 text-sm">
                       <Shield className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Token expires:</span>
                       <span className={getTokenExpiryColor(connection.token_expires_at, refreshStatus[connection.connection_id])}>
                         {formatExpiryDate(connection.token_expires_at, refreshStatus[connection.connection_id])}
                       </span>
+                    </div>
+                  )}
+                  
+                  {connection.credential_type === 'api_key' && (
+                    <div className="flex items-center space-x-2 text-sm">
+                      <Key className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">API Key:</span>
+                      <span className="text-foreground">Long-lived credential (no expiry)</span>
                     </div>
                   )}
 
@@ -312,7 +333,7 @@ export function CredentialsPage() {
                 </div>
 
                 <div className="flex items-center space-x-2 pt-2">
-                  {connection.connection_status === 'active' && (
+                  {connection.connection_status === 'active' && connection.credential_type === 'oauth' && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -344,6 +365,12 @@ export function CredentialsPage() {
                         : 'Refresh Token'
                       }
                     </Button>
+                  )}
+                  {connection.connection_status === 'active' && connection.credential_type === 'api_key' && (
+                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                      <Key className="h-4 w-4" />
+                      <span>API Key Active</span>
+                    </div>
                   )}
                   
                   {connection.connection_status !== 'revoked' && (

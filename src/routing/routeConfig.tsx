@@ -57,6 +57,7 @@ import {
 
 // Manually import the new non-lazy pages
 import { WorkflowsPage } from '../pages/WorkflowsPage';
+import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { GmailCallbackPage } from '../pages/integrations/GmailCallbackPage';
 // Import DashboardPage directly for debugging
@@ -94,6 +95,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
+  { path: '/workflows/automations', element: AutomationsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
   { path: '/integrations/gmail/callback', element: GmailCallbackPage, protection: 'public', layout: false },
   // { path: 'agent-store', element: AgentStorePage, protection: 'protected', layout: true }, // Commented out

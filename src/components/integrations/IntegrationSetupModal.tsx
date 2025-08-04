@@ -128,7 +128,8 @@ export function IntegrationSetupModal({
           connection_name: formData.connection_name || `${integration.name} Connection`,
           encrypted_access_token: vault_secret_id,
           scopes_granted: ['web_search', 'news_search', 'scrape_and_summarize'],
-          connection_status: 'active'
+          connection_status: 'active',
+          credential_type: 'api_key' // Specify this is an API key connection
         });
 
       if (keyError) throw keyError;

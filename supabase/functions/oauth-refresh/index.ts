@@ -13,10 +13,10 @@ interface RefreshRequest {
 async function refreshGmailToken(supabase: SupabaseClient, userId: string, connectionId: string): Promise<{ success: boolean; expires_at?: string }> {
   console.log(`Refreshing Gmail token for user ${userId}, connection ${connectionId}`);
 
-  // Get the refresh token from user_oauth_connections table
+  // Get the connection details including credential type
   const { data: connection, error: fetchError } = await supabase
     .from('user_oauth_connections')
-    .select('vault_refresh_token_id, external_username')
+    .select('vault_refresh_token_id, external_username, credential_type, oauth_providers!inner(name)')
     .eq('id', connectionId)
     .eq('user_id', userId)
     .single();
@@ -25,8 +25,14 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
     throw new Error(`Failed to retrieve connection: ${fetchError?.message || 'Connection not found'}`);
   }
 
-  if (!connection.vault_refresh_token_id) {
-    throw new Error('No refresh token found for this connection.');
+  // Check if this is an API key connection (cannot be refreshed)
+  if (connection.credential_type === 'api_key') {
+    throw new Error('API keys cannot be refreshed. Please update your API key if it has expired.');
+  }
+
+  // Check if this is an OAuth connection with a refresh token
+  if (connection.credential_type === 'oauth' && !connection.vault_refresh_token_id) {
+    throw new Error('No refresh token found for this OAuth connection.');
   }
   
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
