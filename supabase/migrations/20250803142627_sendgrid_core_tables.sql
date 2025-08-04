@@ -158,53 +158,124 @@ ALTER TABLE sendgrid_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sendgrid_operation_logs ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for sendgrid_configurations
-CREATE POLICY "Users can manage their own SendGrid configs" ON sendgrid_configurations
-    FOR ALL USING (user_id = auth.uid());
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'sendgrid_configurations' 
+        AND policyname = 'Users can manage their own SendGrid configs'
+    ) THEN
+        CREATE POLICY "Users can manage their own SendGrid configs" ON sendgrid_configurations
+            FOR ALL USING (user_id = auth.uid());
+    END IF;
+END $$;
 
 -- RLS Policies for agent_sendgrid_permissions
-CREATE POLICY "Users can view their agents' permissions" ON agent_sendgrid_permissions
-    FOR SELECT USING (
-        sendgrid_config_id IN (
-            SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
-        )
-    );
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'agent_sendgrid_permissions' 
+        AND policyname = 'Users can view their agents'' permissions'
+    ) THEN
+        CREATE POLICY "Users can view their agents' permissions" ON agent_sendgrid_permissions
+            FOR SELECT USING (
+                sendgrid_config_id IN (
+                    SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
+                )
+            );
+    END IF;
 
-CREATE POLICY "Users can manage their agents' permissions" ON agent_sendgrid_permissions
-    FOR ALL USING (
-        sendgrid_config_id IN (
-            SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
-        )
-    );
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'agent_sendgrid_permissions' 
+        AND policyname = 'Users can manage their agents'' permissions'
+    ) THEN
+        CREATE POLICY "Users can manage their agents' permissions" ON agent_sendgrid_permissions
+            FOR ALL USING (
+                sendgrid_config_id IN (
+                    SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
 
 -- RLS Policies for agent_email_addresses
-CREATE POLICY "Users can view their agents' email addresses" ON agent_email_addresses
-    FOR SELECT USING (
-        sendgrid_config_id IN (
-            SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
-        )
-    );
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'agent_email_addresses' 
+        AND policyname = 'Users can view their agents'' email addresses'
+    ) THEN
+        CREATE POLICY "Users can view their agents' email addresses" ON agent_email_addresses
+            FOR SELECT USING (
+                sendgrid_config_id IN (
+                    SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
+                )
+            );
+    END IF;
 
-CREATE POLICY "Users can manage their agents' email addresses" ON agent_email_addresses
-    FOR ALL USING (
-        sendgrid_config_id IN (
-            SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
-        )
-    );
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'agent_email_addresses' 
+        AND policyname = 'Users can manage their agents'' email addresses'
+    ) THEN
+        CREATE POLICY "Users can manage their agents' email addresses" ON agent_email_addresses
+            FOR ALL USING (
+                sendgrid_config_id IN (
+                    SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
 
 -- RLS Policies for sendgrid_templates
-CREATE POLICY "Users can manage their templates" ON sendgrid_templates
-    FOR ALL USING (
-        sendgrid_config_id IN (
-            SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
-        )
-    );
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'sendgrid_templates' 
+        AND policyname = 'Users can manage their templates'
+    ) THEN
+        CREATE POLICY "Users can manage their templates" ON sendgrid_templates
+            FOR ALL USING (
+                sendgrid_config_id IN (
+                    SELECT id FROM sendgrid_configurations WHERE user_id = auth.uid()
+                )
+            );
+    END IF;
+END $$;
 
 -- RLS Policies for sendgrid_operation_logs
-CREATE POLICY "Users can view their own logs" ON sendgrid_operation_logs
-    FOR SELECT USING (user_id = auth.uid());
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'sendgrid_operation_logs' 
+        AND policyname = 'Users can view their own logs'
+    ) THEN
+        CREATE POLICY "Users can view their own logs" ON sendgrid_operation_logs
+            FOR SELECT USING (user_id = auth.uid());
+    END IF;
 
-CREATE POLICY "Service role can manage all logs" ON sendgrid_operation_logs
-    FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE schemaname = 'public' 
+        AND tablename = 'sendgrid_operation_logs' 
+        AND policyname = 'Service role can manage all logs'
+    ) THEN
+        CREATE POLICY "Service role can manage all logs" ON sendgrid_operation_logs
+            FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+    END IF;
+END $$;
 
 -- Update timestamp triggers
 CREATE OR REPLACE FUNCTION update_sendgrid_updated_at()
@@ -215,21 +286,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_sendgrid_configurations_updated_at ON sendgrid_configurations;
 CREATE TRIGGER update_sendgrid_configurations_updated_at
     BEFORE UPDATE ON sendgrid_configurations
     FOR EACH ROW
     EXECUTE FUNCTION update_sendgrid_updated_at();
 
+DROP TRIGGER IF EXISTS update_agent_sendgrid_permissions_updated_at ON agent_sendgrid_permissions;
 CREATE TRIGGER update_agent_sendgrid_permissions_updated_at
     BEFORE UPDATE ON agent_sendgrid_permissions
     FOR EACH ROW
     EXECUTE FUNCTION update_sendgrid_updated_at();
 
+DROP TRIGGER IF EXISTS update_agent_email_addresses_updated_at ON agent_email_addresses;
 CREATE TRIGGER update_agent_email_addresses_updated_at
     BEFORE UPDATE ON agent_email_addresses
     FOR EACH ROW
     EXECUTE FUNCTION update_sendgrid_updated_at();
 
+DROP TRIGGER IF EXISTS update_sendgrid_templates_updated_at ON sendgrid_templates;
 CREATE TRIGGER update_sendgrid_templates_updated_at
     BEFORE UPDATE ON sendgrid_templates
     FOR EACH ROW
@@ -416,11 +491,18 @@ GRANT EXECUTE ON FUNCTION validate_agent_sendgrid_permissions(UUID, UUID, TEXT) 
 GRANT EXECUTE ON FUNCTION log_sendgrid_operation(UUID, UUID, TEXT, JSONB, JSONB, TEXT, TEXT, TEXT, INTEGER, INTEGER) TO anon, authenticated;
 
 -- Add constraint to ensure email address validation
-ALTER TABLE agent_email_addresses 
-    ADD CONSTRAINT check_valid_local_part CHECK (local_part ~ '^[a-zA-Z0-9.+_-]+$');
-
-ALTER TABLE sendgrid_configurations 
-    ADD CONSTRAINT check_valid_from_email CHECK (from_email ~ '^[^@]+@[^@]+\.[^@]+$');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_valid_local_part') THEN
+        ALTER TABLE agent_email_addresses 
+            ADD CONSTRAINT check_valid_local_part CHECK (local_part ~ '^[a-zA-Z0-9.+_-]+$');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_valid_from_email') THEN
+        ALTER TABLE sendgrid_configurations 
+            ADD CONSTRAINT check_valid_from_email CHECK (from_email ~ '^[^@]+@[^@]+\.[^@]+$');
+    END IF;
+END $$;
 
 -- Add SendGrid to oauth_providers table (as API key type)
 DO $$
@@ -429,25 +511,25 @@ BEGIN
         INSERT INTO oauth_providers (
             name, 
             display_name, 
-            authorization_url, 
-            token_url, 
-            user_info_url,
-            scopes, 
-            configuration, 
-            is_enabled
+            authorization_endpoint, 
+            token_endpoint, 
+            scopes_supported, 
+            configuration_metadata, 
+            is_enabled,
+            pkce_required
         ) VALUES (
             'sendgrid',
             'SendGrid',
             '',  -- No OAuth URL for API key
             '',  -- No token URL for API key
-            '',  -- No user info URL
             '[]'::jsonb,  -- No scopes for API key
             '{
                 "type": "api_key",
                 "requires_client_secret": false,
                 "flow_type": "api_key"
             }'::jsonb,
-            true
+            true,
+            false  -- PKCE not required for API key
         );
     END IF;
 END $$;
