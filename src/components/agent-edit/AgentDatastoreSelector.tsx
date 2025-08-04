@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import { DatastoreConfigurationModal } from './DatastoreConfigurationModal';
 
 // Datastore Form Component (similar to DatastoresPage)
 interface DatastoreFormProps {
@@ -312,6 +313,21 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
     }
   };
 
+  // New handlers for the unified modal
+  const handleDatastoreSelect = (type: 'pinecone' | 'getzep', datastoreId: string) => {
+    if (type === 'pinecone') {
+      onSelectDatastore('vector', datastoreId);
+    } else if (type === 'getzep') {
+      onSelectDatastore('knowledge', datastoreId);
+    }
+  };
+
+  const handleCreateDatastore = (type: 'pinecone' | 'getzep') => {
+    setShowCreateModal(true);
+    // Pre-fill the form with the correct type
+    setEditingDatastore(null);
+  };
+
   // Get currently selected datastores
   const selectedVector = vectorStores.find(ds => ds.id === selectedVectorStore);
   const selectedKnowledge = knowledgeStores.find(ds => ds.id === selectedKnowledgeStore);
@@ -432,75 +448,21 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
           </Button>
         </div>
 
-        {/* Connection Configuration Modal */}
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Configure Datastore Connections</DialogTitle>
-              <DialogDescription>
-                Select which datastores this agent should use.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              {loadingAvailable ? (
-                <p className="text-center text-muted-foreground">Loading datastores...</p>
-              ) : (
-                <>
-                  {/* Vector Datastore Select */}
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="vectorStore" className="text-right">
-                      Vector
-                    </Label>
-                    <Select 
-                      value={selectedVectorStore || 'none'}
-                      onValueChange={(value) => onSelectDatastore('vector', value === 'none' ? '' : value)}
-                      disabled={connecting}
-                    >
-                      <SelectTrigger id="vectorStore" className="col-span-3">
-                        <SelectValue placeholder="Select vector store..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {vectorStores.map(ds => (
-                          <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  {/* Knowledge Datastore Select */}
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="knowledgeStore" className="text-right">
-                      Knowledge
-                    </Label>
-                    <Select 
-                      value={selectedKnowledgeStore || 'none'}
-                      onValueChange={(value) => onSelectDatastore('knowledge', value === 'none' ? '' : value)}
-                      disabled={connecting}
-                    >
-                      <SelectTrigger id="knowledgeStore" className="col-span-3">
-                        <SelectValue placeholder="Select knowledge store..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {knowledgeStores.map(ds => (
-                          <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setIsModalOpen(false)} disabled={connecting}>
-                Done
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Unified Datastore Configuration Modal */}
+        <DatastoreConfigurationModal
+          isOpen={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          agentId={agentId!}
+          availableDatastores={availableDatastores}
+          selectedVectorStore={selectedVectorStore}
+          selectedKnowledgeStore={selectedKnowledgeStore}
+          onSelectDatastore={handleDatastoreSelect}
+          onCreateDatastore={handleCreateDatastore}
+          connecting={connecting}
+          loadingAvailable={loadingAvailable}
+        />
 
-        {/* Create/Edit Datastore Modal */}
+        {/* Create/Edit Datastore Modal - Keep for creating new datastores */}
         <Dialog open={showCreateModal || !!editingDatastore} onOpenChange={(open) => {
           if (!open) {
             setShowCreateModal(false);

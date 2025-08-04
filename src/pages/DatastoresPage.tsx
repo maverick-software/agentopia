@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, Edit2, Database, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, Database, RefreshCw, X, Brain, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { Datastore as DatastoreType } from '../types';
@@ -381,16 +381,18 @@ export function DatastoresPage() {
       )}
 
       {(showCreateModal || editingDatastore) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <DatastoreForm
-            datastore={editingDatastore}
-            onSubmit={handleCreateOrUpdate}
-            onCancel={() => {
-              setShowCreateModal(false);
-              setEditingDatastore(null);
-            }}
-            isSaving={isSaving}
-          />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-3 z-50">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DatastoreForm
+              datastore={editingDatastore}
+              onSubmit={handleCreateOrUpdate}
+              onCancel={() => {
+                setShowCreateModal(false);
+                setEditingDatastore(null);
+              }}
+              isSaving={isSaving}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -405,6 +407,7 @@ interface DatastoreFormProps {
 }
 
 function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFormProps) {
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<Partial<ExtendedDatastore>>({
     name: datastore?.name || '',
     description: datastore?.description || '',
@@ -412,6 +415,34 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
     config: datastore?.config || {},
   });
   const [formError, setFormError] = useState<string | null>(null);
+
+  const totalSteps = 4;
+  const isEditing = !!datastore;
+
+  const steps = [
+    { id: 1, title: 'Basic Info', description: 'Name and description' },
+    { id: 2, title: 'Type Selection', description: 'Choose your platform' },
+    { id: 3, title: 'Configuration', description: 'API keys and settings' },
+    { id: 4, title: 'Review', description: 'Confirm and create' }
+  ];
+
+  const canProceedToStep = (step: number) => {
+    switch (step) {
+      case 2:
+        return formData.name && formData.name.trim().length > 0;
+      case 3:
+        return formData.type;
+      case 4:
+        if (formData.type === 'pinecone') {
+          return formData.config?.apiKey && formData.config?.region && formData.config?.host && formData.config?.indexName && formData.config?.dimensions;
+        } else if (formData.type === 'getzep') {
+          return formData.config?.apiKey && formData.config?.projectId && formData.config?.collectionName;
+        }
+        return false;
+      default:
+        return true;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -426,239 +457,559 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl">
-      <h2 className="text-2xl font-bold mb-6">
-        {datastore ? 'Edit Datastore' : 'Create Datastore'}
-      </h2>
-
-      {formError && (
-        <div className="mb-6 bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md">
-          {formError}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Name
-          </label>
-          <input
-            type="text"
-            required
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="Enter datastore name"
-            disabled={isSaving}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Description
-          </label>
-          <textarea
-            required
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="Enter datastore description"
-            rows={3}
-            disabled={isSaving}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Type
-          </label>
-          <select
-            required
-            value={formData.type}
-            onChange={(e) => setFormData({
-              ...formData,
-              type: e.target.value as 'pinecone' | 'getzep',
-              config: {}
-            })}
-            className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            disabled={isSaving}
-          >
-            <option value="pinecone">Pinecone</option>
-            <option value="getzep">GetZep</option>
-          </select>
-        </div>
-
-        {formData.type === 'pinecone' && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                API Key
-              </label>
-              <input
-                type="password"
-                required
-                value={formData.config?.apiKey || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, apiKey: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter Pinecone API key"
-                disabled={isSaving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Region
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.config?.region || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, region: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter Pinecone region (e.g., us-west-2)"
-                disabled={isSaving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Host
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.config?.host || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, host: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter Pinecone host URL"
-                disabled={isSaving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Index Name
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.config?.indexName || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, indexName: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter index name"
-                disabled={isSaving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Dimensions
-              </label>
-              <input
-                type="number"
-                required
-                min="1"
-                value={formData.config?.dimensions || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, dimensions: parseInt(e.target.value, 10) }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter vector dimensions (e.g., 1536)"
-                disabled={isSaving}
-              />
-            </div>
+    <div className="bg-background/95 backdrop-blur-xl border border-border/20 rounded-xl shadow-2xl w-full overflow-hidden">
+      {/* Step Header */}
+      <div className="relative bg-gradient-to-r from-primary/5 to-primary/10 px-5 py-4 border-b border-border/10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-foreground mb-1">
+              {isEditing ? 'Edit Datastore' : 'Create New Datastore'}
+            </h2>
+            <p className="text-muted-foreground text-xs">
+              Step {currentStep} of {totalSteps}: {steps[currentStep - 1].description}
+            </p>
           </div>
-        )}
-
-        {formData.type === 'getzep' && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                API Key
-              </label>
-              <input
-                type="password"
-                required
-                value={formData.config?.apiKey || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, apiKey: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter Zep API key"
-                disabled={isSaving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Project ID
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.config?.projectId || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, projectId: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter project ID"
-                disabled={isSaving}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Collection Name
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.config?.collectionName || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  config: { ...formData.config, collectionName: e.target.value }
-                })}
-                className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Enter collection name"
-                disabled={isSaving}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end space-x-3 pt-6">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-foreground hover:text-white transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-all duration-200 p-1.5 rounded-full hover:bg-background/50"
             disabled={isSaving}
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving...' : (datastore ? 'Update' : 'Create')}
+            <X className="w-4 h-4" />
           </button>
         </div>
-      </form>
+
+        {/* Step Indicator */}
+        <div className="flex items-center justify-between relative">
+          {steps.map((step, index) => (
+            <div key={step.id} className="flex items-center flex-1">
+              <div className="flex flex-col items-center relative z-10">
+                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center font-medium text-xs transition-all duration-300 ${
+                  currentStep > step.id 
+                    ? 'bg-primary border-primary text-primary-foreground shadow-sm' 
+                    : currentStep === step.id 
+                      ? 'border-primary text-primary bg-primary/10 shadow-sm ring-2 ring-primary/20' 
+                      : 'border-border text-muted-foreground bg-background'
+                }`}>
+                  {currentStep > step.id ? '✓' : step.id}
+                </div>
+                <div className="mt-1.5 text-center">
+                  <div className={`text-xs font-medium transition-colors ${
+                    currentStep >= step.id ? 'text-foreground' : 'text-muted-foreground'
+                  }`}>
+                    {step.title}
+                  </div>
+                </div>
+              </div>
+              {index < steps.length - 1 && (
+                <div className={`flex-1 h-0.5 mx-3 transition-colors duration-300 ${
+                  currentStep > step.id ? 'bg-primary' : 'bg-border'
+                }`} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-5 min-h-[300px]">
+        {formError && (
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg flex items-start gap-2 mb-4">
+            <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <div className="w-2 h-2 bg-destructive rounded-full"></div>
+            </div>
+            <div>
+              <p className="font-medium text-xs">Configuration Error</p>
+              <p className="text-xs opacity-90 mt-0.5">{formError}</p>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          {/* Step 1: Basic Information */}
+          {currentStep === 1 && (
+            <div className="space-y-5 animate-in fade-in-50 duration-300">
+              <div className="text-center mb-5">
+                <h3 className="text-lg font-bold text-foreground mb-1">Basic Information</h3>
+                <p className="text-muted-foreground text-sm">Let's start with the basics for your datastore</p>
+              </div>
+
+              <div className="max-w-sm mx-auto space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                    Datastore Name
+                    <span className="text-destructive text-xs">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-background/50 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/50 transition-all duration-200 hover:border-border text-sm"
+                    placeholder="My Company Knowledge Base"
+                    disabled={isSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">Choose a descriptive name that identifies this datastore</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-foreground">
+                    Description <span className="text-muted-foreground text-xs">(Optional)</span>
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-background/50 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/50 transition-all duration-200 hover:border-border resize-none text-sm"
+                    placeholder="Brief description of what this datastore contains and how it will be used..."
+                    rows={3}
+                    disabled={isSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">Help others understand the purpose of this datastore</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Type Selection */}
+          {currentStep === 2 && (
+            <div className="space-y-5 animate-in fade-in-50 duration-300">
+              <div className="text-center mb-5">
+                <h3 className="text-lg font-bold text-foreground mb-1">Choose Your Platform</h3>
+                <p className="text-muted-foreground text-sm">Select the type of database you want to connect to</p>
+              </div>
+
+              <div className="max-w-lg mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: 'pinecone', config: {} })}
+                    disabled={isSaving}
+                    className={`group p-4 rounded-xl border-2 transition-all duration-300 text-left hover:shadow-md ${
+                      formData.type === 'pinecone' 
+                        ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-md ring-2 ring-blue-500/20' 
+                        : 'border-border/50 hover:border-blue-500/50 hover:bg-blue-50/30 dark:hover:bg-blue-950/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                        <Database className="w-4 h-4 text-blue-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-foreground">Pinecone</h4>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">Vector Database</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      High-performance vector database perfect for semantic search, embeddings, and AI applications.
+                    </p>
+                    <div className="mt-2 flex items-center text-xs text-muted-foreground">
+                      <span>• Semantic Search</span>
+                      <span className="mx-1">•</span>
+                      <span>• Embeddings</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: 'getzep', config: {} })}
+                    disabled={isSaving}
+                    className={`group p-4 rounded-xl border-2 transition-all duration-300 text-left hover:shadow-md ${
+                      formData.type === 'getzep' 
+                        ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20 shadow-md ring-2 ring-purple-500/20' 
+                        : 'border-border/50 hover:border-purple-500/50 hover:bg-purple-50/30 dark:hover:bg-purple-950/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                        <Brain className="w-4 h-4 text-purple-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-foreground">GetZep</h4>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">Knowledge Graph</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Intelligent knowledge graph for understanding relationships, entities, and context.
+                    </p>
+                    <div className="mt-2 flex items-center text-xs text-muted-foreground">
+                      <span>• Relationships</span>
+                      <span className="mx-1">•</span>
+                      <span>• Context</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Configuration */}
+          {currentStep === 3 && (
+            <div className="space-y-5 animate-in fade-in-50 duration-300">
+              <div className="text-center mb-5">
+                <h3 className="text-lg font-bold text-foreground mb-1">
+                  {formData.type === 'pinecone' ? 'Pinecone Configuration' : 'GetZep Configuration'}
+                </h3>
+                <p className="text-muted-foreground text-sm">
+                  {formData.type === 'pinecone' 
+                    ? 'Connect to your Pinecone vector database' 
+                    : 'Connect to your GetZep knowledge graph'
+                  }
+                </p>
+              </div>
+
+              {formData.type === 'pinecone' && (
+                <div className="max-w-lg mx-auto">
+                  <div className="bg-gradient-to-br from-blue-50/30 to-blue-100/20 dark:from-blue-950/10 dark:to-blue-900/5 border border-blue-200/30 dark:border-blue-800/20 rounded-xl p-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          API Key
+                          <span className="text-destructive text-xs">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={formData.config?.apiKey || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, apiKey: e.target.value }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="pk-..."
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Get this from your Pinecone dashboard</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Region
+                          <span className="text-destructive text-xs">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.config?.region || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, region: e.target.value }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="us-west-2"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">AWS region for your index</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Host URL
+                          <span className="text-destructive text-xs">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.config?.host || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, host: e.target.value }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="https://your-index.pinecone.io"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Your index endpoint URL</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Index Name
+                          <span className="text-destructive text-xs">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.config?.indexName || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, indexName: e.target.value }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="my-vector-index"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Name of your Pinecone index</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-w-xs">
+                      <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                        Vector Dimensions
+                        <span className="text-destructive text-xs">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={formData.config?.dimensions || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          config: { ...formData.config, dimensions: parseInt(e.target.value, 10) }
+                        })}
+                        className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                        placeholder="1536"
+                        disabled={isSaving}
+                      />
+                      <p className="text-xs text-muted-foreground">1536 for OpenAI, 768 for others</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {formData.type === 'getzep' && (
+                <div className="max-w-lg mx-auto">
+                  <div className="bg-gradient-to-br from-purple-50/30 to-purple-100/20 dark:from-purple-950/10 dark:to-purple-900/5 border border-purple-200/30 dark:border-purple-800/20 rounded-xl p-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          API Key
+                          <span className="text-destructive text-xs">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={formData.config?.apiKey || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, apiKey: e.target.value }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all duration-200 text-sm"
+                          placeholder="gz-..."
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Get this from your GetZep console</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Project ID
+                          <span className="text-destructive text-xs">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.config?.projectId || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, projectId: e.target.value }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all duration-200 text-sm"
+                          placeholder="project-123"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Your GetZep project identifier</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-w-xs">
+                      <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                        Collection Name
+                        <span className="text-destructive text-xs">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.config?.collectionName || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          config: { ...formData.config, collectionName: e.target.value }
+                        })}
+                        className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all duration-200 text-sm"
+                        placeholder="my-knowledge-graph"
+                        disabled={isSaving}
+                      />
+                      <p className="text-xs text-muted-foreground">Collection name for organizing data</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Review */}
+          {currentStep === 4 && (
+            <div className="space-y-5 animate-in fade-in-50 duration-300">
+              <div className="text-center mb-5">
+                <h3 className="text-lg font-bold text-foreground mb-1">Review & Create</h3>
+                <p className="text-muted-foreground text-sm">Confirm your datastore configuration</p>
+              </div>
+
+              <div className="max-w-md mx-auto">
+                <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-border/20 rounded-xl p-4 space-y-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between py-2 border-b border-border/20">
+                      <span className="text-xs font-medium text-muted-foreground">Datastore Name</span>
+                      <span className="text-foreground font-medium text-sm">{formData.name}</span>
+                    </div>
+                    
+                    {formData.description && (
+                      <div className="flex items-start justify-between py-2 border-b border-border/20">
+                        <span className="text-xs font-medium text-muted-foreground">Description</span>
+                        <span className="text-foreground text-right max-w-xs text-xs">{formData.description}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between py-2 border-b border-border/20">
+                      <span className="text-xs font-medium text-muted-foreground">Type</span>
+                      <div className="flex items-center gap-1">
+                        {formData.type === 'pinecone' ? (
+                          <>
+                            <Database className="w-3 h-3 text-blue-500" />
+                            <span className="text-foreground font-medium text-xs">Pinecone Vector Database</span>
+                          </>
+                        ) : (
+                          <>
+                            <Brain className="w-3 h-3 text-purple-500" />
+                            <span className="text-foreground font-medium text-xs">GetZep Knowledge Graph</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {formData.type === 'pinecone' && (
+                      <>
+                        <div className="flex items-center justify-between py-2 border-b border-border/20">
+                          <span className="text-xs font-medium text-muted-foreground">Region</span>
+                          <span className="text-foreground font-mono text-xs">{formData.config?.region}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-2 border-b border-border/20">
+                          <span className="text-xs font-medium text-muted-foreground">Index Name</span>
+                          <span className="text-foreground font-mono text-xs">{formData.config?.indexName}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-2 border-b border-border/20">
+                          <span className="text-xs font-medium text-muted-foreground">Dimensions</span>
+                          <span className="text-foreground font-mono text-xs">{formData.config?.dimensions}</span>
+                        </div>
+                      </>
+                    )}
+
+                    {formData.type === 'getzep' && (
+                      <>
+                        <div className="flex items-center justify-between py-2 border-b border-border/20">
+                          <span className="text-xs font-medium text-muted-foreground">Project ID</span>
+                          <span className="text-foreground font-mono text-xs">{formData.config?.projectId}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-2 border-b border-border/20">
+                          <span className="text-xs font-medium text-muted-foreground">Collection</span>
+                          <span className="text-foreground font-mono text-xs">{formData.config?.collectionName}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="bg-muted/20 rounded-lg p-3 mt-4">
+                    <p className="text-xs text-muted-foreground text-center">
+                      🎉 Your datastore is ready to be created! Click "Create Datastore" to complete the setup.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </form>
+      </div>
+
+      {/* Multi-Step Footer */}
+      <div className="relative border-t border-border/20 bg-gradient-to-r from-muted/20 to-muted/10 px-5 py-4">
+        <div className="flex items-center justify-between">
+          {/* Left Side - Progress Info */}
+          <div className="text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              Step {currentStep} of {totalSteps}
+              {formData.type && (
+                <>
+                  <span className="mx-1">•</span>
+                  {formData.type === 'pinecone' ? (
+                    <>
+                      <Database className="w-3 h-3 text-blue-500" />
+                      <span className="text-xs">Pinecone</span>
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-3 h-3 text-purple-500" />
+                      <span className="text-xs">GetZep</span>
+                    </>
+                  )}
+                </>
+              )}
+            </span>
+          </div>
+          
+          {/* Right Side - Navigation */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-3 py-2 text-muted-foreground hover:text-foreground transition-all duration-200 font-medium text-xs disabled:opacity-50 hover:bg-background/50 rounded-lg"
+              disabled={isSaving}
+            >
+              Cancel
+            </button>
+
+            {/* Previous Button */}
+            {currentStep > 1 && (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(currentStep - 1)}
+                disabled={isSaving}
+                className="px-4 py-2 border border-border hover:border-border/80 text-foreground hover:bg-background/50 rounded-lg transition-all duration-200 font-medium text-xs disabled:opacity-50"
+              >
+                Previous
+              </button>
+            )}
+
+            {/* Next Button */}
+            {currentStep < totalSteps && (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(currentStep + 1)}
+                disabled={isSaving || !canProceedToStep(currentStep + 1)}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-all duration-200 font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 min-w-[80px] justify-center"
+              >
+                <span>Next</span>
+                <div className="w-3 h-3 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+                  <span className="text-xs">→</span>
+                </div>
+              </button>
+            )}
+
+            {/* Create/Update Button - Only on last step */}
+            {currentStep === totalSteps && (
+              <button
+                type="submit"
+                onClick={handleSubmit}
+                disabled={isSaving || !canProceedToStep(currentStep)}
+                className="px-5 py-2 bg-gradient-to-r from-primary to-primary/90 text-primary-foreground rounded-lg hover:shadow-md hover:shadow-primary/25 transition-all duration-200 font-medium text-xs disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center gap-1 min-w-[120px] justify-center"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{isEditing ? 'Update Datastore' : 'Create Datastore'}</span>
+                    <div className="w-3 h-3 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+                      <span className="text-xs">✓</span>
+                    </div>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

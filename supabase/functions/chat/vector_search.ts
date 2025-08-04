@@ -26,6 +26,8 @@ export async function getVectorSearchResults(
   supabaseClient: SupabaseClient,
   openai: OpenAI
 ): Promise<string | null> {
+  console.log(`[DEBUG] Starting vector search for agent ${agentId} with message: "${message.substring(0, 100)}..."`);
+  
   try {
     const { data: connection, error: connectionError } = await supabaseClient
       .from('agent_datastores')
@@ -48,22 +50,40 @@ export async function getVectorSearchResults(
       console.error('Vector store connection error:', {
         error: connectionError,
         message: connectionError.message,
-        details: connectionError.details
+        details: connectionError.details,
+        code: connectionError.code,
+        agentId: agentId
       });
+      
+      // Check if it's a "no rows returned" error (agent has no Pinecone datastore)
+      if (connectionError.code === 'PGRST116') {
+        console.log(`[DEBUG] Agent ${agentId} has no Pinecone datastore connected`);
+      }
+      
       return null;
     }
 
     if (!connection?.datastores) {
+      console.log(`[DEBUG] Agent ${agentId} has connection but no datastore object`);
       return null;
     }
 
     const datastore = connection.datastores;
+    console.log(`[DEBUG] Found Pinecone datastore ${datastore.id} for agent ${agentId}`);
+    console.log(`[DEBUG] Datastore config keys:`, Object.keys(datastore.config || {}));
 
     // Validate necessary config fields exist
     if (!datastore.config?.apiKey || !datastore.config?.region || !datastore.config?.indexName) {
-        console.error('Incomplete Pinecone configuration found in datastore:', datastore.id);
+        console.error(`[DEBUG] Incomplete Pinecone configuration found in datastore ${datastore.id}:`, {
+          hasApiKey: !!datastore.config?.apiKey,
+          hasRegion: !!datastore.config?.region, 
+          hasIndexName: !!datastore.config?.indexName,
+          config: datastore.config
+        });
         return null;
     }
+
+    console.log(`[DEBUG] Pinecone config validated for datastore ${datastore.id}`);
 
     // Generate embedding
     const embedding = await openai.embeddings.create({
@@ -83,20 +103,39 @@ export async function getVectorSearchResults(
     const index = pinecone.Index(indexName);
 
     // Query vector store
+    console.log(`[DEBUG] Querying Pinecone index ${indexName} with topK=${datastore.max_results}, threshold=${datastore.similarity_threshold}`);
+    
     const results = await index.query({
       vector: embedding.data[0].embedding,
-      topK: datastore.max_results,
+      topK: datastore.max_results || 10,
       includeMetadata: true,
       includeValues: false,
     });
 
+    console.log(`[DEBUG] Pinecone returned ${results.matches?.length || 0} matches`);
+    
+    if (results.matches?.length) {
+      console.log(`[DEBUG] Top match scores:`, results.matches.slice(0, 3).map(m => ({
+        id: m.id,
+        score: m.score,
+        source: m.metadata?.source
+      })));
+    }
+
     if (!results.matches?.length) {
+      console.log(`[DEBUG] No matches found in Pinecone index ${indexName}`);
       return null;
     }
 
     // Filter and format results
     const relevantResults = results.matches
-      .filter(match => match.score >= datastore.similarity_threshold)
+      .filter(match => {
+        const isRelevant = match.score >= (datastore.similarity_threshold || 0.7);
+        if (!isRelevant) {
+          console.log(`[DEBUG] Filtered out match with score ${match.score} (below threshold ${datastore.similarity_threshold || 0.7})`);
+        }
+        return isRelevant;
+      })
       .map((match) => {
         const metadata = match.metadata as VectorSearchResult['metadata'];
         return {
@@ -107,11 +146,15 @@ export async function getVectorSearchResults(
         };
       });
 
+    console.log(`[DEBUG] After filtering: ${relevantResults.length} relevant results found`);
+
     if (!relevantResults.length) {
+      console.log(`[DEBUG] No relevant results after filtering. Original matches: ${results.matches?.length}, threshold: ${datastore.similarity_threshold || 0.7}`);
       return null;
     }
 
     // Format context message
+    console.log(`[DEBUG] Returning ${relevantResults.length} memories to chat context`);
     const memories = relevantResults
       .map(result => {
         let memory = `Memory (similarity: ${(result.score * 100).toFixed(1)}%):\n${result.text}`;
