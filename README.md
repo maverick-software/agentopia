@@ -39,6 +39,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   Knowledge Graph Integration (GetZep) for advanced memory, contextual understanding, and reasoning.
 *   **🆕 Secure Secret Management:** Built-in Supabase Vault integration for secure API key storage and management
 *   **🆕 Gmail Integration:** Complete OAuth-based Gmail integration allowing agents to send emails on behalf of users
+*   **🆕 SendGrid Integration:** Complete API-based SendGrid integration with agent inboxes, smart routing, and webhook processing for sending and receiving emails
 *   **🆕 Web Research Capabilities:** Integrated web search, page scraping, and content summarization through multiple providers (Serper API, SerpAPI, Brave Search)
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
@@ -364,6 +365,8 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   **🆕 `web-search-api`**: Handles web search, page scraping, and content summarization for agent research capabilities.
 *   **🆕 `gmail-oauth`**: Manages Gmail OAuth authentication flow for email integration.
 *   **🆕 `gmail-api`**: Executes Gmail operations like sending emails on behalf of authenticated users.
+*   **🆕 `sendgrid-api`**: Executes SendGrid operations including email sending, templates, analytics, and agent inbox management.
+*   **🆕 `sendgrid-inbound`**: Processes inbound emails via SendGrid Inbound Parse webhook with smart routing and auto-reply capabilities.
 
 ## Secure Secret Management (Supabase Vault)
 
