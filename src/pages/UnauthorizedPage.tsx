@@ -11,10 +11,10 @@ const UnauthorizedPage: React.FC = () => {
       </p>
       <div className="mt-6">
         <Link
-          to="/dashboard" // Or link back, or to login
+          to="/agents" // Or link back, or to login
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
-          Go Back to Dashboard
+          Go Back to Agents
         </Link>
       </div>
     </div>

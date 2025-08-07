@@ -31,8 +31,8 @@ export function AdminRoute({}: AdminRouteProps) {
   }
 
   if (!isAdmin) {
-    console.warn('[AdminRoute] Decision: User is not an admin. Redirecting to /dashboard.');
-    return <Navigate to="/dashboard" replace />;
+    console.warn('[AdminRoute] Decision: User is not an admin. Redirecting to /agents.');
+    return <Navigate to="/agents" replace />;
   }
 
   console.log('[AdminRoute] Decision: User is admin. Rendering AdminLayout with Outlet.');

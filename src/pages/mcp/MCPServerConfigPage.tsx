@@ -76,7 +76,7 @@ export const MCPServerConfigPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <nav className="text-sm text-muted-foreground">
-          <a href="/dashboard" className="hover:text-foreground">Dashboard</a>
+                          <a href="/agents" className="hover:text-foreground">Agents</a>
           <span className="mx-2">/</span>
           <a href="/mcp/servers" className="hover:text-foreground">MCP Servers</a>
           <span className="mx-2">/</span>
@@ -100,7 +100,7 @@ export const MCPServerConfigPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <nav className="text-sm text-muted-foreground">
-          <a href="/dashboard" className="hover:text-foreground">Dashboard</a>
+                          <a href="/agents" className="hover:text-foreground">Agents</a>
           <span className="mx-2">/</span>
           <a href="/mcp/servers" className="hover:text-foreground">MCP Servers</a>
           <span className="mx-2">/</span>
@@ -137,7 +137,7 @@ export const MCPServerConfigPage: React.FC = () => {
     <div className="space-y-6">
       {/* Simple Navigation */}
       <nav className="text-sm text-muted-foreground">
-        <a href="/dashboard" className="hover:text-foreground">Dashboard</a>
+                        <a href="/agents" className="hover:text-foreground">Agents</a>
         <span className="mx-2">/</span>
         <a href="/mcp/servers" className="hover:text-foreground">MCP Servers</a>
         <span className="mx-2">/</span>

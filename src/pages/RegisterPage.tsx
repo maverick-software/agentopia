@@ -47,7 +47,7 @@ export function RegisterPage() {
         // Check if we are not already on step 4 (completion step)
         if (currentStep < 4) { 
             console.log('RegisterPage initial mount with existing user (and not step 4), redirecting.');
-            navigate('/dashboard', { replace: true });
+            navigate('/agents', { replace: true });
         }
       }
     }
@@ -60,7 +60,7 @@ export function RegisterPage() {
       if (user) { 
           console.log('Registration complete (step 4), redirecting after delay.');
           const timer = setTimeout(() => {
-              navigate('/dashboard', { replace: true });
+              navigate('/agents', { replace: true });
           }, 2000); 
           return () => clearTimeout(timer);
       } else {
@@ -367,7 +367,7 @@ export function RegisterPage() {
          {currentStep === 4 && (
             <div className="text-center space-y-4">
                 <h3 className="text-2xl font-semibold text-green-400">Registration Complete!</h3>
-                <p className="text-gray-300">Redirecting you to the dashboard...</p>
+                <p className="text-gray-300">Redirecting you to the agents page...</p>
             </div>
          )}
 

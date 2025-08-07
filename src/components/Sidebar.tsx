@@ -34,7 +34,7 @@ interface NavItem {
 // Helper function to get icon color class based on route or label
 const getIconColorClass = (route: string, label: string): string => {
   // Check by route first, then by label for flexibility
-  if (route.includes('/dashboard') || label.includes('Dashboard')) return 'text-icon-dashboard';
+
   if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
   if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
   if (route.includes('/workflows') || label.includes('Workflows')) return 'text-icon-workflows';

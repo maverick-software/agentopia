@@ -60,8 +60,7 @@ import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { GmailCallbackPage } from '../pages/integrations/GmailCallbackPage';
-// Import DashboardPage directly for debugging
-import { DashboardPage } from '../pages/DashboardPage';
+
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
 // Define the application routes using the RouteConfig structure
@@ -72,7 +71,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/unauthorized', element: UnauthorizedPage, protection: 'public', layout: false },
 
   // Protected routes (require layout)
-  { path: '/dashboard', element: DashboardPage, protection: 'protected', layout: true },
+
   { path: '/agents', element: AgentsPage, protection: 'protected', layout: true },
   { path: '/agents/new', element: AgentEditPage, protection: 'protected', layout: true },
   { path: '/agents/:agentId', element: AgentEditPage, protection: 'protected', layout: true },

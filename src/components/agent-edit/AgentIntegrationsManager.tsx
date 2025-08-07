@@ -281,10 +281,23 @@ export function AgentIntegrationsManager({
 
   // Filter permissions to only show those that match the current category
   const filteredPermissions = permissions.filter(permission => {
+    const providerName = permission.connection?.provider_name?.toLowerCase();
+    
     // Find the integration definition by matching provider name
-    const integration = integrations.find(int => 
-      int.name.toLowerCase() === permission.connection?.provider_name?.toLowerCase()
-    );
+    // Try multiple matching strategies to handle naming inconsistencies
+    const integration = integrations.find(int => {
+      const intName = int.name.toLowerCase();
+      // Direct match
+      if (intName === providerName) return true;
+      // Gmail special cases: "gmail" provider should match "email" or "gmail" integration
+      if (providerName === 'gmail' && (intName === 'email' || intName === 'gmail')) return true;
+      // Email special case: "email" integration should match "gmail" or "sendgrid" providers
+      if (intName === 'email' && (providerName === 'gmail' || providerName === 'sendgrid')) return true;
+      // Search provider matching
+      if ((providerName?.includes('search') || providerName?.includes('serper') || providerName?.includes('serpapi') || providerName?.includes('brave')) &&
+          (intName.includes('search') || intName.includes('web'))) return true;
+      return false;
+    });
     
     // If we found the integration, use its agent_classification
     if (integration) {
@@ -292,9 +305,8 @@ export function AgentIntegrationsManager({
     }
     
     // If no integration found, default based on provider name patterns
-    // Gmail should be a channel, Web Search should be a tool, everything else defaults to tool
-    const providerName = permission.connection?.provider_name?.toLowerCase();
-    if (providerName === 'gmail') {
+    // Gmail/SendGrid should be channels, Web Search should be tools
+    if (providerName === 'gmail' || providerName === 'sendgrid') {
       return category === 'channel';
     }
     if (providerName?.includes('search') || 
@@ -305,6 +317,7 @@ export function AgentIntegrationsManager({
       return category === 'tool';
     }
     
+    // Default: if we don't know what it is, show it in tools
     return category === 'tool';
   });
 
@@ -398,9 +411,22 @@ export function AgentIntegrationsManager({
                       {getIntegrationIcon(permission.connection?.provider_name)}
                     </div>
                     <div>
-                      <div className="font-medium">{permission.connection?.provider_name || 'Integration'}</div>
+                      <div className="font-medium">
+                        {(() => {
+                          const providerName = permission.connection?.provider_name || permission.integration_name || 'Integration';
+                          // Capitalize provider names for better display
+                          if (providerName.toLowerCase() === 'gmail') return 'Gmail';
+                          if (providerName.toLowerCase() === 'sendgrid') return 'SendGrid';
+                          if (providerName.toLowerCase() === 'slack') return 'Slack';
+                          if (providerName.toLowerCase() === 'discord') return 'Discord';
+                          if (providerName.toLowerCase().includes('serper')) return 'Serper API';
+                          if (providerName.toLowerCase().includes('serpapi')) return 'SerpAPI';
+                          if (providerName.toLowerCase().includes('brave')) return 'Brave Search';
+                          return providerName;
+                        })()}
+                      </div>
                       <div className="text-sm text-muted-foreground">
-                        {permission.connection?.external_username}
+                        {permission.connection?.external_username || permission.connection?.connection_name}
                       </div>
                     </div>
                   </div>

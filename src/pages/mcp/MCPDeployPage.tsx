@@ -125,7 +125,7 @@ export const MCPDeployPage: React.FC = () => {
       <div className="space-y-8">
         {/* Navigation */}
         <nav className="text-sm text-muted-foreground">
-          <a href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</a>
+                          <a href="/agents" className="hover:text-foreground transition-colors">Agents</a>
           <span className="mx-2">/</span>
           <a href="/mcp/servers" className="hover:text-foreground transition-colors">MCP Servers</a>
           <span className="mx-2">/</span>

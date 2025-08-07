@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -20,6 +20,7 @@ import { EnhancedChannelsModal } from '../components/modals/EnhancedChannelsModa
 import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
 import { TasksModal } from '../components/modals/TasksModal';
 import { HistoryModal } from '../components/modals/HistoryModal';
+import { ProcessModal } from '../components/modals/ProcessModal';
 import { ChatMessage } from '../components/ChatMessage';
 import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicator';
@@ -48,6 +49,8 @@ export function AgentChatPage() {
   const [showChannelsModal, setShowChannelsModal] = useState(false);
   const [showTasksModal, setShowTasksModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   
   // AI State tracking
   const [aiState, setAiState] = useState<AIState | null>(null);
@@ -605,6 +608,11 @@ export function AgentChatPage() {
       const responseData = await response.json();
       console.log('Chat API response:', responseData);
       
+      // Store processing details for debugging modal
+      if (responseData.processing_details) {
+        setCurrentProcessingDetails(responseData.processing_details);
+      }
+      
       // The chat function returns { message: string, agent: object }
       const assistantReply = responseData.message;
 
@@ -893,17 +901,18 @@ export function AgentChatPage() {
                             </span>
                             
                             {/* Thoughts Section next to name */}
-                            <details className="group">
-                              <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
-                                <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
-                                <span className="text-xs text-muted-foreground group-open:text-foreground">
-                                  Thoughts
-                                </span>
-                                <span className="text-xs text-muted-foreground/60">
-                                  {message.aiProcessDetails.steps.length} steps
-                                </span>
-                                <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
-                              </summary>
+                            <div className="flex items-center space-x-2">
+                              <details className="group">
+                                <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
+                                  <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
+                                  <span className="text-xs text-muted-foreground group-open:text-foreground">
+                                    Thoughts
+                                  </span>
+                                  <span className="text-xs text-muted-foreground/60">
+                                    {message.aiProcessDetails.steps.length} steps
+                                  </span>
+                                  <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                                </summary>
                               <div className="absolute z-50 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
                                 <div className="space-y-3">
                                   {message.aiProcessDetails.steps.map((step, stepIndex) => (
@@ -980,7 +989,20 @@ export function AgentChatPage() {
                                   </div>
                                 )}
                               </div>
-                            </details>
+                              </details>
+                              
+                              {/* Process Button */}
+                              {currentProcessingDetails && (
+                                <button
+                                  onClick={() => setShowProcessModal(true)}
+                                  className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors"
+                                  title="View detailed processing information"
+                                >
+                                  <BarChart3 className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">Process</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                           
                           {/* Main Response with timestamp in bottom right */}
@@ -1068,8 +1090,8 @@ export function AgentChatPage() {
                 {/* Note: Typing indicator now handled by InlineThinkingIndicator */}
 
                 {/* Removed prominent AI indicators - now using discreet header indicator */}
+                <div ref={messagesEndRef} />
               </div>
-              <div ref={messagesEndRef} />
             </div>
           )}
           
@@ -1286,6 +1308,13 @@ export function AgentChatPage() {
           setAgent(updatedAgent);
           console.log('Agent history updated:', updatedAgent);
         }}
+      />
+
+      {/* Process Modal */}
+      <ProcessModal
+        isOpen={showProcessModal}
+        onClose={() => setShowProcessModal(false)}
+        processingDetails={currentProcessingDetails}
       />
     </div>
   );

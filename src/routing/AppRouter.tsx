@@ -7,10 +7,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { AdminRoute } from './AdminRoute';
 import { appRoutes, RouteConfig } from './routeConfig';
 
-// Directly importing DashboardPage as a workaround.
-// Lazy loading caused a 'TypeError: Cannot convert object to primitive value'
-// during component initialization. See lazyComponents.ts for more details.
-import { DashboardPage } from '../pages/DashboardPage';
+
 
 // Helper function to wrap element with necessary wrappers (Protection and Layout)
 const wrapElement = (route: RouteConfig) => {
@@ -52,7 +49,7 @@ export const AppRouter: React.FC = () => {
               <Route 
                 key={route.path}
                 path={route.path}
-                element={user ? <Navigate to="/dashboard" replace /> : wrapElement(route)} 
+                element={user ? <Navigate to="/agents" replace /> : wrapElement(route)} 
               />
             );
           }
@@ -62,9 +59,9 @@ export const AppRouter: React.FC = () => {
                 <Route
                   key={route.path}
                   path={route.path}
-                  // If user is logged in, redirect to dashboard.
+                  // If user is logged in, redirect to agents.
                   // If user is logged out, redirect to login.
-                  element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
+                  element={user ? <Navigate to="/agents" replace /> : <Navigate to="/login" replace />}
                 />
               );
           }
@@ -102,7 +99,7 @@ export const AppRouter: React.FC = () => {
         })}
         
         {/* Default Catch-all route */}
-        <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
+        <Route path="*" element={<Navigate to={user ? "/agents" : "/login"} replace />} />
       </Routes>
     </Suspense>
   );

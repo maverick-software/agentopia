@@ -80,7 +80,7 @@ export const MCPServersPage: React.FC = () => {
       <div className="space-y-8">
         {/* Simple Navigation */}
         <nav className="text-sm text-muted-foreground">
-          <a href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</a>
+                          <a href="/agents" className="hover:text-foreground transition-colors">Agents</a>
           <span className="mx-2">/</span>
           <span className="text-foreground font-medium">MCP Servers</span>
         </nav>
