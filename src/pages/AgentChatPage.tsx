@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Send, AlertCircle, CheckCircle2, Loader2, ArrowLeft, MoreVertical, Copy, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight, BarChart3 } from 'lucide-react';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -15,13 +15,11 @@ import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
 import { AboutMeModal } from '../components/modals/AboutMeModal';
 import { HowIThinkModal } from '../components/modals/HowIThinkModal';
 import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
-import { ToolsModal } from '../components/modals/ToolsModal';
 import { EnhancedChannelsModal } from '../components/modals/EnhancedChannelsModal';
 import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
 import { TasksModal } from '../components/modals/TasksModal';
 import { HistoryModal } from '../components/modals/HistoryModal';
 import { ProcessModal } from '../components/modals/ProcessModal';
-import { ChatMessage } from '../components/ChatMessage';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
@@ -180,7 +178,9 @@ export function AgentChatPage() {
       'analyzing_tools': 'Checking available tools',
       'executing_tool': toolInfo?.toolName ? `Using ${toolInfo.toolName}` : 'Executing tool',
       'processing_results': 'Processing tool results',
-      'generating_response': 'Generating response'
+      'generating_response': 'Generating response',
+      'completed': 'Response ready',
+      'failed': 'Processing failed'
     }[newState] || 'Processing';
     
     setProcessSteps(prev => {
@@ -210,7 +210,13 @@ export function AgentChatPage() {
   const addStepResponse = useCallback((state: AIState, response: string) => {
     setProcessSteps(prev => {
       const updated = [...prev];
-      const stepIndex = updated.findLastIndex(step => step.state === state);
+      let stepIndex = -1;
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].state === state) {
+          stepIndex = i;
+          break;
+        }
+      }
       if (stepIndex >= 0) {
         updated[stepIndex] = { ...updated[stepIndex], response };
       }
@@ -222,7 +228,13 @@ export function AgentChatPage() {
   const addStepToolCall = useCallback((state: AIState, toolCall: string, toolResult?: any) => {
     setProcessSteps(prev => {
       const updated = [...prev];
-      const stepIndex = updated.findLastIndex(step => step.state === state);
+      let stepIndex = -1;
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].state === state) {
+          stepIndex = i;
+          break;
+        }
+      }
       if (stepIndex >= 0) {
         updated[stepIndex] = { 
           ...updated[stepIndex], 
@@ -280,7 +292,13 @@ export function AgentChatPage() {
         setMessages(prev => {
           const updated = [...prev];
           // Find the most recent thinking message
-          const thinkingIndex = updated.findLastIndex(msg => msg.role === 'thinking' && !msg.metadata?.isCompleted);
+          let thinkingIndex = -1;
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === 'thinking' && !updated[i].metadata?.isCompleted) {
+              thinkingIndex = i;
+              break;
+            }
+          }
           
           if (thinkingIndex !== -1) {
             // Convert to assistant message with thinking details
@@ -599,13 +617,18 @@ export function AgentChatPage() {
       }
       const accessToken = session.access_token;
 
+      // Get the stored context size preference for this agent
+      const contextSize = parseInt(
+        localStorage.getItem(`agent_${agent.id}_context_size`) || '25'
+      );
+
       const requestBody = {
         agentId: agent.id,
         userId: user.id,
         channelId: null,
         message: messageText,
         // Allow backend working-memory to pull recent messages
-        options: { context: { max_messages: 25 } }
+        options: { context: { max_messages: contextSize } }
       };
 
       // Wait for both the API response and the processing simulation
@@ -1037,8 +1060,39 @@ export function AgentChatPage() {
                           
                           {/* Main Response with timestamp in bottom right */}
                           <div className="relative inline-block p-3 rounded-2xl shadow-sm bg-card text-card-foreground">
-                            <div className="text-sm leading-relaxed pr-16">
-                              {message.content}
+                            <div className="text-sm leading-relaxed pr-16 prose prose-sm dark:prose-invert max-w-none
+                              prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
+                              prose-p:my-2 prose-p:leading-relaxed
+                              prose-ul:my-2 prose-ul:pl-6 prose-ul:list-disc
+                              prose-ol:my-2 prose-ol:pl-6 prose-ol:list-decimal
+                              prose-li:my-0.5
+                              prose-pre:my-3 prose-pre:p-3 prose-pre:bg-muted prose-pre:rounded-lg
+                              prose-code:px-1 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm
+                              prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic
+                              prose-strong:font-semibold prose-strong:text-foreground
+                              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
+                              prose-hr:my-4 prose-hr:border-muted-foreground/30">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  code: ({node, inline, className, children, ...props}: any) => {
+                                    const match = /language-(\w+)/.exec(className || '');
+                                    return !inline && match ? (
+                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto">
+                                        <code className={className} {...props}>
+                                          {children}
+                                        </code>
+                                      </pre>
+                                    ) : (
+                                      <code className="px-1 py-0.5 bg-muted rounded text-sm" {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  }
+                                }}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
                             </div>
                             {/* Timestamp in bottom right corner */}
                             <div className="absolute bottom-2 right-3 text-xs text-muted-foreground/60">
@@ -1108,13 +1162,92 @@ export function AgentChatPage() {
                             ? 'bg-primary text-primary-foreground' 
                             : 'bg-card text-card-foreground'
                         }`}>
-                          <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-headings:mt-3 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-pre:my-3">
-                            {message.role === 'assistant' ? (
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-                            ) : (
-                              message.content
-                            )}
-                          </div>
+                          {message.role === 'assistant' ? (
+                            <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none
+                              prose-headings:mt-4 prose-headings:mb-3 prose-headings:font-semibold
+                              prose-p:my-3 prose-p:leading-7
+                              prose-ul:my-3 prose-ul:pl-6 prose-ul:list-disc prose-ul:space-y-2
+                              prose-ol:my-3 prose-ol:pl-6 prose-ol:list-decimal prose-ol:space-y-2
+                              prose-li:my-1 prose-li:leading-7
+                              prose-pre:my-4 prose-pre:p-4 prose-pre:bg-muted prose-pre:rounded-lg
+                              prose-code:px-1.5 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm prose-code:font-mono
+                              prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-4
+                              prose-strong:font-semibold prose-strong:text-foreground
+                              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
+                              prose-hr:my-6 prose-hr:border-muted-foreground/30
+                              [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  // Custom paragraph renderer to ensure spacing
+                                  p: ({children}: any) => (
+                                    <p className="my-3 leading-7">{children}</p>
+                                  ),
+                                  // Custom list renderers
+                                  ul: ({children}: any) => (
+                                    <ul className="my-3 pl-6 list-disc space-y-2">{children}</ul>
+                                  ),
+                                  ol: ({children}: any) => (
+                                    <ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>
+                                  ),
+                                  li: ({children}: any) => (
+                                    <li className="my-1 leading-7">{children}</li>
+                                  ),
+                                  // Headers with spacing
+                                  h1: ({children}: any) => (
+                                    <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>
+                                  ),
+                                  h2: ({children}: any) => (
+                                    <h2 className="text-xl font-semibold mt-5 mb-3">{children}</h2>
+                                  ),
+                                  h3: ({children}: any) => (
+                                    <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>
+                                  ),
+                                  // Ensure code blocks render properly
+                                  code: ({node, inline, className, children, ...props}: any) => {
+                                    const match = /language-(\w+)/.exec(className || '');
+                                    return !inline && match ? (
+                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-4">
+                                        <code className={className} {...props}>
+                                          {children}
+                                        </code>
+                                      </pre>
+                                    ) : (
+                                      <code className="px-1 py-0.5 bg-muted rounded text-sm" {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                  // Blockquotes
+                                  blockquote: ({children}: any) => (
+                                    <blockquote className="border-l-4 border-muted-foreground/30 pl-4 italic my-4">
+                                      {children}
+                                    </blockquote>
+                                  ),
+                                  // Strong/bold
+                                  strong: ({children}: any) => (
+                                    <strong className="font-semibold text-foreground">{children}</strong>
+                                  ),
+                                  // Links
+                                  a: ({href, children}: any) => (
+                                    <a href={href} className="text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">
+                                      {children}
+                                    </a>
+                                  ),
+                                  // Horizontal rule
+                                  hr: () => (
+                                    <hr className="my-6 border-muted-foreground/30" />
+                                  ),
+                                }}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (
+                            <div className="text-sm leading-relaxed">
+                              {message.content}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

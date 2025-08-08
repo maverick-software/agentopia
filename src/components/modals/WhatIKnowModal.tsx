@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
 import { Card, CardContent } from '@/components/ui/card';
 import { 
   Loader2, 
@@ -22,7 +23,8 @@ import {
   Upload,
   X,
   File,
-  Lightbulb
+  Lightbulb,
+  MessageSquare
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -101,6 +103,9 @@ export function WhatIKnowModal({
   const [availableDatastores, setAvailableDatastores] = useState<Datastore[]>([]);
   const [connectedDatastores, setConnectedDatastores] = useState<string[]>([]);
   const [memoryPreferences, setMemoryPreferences] = useState<string[]>(['remember_preferences', 'track_projects', 'learn_conversations']);
+  const [contextHistorySize, setContextHistorySize] = useState<number>(
+    parseInt(localStorage.getItem(`agent_${agentId}_context_size`) || '25')
+  );
   
   // UI state
   const [loading, setLoading] = useState(false);
@@ -275,6 +280,12 @@ export function WhatIKnowModal({
           : [...filtered, preferenceId];
       });
     }
+  };
+
+  const handleContextSizeChange = (value: number[]) => {
+    const newSize = value[0];
+    setContextHistorySize(newSize);
+    localStorage.setItem(`agent_${agentId}_context_size`, newSize.toString());
   };
 
   // Handle datastore selection from modals
@@ -695,6 +706,82 @@ export function WhatIKnowModal({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Conversation Context History */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Conversation Memory
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  How many recent messages should I remember from our conversation?
+                </p>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Messages to remember:</span>
+                  <span className="text-sm font-medium bg-primary/10 px-2 py-1 rounded">
+                    {contextHistorySize} {contextHistorySize === 1 ? 'message' : 'messages'}
+                  </span>
+                </div>
+                
+                <Slider
+                  value={[contextHistorySize]}
+                  onValueChange={handleContextSizeChange}
+                  min={0}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+                
+                <div className="relative h-6">
+                  {/* Main endpoints */}
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>0</span>
+                    <span>100</span>
+                  </div>
+                  
+                  {/* Intermediate markers positioned accurately */}
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="absolute text-xs text-muted-foreground" style={{ left: '25%', transform: 'translateX(-50%)' }}>
+                      25
+                    </span>
+                    <span className="absolute text-xs text-muted-foreground" style={{ left: '50%', transform: 'translateX(-50%)' }}>
+                      50
+                    </span>
+                    <span className="absolute text-xs text-muted-foreground" style={{ left: '75%', transform: 'translateX(-50%)' }}>
+                      75
+                    </span>
+                  </div>
+                  
+                  {/* Labels below */}
+                  <div className="absolute -bottom-4 inset-x-0 flex justify-between text-xs text-muted-foreground/70">
+                    <span className="text-[10px]">No memory</span>
+                    <span className="absolute text-[10px]" style={{ left: '25%', transform: 'translateX(-50%)' }}>
+                      (default)
+                    </span>
+                    <span className="text-[10px]">Max context</span>
+                  </div>
+                </div>
+                
+                <div className="mt-4"></div>
+                
+                <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                  {contextHistorySize === 0 
+                    ? "I won't remember any previous messages in our conversation."
+                    : contextHistorySize <= 10
+                    ? "I'll remember only the most recent exchanges."
+                    : contextHistorySize <= 25
+                    ? "I'll maintain good context of our recent conversation."
+                    : contextHistorySize <= 50
+                    ? "I'll remember a substantial portion of our conversation history."
+                    : "I'll remember extensive conversation history for maximum context."
+                  }
+                </p>
               </div>
             </div>
 
