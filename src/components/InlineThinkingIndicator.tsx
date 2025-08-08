@@ -62,18 +62,7 @@ const getStateIcon = (state: AIState, isActive: boolean = false) => {
   }
 };
 
-const getStateLabel = (state: AIState): string => {
-  switch (state) {
-    case 'thinking': return 'Thinking...';
-    case 'analyzing_tools': return 'Analyzing available tools...';
-    case 'executing_tool': return 'Using tools...';
-    case 'processing_results': return 'Processing results...';
-    case 'generating_response': return 'Crafting response...';
-    case 'completed': return 'Response ready';
-    case 'failed': return 'Process failed';
-    default: return 'Processing...';
-  }
-};
+const getStateLabel = (state: AIState): string => 'Thinking...';
 
 export function InlineThinkingIndicator({ 
   isVisible, 

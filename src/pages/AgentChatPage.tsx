@@ -22,6 +22,8 @@ import { TasksModal } from '../components/modals/TasksModal';
 import { HistoryModal } from '../components/modals/HistoryModal';
 import { ProcessModal } from '../components/modals/ProcessModal';
 import { ChatMessage } from '../components/ChatMessage';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
 import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicator';
 import { InlineThinkingIndicator } from '../components/InlineThinkingIndicator';
@@ -266,55 +268,72 @@ export function AgentChatPage() {
     }, 500);
   }, [thinkingMessageIndex, processSteps]);
 
-  const completeAIProcessingWithResponse = useCallback((responseContent: string) => {
+  const completeAIProcessingWithResponse = useCallback(async (responseContent: string) => {
     setAiState('completed');
     
     // Mark all steps as completed
-    setProcessSteps(prevSteps => {
-      const completedSteps = prevSteps.map(step => ({ ...step, completed: true }));
-      
-      // Find and convert the thinking message to assistant response
-      setMessages(prev => {
-        const updated = [...prev];
-        // Find the most recent thinking message
-        const thinkingIndex = updated.findLastIndex(msg => msg.role === 'thinking' && !msg.metadata?.isCompleted);
+    const completedSteps = await new Promise<typeof processSteps>((resolve) => {
+      setProcessSteps(prevSteps => {
+        const done = prevSteps.map(step => ({ ...step, completed: true }));
+
+        // Find and convert the thinking message to assistant response
+        setMessages(prev => {
+          const updated = [...prev];
+          // Find the most recent thinking message
+          const thinkingIndex = updated.findLastIndex(msg => msg.role === 'thinking' && !msg.metadata?.isCompleted);
+          
+          if (thinkingIndex !== -1) {
+            // Convert to assistant message with thinking details
+            updated[thinkingIndex] = {
+              role: 'assistant',
+              content: responseContent,
+              timestamp: new Date(),
+              agentId: agent?.id,
+              userId: user?.id,
+              metadata: { isCompleted: true },
+              aiProcessDetails: {
+                steps: done,
+                totalDuration: Date.now() - (done[0]?.startTime?.getTime() || Date.now()),
+                toolsUsed: done.filter(s => s.details).map(s => s.details || '')
+              }
+            };
+          } else {
+            // Fallback: Add new assistant message if no thinking message found
+            updated.push({
+              role: 'assistant',
+              content: responseContent,
+              timestamp: new Date(),
+              agentId: agent?.id,
+              userId: user?.id,
+              metadata: { isCompleted: true },
+              aiProcessDetails: {
+                steps: done,
+                totalDuration: Date.now() - (done[0]?.startTime?.getTime() || Date.now()),
+                toolsUsed: done.filter(s => s.details).map(s => s.details || '')
+              }
+            });
+          }
+          return updated;
+        });
         
-        if (thinkingIndex !== -1) {
-          // Convert to assistant message with thinking details
-          updated[thinkingIndex] = {
-            role: 'assistant',
-            content: responseContent,
-            timestamp: new Date(),
-            agentId: agent?.id,
-            userId: user?.id,
-            metadata: { isCompleted: true },
-            aiProcessDetails: {
-              steps: completedSteps,
-              totalDuration: Date.now() - (completedSteps[0]?.startTime?.getTime() || Date.now()),
-              toolsUsed: completedSteps.filter(s => s.details).map(s => s.details || '')
-            }
-          };
-        } else {
-          // Fallback: Add new assistant message if no thinking message found
-          updated.push({
-            role: 'assistant',
-            content: responseContent,
-            timestamp: new Date(),
-            agentId: agent?.id,
-            userId: user?.id,
-            metadata: { isCompleted: true },
-            aiProcessDetails: {
-              steps: completedSteps,
-              totalDuration: Date.now() - (completedSteps[0]?.startTime?.getTime() || Date.now()),
-              toolsUsed: completedSteps.filter(s => s.details).map(s => s.details || '')
-            }
-          });
-        }
-        return updated;
+        return done;
       });
-      
-      return completedSteps;
+      // Resolve in next tick to ensure setState above applied
+      requestAnimationFrame(() => resolve(processSteps));
     });
+
+    // Persist assistant message so it stays visible on reload/history sync
+    try {
+      await supabase
+        .from('chat_messages')
+        .insert({
+          content: responseContent,
+          sender_agent_id: agent?.id || null,
+          sender_user_id: null,
+        });
+    } catch (e) {
+      console.warn('[chat] Failed to persist assistant message:', e);
+    }
     
     // Clean up state
     setTimeout(() => {
@@ -582,7 +601,11 @@ export function AgentChatPage() {
 
       const requestBody = {
         agentId: agent.id,
-        message: messageText
+        userId: user.id,
+        channelId: null,
+        message: messageText,
+        // Allow backend working-memory to pull recent messages
+        options: { context: { max_messages: 25 } }
       };
 
       // Wait for both the API response and the processing simulation
@@ -608,13 +631,16 @@ export function AgentChatPage() {
       const responseData = await response.json();
       console.log('Chat API response:', responseData);
       
-      // Store processing details for debugging modal
-      if (responseData.processing_details) {
-        setCurrentProcessingDetails(responseData.processing_details);
+      // Store processing details for debugging modal (supports V2 and V1)
+      const v2Processing = responseData.processing_details || responseData.data?.processing_details;
+      if (v2Processing) {
+        setCurrentProcessingDetails(v2Processing);
       }
       
-      // The chat function returns { message: string, agent: object }
-      const assistantReply = responseData.message;
+      // Support both V2 and V1 response shapes
+      const v2Text = responseData?.data?.message?.content?.text;
+      const v1Text = responseData?.message;
+      const assistantReply = typeof v2Text === 'string' ? v2Text : v1Text;
 
       if (typeof assistantReply !== 'string') {
           console.error('Invalid response format from chat API:', responseData);
@@ -622,7 +648,7 @@ export function AgentChatPage() {
       }
 
       // Complete AI processing and convert thinking message to assistant response
-      completeAIProcessingWithResponse(assistantReply);
+      await completeAIProcessingWithResponse(assistantReply);
 
       // Scroll after updating message
       if (isMounted.current) {
@@ -850,13 +876,17 @@ export function AgentChatPage() {
                 {messages.map((message, index) => {
                   // Handle thinking messages with inline indicator
                   if (message.role === 'thinking') {
+                    const isCurrentThinking = index === thinkingMessageIndex && !message.metadata?.isCompleted;
+                    if (!isCurrentThinking) {
+                      return null; // hide previous/completed thinking indicators
+                    }
                     return (
                       <InlineThinkingIndicator
                         key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
                         isVisible={true}
-                        currentState={message.metadata?.isCompleted ? 'completed' : aiState}
+                        currentState={aiState}
                         currentTool={currentTool}
-                        processSteps={message.aiProcessDetails?.steps || processSteps.map(step => ({
+                        processSteps={processSteps.map(step => ({
                           state: step.state,
                           label: step.label,
                           duration: step.duration,
@@ -865,7 +895,7 @@ export function AgentChatPage() {
                         }))}
                         agentName={agent?.name || 'Agent'}
                         agentAvatarUrl={agent?.avatar_url}
-                        isCompleted={message.metadata?.isCompleted || false}
+                        isCompleted={false}
                         className="mb-4"
                       />
                     );
@@ -1078,8 +1108,12 @@ export function AgentChatPage() {
                             ? 'bg-primary text-primary-foreground' 
                             : 'bg-card text-card-foreground'
                         }`}>
-                          <div className="text-sm leading-relaxed">
-                            {message.content}
+                          <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-headings:mt-3 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-pre:my-3">
+                            {message.role === 'assistant' ? (
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                            ) : (
+                              message.content
+                            )}
                           </div>
                         </div>
                       </div>

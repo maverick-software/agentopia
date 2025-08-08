@@ -130,7 +130,8 @@ export class ContextRetriever {
     
     // Add recent messages
     const recentMessages = conversationContext.recent_messages || [];
-    recentMessages.slice(-5).forEach((message, index) => {
+    const workingLimit = (conversationContext as any).working_memory_limit ?? 5;
+    recentMessages.slice(-Math.max(0, Math.min(100, workingLimit))).forEach((message, index) => {
       candidates.push({
         id: `conv_${message.id || index}`,
         content: message.content,

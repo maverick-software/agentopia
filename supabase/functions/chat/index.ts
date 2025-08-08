@@ -106,8 +106,14 @@ async function handler(req: Request): Promise<Response> {
     // Parse request body
     const body = await req.json();
     
-    // Get API version
-    const apiVersion = APIVersionRouter.detectVersion(req);
+    // Infer API version: prefer explicit, but fall back to body shape
+    let apiVersion = APIVersionRouter.detectVersion(req);
+    // If no explicit version header/path, detect by payload
+    const looksLikeV2 = body?.version === '2.0.0' || (body?.message && typeof body.message === 'object' && body.message.content);
+    const looksLikeV1 = !looksLikeV2; // legacy shape `{ agentId, message }`
+    if (!req.headers.get('X-API-Version')) {
+      apiVersion = looksLikeV2 ? '2.0' : '1.0';
+    }
     log.info('Processing request', { api_version: apiVersion, method: req.method, url: req.url });
     
     // Initialize message adapter for conversions

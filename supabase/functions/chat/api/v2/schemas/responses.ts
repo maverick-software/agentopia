@@ -54,6 +54,7 @@ export interface MessageResponse extends SuccessResponse<{
   session: SessionInfo;
 }> {
   metrics?: MessageMetrics;
+  processing_details?: any;
 }
 
 export interface ConversationInfo {

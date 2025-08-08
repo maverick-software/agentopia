@@ -66,8 +66,8 @@ export class APIVersionRouter {
     if (url.pathname.includes('/v2/')) return '2.0';
     if (url.pathname.includes('/v1/')) return '1.0';
     
-    // Default to V1 for backward compatibility
-    return '1.0';
+    // Default to V2 by design
+    return '2.0';
   }
   
   /**

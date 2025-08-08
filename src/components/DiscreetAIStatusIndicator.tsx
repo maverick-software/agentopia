@@ -57,48 +57,12 @@ const getStateIcon = (state: AIState, size: 'sm' | 'xs' = 'xs') => {
   }
 };
 
-const getStateLabel = (state: AIState) => {
-  switch (state) {
-    case 'thinking':
-      return 'Thinking';
-    case 'analyzing_tools':
-      return 'Analyzing';
-    case 'executing_tool':
-      return 'Processing';
-    case 'processing_results':
-      return 'Processing';
-    case 'generating_response':
-      return 'Responding';
-    case 'completed':
-      return 'Complete';
-    case 'failed':
-      return 'Error';
-    default:
-      return 'Working';
-  }
-};
+const getStateLabel = (_state: AIState) => 'Thinking';
 
 const getStateMessage = (state: AIState, agentName?: string, toolName?: string) => {
   const agent = agentName || 'Agent';
   
-  switch (state) {
-    case 'thinking':
-      return `${agent} is analyzing your request...`;
-    case 'analyzing_tools':
-      return `${agent} is checking available tools...`;
-    case 'executing_tool':
-      return toolName ? `${agent} is using ${toolName}...` : `${agent} is executing a tool...`;
-    case 'processing_results':
-      return `${agent} is processing the results...`;
-    case 'generating_response':
-      return `${agent} is preparing the response...`;
-    case 'completed':
-      return `${agent} has completed the task successfully`;
-    case 'failed':
-      return `${agent} encountered an error`;
-    default:
-      return `${agent} is working...`;
-  }
+  return `${agent} is thinking...`;
 };
 
 const formatDuration = (startTime: Date, endTime?: Date) => {

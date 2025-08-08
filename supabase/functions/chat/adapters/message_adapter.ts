@@ -260,9 +260,23 @@ export class MessageAdapter {
       metadata: {},
     };
     
+    // Build context object, omitting null/undefined values
+    const context: any = {
+      agent_id: v1Request.agentId,
+      user_id: v1Request.userId,
+      conversation_id: v1Request.conversationId || generateConversationId(),
+      session_id: v1Request.sessionId || generateConversationId(),
+    };
+    
+    // Only include channel_id if it's not null/undefined
+    if (v1Request.channelId) {
+      context.channel_id = v1Request.channelId;
+    }
+    
     return {
       version: '2.0.0',
       message: v2Message,
+      context,
       options: {
         response: {
           stream: v1Request.stream || false,
@@ -286,8 +300,15 @@ export class MessageAdapter {
           timeout_ms: 30000,
         },
         context: {
-          max_messages: 20,
+          max_messages: v1Request.options?.context?.max_messages || 20,
           token_limit: 4000,
+        },
+        reasoning: {
+          enabled: true,
+          mode: 'summary',
+          threshold: 0.6,
+          max_steps: 6,
+          max_tool_calls: 3,
         },
       },
     };

@@ -237,8 +237,20 @@ export interface AuditInformation {
 export interface ChatRequestV2 {
   version: '2.0.0';
   message: Partial<AdvancedChatMessage>;
-  
+  // Top-level context for routing and retrieval
+  context?: {
+    conversation_id?: string;
+    session_id?: string;
+    agent_id?: string;
+    channel_id?: string;
+    workspace_id?: string;
+    user_id?: string;
+  };
+
   options?: ChatOptions;
+  
+  // Optional request identifier
+  request_id?: string;
 }
 
 export interface ChatOptions {

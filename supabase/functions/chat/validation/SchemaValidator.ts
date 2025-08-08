@@ -201,6 +201,17 @@ const ChatRequestV2Schema = z.object({
       compression_enabled: z.boolean().optional(),
       include_system_messages: z.boolean().optional(),
     }).optional(),
+    reasoning: z.object({
+      enabled: z.boolean().default(true),
+      mode: z.enum(['summary','trace']).default('summary'),
+      threshold: z.number().min(0).max(1).default(0.6),
+      max_steps: z.number().min(1).max(32).default(8),
+      max_tool_calls: z.number().min(0).max(10).default(3),
+      styles_allowed: z.array(z.enum(['inductive','abductive','deductive'])).optional(),
+      style_bias: z.enum(['inductive','abductive','deductive']).optional(),
+      budget_tokens: z.number().min(128).max(32000).optional(),
+      timeout_ms: z.number().min(500).max(120000).optional(),
+    }).optional(),
   }).optional(),
   request_id: z.string().optional(),
 });

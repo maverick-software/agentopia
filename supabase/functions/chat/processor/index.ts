@@ -1,11 +1,8 @@
 // Processor Module Exports
-// Central export point for the message processor
+// Central export file for all processor components
 
 export { MessageProcessor } from './MessageProcessor.ts';
-export type {
-  ProcessingContext,
-  ProcessedMessage,
-  ProcessingMetrics,
-  ProcessingOptions,
-  MessageHandler,
-} from './MessageProcessor.ts';
+export * from './types.ts';
+export * from './stages.ts';
+export * from './handlers.ts';
+export * from './builder.ts';

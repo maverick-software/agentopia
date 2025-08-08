@@ -14,7 +14,11 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
 }) => {
   if (!isOpen || !processingDetails) return null;
 
-  const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance } = processingDetails;
+  const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance, reasoning } = processingDetails;
+  const reasoningGraph = processingDetails?.reasoning_graph as { states?: string[] } | undefined;
+
+  const [showStepModal, setShowStepModal] = React.useState(false);
+  const [selectedStep, setSelectedStep] = React.useState<any | null>(null);
 
   const formatTime = (ms: number) => `${ms}ms`;
   const formatPercent = (value: number) => `${(value * 100).toFixed(1)}%`;
@@ -35,6 +39,18 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+          {/* Reasoning Summary Header */}
+          {reasoning && (
+            <div className="mb-4 flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
+              <div className="text-sm text-yellow-900">
+                <span className="font-medium">Reasoning:</span> {reasoning.type || 'none'}
+                <span className="ml-3 font-medium">Score:</span> {((reasoning.score || 0) * 100).toFixed(1)}%
+              </div>
+              {reasoning.reason && (
+                <div className="text-xs text-yellow-800">{reasoning.reason}</div>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Memory Operations */}
@@ -167,6 +183,19 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                 <MessageSquare className="h-5 w-5 text-yellow-600" />
                 <h3 className="font-semibold text-yellow-900">Reasoning Chain</h3>
               </div>
+              {/* Markov state path */}
+              {reasoningGraph?.states?.length ? (
+                <div className="mb-3 text-xs text-yellow-800">
+                  <span className="font-medium">Markov Path:</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {reasoningGraph.states.map((s, i) => (
+                      <span key={`${s}-${i}`} className="px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded">
+                        {i + 1}. {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               
               {reasoning_chain && reasoning_chain.length > 0 ? (
                 <div className="space-y-3">
@@ -180,6 +209,12 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                           <span className="text-xs font-medium text-yellow-800 uppercase">{step.type}</span>
                           <span className="text-xs text-gray-500">({formatTime(step.time_ms)})</span>
                           <span className="text-xs text-gray-500">Confidence: {formatPercent(step.confidence)}</span>
+                          <button
+                            className="ml-auto text-xs px-2 py-0.5 rounded border border-yellow-300 text-yellow-900 hover:bg-yellow-100"
+                            onClick={() => { setSelectedStep(step); setShowStepModal(true); }}
+                          >
+                            View
+                          </button>
                         </div>
                         <div className="text-sm text-gray-700">{step.description}</div>
                       </div>
@@ -265,6 +300,58 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
           </div>
         </div>
       </div>
+      {/* Step Details Modal */}
+      {showStepModal && selectedStep && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowStepModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <div className="text-sm font-semibold text-gray-900">Reasoning Step #{selectedStep.step} • {selectedStep.state || selectedStep.type}</div>
+              <button onClick={() => setShowStepModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="h-4 w-4 text-gray-600" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 text-sm text-gray-800">
+              {selectedStep.question && (
+                <div>
+                  <div className="font-medium text-gray-900">Question</div>
+                  <div className="mt-1 whitespace-pre-wrap text-gray-700">{selectedStep.question}</div>
+                </div>
+              )}
+              {selectedStep.hypothesis && (
+                <div>
+                  <div className="font-medium text-gray-900">Hypothesis</div>
+                  <div className="mt-1 whitespace-pre-wrap text-gray-700">{selectedStep.hypothesis}</div>
+                </div>
+              )}
+              {(selectedStep.action || selectedStep.observation) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="font-medium text-gray-900">Action</div>
+                    <pre className="mt-1 bg-gray-50 border rounded p-2 text-xs overflow-auto">{JSON.stringify(selectedStep.action, null, 2)}</pre>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-900">Observation</div>
+                    <pre className="mt-1 bg-gray-50 border rounded p-2 text-xs overflow-auto">{JSON.stringify(selectedStep.observation, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+              {Array.isArray(selectedStep.facts_considered) && selectedStep.facts_considered.length > 0 && (
+                <div>
+                  <div className="font-medium text-gray-900">Facts Considered</div>
+                  <ul className="mt-1 list-disc pl-5 space-y-1 text-gray-700">
+                    {selectedStep.facts_considered.map((f: string, i: number) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t flex justify-end">
+              <button onClick={() => setShowStepModal(false)} className="px-3 py-1.5 text-sm rounded bg-gray-900 text-white hover:bg-black">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
