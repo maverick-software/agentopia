@@ -9,6 +9,10 @@ These additional memory types should, whenever activated and assigned, be storin
 
 Change 'Knowledge' to 'Memory.' We will work inside different types of memory: episodic, semantic, working memory. All memory types will be optional and adjustable within the users pop up modal.
 
+## Background chat summaries ##
+
+A background agent that is keeping tracking of summarizing the conversation, documenting important facts and memories that will probably be useful later.
+
 ## Deep Memory Search as a Tool ##
 
 We will provide every chat respone with a predefined set of memory settings,  but if we need a deeper memory search, like expanding upon topics to find new nodes and edges, or to lower the similarity score on episodic memory to bring in more old memories, or to expand the temporal aspect of a memory to bring in memories closer to a timeline event, we can provide these tools to the agent wihin a 'Deep Memory Search' framework, where it determines if it needs to activate the Deep Memory Search state, and then determines which type of deep memory searches it wants to complete, and then calls those memory searches like MCP tools.
