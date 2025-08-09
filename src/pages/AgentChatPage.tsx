@@ -91,6 +91,25 @@ export function AgentChatPage() {
     }
   }, []);
 
+  // Normalize Markdown for consistent initial rendering
+  const formatMarkdown = useCallback((text: string): string => {
+    if (!text) return '';
+    const lines = text.split('\n');
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      const isList = /^([-*+]\s|\d+\.\s)/.test(trimmed);
+      const isHeader = /^#{1,6}\s/.test(trimmed);
+      // Ensure a blank line before lists and headers when missing
+      if ((isList || isHeader) && out.length > 0 && out[out.length - 1].trim() !== '') {
+        out.push('');
+      }
+      out.push(line);
+    }
+    return out.join('\n');
+  }, []);
+
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
@@ -1075,10 +1094,18 @@ export function AgentChatPage() {
                               <ReactMarkdown 
                                 remarkPlugins={[remarkGfm]}
                                 components={{
+                                  // Match renderer used in regular messages for consistent look
+                                  p: ({children}: any) => (<p className="my-3 leading-7">{children}</p>),
+                                  ul: ({children}: any) => (<ul className="my-3 pl-6 list-disc space-y-2">{children}</ul>),
+                                  ol: ({children}: any) => (<ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>),
+                                  li: ({children}: any) => (<li className="my-1 leading-7">{children}</li>),
+                                  h1: ({children}: any) => (<h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>),
+                                  h2: ({children}: any) => (<h2 className="text-xl font-semibold mt-5 mb-3">{children}</h2>),
+                                  h3: ({children}: any) => (<h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>),
                                   code: ({node, inline, className, children, ...props}: any) => {
                                     const match = /language-(\w+)/.exec(className || '');
                                     return !inline && match ? (
-                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto">
+                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-4">
                                         <code className={className} {...props}>
                                           {children}
                                         </code>
@@ -1088,10 +1115,18 @@ export function AgentChatPage() {
                                         {children}
                                       </code>
                                     );
-                                  }
+                                  },
+                                  blockquote: ({children}: any) => (
+                                    <blockquote className="border-l-4 border-muted-foreground/30 pl-4 italic my-4">{children}</blockquote>
+                                  ),
+                                  strong: ({children}: any) => (<strong className="font-semibold text-foreground">{children}</strong>),
+                                  a: ({href, children}: any) => (
+                                    <a href={href} className="text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">{children}</a>
+                                  ),
+                                  hr: () => (<hr className="my-6 border-muted-foreground/30" />),
                                 }}
                               >
-                                {message.content}
+                                {formatMarkdown(message.content)}
                               </ReactMarkdown>
                             </div>
                             {/* Timestamp in bottom right corner */}
@@ -1240,7 +1275,7 @@ export function AgentChatPage() {
                                   ),
                                 }}
                               >
-                                {message.content}
+                                {formatMarkdown(message.content)}
                               </ReactMarkdown>
                             </div>
                           ) : (
