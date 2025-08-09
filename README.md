@@ -37,6 +37,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   Team Management
 *   Datastore Management (Pinecone RAG)
 *   Knowledge Graph Integration (GetZep) for advanced memory, contextual understanding, and reasoning.
+*   Agent‑scoped datastore credentials via `agent_datastores` (per‑agent Pinecone/GetZep configs used by chat at runtime)
 *   **🆕 Secure Secret Management:** Built-in Supabase Vault integration for secure API key storage and management
 *   **🆕 Gmail Integration:** Complete OAuth-based Gmail integration allowing agents to send emails on behalf of users
 *   **🆕 SendGrid Integration:** Complete API-based SendGrid integration with agent inboxes, smart routing, and webhook processing for sending and receiving emails
@@ -163,8 +164,8 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
     *   `OPENAI_API_KEY`: Your OpenAI API key.
     *   `DISCORD_PUBLIC_KEY`: (If using Discord) Your Discord application's public key.
     *   `DISCORD_APP_ID`: (If using Discord) Your Discord application's ID.
-    *   `PINECONE_API_KEY`: (If using Pinecone) Your Pinecone API key.
-    *   `PINECONE_ENVIRONMENT`: (If using Pinecone) Your Pinecone environment.
+    *   `PINECONE_API_KEY`: Optional fallback. Prefer agent‑scoped credentials in `datastores.config` linked via `agent_datastores`.
+    *   `PINECONE_INDEX` / `PINECONE_ENVIRONMENT`: Optional fallbacks when no agent datastore is linked.
     *   `MANAGER_URL`: (If using backend services) URL of the deployed `worker-manager`.
     *   `MANAGER_SECRET_KEY`: Shared secret between Supabase functions and `worker-manager`.
 3.  **(Optional) Backend Services:** Create `.env` files within `services/worker-manager` and `services/discord-worker` containing necessary secrets (Supabase keys, Discord tokens, Manager key, etc.).
@@ -357,7 +358,15 @@ Uses PostgreSQL managed by Supabase. Key tables include `users`, `agents`, `team
 
 Located in `supabase/functions/`. These are serverless functions handling specific backend tasks:
 
-*   `chat`: Core logic for generating AI agent responses, including history management, RAG (via Pinecone), MCP integration, and applying context window settings.
+*   `chat`: Core logic for generating AI agent responses. Advanced Chat V2 highlights:
+    * Per‑agent datastore resolution (`agent_datastores → datastores.config` preferred over env vars)
+    * Working memory/history with configurable size (`options.context.max_messages` 0–100)
+    * Context Engine optimization + compression
+    * Memory retrieval before reasoning/tool use:
+      - Episodic → vector search (Pinecone)
+      - Semantic → knowledge graph (GetZep) when connected; concept search fallback
+    * Assistant prompt injection of labeled memory sections (`EPISODIC MEMORY` / `SEMANTIC MEMORY`)
+    * Reasoning stage operates on `context_window.sections` with Markov path + metrics for the Process Modal
 *   `discord-interaction-handler`: Handles incoming webhooks from Discord for slash commands (like `/activate`) and autocomplete.
 *   `manage-discord-worker`: Provides an endpoint for the frontend to request starting/stopping specific agent Discord workers via the `worker-manager` service.
 *   `register-agent-commands`: Registers necessary Discord slash commands for agents.
@@ -651,12 +660,14 @@ The system implements **four types of memory** that work together to create inte
 - **Participant Tracking**: Who was involved in each interaction
 - **Emotional Context**: Mood and sentiment analysis
 - **Outcome Recording**: Success/failure patterns for learning
+ - **Retrieval**: Vector search via Pinecone using the agent’s configured datastore; merged into `context_window.sections` prior to reasoning.
 
 #### **2. Semantic Memory (Knowledge)**
 - **Concept Storage**: Facts, definitions, and relationships
 - **Confidence Scoring**: Reliability metrics for information
 - **Knowledge Graphs**: Interconnected concept relationships
 - **Domain Expertise**: Specialized knowledge areas
+ - **Retrieval**: GetZep knowledge graph when connected (via datastore). If not connected, concept search fallback. Merged into `context_window.sections` and labeled `SEMANTIC MEMORY` in the assistant preamble.
 
 #### **3. Procedural Memory (Skills)**
 - **Task Procedures**: Step-by-step process knowledge
@@ -927,6 +938,7 @@ gmail.send_email({
 - **Proper message alignment** with user messages on right, agent on left
 - **Agent avatar integration** showing profile images throughout chat
 - **Responsive layout** with optimized spacing and typography
+ - **Immediate Markdown fidelity**: Frontend normalizes Markdown and uses consistent renderers so lists/headings render correctly on first paint (no refresh required)
 
 **⚡ State Management:**
 - **Persistent thinking data** preserved across page reloads
@@ -1053,6 +1065,26 @@ Located in `services/`. These are designed for persistent execution on a server 
     *   Updated to use new VaultService for secure token storage
     *   Improved error handling and permission validation
 *   **🆕 Chat Handoff Protocol Implementation (July 2025):**
+*   **🆕 Advanced Chat V2 Memory & Context (August 2025):**
+    * Agent‑scoped datastore resolution (Pinecone/GetZep)
+    * Episodic = Pinecone vector search; Semantic = GetZep knowledge graph (with fallback)
+    * Memory merged into `context_window.sections` before reasoning/tool use
+    * Assistant preamble injects labeled memory blocks; Process Modal shows memory and reasoning metrics
+    * Frontend Markdown normalization for correct initial rendering
+
+## Datastores & Memory Integrations (Pinecone, GetZep)
+
+The platform supports per‑agent knowledge connections via `agent_datastores`:
+
+- `datastores` records include a `config` JSON with provider credentials. For Pinecone: `apiKey`, `region`, `indexName`.
+- Agents link to datastores through `agent_datastores`; the chat function resolves these at request time.
+
+Retrieval behavior:
+
+- Episodic (experiences): vector search against the agent’s Pinecone index; results added to context and labeled in the assistant message.
+- Semantic (knowledge): GetZep knowledge graph when connected; concept fallback otherwise. Results added to context and labeled accordingly.
+
+Note: Global Pinecone env vars are supported as a fallback but are not required when agent datastores are configured.
     *   Executed comprehensive knowledge transfer protocol following premium standards
     *   Created complete handoff documentation suite in `docs/handoff/20250729_161128_*`
     *   Synchronized project documentation, database schema, and policies

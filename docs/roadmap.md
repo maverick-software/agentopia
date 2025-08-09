@@ -11,7 +11,11 @@ Change 'Knowledge' to 'Memory.' We will work inside different types of memory: e
 
 ## Background chat summaries ##
 
-A background agent that is keeping tracking of summarizing the conversation, documenting important facts and memories that will probably be useful later.
+A background agent that is keeping track of summarizing the conversation, documenting important facts and memories that will probably be useful later. Basically stores them in a short form memory, and saves them to a summary table that has one row for each chat like 'chat_id,' 'summary notes', and 'important facts' or something.
+
+## Values ## 
+
+A background agent that reviews the current conversation, context, chat summaries and important information and 'agent value system' and determines if there are any long term values this agent should posess that would help it achieve its goal or become a better version of itself. It then writes the value in one or sentences and saves it to the agent values table with the agent_id. We will then create an adapter, ensuring that the values are delivered to the agent via the system prompt.
 
 ## Deep Memory Search as a Tool ##
 
@@ -19,9 +23,7 @@ We will provide every chat respone with a predefined set of memory settings,  bu
 
 ## Optional Chat Features ##
 
-Let's review our system and map a methodology for toggling certain features on, like 'advanced reasoning' 'tools'
-
-
+Let's review our system and map a methodology for toggling certain features on, like 'advanced reasoning' 'tools'. This would just like how claude and chatgpt do it in their chat area.
 
 ## New User Workflows ##
 

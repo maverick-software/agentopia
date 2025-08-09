@@ -13,6 +13,7 @@ import { ContextEngine } from './core/context/context_engine.ts';
 import { StateManager } from './core/state/state_manager.ts';
 import { MonitoringSystem } from './core/monitoring/monitoring_system.ts';
 import { APIVersionRouter, MessageAdapter, getFeatureFlags, isFeatureEnabled } from './adapters/index.ts';
+import { FunctionCallingManager } from './function_calling.ts';
 import { SchemaValidator } from './validation/index.ts';
 
 // Import API handlers
@@ -268,6 +269,25 @@ async function routeHandler(req: Request): Promise<Response> {
   
   if (url.pathname === '/metrics') {
     return handleMetrics();
+  }
+
+  // Diagnostics: list discovered tools for an agent+user
+  if (url.pathname === '/tools/diagnostics') {
+    try {
+      const agentId = url.searchParams.get('agent_id') || '';
+      const userId = url.searchParams.get('user_id') || '';
+      const fcm = new FunctionCallingManager(supabase as any);
+      const tools = await fcm.getAvailableTools(agentId, userId);
+      return new Response(JSON.stringify({ agent_id: agentId, user_id: userId, tools }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (err: any) {
+      return new Response(JSON.stringify({ error: err?.message || 'diagnostics_error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
   
   // API routes

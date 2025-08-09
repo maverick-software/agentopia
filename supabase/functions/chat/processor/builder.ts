@@ -110,6 +110,8 @@ export function buildSuccessResponse(
         quality_score: metrics.context_quality_score || 0,
       },
       tool_operations: metrics.tool_details || [],
+      discovered_tools: (metrics as any).discovered_tools || [],
+      tool_requested: (metrics as any).tool_requested || false,
       reasoning_chain: metrics.reasoning_steps || [],
       // Reasoning summary for modal header
       reasoning: metrics.reasoning

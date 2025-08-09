@@ -271,6 +271,29 @@ export const WEB_SEARCH_MCP_TOOLS: Record<string, MCPTool> = {
 };
 
 /**
+ * SendGrid MCP Tools Registry
+ */
+export const SENDGRID_MCP_TOOLS: Record<string, MCPTool> = {
+  send_email: {
+    name: 'send_email',
+    description: 'Send a transactional email via SendGrid. Use when asked to email without OAuth inbox context.',
+    parameters: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject line' },
+        body: { type: 'string', description: 'Plaintext body' },
+        html: { type: 'string', description: 'HTML body (optional)' },
+        from: { type: 'string', description: 'From email (optional, defaults to agent setting)' },
+        reply_to: { type: 'string', description: 'Reply-To email (optional)' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+    required_scopes: ['sendgrid_send'],
+  },
+};
+
+/**
  * Function Calling Manager
  */
 export class FunctionCallingManager {
@@ -292,10 +315,10 @@ export class FunctionCallingManager {
       // Get Web Search tools if agent has web search permissions
       const webSearchTools = await this.getWebSearchTools(agentId, userId);
       
-      // Future: Add other tool providers here
-      // const slackTools = await this.getSlackTools(agentId, userId);
+      // SendGrid transactional email tools (API key based)
+      const sendgridTools = await this.getSendgridTools(agentId, userId);
       
-      const allTools = [...gmailTools, ...webSearchTools];
+      const allTools = [...gmailTools, ...webSearchTools, ...sendgridTools];
       
       console.log(`[FunctionCalling] Found ${allTools.length} available tools`);
       return allTools;
@@ -421,6 +444,47 @@ export class FunctionCallingManager {
   }
 
   /**
+   * Get SendGrid tools for an agent (API key based)
+   */
+  private async getSendgridTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          allowed_scopes,
+          is_active,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name),
+            credential_type
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .eq('user_oauth_connections.oauth_providers.name', 'sendgrid')
+        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('is_active', true)
+        .single();
+
+      if (!permissions) {
+        return [];
+      }
+
+      const grantedScopes = permissions.allowed_scopes || [];
+      const available: OpenAIFunction[] = [];
+      for (const tool of Object.values(SENDGRID_MCP_TOOLS)) {
+        const ok = tool.required_scopes.length === 0 || tool.required_scopes.some(s => grantedScopes.includes(s));
+        if (ok) {
+          available.push({ name: tool.name, description: tool.description, parameters: tool.parameters });
+        }
+      }
+      return available;
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting SendGrid tools:', error);
+      return [];
+    }
+  }
+
+  /**
    * Execute a function call
    */
   async executeFunction(
@@ -441,6 +505,9 @@ export class FunctionCallingManager {
       
       if (Object.keys(WEB_SEARCH_MCP_TOOLS).includes(functionName)) {
         return await this.executeWebSearchTool(agentId, userId, functionName, parameters);
+      }
+      if (Object.keys(SENDGRID_MCP_TOOLS).includes(functionName)) {
+        return await this.executeSendgridTool(agentId, userId, functionName, parameters);
       }
       
       // Future: Add other providers
@@ -607,6 +674,48 @@ export class FunctionCallingManager {
           execution_time_ms: Date.now() - startTime,
         },
       };
+    }
+  }
+
+  /** Execute SendGrid tool */
+  private async executeSendgridTool(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    const start = Date.now();
+    try {
+      // Validate permissions similarly to web search (API key present)
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          *,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name),
+            credential_type
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .eq('user_oauth_connections.oauth_providers.name', 'sendgrid')
+        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('is_active', true)
+        .single();
+
+      if (!permissions) {
+        return { success: false, error: 'SendGrid not connected', metadata: { execution_time_ms: Date.now() - start } };
+      }
+
+      const { data, error } = await this.supabaseClient.functions.invoke('sendgrid-api', {
+        body: { action: toolName, agent_id: agentId, params: parameters },
+        headers: { 'Authorization': `Bearer ${this.authToken}` },
+      });
+      if (error) throw new Error(error.message);
+      if (data && !data.success && data.error) throw new Error(data.error);
+      return { success: true, data: data?.data || data, metadata: { execution_time_ms: Date.now() - start } };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'SendGrid tool failed', metadata: { execution_time_ms: Date.now() - start } };
     }
   }
 

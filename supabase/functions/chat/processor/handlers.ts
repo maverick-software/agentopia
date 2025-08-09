@@ -1,5 +1,6 @@
 import type { AdvancedChatMessage } from '../types/message.types.ts';
 import type { ProcessingContext, ProcessingMetrics } from './MessageProcessor.ts';
+import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
 
 export interface MessageHandler {
@@ -251,8 +252,85 @@ Remember: ALWAYS use blank lines between elements for readability!`
     
     // Current message
     msgs.push({ role: 'user', content: (message as any).content?.text || '' });
-    
-    const completion = await this.openai.chat.completions.create({ model: 'gpt-4', messages: msgs, temperature: 0.7, max_tokens: 2000 });
+
+    // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
+    const fcm = new FunctionCallingManager(this.supabase as any, '');
+    const availableTools = (context.agent_id && context.user_id)
+      ? await fcm.getAvailableTools(context.agent_id, context.user_id)
+      : [];
+
+    // Nudge awareness: briefly declare available tools and guidelines in a system message
+    if (availableTools.length > 0) {
+      const toolNames = availableTools.map(t => t.name).join(', ');
+      const guidance = `Available tools for this agent: ${toolNames}.\nGuidelines: If the user asks to send an email, call send_email. If asked to read or search emails, call read_emails or search_emails. If asked to perform email actions (archive, mark read), call email_actions. Use tools only when needed; otherwise answer directly.`;
+      msgs.push({ role: 'system', content: guidance });
+    }
+
+    // First reasoning/act step
+    let completion = await this.openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: msgs,
+      temperature: 0.7,
+      max_tokens: 1200,
+      tools: availableTools.map((fn) => ({ type: 'function', function: fn })),
+      tool_choice: 'auto',
+    });
+
+    // Handle tool calls (Act → Observe → Reflect)
+    const toolCalls = (completion.choices?.[0]?.message?.tool_calls || []) as OpenAIToolCall[];
+    const toolDetails: any[] = [];
+    const discoveredToolsForMetrics = availableTools.map(t => ({ name: t.name }));
+    if (toolCalls.length > 0) {
+      // Per OpenAI protocol, include the assistant message containing tool_calls before tool messages
+      msgs.push({
+        role: 'assistant',
+        content: '',
+        tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.function.name, arguments: tc.function.arguments } })),
+      } as any);
+      for (const tc of toolCalls) {
+        const started = Date.now();
+        try {
+          const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+          const result = await fcm.executeFunction(context.agent_id || '', context.user_id || '', tc.function.name, args);
+          toolDetails.push({
+            name: tc.function.name,
+            execution_time_ms: Date.now() - started,
+            success: !!result.success,
+            input_params: args,
+            output_result: result.data || null,
+            error: result.success ? undefined : result.error,
+          });
+          // Append tool observation
+          msgs.push({
+            role: 'tool',
+            content: fcm.formatFunctionResult(result, tc.function.name),
+            tool_call_id: tc.id,
+          } as any);
+        } catch (err: any) {
+          toolDetails.push({
+            name: tc.function?.name,
+            execution_time_ms: Date.now() - started,
+            success: false,
+            input_params: {},
+            output_result: null,
+            error: err?.message || 'Tool execution error',
+          });
+          msgs.push({
+            role: 'tool',
+            content: `Tool ${tc.function?.name} failed: ${err?.message || 'Unknown error'}`,
+            tool_call_id: tc.id,
+          } as any);
+        }
+      }
+      // Reflect: ask model to produce final answer
+      completion = await this.openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: msgs,
+        temperature: 0.5,
+        max_tokens: 1200,
+      });
+    }
+
     let text = completion.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
     
     // Post-process the response to ensure proper Markdown formatting
@@ -296,7 +374,10 @@ Remember: ALWAYS use blank lines between elements for readability!`
         completion_tokens: completionTokens,
         model_used: 'gpt-4',
         memory_searches: 0,
-        tool_executions: 0,
+        tool_executions: toolDetails.length,
+        tool_details: toolDetails,
+        discovered_tools: discoveredToolsForMetrics,
+        tool_requested: toolCalls.length > 0,
       },
     } as any;
   }

@@ -14,7 +14,7 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
 }) => {
   if (!isOpen || !processingDetails) return null;
 
-  const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance, reasoning } = processingDetails;
+  const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance, reasoning, discovered_tools } = processingDetails;
   const reasoningGraph = processingDetails?.reasoning_graph as { states?: string[] } | undefined;
 
   const [showStepModal, setShowStepModal] = React.useState(false);
@@ -152,6 +152,22 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                 <h3 className="font-semibold text-purple-900">Tool Operations</h3>
               </div>
               
+              {/* Discovered tools section */}
+              <div className="mb-3 text-sm">
+                <div className="font-medium text-purple-900">Discovered Tools</div>
+                <div className="mt-1">
+                  {(discovered_tools && discovered_tools.length > 0) ? (
+                    discovered_tools.map((t: any, idx: number) => (
+                      <span key={idx} className="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs mr-2 mb-1">
+                        {t.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-500">No tools discovered for this request</span>
+                  )}
+                </div>
+              </div>
+
               {tool_operations && tool_operations.length > 0 ? (
                 <div className="space-y-3">
                   {tool_operations.map((tool: any, idx: number) => (
@@ -173,7 +189,7 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-gray-500">No tools were used in this request</div>
+                <div className="text-sm text-gray-500">Tools were not requested or inferred in this request</div>
               )}
             </div>
 
