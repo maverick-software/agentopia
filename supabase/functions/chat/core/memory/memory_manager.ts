@@ -3,6 +3,7 @@
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
+import { SemanticMemoryManager } from './semantic_memory.ts';
 import OpenAI from 'npm:openai@4.28.0';
 import {
   AgentMemory,
@@ -14,7 +15,6 @@ import {
 } from '../../types/memory.types.ts';
 import { generateMemoryId, generateTimestamp } from '../../types/utils.ts';
 import { EpisodicMemoryManager } from './episodic_memory.ts';
-import { SemanticMemoryManager } from './semantic_memory.ts';
 import { MemoryConsolidationManager } from './memory_consolidation.ts';
 import { MemoryFactory } from './memory_factory.ts';
 
@@ -540,20 +540,113 @@ export class MemoryManager {
       relevance_scores: [] as number[],
     };
     
-    // Search episodic memories
+    // Search episodic memories via vector search (Pinecone) if available; fallback to DB query
     if (!context?.memory_types || context.memory_types.includes('episodic')) {
-      results.episodic = await this.episodicManager.query({
-        agent_id,
-        timeframe: context?.timeframe,
-      });
+      try {
+        // Prefer agent-scoped Pinecone configuration
+        const { data: connection } = await this.supabase
+          .from('agent_datastores')
+          .select(`
+            datastore_id,
+            datastores:datastore_id (
+              id,
+              type,
+              config
+            )
+          `)
+          .eq('agent_id', agent_id)
+          .eq('datastores.type', 'pinecone')
+          .single();
+
+        const ds = (connection as any)?.datastores;
+        if (ds?.config?.apiKey && ds?.config?.indexName) {
+          // Generate embedding
+          const emb = await this.openai.embeddings.create({
+            model: this.config.embedding_model || 'text-embedding-3-small',
+            input: query,
+          });
+          const vector = emb.data[0].embedding as number[];
+
+          // Query Pinecone
+          const pc = new Pinecone({ apiKey: ds.config.apiKey });
+          const index = pc.index(ds.config.indexName);
+          const search = await index.query({
+            vector,
+            topK: 10,
+            includeMetadata: true,
+            includeValues: false,
+            filter: { agent_id: { $eq: agent_id }, memory_type: { $eq: 'episodic' } },
+          });
+
+          const ids = (search.matches || []).map((m: any) => m.id);
+          if (ids.length > 0) {
+            const { data: memories } = await this.supabase
+              .from('agent_memories')
+              .select('*')
+              .in('id', ids);
+            results.episodic = (memories || []) as any[];
+          } else {
+            results.episodic = [];
+          }
+        } else {
+          // Fallback: DB episodic query
+          results.episodic = await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
+        }
+      } catch (err) {
+        console.warn('[MemoryManager] Episodic vector search failed; falling back:', (err as Error)?.message);
+        try {
+          results.episodic = await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
+        } catch {
+          results.episodic = [];
+        }
+      }
     }
     
-    // Search semantic memories
+    // Search semantic memories if available (never throw)
     if (!context?.memory_types || context.memory_types.includes('semantic')) {
-      results.semantic = await this.semanticManager.query({
-        agent_id,
-        concept: query,
-      });
+      try {
+        // Prefer agent-scoped datastore configuration if available
+        const { data: connection } = await this.supabase
+          .from('agent_datastores')
+          .select(`
+            datastore_id,
+            datastores:datastore_id (
+              id,
+              type,
+              config
+            )
+          `)
+          .eq('agent_id', agent_id)
+          .eq('datastores.type', 'pinecone')
+          .single();
+
+        const ds = (connection as any)?.datastores;
+        if (ds?.config?.apiKey && ds?.config?.indexName) {
+          // Build a per-agent semantic manager with the agent's Pinecone credentials
+          const dynamicPinecone = new Pinecone({ apiKey: ds.config.apiKey });
+          const SemanticCtor = this.semanticManager ? (this.semanticManager as any).constructor : SemanticMemoryManager;
+          const agentSemantic = new SemanticCtor(
+            this.supabase,
+            dynamicPinecone,
+            this.openai,
+            {
+              index_name: ds.config.indexName,
+              namespace: this.config.namespace,
+              embedding_model: this.config.embedding_model,
+            }
+          );
+          results.semantic = await agentSemantic.query({ agent_id, concept: query });
+        } else if (this.semanticManager) {
+          // Fallback to default semantic manager
+          results.semantic = await this.semanticManager.query({ agent_id, concept: query });
+        } else {
+          console.info('[MemoryManager] Semantic memory not configured for agent');
+          results.semantic = [];
+        }
+      } catch (err) {
+        console.warn('[MemoryManager] Semantic search failed:', (err as Error)?.message);
+        results.semantic = [];
+      }
     }
     
     // Search procedural memories

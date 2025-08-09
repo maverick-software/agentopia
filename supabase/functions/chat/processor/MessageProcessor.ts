@@ -70,7 +70,7 @@ export class MessageProcessor {
     
     // Initialize handlers first (needed by pipeline)
     this.handlers = new Map([
-      ['text', new TextMessageHandler(this.openai, this.supabase)],
+      ['text', new TextMessageHandler(this.openai, this.supabase, this._memoryManager)],
       ['structured', new StructuredMessageHandler()],
       ['tool_call', new ToolCallHandler()],
     ]);
@@ -94,7 +94,8 @@ export class MessageProcessor {
             const style: ReasoningStyle = ReasoningSelector.select(contentText, (message.tools || []).map((t: any)=>t.function?.name).filter(Boolean), opts.styles_allowed, opts.style_bias);
             metrics.reasoning = { score: scoreInfo.score, enabled, style, reason: scoreInfo.reason };
             if (enabled && scoreInfo.score >= threshold) {
-              const segsForFacts = (message?.context?.context_window?.segments || []) as any[];
+              // Use structured sections, not segments
+              const segsForFacts = (message?.context?.context_window?.sections || []) as any[];
               const factsSeed: string[] = [];
               for (let i = 0; i < Math.min(3, segsForFacts.length); i++) {
                 const c = segsForFacts[i];
@@ -127,7 +128,7 @@ export class MessageProcessor {
               );
               // Collect lightweight facts from context (top segments)
               const facts: string[] = [];
-              const segs = (message?.context?.context_window?.segments || []) as any[];
+              const segs = (message?.context?.context_window?.sections || []) as any[];
               for (let i = 0; i < Math.min(3, segs.length); i++) {
                 const c = segs[i];
                 const text = typeof c?.content === 'string' ? c.content : (c?.content?.text || c?.summary || '');

@@ -1,5 +1,6 @@
 import type { AdvancedChatMessage } from '../types/message.types.ts';
 import type { ProcessingContext, ProcessingMetrics } from './MessageProcessor.ts';
+import { MemoryManager } from '../core/memory/memory_manager.ts';
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -11,7 +12,7 @@ export interface MessageHandler {
 }
 
 export class TextMessageHandler implements MessageHandler {
-  constructor(private openai: any, private supabase: any) {}
+  constructor(private openai: any, private supabase: any, private memoryManager?: MemoryManager | null) {}
   canHandle(message: AdvancedChatMessage): boolean {
     return (message as any).content?.type === 'text';
   }
@@ -214,6 +215,27 @@ Another paragraph after the list, properly spaced.
 Remember: ALWAYS use blank lines between elements for readability!`
       );
       if (preamble.length) msgs.push({ role: 'system', content: preamble.join('\n') });
+
+      // CONTEXT WINDOW INJECTION (episodic/semantic context) - as assistant message
+      const ctxWin = (message as any)?.context?.context_window;
+      const sections = Array.isArray(ctxWin?.sections) ? ctxWin.sections : [];
+      if (sections.length > 0) {
+        const toLabel = (s: any): string => {
+          if (s?.source === 'episodic_memory') return 'EPISODIC MEMORY';
+          if (s?.source === 'semantic_memory') return 'SEMANTIC MEMORY';
+          return s?.title || 'Context';
+        };
+
+        const top = sections
+          .slice(0, 4)
+          .map((s: any) => `${toLabel(s)}:\n${String(s.content || '').slice(0, 2000)}`);
+        const ctxBlock = [
+          '=== CONTEXT WINDOW ===',
+          ...top,
+          '=== END CONTEXT WINDOW ===\n',
+        ].join('\n\n');
+        msgs.push({ role: 'assistant', content: ctxBlock });
+      }
       if (agent?.assistant_instructions) msgs.push({ role: 'assistant', content: agent.assistant_instructions });
     }
     // ADD CONVERSATION HISTORY FROM CONTEXT!
@@ -247,6 +269,21 @@ Remember: ALWAYS use blank lines between elements for readability!`
       timestamp: new Date().toISOString(),
       metadata: { model: 'gpt-4', tokens: { prompt: promptTokens, completion: completionTokens, total: tokensTotal }, source: 'api' },
     } as any;
+
+    // FEEDBACK LOOP: Persist memories (episodic always; semantic if Pinecone configured)
+    try {
+      const memOpts = (context.request_options as any)?.memory ?? { enabled: true };
+      if (memOpts.enabled && this.memoryManager) {
+        const convo: AdvancedChatMessage[] = [message, processed];
+        if (this.memoryManager.semanticManager) {
+          await this.memoryManager.createFromConversation(convo, true);
+        } else {
+          await this.memoryManager.episodicManager.createFromConversation(convo, true);
+        }
+      }
+    } catch (_) {
+      // best-effort; do not fail response on memory persistence issues
+    }
     return {
       message: processed,
       context,

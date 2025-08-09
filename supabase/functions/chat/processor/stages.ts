@@ -108,6 +108,25 @@ export class EnrichmentStage extends ProcessingStage {
     metrics: ProcessingMetrics
   ): Promise<AdvancedChatMessage> {
     const startedAt = Date.now();
+    // Initialize memory metrics so UI reflects status even if search is skipped
+    if (!metrics.episodic_memory) {
+      (metrics as any).episodic_memory = {
+        searched: false,
+        results_count: 0,
+        relevance_scores: [],
+        memories_used: [],
+        search_time_ms: 0,
+      };
+    }
+    if (!metrics.semantic_memory) {
+      (metrics as any).semantic_memory = {
+        searched: false,
+        results_count: 0,
+        relevance_scores: [],
+        concepts_retrieved: [],
+        search_time_ms: 0,
+      };
+    }
     // Build context request from message
     const contextRequest = {
       query: message.content.type === 'text' ? message.content.text : '',
@@ -160,6 +179,50 @@ export class EnrichmentStage extends ProcessingStage {
         // Track sources
         metrics.context_sources = Array.from(new Set([...(metrics.context_sources || []), 'episodic_memory', 'semantic_memory']));
         metrics.memory_searches = (metrics.memory_searches || 0) + 1;
+
+        // Merge memory results into context window so they are available before reasoning/tool use
+        const estimateTokens = (text: string) => Math.ceil((text || '').length / 4);
+        const existingSections = (optimizedContext as any)?.context_window?.sections || [];
+        const memorySections: any[] = [];
+
+        // Add top episodic snippets
+        for (const m of (memoryResults.episodic || []).slice(0, 3)) {
+          const text = typeof m?.content?.event === 'string'
+            ? `${m.content.event}\n${JSON.stringify(m.content.context || {})}`
+            : JSON.stringify(m?.content || {});
+          memorySections.push({
+            id: `episodic_${m.id || crypto.randomUUID()}`,
+            title: 'Episodic Memory',
+            content: text,
+            source: 'episodic_memory',
+            priority: 2,
+            token_count: estimateTokens(text),
+            relevance_score: (m as any)?.relevance || 0.5,
+            metadata: { memory_id: m.id, created_at: m.created_at },
+          });
+        }
+
+        // Add top semantic concepts
+        for (const m of (memoryResults.semantic || []).slice(0, 3)) {
+          const text = m?.content?.definition
+            ? `${m.content.concept}: ${m.content.definition}`
+            : JSON.stringify(m?.content || {});
+          memorySections.push({
+            id: `semantic_${m.id || crypto.randomUUID()}`,
+            title: `Semantic Knowledge` ,
+            content: text,
+            source: 'semantic_memory',
+            priority: 2,
+            token_count: estimateTokens(text),
+            relevance_score: (m as any)?.relevance || 0.6,
+            metadata: { memory_id: m.id, created_at: m.created_at },
+          });
+        }
+
+        const mergedSections = [...existingSections, ...memorySections];
+        const totalTokens = mergedSections.reduce((sum: number, s: any) => sum + (s.token_count || 0), 0);
+        (optimizedContext as any).context_window.sections = mergedSections;
+        (optimizedContext as any).context_window.total_tokens = totalTokens;
       }
     } catch (_) {
       // Best-effort; do not fail pipeline on memory fetch issues
