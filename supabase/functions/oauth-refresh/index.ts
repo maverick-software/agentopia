@@ -42,6 +42,31 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
     throw new Error('Google OAuth credentials not configured');
   }
 
+  // CRITICAL FIX: Decrypt the refresh token from vault or use directly if it's plain text
+  let actualRefreshToken: string;
+  
+  // Check if vault_refresh_token_id is a UUID (vault reference) or plain text token
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(connection.vault_refresh_token_id);
+  
+  if (isUuid) {
+    // It's a vault reference, decrypt it
+    console.log('Decrypting refresh token from vault...');
+    const { data: decryptedToken, error: decryptError } = await supabase.rpc(
+      'vault_decrypt',
+      { vault_id: connection.vault_refresh_token_id }
+    );
+    
+    if (decryptError || !decryptedToken) {
+      throw new Error(`Failed to decrypt refresh token: ${decryptError?.message || 'Decryption failed'}`);
+    }
+    
+    actualRefreshToken = decryptedToken;
+  } else {
+    // It's stored as plain text (legacy format)
+    console.log('Using refresh token stored as plain text...');
+    actualRefreshToken = connection.vault_refresh_token_id;
+  }
+
   console.log('Making token refresh request to Google...');
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -50,7 +75,7 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
       grant_type: 'refresh_token',
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: connection.vault_refresh_token_id,
+      refresh_token: actualRefreshToken,
     }),
   });
 
@@ -66,10 +91,13 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
   // Calculate expiry time
   const expiresAt = new Date(Date.now() + (newTokens.expires_in * 1000)).toISOString();
 
-  // Update the connection with new tokens
+  // CRITICAL FIX: Properly encrypt tokens before storing
+  // For consistency with the rest of the system, we'll store tokens as plain text
+  // (since the system supports both vault UUIDs and plain text storage)
   const updateData: any = {
     vault_access_token_id: newTokens.access_token,
     token_expires_at: expiresAt,
+    last_token_refresh: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 
@@ -103,21 +131,29 @@ serve(async (req) => {
       throw new Error('connection_id is required');
     }
 
+    // Create Supabase client with service role for database operations
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header provided');
-    }
+    // Create Supabase client with user context for authentication
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { 
+        autoRefreshToken: false,
+        persistSession: false 
+      },
+      global: {
+        headers: { Authorization: req.headers.get('Authorization') ?? '' }
+      }
+    });
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
     if (userError || !user) {
       throw new Error('Invalid or expired token');
     }
 
-    const { success, expires_at } = await refreshGmailToken(supabase, user.id, connection_id);
+    const { success, expires_at } = await refreshGmailToken(supabaseService, user.id, connection_id);
 
     const expiryDate = new Date(expires_at!);
     const message = `Token refreshed successfully! New expiry: ${expiryDate.toLocaleString()}`;
