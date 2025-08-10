@@ -142,7 +142,7 @@ ${content}`;
 
 // Search providers
 const searchProviders: Record<string, SearchProvider> = {
-  serper: {
+  serper_api: {
     name: 'Serper',
     execute: async (query: string, params: any, apiKey: string) => {
       const response = await fetch('https://google.serper.dev/search', {
@@ -282,7 +282,7 @@ serve(async (req) => {
         oauth_providers!inner(name, configuration)
       `)
       .eq('user_id', user.id)
-      .in('oauth_providers.name', ['serper', 'serpapi', 'brave_search'])
+      .in('oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
       .eq('connection_status', 'active')
       .eq('credential_type', 'api_key');
 
@@ -294,7 +294,7 @@ serve(async (req) => {
     let result: WebSearchResult;
 
     // Try providers in order of preference
-    const preferredProviders = ['serper', 'brave_search', 'serpapi'];
+    const preferredProviders = ['serper_api', 'brave_search', 'serpapi'];
     let lastError: Error | null = null;
 
     for (const providerName of preferredProviders) {
@@ -308,8 +308,19 @@ serve(async (req) => {
         console.log(`[web-search-api] Trying provider: ${providerName}`);
 
         // Decrypt API key from Supabase Vault
-        const { data: decryptedKey } = await supabase
-          .rpc('vault_decrypt', { encrypted_data: connection.encrypted_access_token });
+        let decryptedKey: string | null = null;
+        // Prefer dedicated vault id column when present
+        if (connection.vault_access_token_id) {
+          const { data } = await supabase.rpc('vault_decrypt', { vault_id: connection.vault_access_token_id });
+          decryptedKey = data as string;
+        } else if (connection.encrypted_access_token) {
+          // Backward compatibility: treat stored value as vault id when it looks like a UUID
+          const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(connection.encrypted_access_token);
+          if (looksLikeUuid) {
+            const { data } = await supabase.rpc('vault_decrypt', { vault_id: connection.encrypted_access_token });
+            decryptedKey = data as string;
+          }
+        }
 
         if (!decryptedKey) {
           throw new Error('Failed to decrypt API key');
@@ -425,7 +436,7 @@ serve(async (req) => {
 // Utility function to normalize search results across providers
 function normalizeSearchResults(data: any, provider: string): any {
   switch (provider) {
-    case 'serper':
+    case 'serper_api':
       return {
         results: data.organic?.map((result: any) => ({
           title: result.title,

@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
+import { useConnections } from '@/hooks/useConnections';
 import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
-import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
 import { toast } from 'react-hot-toast';
 
 interface EnhancedChannelsModalProps {
@@ -54,6 +54,7 @@ export function EnhancedChannelsModal({
 }: EnhancedChannelsModalProps) {
   const { user } = useAuth();
   const { connection: gmailConnection, initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
+  const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('channel');
   
   // UI state
@@ -115,6 +116,9 @@ export function EnhancedChannelsModal({
       console.log('Initiating Gmail OAuth flow');
       await gmailInitiateOAuth();
       
+      // Refresh connections to get the latest data
+      await refetchConnections();
+      
       toast.success('Gmail connected successfully! 🎉');
       setSaved(true);
       setSetupService(null);
@@ -133,11 +137,77 @@ export function EnhancedChannelsModal({
   };
 
   const getServiceStatus = (serviceId: string) => {
-    // Check if this service is connected
+    // Check if this service is connected using centralized connections
     if (serviceId === 'gmail') {
-      return gmailConnection ? 'connected' : 'available';
+      const gmailConnected = connections.some(c => 
+        c.provider_name === 'gmail' && 
+        c.connection_status === 'connected'
+      );
+      return gmailConnected ? 'connected' : 'available';
     }
     return 'coming_soon';
+  };
+
+  const renderConnectedChannels = () => {
+    // Filter connections for channels only
+    const channelConnections = connections.filter(c => 
+      c.provider_name === 'gmail' && c.connection_status === 'connected'
+    );
+
+    if (channelConnections.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+          <Settings className="h-12 w-12 text-muted-foreground opacity-50" />
+          <div className="text-center">
+            <p className="text-muted-foreground font-medium">No channels connected</p>
+            <p className="text-sm text-muted-foreground mt-1">Add a channel to get started</p>
+          </div>
+          <Button
+            onClick={() => setActiveTab('available')}
+            className="mt-4"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Channel
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end mb-4">
+          <Button
+            onClick={() => setActiveTab('available')}
+            size="sm"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Channel
+          </Button>
+        </div>
+        
+        {channelConnections.map((connection) => (
+          <div
+            key={connection.id}
+            className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
+                <Mail className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-medium">Gmail</h3>
+                <p className="text-sm text-muted-foreground">
+                  {connection.external_username || connection.connection_name || 'Connected'}
+                </p>
+              </div>
+            </div>
+            <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+              Connected
+            </Badge>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const renderSetupFlow = (service: any) => {
@@ -310,14 +380,8 @@ export function EnhancedChannelsModal({
             </TabsList>
             
             <TabsContent value="connected" className="mt-6">
-              {/* Use the existing AgentIntegrationsManager for connected channels */}
               <div className="min-h-[300px]">
-                <AgentIntegrationsManager
-                  agentId={agentId}
-                  category="channel"
-                  title=""
-                  description=""
-                />
+                {renderConnectedChannels()}
               </div>
             </TabsContent>
             

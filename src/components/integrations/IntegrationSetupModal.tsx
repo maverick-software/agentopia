@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
+import { useConnections } from '@/hooks/useConnections';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -44,6 +45,7 @@ export function IntegrationSetupModal({
   const vaultService = new VaultService(supabase);
   const { user } = useAuth();
   const { connection: gmailConnection, initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
+  const { connections: unifiedConnections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   
   // Form state
   const [formData, setFormData] = useState({
@@ -126,7 +128,8 @@ export function IntegrationSetupModal({
           external_user_id: user.id, // Required field
           external_username: formData.connection_name || `${integration.name} Connection`,
           connection_name: formData.connection_name || `${integration.name} Connection`,
-          encrypted_access_token: vault_secret_id,
+          // Prefer vault id column for new entries
+          vault_access_token_id: vault_secret_id,
           scopes_granted: ['web_search', 'news_search', 'scrape_and_summarize'],
           connection_status: 'active',
           credential_type: 'api_key' // Specify this is an API key connection
@@ -160,6 +163,8 @@ export function IntegrationSetupModal({
 
       // Show success message briefly then close modal
       setTimeout(() => {
+        // Refresh unified connections to reflect connected status immediately
+        refetchConnections();
         onComplete();
         handleClose();
       }, 1500);

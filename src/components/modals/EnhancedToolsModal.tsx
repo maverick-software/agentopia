@@ -34,8 +34,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useWebSearchConnection } from '@/hooks/useWebSearchIntegration';
+import { useConnections } from '@/hooks/useConnections';
 import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
-import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
 import { toast } from 'react-hot-toast';
 
 interface EnhancedToolsModalProps {
@@ -58,6 +58,7 @@ export function EnhancedToolsModal({
   const { user } = useAuth();
   const supabase = useSupabaseClient();
   const { connections: webSearchConnections, refetch: refetchWebSearchConnections } = useWebSearchConnection();
+  const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('tool');
   
   // UI state
@@ -198,8 +199,9 @@ export function EnhancedToolsModal({
       setSetupService(null);
       resetForm();
       
-      // Refresh web search connections to show the new credential
+      // Refresh both web search connections and centralized connections
       await refetchWebSearchConnections();
+      await refetchConnections();
       
       // Switch to connected tab to show the new connection
       setActiveTab('connected');
@@ -214,11 +216,85 @@ export function EnhancedToolsModal({
   };
 
   const getToolStatus = (toolId: string) => {
-    // Check if this tool is connected
-    const hasConnection = webSearchConnections.some(conn => 
-      conn.provider_name === toolId || conn.provider_name === `${toolId}_api`
+    // Check if this tool is connected using centralized connections
+    const hasConnection = connections.some(conn => 
+      (conn.provider_name === toolId || conn.provider_name === `${toolId}_api`) &&
+      conn.connection_status === 'connected'
     );
     return hasConnection ? 'connected' : 'available';
+  };
+
+  const renderConnectedTools = () => {
+    // Filter connections for tools only (web search providers)
+    const toolConnections = connections.filter(c => 
+      ['serper_api', 'serpapi', 'brave_search'].includes(c.provider_name) && 
+      c.connection_status === 'connected'
+    );
+
+    if (toolConnections.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+          <Settings className="h-12 w-12 text-muted-foreground opacity-50" />
+          <div className="text-center">
+            <p className="text-muted-foreground font-medium">No tools connected</p>
+            <p className="text-sm text-muted-foreground mt-1">Add a tool to get started</p>
+          </div>
+          <Button
+            onClick={() => setActiveTab('available')}
+            className="mt-4"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Tool
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end mb-4">
+          <Button
+            onClick={() => setActiveTab('available')}
+            size="sm"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Tool
+          </Button>
+        </div>
+        
+        {toolConnections.map((connection) => {
+          // Get the tool info for display
+          const toolInfo = TOOL_CATEGORIES
+            .flatMap(cat => cat.tools)
+            .find(tool => 
+              tool.id === connection.provider_name || 
+              `${tool.id}_api` === connection.provider_name
+            );
+          
+          return (
+            <div
+              key={connection.id}
+              className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <Search className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-medium">{toolInfo?.name || connection.provider_display_name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {connection.external_username || connection.connection_name || 'Connected'}
+                  </p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                Connected
+              </Badge>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const renderApiKeySetup = (tool: any) => {
@@ -468,14 +544,8 @@ export function EnhancedToolsModal({
             </TabsList>
             
             <TabsContent value="connected" className="mt-6">
-              {/* Use the existing AgentIntegrationsManager for connected tools */}
               <div className="min-h-[300px]">
-                <AgentIntegrationsManager
-                  agentId={agentId}
-                  category="tool"
-                  title=""
-                  description=""
-                />
+                {renderConnectedTools()}
               </div>
             </TabsContent>
             

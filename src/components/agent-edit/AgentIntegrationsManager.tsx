@@ -20,7 +20,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
-import { useWebSearchConnection, useAgentWebSearchPermissions } from '@/hooks/useWebSearchIntegration';
+import { useConnections } from '@/hooks/useConnections';
 import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
 import { toast } from 'react-hot-toast';
 
@@ -66,7 +66,7 @@ export function AgentIntegrationsManager({
 }: AgentIntegrationsManagerProps) {
   const { user } = useAuth();
   const { connections: gmailConnections } = useGmailConnection();
-  const { connections: webSearchConnections } = useWebSearchConnection();
+  const { connections: unifiedConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification(category as 'tool' | 'channel');
   
   // State for modals
@@ -91,7 +91,7 @@ export function AgentIntegrationsManager({
     if (agentId && user) {
       fetchAgentPermissions();
     }
-  }, [agentId, user, webSearchConnections, gmailConnections]);
+  }, [agentId, user, unifiedConnections, gmailConnections]);
 
   const fetchAgentPermissions = async () => {
     try {
@@ -326,33 +326,28 @@ export function AgentIntegrationsManager({
     if (!selectedIntegration) return [];
     
     const integrationId = selectedIntegration.id || selectedIntegration.name?.toLowerCase();
-    switch (integrationId) {
-      case 'gmail':
-        return gmailConnections.filter(
-          conn => conn.connection_status === 'active' && 
-          !permissions.some(perm => perm.user_oauth_connection_id === conn.id)
-        );
-      case 'serper-api':
-      case 'serper api':
-      case 'serpapi':
-      case 'brave-search-api':
-      case 'brave search api':
-      case 'web-search':
-      case 'web search':
-        // Filter web search connections by the specific provider type
-        // Match against provider_name from database: 'serper_api', 'serpapi', 'brave_search'
-        const providerNameFilter = integrationId.includes('serper') && !integrationId.includes('serpapi') ? 'serper_api' :
-                                   integrationId.includes('serpapi') ? 'serpapi' :
-                                   integrationId.includes('brave') ? 'brave_search' : null;
-        
-        return webSearchConnections.filter(conn => 
-          conn.is_active === true && 
-          !permissions.some(perm => perm.user_oauth_connection_id === conn.id) &&
-          (!providerNameFilter || conn.provider_name === providerNameFilter)
-        );
-      default:
-        return [];
+    // Centralized: unify from useConnections
+    const providerMap: Record<string, string | null> = {
+      'gmail': 'gmail',
+      'serper-api': 'serper_api',
+      'serper api': 'serper_api',
+      'serpapi': 'serpapi',
+      'brave-search-api': 'brave_search',
+      'brave search api': 'brave_search',
+      'web-search': null,
+      'web search': null,
     }
+    const provider = providerMap[integrationId as keyof typeof providerMap]
+    return unifiedConnections
+      .filter(c => c.connection_status === 'active' && (!provider || c.provider_name === provider))
+      .filter(c => !permissions.some(perm => perm.user_oauth_connection_id === c.connection_id))
+      .map(c => ({
+        id: c.connection_id,
+        external_username: c.external_username || c.connection_name || `${c.provider_display_name} Connection`,
+        provider_display_name: c.provider_display_name,
+        provider_name: c.provider_name,
+        connection_metadata: {},
+      }))
   };
   
   const availableCredentials = getAvailableCredentials();

@@ -22,7 +22,8 @@ import {
   AlertCircle,
   ChevronRight
 } from 'lucide-react';
-import { useIntegrationCategories, useIntegrationsByCategory, useUserIntegrations } from '@/hooks/useIntegrations';
+import { useIntegrationCategories, useIntegrationsByCategory } from '@/hooks/useIntegrations';
+import { useConnections } from '@/hooks/useConnections';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
 
@@ -79,7 +80,7 @@ export function IntegrationsPage() {
   const { integrations, loading: integrationsLoading } = useIntegrationsByCategory(
     selectedCategory === 'all' ? undefined : selectedCategory
   );
-  const { userIntegrations, loading: userIntegrationsLoading } = useUserIntegrations();
+  const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
 
   // Override integration status - Gmail and Web Search providers are available
@@ -127,9 +128,25 @@ export function IntegrationsPage() {
     return matchesSearch && isNotDisabled;
   });
 
-  const getUserIntegrationStatus = (integrationId: string) => {
-    const userIntegration = userIntegrations.find(ui => ui.integration_id === integrationId);
-    return userIntegration?.connection_status || 'disconnected';
+  const providerNameForIntegration = (name: string): string | null => {
+    switch (name) {
+      case 'Gmail':
+        return 'gmail';
+      case 'Serper API':
+        return 'serper_api';
+      case 'SerpAPI':
+        return 'serpapi';
+      case 'Brave Search API':
+        return 'brave_search';
+      default:
+        return null;
+    }
+  };
+
+  const isIntegrationConnected = (integrationName: string) => {
+    const provider = providerNameForIntegration(integrationName);
+    if (!provider) return false;
+    return unifiedConnections.some(c => c.provider_name === provider && c.connection_status === 'active');
   };
 
   const handleAddCredentials = (integration: any) => {
@@ -140,11 +157,11 @@ export function IntegrationsPage() {
   const handleSetupComplete = () => {
     setShowSetupModal(false);
     setSelectedIntegration(null);
-    // Refresh user integrations
-    window.location.reload();
+    // Refresh unified connections for live status
+    refetchConnections();
   };
 
-  if (categoriesLoading || integrationsLoading || userIntegrationsLoading) {
+  if (categoriesLoading || integrationsLoading || unifiedLoading) {
     return (
       <div className="flex-1 space-y-4 p-4 pt-6">
         <div className="flex items-center justify-between">
@@ -222,9 +239,8 @@ export function IntegrationsPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filteredIntegrations.map((integration) => {
                 const IconComponent = getIconComponent(integration.icon_name || 'Settings');
-                const userStatus = getUserIntegrationStatus(integration.id);
-                const isConnected = userStatus === 'connected';
-                const statusIcon = getConnectionStatusIcon(userStatus);
+                const isConnected = isIntegrationConnected(integration.name);
+                const statusIcon = getConnectionStatusIcon(isConnected ? 'connected' : 'disconnected');
                 const effectiveStatus = getEffectiveStatus(integration);
                 const isComingSoon = effectiveStatus === 'coming_soon';
                 

@@ -82,6 +82,34 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
   if (!tokenResponse.ok) {
     const error = await tokenResponse.text();
     console.error('Token refresh failed:', error);
+    
+    // Parse the error response to provide better user guidance
+    let errorDetails;
+    try {
+      errorDetails = JSON.parse(error);
+    } catch (e) {
+      errorDetails = { error: 'unknown', error_description: error };
+    }
+    
+    // Handle specific OAuth error cases
+    if (errorDetails.error === 'invalid_grant') {
+      // Update connection status to indicate re-authentication is needed
+      await supabase
+        .from('user_oauth_connections')
+        .update({
+          connection_status: 'expired',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', connectionId)
+        .eq('user_id', userId);
+      
+      throw new Error(
+        'Your Gmail connection has expired and needs to be renewed. ' +
+        'This happens when tokens are unused for more than 7 days. ' +
+        'Please disconnect and reconnect your Gmail account to restore access.'
+      );
+    }
+    
     throw new Error(`Token refresh failed: ${error}`);
   }
 
