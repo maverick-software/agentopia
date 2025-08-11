@@ -280,19 +280,30 @@ export function IntegrationSetupModal({
       // Store API key in vault (for now, storing raw key)
       const vaultKeyId = formData.api_key;
       
+      // Get Mailgun OAuth provider ID
+      const { data: mailgunProvider, error: providerError } = await supabase
+        .from('oauth_providers')
+        .select('id')
+        .eq('name', 'mailgun')
+        .single();
+
+      if (providerError || !mailgunProvider) {
+        throw new Error('Mailgun provider not found. Please contact support.');
+      }
+
       // Create or update Mailgun configuration
       const { error: connError } = await supabase
         .from('user_oauth_connections')
         .insert({
           user_id: user.id,
-          provider_name: 'mailgun',
+          oauth_provider_id: mailgunProvider.id,
           connection_name: formData.connection_name || 'Mailgun Connection',
           credential_type: 'api_key',
-          connection_status: 'connected',
+          connection_status: 'active',
           vault_access_token_id: vaultKeyId,
           external_username: formData.from_email, // Store domain
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          external_user_id: 'mailgun_user',
+          scopes_granted: []
         });
       
       if (connError) throw connError;
