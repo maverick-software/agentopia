@@ -294,6 +294,148 @@ export const SENDGRID_MCP_TOOLS: Record<string, MCPTool> = {
 };
 
 /**
+ * Mailgun MCP Tools Registry
+ */
+export const MAILGUN_MCP_TOOLS: Record<string, MCPTool> = {
+  mailgun_send_email: {
+    name: 'mailgun_send_email',
+    description: 'Send an email via Mailgun Email API. Use for high-deliverability email sending with advanced features.',
+    parameters: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'string',
+          description: 'Recipient email address',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject line',
+        },
+        text: {
+          type: 'string',
+          description: 'Plain text email body',
+        },
+        html: {
+          type: 'string',
+          description: 'HTML email body (optional)',
+        },
+        from: {
+          type: 'string',
+          description: 'From email address (must be from verified domain)',
+        },
+        cc: {
+          type: 'array',
+          description: 'CC recipients',
+          items: { type: 'string' }
+        },
+        bcc: {
+          type: 'array', 
+          description: 'BCC recipients',
+          items: { type: 'string' }
+        },
+        attachments: {
+          type: 'array',
+          description: 'Email attachments',
+          items: {
+            type: 'object',
+            properties: {
+              filename: { type: 'string' },
+              content: { type: 'string', description: 'Base64 encoded content' },
+              contentType: { type: 'string' }
+            }
+          }
+        },
+        template: {
+          type: 'string',
+          description: 'Mailgun template name (optional)'
+        },
+        template_variables: {
+          type: 'object',
+          description: 'Template variables for personalization'
+        },
+        scheduled_time: {
+          type: 'string',
+          description: 'Schedule email for future delivery (RFC 2822 format)'
+        },
+        tags: {
+          type: 'array',
+          description: 'Email tags for tracking',
+          items: { type: 'string' }
+        }
+      },
+      required: ['to', 'subject', 'from'],
+    },
+    required_scopes: ['email_send'],
+  },
+
+  mailgun_validate_email: {
+    name: 'mailgun_validate_email',
+    description: 'Validate an email address using Mailgun validation service.',
+    parameters: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address to validate'
+        }
+      },
+      required: ['email']
+    },
+    required_scopes: ['email_validate'],
+  },
+
+  mailgun_get_stats: {
+    name: 'mailgun_get_stats',
+    description: 'Get email delivery statistics and analytics.',
+    parameters: {
+      type: 'object',
+      properties: {
+        start_date: {
+          type: 'string',
+          description: 'Start date for stats (YYYY-MM-DD)'
+        },
+        end_date: {
+          type: 'string', 
+          description: 'End date for stats (YYYY-MM-DD)'
+        },
+        resolution: {
+          type: 'string',
+          enum: ['hour', 'day', 'month'],
+          description: 'Time resolution for stats'
+        }
+      }
+    },
+    required_scopes: ['email_analytics'],
+  },
+
+  mailgun_manage_suppressions: {
+    name: 'mailgun_manage_suppressions',
+    description: 'Manage email suppressions (bounces, unsubscribes, complaints).',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['get', 'add', 'remove'],
+          description: 'Action to perform'
+        },
+        type: {
+          type: 'string',
+          enum: ['bounces', 'unsubscribes', 'complaints'],
+          description: 'Suppression list type'
+        },
+        email: {
+          type: 'string',
+          description: 'Email address for add/remove actions'
+        }
+      },
+      required: ['action', 'type']
+    },
+    required_scopes: ['email_manage'],
+  }
+};
+
+/**
  * Function Calling Manager
  */
 export class FunctionCallingManager {
@@ -318,7 +460,10 @@ export class FunctionCallingManager {
       // SendGrid transactional email tools (API key based)
       const sendgridTools = await this.getSendgridTools(agentId, userId);
       
-      const allTools = [...gmailTools, ...webSearchTools, ...sendgridTools];
+      // Mailgun email tools (API key based)
+      const mailgunTools = await this.getMailgunTools(agentId, userId);
+      
+      const allTools = [...gmailTools, ...webSearchTools, ...sendgridTools, ...mailgunTools];
       
       console.log(`[FunctionCalling] Found ${allTools.length} available tools`);
       return allTools;
@@ -485,6 +630,59 @@ export class FunctionCallingManager {
   }
 
   /**
+   * Get available Mailgun tools for agent
+   */
+  private async getMailgunTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      // Check if user has Mailgun API key configured
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          allowed_scopes,
+          is_active,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name),
+            credential_type
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .eq('user_oauth_connections.oauth_providers.name', 'mailgun')
+        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('is_active', true)
+        .single();
+
+      if (!permissions) {
+        console.log(`[FunctionCalling] No Mailgun credentials found for agent ${agentId}`);
+        return [];
+      }
+
+      const grantedScopes = permissions.allowed_scopes || [];
+      const available: OpenAIFunction[] = [];
+      
+      for (const tool of Object.values(MAILGUN_MCP_TOOLS)) {
+        const hasRequiredScopes = tool.required_scopes.length === 0 || 
+          tool.required_scopes.some(s => grantedScopes.includes(s));
+        
+        if (hasRequiredScopes) {
+          available.push({ 
+            name: tool.name, 
+            description: tool.description, 
+            parameters: tool.parameters 
+          });
+        }
+      }
+      
+      console.log(`[FunctionCalling] Found ${available.length} Mailgun tools for agent ${agentId}`);
+      return available;
+      
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting Mailgun tools:', error);
+      return [];
+    }
+  }
+
+  /**
    * Execute a function call
    */
   async executeFunction(
@@ -508,6 +706,10 @@ export class FunctionCallingManager {
       }
       if (Object.keys(SENDGRID_MCP_TOOLS).includes(functionName)) {
         return await this.executeSendgridTool(agentId, userId, functionName, parameters);
+      }
+      
+      if (Object.keys(MAILGUN_MCP_TOOLS).includes(functionName)) {
+        return await this.executeMailgunTool(agentId, userId, functionName, parameters);
       }
       
       // Future: Add other providers
@@ -716,6 +918,88 @@ export class FunctionCallingManager {
       return { success: true, data: data?.data || data, metadata: { execution_time_ms: Date.now() - start } };
     } catch (err: any) {
       return { success: false, error: err?.message || 'SendGrid tool failed', metadata: { execution_time_ms: Date.now() - start } };
+    }
+  }
+
+  /**
+   * Execute Mailgun tool
+   */
+  private async executeMailgunTool(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[Mailgun] Executing ${toolName} for agent ${agentId}`);
+      
+      // Validate permissions (API key present)
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_oauth_permissions')
+        .select(`
+          *,
+          user_oauth_connections!inner(
+            oauth_providers!inner(name),
+            credential_type
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connections.user_id', userId)
+        .eq('user_oauth_connections.oauth_providers.name', 'mailgun')
+        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('is_active', true)
+        .single();
+
+      if (!permissions) {
+        return { 
+          success: false, 
+          error: 'Mailgun not connected or no permissions granted', 
+          metadata: { execution_time_ms: Date.now() - startTime } 
+        };
+      }
+      
+      // Call Mailgun service function
+      const { data, error } = await this.supabaseClient.functions.invoke('mailgun-service', {
+        body: {
+          action: toolName.replace('mailgun_', ''), // Remove prefix
+          agent_id: agentId,
+          user_id: userId,
+          parameters
+        },
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      });
+
+      if (error) {
+        throw new Error(`Mailgun API error: ${error.message}`);
+      }
+
+      if (data && !data.success && data.error) {
+        throw new Error(data.error);
+      }
+
+      return {
+        success: true,
+        data: data?.data || data,
+        metadata: {
+          execution_time_ms: Date.now() - startTime,
+          provider: 'mailgun',
+          tool_name: toolName
+        }
+      };
+
+    } catch (error) {
+      console.error(`[Mailgun] Error executing ${toolName}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        metadata: {
+          execution_time_ms: Date.now() - startTime,
+          provider: 'mailgun',
+          tool_name: toolName
+        }
+      };
     }
   }
 

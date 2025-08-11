@@ -63,6 +63,7 @@ export function IntegrationSetupModal({
   // Check if this is a web search integration
   const isWebSearchIntegration = ['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration?.name);
   const isSendGridIntegration = integration?.name === 'SendGrid';
+  const isMailgunIntegration = integration?.name === 'Mailgun';
 
   // Reset state when modal is closed
   const resetModalState = () => {
@@ -256,6 +257,65 @@ export function IntegrationSetupModal({
     }
   };
 
+  const handleMailgunSetup = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Validate inputs
+      if (!formData.api_key.trim()) {
+        setError('API key is required');
+        setLoading(false);
+        return;
+      }
+      
+      if (!formData.from_email.trim()) {
+        setError('Domain is required');
+        setLoading(false);
+        return;
+      }
+      
+      // Store API key in vault (for now, storing raw key)
+      const vaultKeyId = formData.api_key;
+      
+      // Create or update Mailgun configuration
+      const { error: connError } = await supabase
+        .from('user_oauth_connections')
+        .insert({
+          user_id: user.id,
+          provider_name: 'mailgun',
+          connection_name: formData.connection_name || 'Mailgun Connection',
+          credential_type: 'api_key',
+          connection_status: 'connected',
+          vault_access_token_id: vaultKeyId,
+          external_username: formData.from_email, // Store domain
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      
+      if (connError) throw connError;
+      
+      // Refresh connections
+      await refetchConnections();
+      
+      setSuccess(true);
+      setSuccessMessage('Mailgun connected successfully!');
+      
+      setTimeout(() => {
+        onComplete();
+        handleClose();
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error('Mailgun setup error:', error);
+      setError(error.message || 'Failed to connect Mailgun');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOAuthFlow = async () => {
     console.log('Starting OAuth flow for integration:', integration.name);
     setLoading(true);
@@ -308,7 +368,7 @@ export function IntegrationSetupModal({
     if (isWebSearchIntegration) {
       return <Search className="h-5 w-5 text-blue-400" />;
     }
-    if (isSendGridIntegration) {
+    if (isSendGridIntegration || isMailgunIntegration) {
       return <Mail className="h-5 w-5 text-blue-400" />;
     }
     return <Globe className="h-5 w-5 text-blue-400" />;
@@ -331,6 +391,16 @@ export function IntegrationSetupModal({
         'Create agent-specific email addresses',
         'Track email delivery and engagement',
         'Secure API key storage'
+      ];
+    }
+    if (isMailgunIntegration) {
+      return [
+        'High-deliverability email sending',
+        'Advanced email validation',
+        'Inbound email routing to agents',
+        'Delivery statistics and analytics',
+        'Suppression list management',
+        'Template-based email sending'
       ];
     }
     return [
@@ -487,6 +557,110 @@ export function IntegrationSetupModal({
                           <>
                             <Mail className="h-4 w-4 mr-2" />
                             Connect SendGrid
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : isMailgunIntegration ? (
+                  // Mailgun API Key Setup
+                  <Card className="bg-gray-800 border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <Key className="h-5 w-5 text-blue-400" />
+                        Mailgun Configuration
+                      </CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Configure your Mailgun domain and API key for high-deliverability email
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {error && (
+                        <Alert className="bg-red-900/20 border-red-500/20">
+                          <AlertCircle className="h-4 w-4 text-red-400" />
+                          <AlertDescription className="text-red-400">
+                            {error}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div>
+                        <Label htmlFor="connection_name" className="text-white">
+                          Connection Name (Optional)
+                        </Label>
+                        <Input
+                          id="connection_name"
+                          value={formData.connection_name}
+                          onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
+                          placeholder="My Mailgun Connection"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="from_email" className="text-white">
+                          Mailgun Domain *
+                        </Label>
+                        <Input
+                          id="from_email"
+                          value={formData.from_email}
+                          onChange={(e) => setFormData(prev => ({ ...prev, from_email: e.target.value }))}
+                          placeholder="mail.yourdomain.com"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Your verified Mailgun sending domain
+                        </p>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="api_key" className="text-white">
+                          Mailgun API Key *
+                        </Label>
+                        <Input
+                          id="api_key"
+                          type="password"
+                          value={formData.api_key}
+                          onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))}
+                          placeholder="key-xxxxxxxxxxxxxxxxxxxxxx"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Your Mailgun API key (starts with "key-")
+                        </p>
+                      </div>
+
+                      <div className="text-sm text-gray-400 mt-4">
+                        <a 
+                          href="https://app.mailgun.com/app/account/security/api_keys" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="hover:text-white underline"
+                        >
+                          Get your Mailgun API key
+                        </a>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleMailgunSetup}
+                        disabled={loading || success || !formData.api_key || !formData.from_email}
+                        className={`w-full mt-4 ${success ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                      >
+                        {success ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Success!
+                          </>
+                        ) : loading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Setting up...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Connect Mailgun
                           </>
                         )}
                       </Button>

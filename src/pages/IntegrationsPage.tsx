@@ -84,7 +84,7 @@ export function IntegrationsPage() {
   const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
 
-  // Override integration status - Gmail, SendGrid and Web Search providers are available
+  // Override integration status - Gmail, SendGrid, Mailgun and Web Search providers are available
   const getEffectiveStatus = (integration: any) => {
     // Gmail is available
     if (integration.name === 'Gmail') {
@@ -93,6 +93,11 @@ export function IntegrationsPage() {
     
     // SendGrid is available
     if (integration.name === 'SendGrid') {
+      return 'available';
+    }
+    
+    // Mailgun is available
+    if (integration.name === 'Mailgun') {
       return 'available';
     }
     
@@ -144,6 +149,8 @@ export function IntegrationsPage() {
         return 'gmail';
       case 'SendGrid':
         return 'sendgrid';
+      case 'Mailgun':
+        return 'mailgun';
       case 'Serper API':
         return 'serper_api';
       case 'SerpAPI':
