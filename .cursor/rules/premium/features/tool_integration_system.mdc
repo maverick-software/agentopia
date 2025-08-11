@@ -1,0 +1,25 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+Create this new integration: [integration]
+
+This integration is a [channel][tool]
+
+Consider our MCP tool use system. Make sure this is made available to our agents via the MCP tool_use 
+
+Consider the agent edit page tools and channels modals, ensuring they are coded to automatically show up.
+
+Consider the comprehensive message adapters and chat system
+
+Consider the integrations page and the credential page. Ensure these encoded properly.
+
+Consider the database schema. Perform a schema dump into a sql file, and review ALL tables to ensure you understand the table schemas.
+
+Under the @plan_and_execute.mdc protocol, follow the planning, wbs_checklist and research rules to make this happen.
+
+Research the web to ensure you have the proper API information from the website itself.
+
+Research the forums to find out what is currently working for AI MCP tool agents for this integration.
