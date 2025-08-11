@@ -18,7 +18,8 @@ import {
   CheckCircle,
   Loader2,
   Key,
-  Search
+  Search,
+  Mail
 } from 'lucide-react';
 import { VaultService } from '@/services/VaultService';
 
@@ -54,11 +55,14 @@ export function IntegrationSetupModal({
     default_location: '',
     default_language: 'en',
     default_engine: 'google',
-    safesearch: 'moderate'
+    safesearch: 'moderate',
+    from_email: '',
+    from_name: ''
   });
 
   // Check if this is a web search integration
   const isWebSearchIntegration = ['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration?.name);
+  const isSendGridIntegration = integration?.name === 'SendGrid';
 
   // Reset state when modal is closed
   const resetModalState = () => {
@@ -178,6 +182,80 @@ export function IntegrationSetupModal({
     }
   };
 
+  const handleSendGridSetup = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Validate inputs
+      if (!formData.api_key.trim()) {
+        setError('API key is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.from_email.trim()) {
+        setError('From email is required');
+        setLoading(false);
+        return;
+      }
+      
+      // Store API key in vault (for now, storing raw key)
+      const vaultKeyId = formData.api_key;
+      
+      // Create or update SendGrid configuration
+      const { error: configError } = await supabase
+        .from('sendgrid_configurations')
+        .upsert({
+          user_id: user.id,
+          api_key_vault_id: vaultKeyId,
+          from_email: formData.from_email,
+          from_name: formData.from_name || null,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+      
+      if (configError) throw configError;
+      
+      // Create connection record
+      const { error: connError } = await supabase
+        .from('user_oauth_connections')
+        .insert({
+          user_id: user.id,
+          provider_name: 'sendgrid',
+          connection_name: formData.connection_name || 'SendGrid Connection',
+          credential_type: 'api_key',
+          connection_status: 'connected',
+          vault_access_token_id: vaultKeyId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      
+      if (connError) throw connError;
+      
+      // Refresh connections
+      await refetchConnections();
+      
+      setSuccess(true);
+      setSuccessMessage('SendGrid connected successfully!');
+      
+      setTimeout(() => {
+        onComplete();
+        handleClose();
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error('SendGrid setup error:', error);
+      setError(error.message || 'Failed to connect SendGrid');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOAuthFlow = async () => {
     console.log('Starting OAuth flow for integration:', integration.name);
     setLoading(true);
@@ -230,6 +308,9 @@ export function IntegrationSetupModal({
     if (isWebSearchIntegration) {
       return <Search className="h-5 w-5 text-blue-400" />;
     }
+    if (isSendGridIntegration) {
+      return <Mail className="h-5 w-5 text-blue-400" />;
+    }
     return <Globe className="h-5 w-5 text-blue-400" />;
   };
 
@@ -240,6 +321,15 @@ export function IntegrationSetupModal({
         'Get news and current events data',
         'Scrape and summarize web pages',
         'Location-based search results',
+        'Secure API key storage'
+      ];
+    }
+    if (isSendGridIntegration) {
+      return [
+        'Send transactional and marketing emails',
+        'Receive emails via inbound parse webhooks',
+        'Create agent-specific email addresses',
+        'Track email delivery and engagement',
         'Secure API key storage'
       ];
     }
@@ -283,7 +373,126 @@ export function IntegrationSetupModal({
               </div>
             ) : (
               <div className="space-y-6">
-                {isWebSearchIntegration ? (
+                {isSendGridIntegration ? (
+                  // SendGrid API Key Setup
+                  <Card className="bg-gray-800 border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <Key className="h-5 w-5 text-blue-400" />
+                        SendGrid Configuration
+                      </CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Configure your SendGrid API key and email settings
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {error && (
+                        <Alert className="bg-red-900/20 border-red-500/20">
+                          <AlertCircle className="h-4 w-4 text-red-400" />
+                          <AlertDescription className="text-red-400">
+                            {error}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div>
+                        <Label htmlFor="connection_name" className="text-white">
+                          Connection Name (Optional)
+                        </Label>
+                        <Input
+                          id="connection_name"
+                          value={formData.connection_name}
+                          onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
+                          placeholder="My SendGrid Connection"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="api_key" className="text-white">
+                          SendGrid API Key *
+                        </Label>
+                        <Input
+                          id="api_key"
+                          type="password"
+                          value={formData.api_key}
+                          onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))}
+                          placeholder="SG.xxxxxxxxxxxxxxxxxxxxxx"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Your API key with mail.send permissions
+                        </p>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="from_email" className="text-white">
+                          From Email Address *
+                        </Label>
+                        <Input
+                          id="from_email"
+                          type="email"
+                          value={formData.from_email}
+                          onChange={(e) => setFormData(prev => ({ ...prev, from_email: e.target.value }))}
+                          placeholder="noreply@yourdomain.com"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          The email address that will appear as the sender
+                        </p>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="from_name" className="text-white">
+                          From Name (Optional)
+                        </Label>
+                        <Input
+                          id="from_name"
+                          value={formData.from_name}
+                          onChange={(e) => setFormData(prev => ({ ...prev, from_name: e.target.value }))}
+                          placeholder="Your Company Name"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2 text-sm text-gray-400">
+                        <ExternalLink className="h-4 w-4" />
+                        <a 
+                          href="https://app.sendgrid.com/settings/api_keys" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="hover:text-white underline"
+                        >
+                          Get your SendGrid API key
+                        </a>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleSendGridSetup}
+                        disabled={loading || success || !formData.api_key || !formData.from_email}
+                        className={`w-full mt-4 ${success ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                      >
+                        {success ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Success!
+                          </>
+                        ) : loading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Setting up...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Connect SendGrid
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : isWebSearchIntegration ? (
                   // Web Search API Key Setup
                   <Card className="bg-gray-800 border-gray-700">
                     <CardHeader>

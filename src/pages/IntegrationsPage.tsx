@@ -20,7 +20,8 @@ import {
   Check,
   Clock,
   AlertCircle,
-  ChevronRight
+  ChevronRight,
+  Mail
 } from 'lucide-react';
 import { useIntegrationCategories, useIntegrationsByCategory } from '@/hooks/useIntegrations';
 import { useConnections } from '@/hooks/useConnections';
@@ -83,10 +84,15 @@ export function IntegrationsPage() {
   const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
 
-  // Override integration status - Gmail and Web Search providers are available
+  // Override integration status - Gmail, SendGrid and Web Search providers are available
   const getEffectiveStatus = (integration: any) => {
     // Gmail is available
     if (integration.name === 'Gmail') {
+      return 'available';
+    }
+    
+    // SendGrid is available
+    if (integration.name === 'SendGrid') {
       return 'available';
     }
     
@@ -109,10 +115,14 @@ export function IntegrationsPage() {
         return Shield;
       case 'MessageSquare':
         return MessageSquare;
+      case 'Mail':
+        return Mail;
       case 'Cloud':
         return Cloud;
       case 'Zap':
         return Zap;
+      case 'Search':
+        return Search;
       default:
         return Settings;
     }
@@ -132,6 +142,8 @@ export function IntegrationsPage() {
     switch (name) {
       case 'Gmail':
         return 'gmail';
+      case 'SendGrid':
+        return 'sendgrid';
       case 'Serper API':
         return 'serper_api';
       case 'SerpAPI':
@@ -196,7 +208,7 @@ export function IntegrationsPage() {
           <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
           <div className="flex items-center space-x-2">
             <span className="text-sm text-muted-foreground">
-              {userIntegrations.length} connected
+              {unifiedConnections.length} connected
             </span>
           </div>
         </div>
