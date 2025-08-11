@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
 import { useConnections } from '@/hooks/useConnections';
 import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
+import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
 
 interface AgentPermission {
@@ -65,6 +66,7 @@ export function AgentIntegrationsManager({
   description = 'Connect external services to this agent' 
 }: AgentIntegrationsManagerProps) {
   const { user } = useAuth();
+  const supabase = useSupabaseClient();
   const { connections: gmailConnections } = useGmailConnection();
   const { connections: unifiedConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification(category as 'tool' | 'channel');
@@ -81,6 +83,7 @@ export function AgentIntegrationsManager({
   const [selectedCredential, setSelectedCredential] = useState<any>(null);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   const [editingPermission, setEditingPermission] = useState<AgentPermission | null>(null);
+  const [capabilities, setCapabilities] = useState<Record<string, { capability_key: string; display_label: string; display_order: number }[]>>({});
   
   // Data state
   const [permissions, setPermissions] = useState<AgentPermission[]>([]);
@@ -92,6 +95,29 @@ export function AgentIntegrationsManager({
       fetchAgentPermissions();
     }
   }, [agentId, user, unifiedConnections, gmailConnections]);
+
+  useEffect(() => {
+    // Load capability catalog for current classification integrations
+    (async () => {
+      try {
+        if (!integrations || integrations.length === 0) return;
+        const ids = integrations.map(i => i.id);
+        const { data } = await supabase
+          .from('integration_capabilities')
+          .select('integration_id, capability_key, display_label, display_order')
+          .in('integration_id', ids)
+          .order('display_order');
+        const map: Record<string, any[]> = {};
+        (data || []).forEach((row: any) => {
+          if (!map[row.integration_id]) map[row.integration_id] = [];
+          map[row.integration_id].push({ capability_key: row.capability_key, display_label: row.display_label, display_order: row.display_order });
+        });
+        setCapabilities(map);
+      } catch (e) {
+        console.warn('Capabilities load skipped', e);
+      }
+    })();
+  }, [integrations, supabase]);
 
   const fetchAgentPermissions = async () => {
     try {
@@ -476,6 +502,13 @@ export function AgentIntegrationsManager({
                         <div className="text-sm text-muted-foreground">
                           {integration.description}
                         </div>
+                        {capabilities[integration.id] && capabilities[integration.id].length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {capabilities[integration.id].map(c => (
+                              <Badge key={c.capability_key} variant="secondary" className="text-xs">{c.display_label}</Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <ChevronRight className="h-5 w-5" />

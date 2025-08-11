@@ -66,6 +66,7 @@ export function EnhancedChannelsModal({
   const [activeTab, setActiveTab] = useState('connected');
   const [connectingService, setConnectingService] = useState<string | null>(null);
   const [setupService, setSetupService] = useState<string | null>(null);
+  const [selectingCredentialFor, setSelectingCredentialFor] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   
   // Setup form state
@@ -75,6 +76,83 @@ export function EnhancedChannelsModal({
   const [fromName, setFromName] = useState('');
   const [mailgunDomain, setMailgunDomain] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Agent-level permissions (channels added to this agent)
+  type AgentPermission = {
+    id: string;
+    connection_id: string;
+    provider_name: string;
+    external_username?: string | null;
+    is_active: boolean;
+    allowed_scopes?: string[];
+  };
+  const [agentPermissions, setAgentPermissions] = useState<AgentPermission[]>([]);
+
+  // Static capability catalog per provider for display
+  const CAPABILITIES: Record<string, { id: string; label: string }[]> = {
+    gmail: [
+      { id: 'send_email', label: 'Send Email' },
+      { id: 'read_emails', label: 'Read Emails' },
+      { id: 'modify_emails', label: 'Modify Labels' }
+    ],
+    sendgrid: [
+      { id: 'send_email', label: 'Send Email' },
+      { id: 'inbound', label: 'Inbound Routing' },
+      { id: 'templates', label: 'Templates' },
+      { id: 'analytics', label: 'Analytics' }
+    ],
+    mailgun: [
+      { id: 'send_email', label: 'Send Email' },
+      { id: 'validate', label: 'Validate Email' },
+      { id: 'stats', label: 'Stats' },
+      { id: 'suppressions', label: 'Suppressions' }
+    ]
+  };
+
+  // DB-driven capabilities for channels
+  type CapabilityRow = { capability_key: string; display_label: string; display_order: number };
+  const [capabilitiesByIntegrationId, setCapabilitiesByIntegrationId] = useState<Record<string, CapabilityRow[]>>({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const ids = integrations.map(i => i.id);
+        if (!ids.length) return;
+        const { data } = await supabase
+          .from('integration_capabilities')
+          .select('integration_id, capability_key, display_label, display_order')
+          .in('integration_id', ids)
+          .order('display_order');
+        const map: Record<string, CapabilityRow[]> = {};
+        (data || []).forEach((row: any) => {
+          if (!map[row.integration_id]) map[row.integration_id] = [];
+          map[row.integration_id].push({ capability_key: row.capability_key, display_label: row.display_label, display_order: row.display_order ?? 0 });
+        });
+        setCapabilitiesByIntegrationId(map);
+      } catch {}
+    })();
+  }, [integrations, supabase]);
+
+  const fetchAgentPermissions = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      const { data, error: rpcError } = await supabase.rpc('get_agent_integration_permissions', { p_agent_id: agentId });
+      if (rpcError) throw rpcError;
+      const rows = (data || []).map((r: any) => ({
+        id: r.permission_id,
+        connection_id: r.connection_id,
+        provider_name: r.provider_name,
+        external_username: r.external_username,
+        is_active: r.is_active,
+        allowed_scopes: r.allowed_scopes || []
+      }));
+      setAgentPermissions(rows);
+    } catch (e) {
+      console.error('Failed fetching agent permissions', e);
+    }
+  }, [agentId, supabase]);
+
+  useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
 
   // Map DB integrations -> modal service definitions
   const mapIntegrationToService = (integration: { name: string; description?: string }) => {
@@ -114,6 +192,21 @@ export function EnhancedChannelsModal({
       type,
       gradient
     } as const;
+  };
+
+  const renderCapabilitiesBadges = (provider: string, integrationId?: string) => {
+    const dbCaps = integrationId ? (capabilitiesByIntegrationId as any)?.[integrationId] : null;
+    const caps = dbCaps && dbCaps.length ? dbCaps.map((c: any) => ({ key: c.capability_key, label: c.display_label })) : (CAPABILITIES[provider?.toLowerCase()] || []);
+    if (!caps || caps.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-2 mt-2">
+        {caps.map((c: any) => (
+          <Badge key={c.key || c.id} variant="secondary" className="text-xs">
+            {c.label}
+          </Badge>
+        ))}
+      </div>
+    );
   };
 
   const handleMailgunSetup = async () => {
@@ -180,6 +273,19 @@ export function EnhancedChannelsModal({
     .filter(i => i.status === 'available')
     .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.name.localeCompare(b.name))
     .map(mapIntegrationToService);
+
+  const providerNameForServiceId = (serviceId: string) => {
+    switch (serviceId) {
+      case 'gmail':
+        return 'gmail';
+      case 'sendgrid':
+        return 'sendgrid';
+      case 'mailgun':
+        return 'mailgun';
+      default:
+        return serviceId;
+    }
+  };
 
   // Clear saved state after 3 seconds
   useEffect(() => {
@@ -308,39 +414,19 @@ export function EnhancedChannelsModal({
   };
 
   const getServiceStatus = (serviceId: string) => {
-    // Check if this service is connected using centralized connections
-    if (serviceId === 'gmail') {
-      const gmailConnected = connections.some(c => 
-        c.provider_name === 'gmail' && 
-        c.connection_status === 'active'
-      );
-      return gmailConnected ? 'connected' : 'available';
-    }
-    
-    if (serviceId === 'sendgrid') {
-      const sendgridConnected = connections.some(c => 
-        c.provider_name === 'sendgrid' && 
-        c.connection_status === 'active'
-      );
-      return sendgridConnected ? 'connected' : 'available';
-    }
-    if (serviceId === 'mailgun') {
-      const mailgunConnected = connections.some(c => 
-        c.provider_name === 'mailgun' &&
-        c.connection_status === 'active'
-      );
-      return mailgunConnected ? 'connected' : 'available';
-    }
-    
-    return 'coming_soon';
+    // Status should reflect whether this AGENT has the channel added (permission exists)
+    const provider = providerNameForServiceId(serviceId);
+    const exists = agentPermissions.some(p => p.provider_name === provider && p.is_active);
+    if (exists) return 'connected';
+
+    // Otherwise show available if user has a credential for this provider
+    const hasCredential = connections.some(c => c.provider_name === provider && c.connection_status === 'active');
+    return hasCredential ? 'available' : 'available';
   };
 
   const renderConnectedChannels = () => {
-    // Filter connections for channels only
-    const channelConnections = connections.filter(c => 
-      (c.provider_name === 'gmail' || c.provider_name === 'sendgrid' || c.provider_name === 'mailgun') && 
-      c.connection_status === 'active'
-    );
+    // Show channels added to the AGENT (not just user-level credentials)
+    const channelConnections = agentPermissions.filter(p => p.is_active);
 
     if (channelConnections.length === 0) {
       return (
@@ -374,14 +460,15 @@ export function EnhancedChannelsModal({
         </div>
         
         {channelConnections.map((connection) => {
-          const isSendGrid = connection.provider_name === 'sendgrid';
-          const isMailgun = connection.provider_name === 'mailgun';
+          const isSendGrid = (connection as any).provider_name === 'sendgrid';
+          const isMailgun = (connection as any).provider_name === 'mailgun';
           const gradient = isSendGrid
             ? 'from-blue-500 to-indigo-500'
             : isMailgun
             ? 'from-rose-500 to-pink-500'
             : 'from-red-500 to-orange-500';
           const name = isSendGrid ? 'SendGrid' : isMailgun ? 'Mailgun' : 'Gmail';
+          const matched = integrations.find(i => i.name.toLowerCase().includes(((connection as any).provider_name || '').toLowerCase()));
           
           return (
             <div
@@ -394,9 +481,10 @@ export function EnhancedChannelsModal({
                 </div>
                 <div>
                   <h3 className="font-medium">{name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {connection.external_username || connection.connection_name || 'Connected'}
-                  </p>
+                   <p className="text-sm text-muted-foreground">
+                    {(connection as any).external_username || 'Authorized'}
+                   </p>
+                  {renderCapabilitiesBadges((connection as any).provider_name, matched?.id)}
                 </div>
               </div>
               <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
@@ -633,6 +721,75 @@ export function EnhancedChannelsModal({
     return null;
   };
 
+  const defaultScopesForService = (serviceId: string): string[] => {
+    if (serviceId === 'gmail') return ['gmail.readonly', 'gmail.send', 'gmail.modify'];
+    if (serviceId === 'sendgrid' || serviceId === 'mailgun') return ['send_email'];
+    return [];
+  };
+
+  const renderCredentialSelector = (service: any) => {
+    const provider = providerNameForServiceId(service.id);
+    const creds = connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    return (
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Shield className="h-5 w-5 text-blue-500" />
+            <span>Select credential for {service.name}</span>
+          </CardTitle>
+          <CardDescription>Choose an existing credential or add a new one.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Capabilities</div>
+            {renderCapabilitiesBadges(provider, (service as any).integrationId)}
+          </div>
+          {creds.length === 0 && (
+            <div className="text-sm text-muted-foreground">No saved credentials for {service.name}.</div>
+          )}
+          {creds.map((c) => (
+            <div key={c.connection_id} className="flex items-center justify-between p-3 border rounded">
+              <div className="text-sm">
+                <div className="font-medium">{c.provider_display_name}</div>
+                <div className="text-muted-foreground">{c.external_username || c.connection_name}</div>
+              </div>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setConnectingService(service.id);
+                    const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
+                      p_agent_id: agentId,
+                      p_connection_id: c.connection_id,
+                      p_allowed_scopes: defaultScopesForService(service.id),
+                      p_permission_level: 'custom'
+                    });
+                    if (grantError) throw grantError;
+                    await fetchAgentPermissions();
+                    setSelectingCredentialFor(null);
+                    setActiveTab('connected');
+                  } catch (e) {
+                    console.error('Grant permission error', e);
+                    toast.error('Failed to authorize agent');
+                  } finally {
+                    setConnectingService(null);
+                  }
+                }}
+              >
+                Authorize Agent
+              </Button>
+            </div>
+          ))}
+          <div className="pt-2">
+            <Button variant="outline" onClick={() => setSetupService(service.id)}>
+              <Plus className="h-4 w-4 mr-2" /> Add new credential
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderAvailableServices = () => {
     return (
       <div className="space-y-4">
@@ -646,6 +803,7 @@ export function EnhancedChannelsModal({
             const status = getServiceStatus(service.id);
             const isConnected = status === 'connected';
             const isSetupMode = setupService === service.id;
+            const isSelectingCredential = selectingCredentialFor === service.id;
             
             if (isSetupMode) {
               return (
@@ -669,6 +827,25 @@ export function EnhancedChannelsModal({
                     </Button>
                   </div>
                   {renderSetupFlow(service)}
+                </div>
+              );
+            }
+            if (isSelectingCredential) {
+              return (
+                <div key={service.id} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${service.gradient} flex items-center justify-center`}>
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">{service.name}</h3>
+                        <p className="text-sm text-muted-foreground">Choose credential</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectingCredentialFor(null)}>Cancel</Button>
+                  </div>
+                  {renderCredentialSelector(service)}
                 </div>
               );
             }
@@ -710,13 +887,13 @@ export function EnhancedChannelsModal({
                   ) : status === 'coming_soon' ? (
                     <AlertCircle className="h-5 w-5 text-muted-foreground" />
                   ) : (
-                   <Button
-                      onClick={() => setSetupService(service.id)}
+                    <Button
+                      onClick={() => setSelectingCredentialFor(service.id)}
                       size="sm"
                       className={`bg-gradient-to-r ${service.gradient} hover:opacity-90 text-white`}
                     >
                       <Plus className="h-4 w-4 mr-1" />
-                      Connect
+                      Add Channel
                     </Button>
                   )}
                 </div>

@@ -18,6 +18,8 @@ Consider the integrations page and the credential page. Ensure these encoded pro
 
 Consider the database schema. Perform a schema dump into a sql file, and review ALL tables to ensure you understand the table schemas.
 
+Consider persistence, ensuring that all states are saved and appropriately retrieved from the database for these tools, channels and credentials.
+
 Under the @plan_and_execute.mdc protocol, follow the planning, wbs_checklist and research rules to make this happen.
 
 Research the web to ensure you have the proper API information from the website itself.

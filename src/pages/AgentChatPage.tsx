@@ -511,68 +511,83 @@ export function AgentChatPage() {
     fetchAgent();
   }, [agentId, user]);
 
-  // Fetch chat history
+  // Fetch chat history (scoped to this agent)
   useEffect(() => {
     const fetchHistory = async () => {
       if (!agentId || !user?.id) return;
 
       setIsHistoryLoading(true);
       try {
-        const { data, error } = await supabase
+        // Assistant messages from this agent
+        const { data: assistantData, error: assistantErr } = await supabase
           .from('chat_messages')
           .select('*')
-          .or(`sender_agent_id.eq.${agentId},sender_user_id.eq.${user.id}`)
+          .eq('sender_agent_id', agentId)
           .order('created_at', { ascending: true });
+        if (assistantErr) throw assistantErr;
 
-        if (error) throw error;
+        // User messages to this agent (tracked via metadata.target_agent_id)
+        const { data: userDataTagged, error: userErr } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('sender_user_id', user.id)
+          .contains('metadata', { target_agent_id: agentId })
+          .order('created_at', { ascending: true });
+        if (userErr) throw userErr;
 
-        if (data) {
-          const formattedMessages: Message[] = data.map((msg: any) => ({
-            role: msg.sender_agent_id ? 'assistant' : 'user',
-            content: msg.content,
-            timestamp: new Date(msg.created_at),
-            agentId: msg.sender_agent_id,
-            userId: msg.sender_agent_id ? user.id : msg.sender_user_id, // For assistant messages, use current user's ID
-          }));
-          
-          // Preserve existing messages with aiProcessDetails to avoid losing "Thoughts" data
-          setMessages(prevMessages => {
-            // Find messages with aiProcessDetails that should be preserved
-            const messagesWithThoughts = prevMessages.filter(msg => 
-              msg.aiProcessDetails && msg.role === 'assistant'
-            );
-            
-            // If we have no messages with thoughts, just use the formatted messages
-            if (messagesWithThoughts.length === 0) {
-              return formattedMessages;
-            }
-            
-            // Merge: keep database messages but preserve any with aiProcessDetails
-            const merged = [...formattedMessages];
-            messagesWithThoughts.forEach(thoughtMsg => {
-              // Find if this message exists in formatted messages (by content and rough timestamp)
-              const existingIndex = merged.findIndex(msg => 
-                msg.content === thoughtMsg.content && 
-                msg.role === 'assistant' &&
-                Math.abs(msg.timestamp.getTime() - thoughtMsg.timestamp.getTime()) < 60000 // Within 1 minute
-              );
-              
-              if (existingIndex !== -1) {
-                // Replace the database version with our version that has aiProcessDetails
-                merged[existingIndex] = thoughtMsg;
-              } else {
-                // This is a recent message not yet in database, add it
-                merged.push(thoughtMsg);
-              }
-            });
-            
-            // Sort by timestamp to maintain order
-            return merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        // Legacy user messages without tag (fallback)
+        const { data: userDataAll, error: userAllErr } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('sender_user_id', user.id)
+          .order('created_at', { ascending: true })
+          .limit(500);
+        if (userAllErr) throw userAllErr;
+
+        // Heuristic: include untagged user messages that are within 15 minutes of any assistant message from this agent
+        const assistantTimes = new Set((assistantData || []).map((a: any) => new Date(a.created_at).getTime()));
+        const assistantArr = (assistantData || []).map((a: any) => new Date(a.created_at).getTime());
+        const fifteenMin = 15 * 60 * 1000;
+        const userUntagged = (userDataAll || []).filter((u: any) => {
+          const tagged = u?.metadata && u.metadata.target_agent_id === agentId;
+          if (tagged) return false; // already handled in tagged set
+          const t = new Date(u.created_at).getTime();
+          return assistantArr.some(at => Math.abs(at - t) <= fifteenMin);
+        });
+
+        const rows = [...(assistantData || []), ...(userDataTagged || []), ...userUntagged].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+
+        const formatted: Message[] = rows.map((msg: any) => ({
+          role: msg.sender_agent_id ? 'assistant' : 'user',
+          content: msg.content,
+          timestamp: new Date(msg.created_at),
+          agentId: msg.sender_agent_id,
+          userId: msg.sender_agent_id ? user.id : msg.sender_user_id,
+        }));
+
+        setMessages(prevMessages => {
+          const merged = [...formatted];
+          // Preserve assistant messages with Thoughts UI details
+          const thoughts = prevMessages.filter(m => m.role === 'assistant' && m.aiProcessDetails);
+          thoughts.forEach(th => {
+            const idx = merged.findIndex(m => m.role === 'assistant' && m.content === th.content && Math.abs(m.timestamp.getTime() - th.timestamp.getTime()) < 60000);
+            if (idx !== -1) merged[idx] = th; else merged.push(th);
           });
-        }
+
+          // Preserve any recent user messages already in UI that may not yet be tagged in DB
+          const recentUserMsgs = prevMessages.filter(m => m.role === 'user' && m.userId === user.id);
+          recentUserMsgs.forEach(um => {
+            const exists = merged.find(m => m.role === 'user' && m.content === um.content && Math.abs(m.timestamp.getTime() - um.timestamp.getTime()) < 60000);
+            if (!exists) merged.push(um);
+          });
+
+          return merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        });
       } catch (err) {
-        console.error("Failed to fetch chat history:", err);
-        setError("Could not load chat history.");
+        console.error('Failed to fetch chat history:', err);
+        setError('Could not load chat history.');
       } finally {
         setIsHistoryLoading(false);
       }
@@ -618,6 +633,7 @@ export function AgentChatPage() {
           content: messageText,
           sender_user_id: user.id,
           sender_agent_id: null,
+          metadata: { target_agent_id: agent.id }
         });
 
       if (saveError) throw saveError;

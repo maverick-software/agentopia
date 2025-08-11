@@ -24,6 +24,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 - [Current Status & Next Steps](#current-status--next-steps)
 - [Knowledge Transfer & Handoff Documentation](#knowledge-transfer--handoff-documentation)
 - [Deployment](#deployment)
+- [Integrations & Capabilities](#integrations--capabilities)
 
 ## Project Overview
 
@@ -42,6 +43,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   **🆕 Gmail Integration:** Complete OAuth-based Gmail integration allowing agents to send emails on behalf of users
 *   **🆕 SendGrid Integration:** Complete API-based SendGrid integration with agent inboxes, smart routing, and webhook processing for sending and receiving emails
 *   **🆕 Web Research Capabilities:** Integrated web search, page scraping, and content summarization through multiple providers (Serper API, SerpAPI, Brave Search)
+*   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -353,6 +355,10 @@ Uses PostgreSQL managed by Supabase. Key tables include `users`, `agents`, `team
 *   **Relationships:** Workspaces link members (users, agents, teams). Channels belong to workspaces. Messages belong to channels. Agents can be linked to datastores and MCP configurations.
 *   **RLS:** Row Level Security is enforced on most tables to control data access based on user roles and workspace membership.
 *   **Migrations:** Located in `supabase/migrations/`.
+*   **New:** `integration_capabilities` — catalog of feature badges per integration
+    - Columns: `integration_id`, `capability_key`, `display_label`, `display_order`, timestamps
+    - Purpose: drives dynamic capability badges in UI for both tools and channels
+    - RLS: readable by everyone; managed per integration
 
 ## Supabase Functions
 
@@ -376,6 +382,12 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   **🆕 `gmail-api`**: Executes Gmail operations like sending emails on behalf of authenticated users.
 *   **🆕 `sendgrid-api`**: Executes SendGrid operations including email sending, templates, analytics, and agent inbox management.
 *   **🆕 `sendgrid-inbound`**: Processes inbound emails via SendGrid Inbound Parse webhook with smart routing and auto-reply capabilities.
+
+Also see database RPCs used by integrations UI:
+
+- `grant_agent_integration_permission(p_agent_id uuid, p_connection_id uuid, p_allowed_scopes text[], p_permission_level text)`
+- `revoke_agent_integration_permission(p_permission_id uuid)`
+- `get_agent_integration_permissions(p_agent_id uuid)` — returns provider_name, external_username, allowed_scopes, is_active for the agent’s authorized connections
 
 ## Secure Secret Management (Supabase Vault)
 
