@@ -21,20 +21,21 @@ export async function getRelevantChatHistory(
   console.log(`[getRelevantChatHistory] Attempting fetch - channelId: ${channelId}, userId: ${userId}, targetAgentId: ${targetAgentId}, limit: ${limit}`);
 
   try {
-    let query = supabaseClient
-        .from('chat_messages')
-        .select('content, created_at, sender_agent_id, sender_user_id, agents:sender_agent_id ( name )')
+    // Prefer v2 storage
+    let v2Query = supabaseClient
+        .from('chat_messages_v2')
+        .select('role, content, created_at, sender_agent_id, sender_user_id, context, agents:sender_agent_id ( name )')
         .order('created_at', { ascending: false })
         .limit(limit);
 
     if (channelId) {
         // Workspace Channel History
         console.log(`[getRelevantChatHistory] Mode: Workspace Channel`);
-        query = query.eq('channel_id', channelId);
+        v2Query = v2Query.eq('channel_id', channelId);
     } else if (userId && targetAgentId) {
         // Direct Chat History (User <-> Agent)
         console.log(`[getRelevantChatHistory] Mode: Direct Chat`);
-        query = query.is('channel_id', null) 
+        v2Query = v2Query.is('channel_id', null)
                      .or(
                         `sender_user_id.eq.${userId},` +
                         `sender_agent_id.eq.${targetAgentId}`
@@ -55,21 +56,36 @@ export async function getRelevantChatHistory(
     // Log the final query structure before execution (optional, might be complex)
     // console.log("[getRelevantChatHistory] Executing query:", query); // Be cautious logging full queries
 
-    const { data, error } = await query;
+    const { data: v2Data, error: v2Error } = await v2Query;
 
     // Log the raw results
-    console.log(`[getRelevantChatHistory] Query Result - Error:`, error); 
-    console.log(`[getRelevantChatHistory] Query Result - Data Count:`, data?.length ?? 0);
+    console.log(`[getRelevantChatHistory] V2 Result - Error:`, v2Error); 
+    console.log(`[getRelevantChatHistory] V2 Result - Data Count:`, v2Data?.length ?? 0);
     // console.log(`[getRelevantChatHistory] Query Result - Raw Data:`, data); // Avoid logging potentially sensitive message content unless necessary
 
-    if (error) throw error;
+    if (!v2Error && v2Data) {
+      const historyV2 = (v2Data || []).map((msg: any) => ({
+          role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
+          content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
+          timestamp: msg.created_at,
+          agentName: msg.agents?.name ?? null
+      } as ChatMessage)).reverse();
+      console.log(`[getRelevantChatHistory] Processed ${historyV2.length} messages for history (v2).`);
+      return historyV2;
+    }
 
-    // Map to ChatMessage type (imported)
+    // Fallback to v1 if v2 fails (temporary during migration)
+    const { data, error } = await supabaseClient
+      .from('chat_messages')
+      .select('content, created_at, sender_agent_id, sender_user_id, agents:sender_agent_id ( name )')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
     const history = (data || []).map((msg: any) => ({
-        role: msg.sender_agent_id ? 'assistant' : 'user',
-        content: msg.content,
-        timestamp: msg.created_at,
-        agentName: msg.agents?.name ?? null
+      role: msg.sender_agent_id ? 'assistant' : 'user',
+      content: msg.content,
+      timestamp: msg.created_at,
+      agentName: msg.agents?.name ?? null
     } as ChatMessage)).reverse(); 
     
     console.log(`[getRelevantChatHistory] Processed ${history.length} messages for history.`);

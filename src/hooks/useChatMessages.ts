@@ -43,7 +43,7 @@ export function useChatMessages(
     setLoading(true);
     try {
       const { data, error: fetchError } = await supabase
-        .from('chat_messages')
+        .from('chat_messages_v2')
         .select(`
           *,
           agents:sender_agent_id (
@@ -57,11 +57,12 @@ export function useChatMessages(
 
       if (fetchError) throw fetchError;
       
-      const fetchedMessages = data?.map(msg => {
+      const fetchedMessages = data?.map((msg: any) => {
         const message: ChatMessage = {
           ...msg,
+          content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
           timestamp: new Date(msg.created_at),
-          role: msg.sender_agent_id ? 'assistant' : 'user',
+          role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
           agentName: msg.agents?.name || null
         };
         return message;
@@ -109,18 +110,18 @@ export function useChatMessages(
     setError(null);
     console.log(`Subscribing to new messages for channel ${channelId}`);
     
-    const channel = supabase.channel(`chat_channel:${channelId}`)
+    const channel = supabase.channel(`chat_channel_v2:${channelId}`)
       .on<ChatMessage>(
         'postgres_changes',
         { 
           event: 'INSERT',
           schema: 'public',
-          table: 'chat_messages',
+          table: 'chat_messages_v2',
           filter: `channel_id=eq.${channelId}`
         },
         async (payload) => {
           console.log('New message received via Realtime:', payload);
-          const newMessageRaw = payload.new as ChatMessage;
+          const newMessageRaw = payload.new as any;
           
           let agentName = null;
           if (newMessageRaw.sender_agent_id) {
@@ -141,10 +142,11 @@ export function useChatMessages(
           
           const newMessage: ChatMessage = {
             ...newMessageRaw,
+            content: typeof newMessageRaw.content === 'string' ? newMessageRaw.content : (newMessageRaw.content?.text ?? ''),
             timestamp: new Date(newMessageRaw.created_at),
-            role: newMessageRaw.sender_agent_id ? 'assistant' : 'user',
+            role: (newMessageRaw.role === 'assistant' || newMessageRaw.sender_agent_id) ? 'assistant' : 'user',
             agentName
-          };
+          } as any;
           
           const currentMessages = messagesRef.current;
           if (!currentMessages.some(msg => msg.id === newMessage.id)) {

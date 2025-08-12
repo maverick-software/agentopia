@@ -98,6 +98,7 @@ export function createResponseHeaders(options?: {
     'Content-Type': ContentTypes.JSON,
     [Headers.API_VERSION]: APIConfig.version,
     'Cache-Control': 'no-cache, no-store, must-revalidate',
+    ...CORS_HEADERS,
   };
   
   if (options?.requestId) {

@@ -12,7 +12,7 @@ import { MemoryManager } from './core/memory/memory_manager.ts';
 import { ContextEngine } from './core/context/context_engine.ts';
 import { StateManager } from './core/state/state_manager.ts';
 import { MonitoringSystem } from './core/monitoring/monitoring_system.ts';
-import { APIVersionRouter, MessageAdapter, getFeatureFlags, isFeatureEnabled } from './adapters/index.ts';
+import { APIVersionRouter, MessageAdapter, getFeatureFlags, isFeatureEnabled, DualWriteService } from './adapters/index.ts';
 import { FunctionCallingManager } from './function_calling.ts';
 import { SchemaValidator } from './validation/index.ts';
 
@@ -147,6 +147,19 @@ async function handler(req: Request): Promise<Response> {
         validate: true,
         timeout: 30000,
       });
+      // Persist assistant message (dual-write v1/v2) so the UI can load it later
+      try {
+        const dual = new DualWriteService(supabase as any);
+        await dual.saveMessage(response.data.message, {
+          context: {
+            channel_id: body?.context?.channel_id ?? body?.channelId ?? null,
+            sender_user_id: response.data.message?.context?.user_id,
+            sender_agent_id: response.data.message?.context?.agent_id,
+          },
+        });
+      } catch (persistErr) {
+        log.warn('Assistant message persistence failed (non-fatal)', persistErr as Error);
+      }
       
       // Create response headers
       const headers = createResponseHeaders({
@@ -173,6 +186,19 @@ async function handler(req: Request): Promise<Response> {
         validate: true,
         timeout: 30000,
       });
+      // Persist assistant message (dual-write v1/v2) for legacy clients
+      try {
+        const dual = new DualWriteService(supabase as any);
+        await dual.saveMessage(v2Response.data.message, {
+          context: {
+            channel_id: body?.channelId ?? null,
+            sender_user_id: v2Response.data.message?.context?.user_id,
+            sender_agent_id: v2Response.data.message?.context?.agent_id,
+          },
+        });
+      } catch (persistErr) {
+        log.warn('Assistant message persistence failed (non-fatal)', persistErr as Error);
+      }
       
       // Convert response back to v1 format
       const v1Response = messageAdapter.v2ToV1Response(v2Response);
@@ -190,7 +216,10 @@ async function handler(req: Request): Promise<Response> {
     
   } catch (error) {
     log.error('Request handling failed', error as Error);
-    return handleError(error, requestId);
+    const errResp = await handleError(error, requestId);
+    const hdrs = new Headers(errResp.headers);
+    Object.entries(CORS_HEADERS).forEach(([k,v])=>hdrs.set(k as string, v as string));
+    return new Response(errResp.body, { status: errResp.status, headers: hdrs });
   } finally {
     timer.stop();
   }
@@ -229,7 +258,10 @@ async function handleStreamingRequest(body: any, requestId: string): Promise<Res
     }
   })();
   
-  return stream.getResponse();
+  const resp = stream.getResponse();
+  const hdrs = new Headers(resp.headers);
+  Object.entries(CORS_HEADERS).forEach(([k,v])=>hdrs.set(k as string, v as string));
+  return new Response(resp.body, { status: resp.status, headers: hdrs });
 }
 
 // Health check endpoint
@@ -241,6 +273,7 @@ async function handleHealthCheck(): Promise<Response> {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
+      ...CORS_HEADERS,
     },
   });
 }
@@ -254,6 +287,7 @@ async function handleMetrics(): Promise<Response> {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
+      ...CORS_HEADERS,
     },
   });
 }
@@ -280,12 +314,12 @@ async function routeHandler(req: Request): Promise<Response> {
       const tools = await fcm.getAvailableTools(agentId, userId);
       return new Response(JSON.stringify({ agent_id: agentId, user_id: userId, tools }), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     } catch (err: any) {
       return new Response(JSON.stringify({ error: err?.message || 'diagnostics_error' }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
   }
@@ -303,6 +337,7 @@ async function routeHandler(req: Request): Promise<Response> {
     status: 404,
     headers: {
       'Content-Type': 'application/json',
+      ...CORS_HEADERS,
     },
   });
 }

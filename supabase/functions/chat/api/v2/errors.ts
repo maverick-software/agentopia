@@ -239,6 +239,8 @@ export class BusinessError extends APIError {
 /**
  * Error handler middleware
  */
+import { CORS_HEADERS } from './index.ts';
+
 export async function handleError(
   error: unknown,
   requestId?: string
@@ -257,6 +259,7 @@ export async function handleError(
       headers: {
         'Content-Type': 'application/json',
         'X-Request-ID': requestId || '',
+        ...CORS_HEADERS,
       },
     });
   }
@@ -288,6 +291,7 @@ export async function handleError(
       headers: {
         'Content-Type': 'application/json',
         'X-Request-ID': requestId || '',
+        ...CORS_HEADERS,
       },
     });
   }
@@ -314,6 +318,7 @@ export async function handleError(
     headers: {
       'Content-Type': 'application/json',
       'X-Request-ID': requestId || '',
+      ...CORS_HEADERS,
     },
   });
 }

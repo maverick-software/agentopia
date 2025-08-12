@@ -508,9 +508,9 @@ export function AgentChatPage() {
 
       setIsHistoryLoading(true);
       try {
-        // Assistant messages from this agent
+        // Assistant messages from this agent (v2)
         const { data: assistantData, error: assistantErr } = await supabase
-          .from('chat_messages')
+          .from('chat_messages_v2')
           .select('*')
           .eq('sender_agent_id', agentId)
           .order('created_at', { ascending: true });
@@ -518,7 +518,7 @@ export function AgentChatPage() {
 
         // User messages to this agent (tracked via metadata.target_agent_id)
         const { data: userDataTagged, error: userErr } = await supabase
-          .from('chat_messages')
+          .from('chat_messages_v2')
           .select('*')
           .eq('sender_user_id', user.id)
           .contains('metadata', { target_agent_id: agentId })
@@ -527,7 +527,7 @@ export function AgentChatPage() {
 
         // Legacy user messages without tag (fallback)
         const { data: userDataAll, error: userAllErr } = await supabase
-          .from('chat_messages')
+          .from('chat_messages_v2')
           .select('*')
           .eq('sender_user_id', user.id)
           .order('created_at', { ascending: true })
@@ -550,8 +550,8 @@ export function AgentChatPage() {
         );
 
         const formatted: Message[] = rows.map((msg: any) => ({
-          role: msg.sender_agent_id ? 'assistant' : 'user',
-          content: msg.content,
+          role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
+          content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
           timestamp: new Date(msg.created_at),
           agentId: msg.sender_agent_id,
           userId: msg.sender_agent_id ? user.id : msg.sender_user_id,
@@ -616,14 +616,24 @@ export function AgentChatPage() {
       // Start AI processing indicator
       startAIProcessing();
       
-      // Save user message to database
+      // Save user message to database (v2 schema)
+      const convId = localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
+      const sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+      localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
+      localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+
       const { error: saveError } = await supabase
-        .from('chat_messages')
+        .from('chat_messages_v2')
         .insert({
-          content: messageText,
+          conversation_id: convId,
+          session_id: sessId,
+          channel_id: null,
+          role: 'user',
+          content: { type: 'text', text: messageText },
           sender_user_id: user.id,
           sender_agent_id: null,
-          metadata: { target_agent_id: agent.id }
+          metadata: { target_agent_id: agent.id },
+          context: { agent_id: agent.id, user_id: user.id }
         });
 
       if (saveError) throw saveError;
@@ -647,12 +657,25 @@ export function AgentChatPage() {
         localStorage.getItem(`agent_${agent.id}_context_size`) || '25'
       );
 
+      // Provide minimal v2 context with conversation/session IDs
+      const conversationId = localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
+      const sessionId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+      localStorage.setItem(`agent_${agent.id}_conversation_id`, conversationId);
+      localStorage.setItem(`agent_${agent.id}_session_id`, sessionId);
+
       const requestBody = {
-        agentId: agent.id,
-        userId: user.id,
-        channelId: null,
-        message: messageText,
-        // Allow backend working-memory to pull recent messages
+        version: '2.0.0',
+        context: {
+          agent_id: agent.id,
+          user_id: user.id,
+          conversation_id: conversationId,
+          session_id: sessionId,
+          channel_id: null
+        },
+        message: {
+          role: 'user',
+          content: { type: 'text', text: messageText }
+        },
         options: { context: { max_messages: contextSize } }
       };
 
