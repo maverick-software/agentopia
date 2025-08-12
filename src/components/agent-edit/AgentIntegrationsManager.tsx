@@ -168,7 +168,8 @@ export function AgentIntegrationsManager({
                          (integrationId.includes('serper') || 
                           integrationId.includes('serpapi') || 
                           integrationId.includes('brave') || 
-                          integrationId.includes('search')) ? DEFAULT_SEARCH_API_SCOPES : [];
+                          integrationId.includes('search')) ? DEFAULT_SEARCH_API_SCOPES :
+                         integrationId.includes('mailgun') ? ['send_email','validate','stats','suppressions'] : [];
     
     setSelectedScopes(defaultScopes);
     setShowAddModal(false);

@@ -359,18 +359,8 @@ export function AgentChatPage() {
       requestAnimationFrame(() => resolve(processSteps));
     });
 
-    // Persist assistant message so it stays visible on reload/history sync
-    try {
-      await supabase
-        .from('chat_messages')
-        .insert({
-          content: responseContent,
-          sender_agent_id: agent?.id || null,
-          sender_user_id: null,
-        });
-    } catch (e) {
-      console.warn('[chat] Failed to persist assistant message:', e);
-    }
+    // Note: Do not persist here. The backend chat function persists the assistant
+    // response. Writing here would duplicate rows and cause repeated messages.
     
     // Clean up state
     setTimeout(() => {

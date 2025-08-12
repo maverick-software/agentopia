@@ -289,7 +289,8 @@ export const SENDGRID_MCP_TOOLS: Record<string, MCPTool> = {
       },
       required: ['to', 'subject', 'body'],
     },
-    required_scopes: ['sendgrid_send'],
+    // Standardize on generic email capability scopes across providers
+    required_scopes: ['send_email'],
   },
 };
 
@@ -365,7 +366,8 @@ export const MAILGUN_MCP_TOOLS: Record<string, MCPTool> = {
       },
       required: ['to', 'subject', 'from'],
     },
-    required_scopes: ['email_send'],
+    // Use unified capability keys so UI-granted scopes match discovery
+    required_scopes: ['send_email'],
   },
 
   mailgun_validate_email: {
@@ -381,7 +383,7 @@ export const MAILGUN_MCP_TOOLS: Record<string, MCPTool> = {
       },
       required: ['email']
     },
-    required_scopes: ['email_validate'],
+    required_scopes: ['validate'],
   },
 
   mailgun_get_stats: {
@@ -405,7 +407,7 @@ export const MAILGUN_MCP_TOOLS: Record<string, MCPTool> = {
         }
       }
     },
-    required_scopes: ['email_analytics'],
+    required_scopes: ['stats'],
   },
 
   mailgun_manage_suppressions: {
@@ -431,7 +433,7 @@ export const MAILGUN_MCP_TOOLS: Record<string, MCPTool> = {
       },
       required: ['action', 'type']
     },
-    required_scopes: ['email_manage'],
+    required_scopes: ['suppressions'],
   }
 };
 
@@ -495,7 +497,7 @@ export class FunctionCallingManager {
         .eq('user_oauth_connections.oauth_providers.name', 'gmail')
         .eq('user_oauth_connections.credential_type', 'oauth')
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (!permissions) {
         console.log(`[FunctionCalling] No Gmail permissions found for agent ${agentId}`);

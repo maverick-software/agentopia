@@ -723,7 +723,8 @@ export function EnhancedChannelsModal({
 
   const defaultScopesForService = (serviceId: string): string[] => {
     if (serviceId === 'gmail') return ['gmail.readonly', 'gmail.send', 'gmail.modify'];
-    if (serviceId === 'sendgrid' || serviceId === 'mailgun') return ['send_email'];
+    if (serviceId === 'sendgrid') return ['send_email'];
+    if (serviceId === 'mailgun') return ['send_email', 'validate', 'stats', 'suppressions'];
     return [];
   };
 
