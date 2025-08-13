@@ -24,6 +24,7 @@ import {
   Mail
 } from 'lucide-react';
 import { useIntegrationCategories, useIntegrationsByCategory } from '@/hooks/useIntegrations';
+import { Link } from 'react-router-dom';
 import { useConnections } from '@/hooks/useConnections';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
@@ -323,8 +324,8 @@ export function IntegrationsPage() {
                       
                       <div className="flex items-center space-x-2">
                         {isConnected && !isComingSoon ? (
-                          <>
-                            {/* Add Another Account when already connected */}
+                          <div className="flex w-full gap-2">
+                            {/* Add Another Account when already connected (Gmail only) */}
                             {integration.name === 'Gmail' ? (
                               <Button
                                 onClick={() => handleAddCredentials(integration)}
@@ -334,17 +335,21 @@ export function IntegrationsPage() {
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add Another Account
                               </Button>
-                            ) : null}
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-border text-foreground hover:bg-accent"
-                              onClick={() => handleAddCredentials(integration)}
-                            >
-                              <Settings className="h-4 w-4 mr-2" />
-                              Manage
-                            </Button>
-                          </>
+                            ) : (
+                              <span className="flex-1" />
+                            )}
+                            {/* Manage should navigate to Credentials page */}
+                            <Link to="/credentials" className="flex-1">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="w-full border-border text-foreground hover:bg-accent"
+                              >
+                                <Settings className="h-4 w-4 mr-2" />
+                                Manage
+                              </Button>
+                            </Link>
+                          </div>
                         ) : (
                           <Button 
                             onClick={() => handleAddCredentials(integration)}
