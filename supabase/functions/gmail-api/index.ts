@@ -336,14 +336,14 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
 }
 
 async function readEmails(accessToken: string, parameters: any): Promise<any> {
-  const { query = '', max_results = 50, label_ids = [] } = parameters
-  
+  const { query = '', max_results = 50, label_ids = [], include_body = false } = parameters
+
   let url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max_results}`
-  
+
   if (query) {
     url += `&q=${encodeURIComponent(query)}`
   }
-  
+
   if (label_ids.length > 0) {
     label_ids.forEach((labelId: string) => {
       url += `&labelIds=${encodeURIComponent(labelId)}`
@@ -361,32 +361,62 @@ async function readEmails(accessToken: string, parameters: any): Promise<any> {
     throw new Error(`Failed to read emails: ${error}`)
   }
 
-  const messageList = await response.json()
-  
-  // Get detailed information for each message
-  if (messageList.messages && messageList.messages.length > 0) {
-    const detailedMessages = await Promise.all(
-      messageList.messages.slice(0, Math.min(10, messageList.messages.length)).map(async (msg: any) => {
-        const detailResponse = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            },
+  const list = await response.json()
+
+  // Helper to decode body content from parts
+  const decodeBody = (parts: any[]): string | null => {
+    try {
+      const findPart = (ps: any[]): any | null => {
+        for (const p of ps || []) {
+          if ((p.mimeType || '').startsWith('text/plain') && p.body?.data) return p
+          if ((p.mimeType || '').startsWith('text/html') && p.body?.data) return p
+          if (p.parts) {
+            const inner = findPart(p.parts)
+            if (inner) return inner
           }
-        )
-        
-        if (detailResponse.ok) {
-          return await detailResponse.json()
         }
-        return msg
-      })
-    )
-    
-    messageList.detailed_messages = detailedMessages
+        return null
+      }
+      const part = findPart(parts)
+      if (!part?.body?.data) return null
+      const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/')
+      const decoded = atob(b64)
+      return decoded.slice(0, 2000)
+    } catch (_) {
+      return null
+    }
   }
 
-  return messageList
+  // Get details and produce simplified payload the model can use reliably
+  const simplified: any[] = []
+  if (list.messages && Array.isArray(list.messages) && list.messages.length > 0) {
+    const details = await Promise.all(
+      list.messages.slice(0, Math.min(10, list.messages.length)).map(async (m: any) => {
+        const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}` , {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        })
+        return res.ok ? await res.json() : m
+      })
+    )
+
+    for (const d of details) {
+      const headers = (d.payload?.headers || []) as Array<{ name: string; value: string }>
+      const get = (n: string) => headers.find(h => h.name?.toLowerCase() === n) ?.value || ''
+      const subject = get('subject')
+      const from = get('from')
+      const date = get('date')
+      const body_preview = include_body ? decodeBody(d.payload?.parts || []) : null
+      simplified.push({ id: d.id, threadId: d.threadId, subject, from, date, snippet: d.snippet, body_preview })
+    }
+  }
+
+  return {
+    success: true,
+    total: simplified.length,
+    messages: simplified,
+    // include raw for debugging when needed
+    raw_count: Array.isArray(list.messages) ? list.messages.length : 0,
+  }
 }
 
 async function searchEmails(accessToken: string, parameters: any): Promise<any> {
