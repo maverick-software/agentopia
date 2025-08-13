@@ -117,8 +117,9 @@ async function handler(req: Request): Promise<Response> {
     }
     
     // Verify the JWT token
+    let token: string | undefined;
     try {
-      const token = authHeader.split(' ')[1];
+      token = authHeader.split(' ')[1];
       const { data: { user }, error: userError } = await (supabase as any).auth.getUser(token);
       if (userError || !user) {
         return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
@@ -141,6 +142,12 @@ async function handler(req: Request): Promise<Response> {
     
     // Parse request body
     const body = await req.json();
+    // Inject auth token for downstream tool execution (FunctionCallingManager)
+    try {
+      const opts = (body.options ||= {});
+      const auth = (opts.auth ||= {});
+      if (token) auth.token = token;
+    } catch (_) { /* non-fatal */ }
     // Sanitize optional string fields that may arrive as null from legacy clients
     if (body?.context) {
       for (const key of ['channel_id','workspace_id','agent_id','user_id','conversation_id','session_id']) {

@@ -254,7 +254,8 @@ Remember: ALWAYS use blank lines between elements for readability!`
     msgs.push({ role: 'user', content: (message as any).content?.text || '' });
 
     // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
-    const fcm = new FunctionCallingManager(this.supabase as any, '');
+    const authToken = (context as any)?.request_options?.auth?.token || '';
+    const fcm = new FunctionCallingManager(this.supabase as any, authToken);
     const availableTools = (context.agent_id && context.user_id)
       ? await fcm.getAvailableTools(context.agent_id, context.user_id)
       : [];
