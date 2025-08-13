@@ -309,8 +309,10 @@ export function EnhancedChannelsModal({
       console.log('Initiating Gmail OAuth flow');
       await gmailInitiateOAuth();
       
-      // Refresh connections to get the latest data
+      // Refresh connections to get the latest data and force UI update from authoritative RPC
       await refetchConnections();
+      // Also refresh agent permissions list so connected badge updates immediately
+      await fetchAgentPermissions();
       
       toast.success('Gmail connected successfully! 🎉');
       setSaved(true);

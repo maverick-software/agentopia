@@ -44,30 +44,29 @@ export function CredentialsPage() {
     if (user) {
       fetchConnections();
     }
-  }, [user, unifiedConnections, loadingUnified]);
+  }, [user]);
 
   const fetchConnections = async () => {
     if (!user) return;
 
     try {
-      // Map unified list into local view model (preserve scopes_granted if present via RPC)
+      // Use authoritative RPC only to avoid stale overwrite from hook state
       const { data, error } = await supabase.rpc('get_user_oauth_connections', { p_user_id: user.id });
       if (error) throw error;
-      const scopesById = new Map<string, string[]>((data || []).map((d: any) => [d.connection_id, d.scopes_granted || []]));
-      const mapped = (unifiedConnections || []).map((c: any) => ({
-        connection_id: c.connection_id,
-        provider_name: c.provider_name,
-        provider_display_name: c.provider_display_name,
-        external_username: c.external_username,
-        connection_name: c.connection_name,
-        scopes_granted: scopesById.get(c.connection_id) || [],
-        connection_status: c.connection_status,
-        credential_type: c.credential_type,
-        token_expires_at: c.token_expires_at,
-        created_at: c.created_at,
-        updated_at: c.updated_at,
-      }))
-      setConnections(mapped)
+      const mapped = (data || []).map((row: any) => ({
+        connection_id: row.connection_id,
+        provider_name: row.provider_name || row.oauth_providers?.name,
+        provider_display_name: row.provider_display_name || row.oauth_providers?.display_name,
+        external_username: row.external_username ?? null,
+        connection_name: row.connection_name ?? null,
+        scopes_granted: row.scopes_granted || [],
+        connection_status: row.connection_status,
+        credential_type: row.credential_type,
+        token_expires_at: row.token_expires_at ?? null,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
+      setConnections(mapped);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -123,7 +122,8 @@ export function CredentialsPage() {
         }
       }));
 
-      // Refresh the connections list to show updated expiry
+      // Refresh the unified hook and then our local list for immediate UI consistency
+      await refetch();
       await fetchConnections();
       
       // Clear success state after 3 seconds

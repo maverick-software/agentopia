@@ -278,11 +278,16 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     email += `${message.html || message.body}`
   }
 
-  // Convert to base64url
-  const encodedEmail = btoa(email)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
+  // Convert to base64url with UTF-8 support to avoid InvalidCharacterError
+  const encodedEmail = (() => {
+    const bytes = new TextEncoder().encode(email);
+    let binary = '';
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  })()
 
   console.log('[sendEmail] Making request to Gmail API')
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
