@@ -271,15 +271,19 @@ Remember: ALWAYS use blank lines between elements for readability!`
     const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
     let completion: any;
     let router: any = null;
+    let effectiveModel = 'gpt-4';
     if (useRouter && context.agent_id) {
       const { LLMRouter } = await import('../../shared/llm/router.ts');
       router = new LLMRouter();
+      const resolved = await router.resolveAgent(context.agent_id);
+      effectiveModel = resolved?.prefs?.model || effectiveModel;
       const resp = await router.chat(context.agent_id, msgs as any, { tools: availableTools as any, temperature: 0.7, maxTokens: 1200 });
       completion = {
         choices: [{ message: { content: resp.text, tool_calls: (resp.toolCalls || []).map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
         usage: resp.usage ? { prompt_tokens: resp.usage.prompt, completion_tokens: resp.usage.completion, total_tokens: resp.usage.total } : undefined,
       };
     } else {
+      effectiveModel = 'gpt-4';
       completion = await this.openai.chat.completions.create({
         model: 'gpt-4',
         messages: msgs,

@@ -39,6 +39,7 @@ export const APIConfig = {
   defaults: {
     maxTokens: 4096,
     temperature: 0.7,
+    // Model now determined by LLMRouter per-agent when USE_LLM_ROUTER=true
     model: 'gpt-4',
     memoryMaxResults: 10,
     contextWindowSize: 50,

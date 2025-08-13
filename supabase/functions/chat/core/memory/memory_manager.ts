@@ -1092,22 +1092,37 @@ class MemoryConsolidator {
   }
   
   private async createSummary(memories: AgentMemory[]): Promise<string> {
-    // Use LLM to create summary
+    // Use LLM to create summary (prefer router per-agent when enabled if accessible)
     const events = memories.map(m => this.memoryToText(m)).join('\n');
-    
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{
-        role: 'system',
-        content: 'Summarize the following events into a concise narrative:',
-      }, {
-        role: 'user',
-        content: events,
-      }],
-      max_tokens: 500,
-    });
-    
-    return response.choices[0].message.content || 'Summary unavailable';
+    let text = '';
+    const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+    try {
+      if (useRouter) {
+        const { LLMRouter } = await import('../../shared/llm/router.ts');
+        const router = new LLMRouter();
+        // We may not have agent_id here; summaries are generic. Fallback to default agent if provided in config.
+        const agentId = (this.config as any)?.agent_id || '';
+        if (agentId) {
+          const resp = await router.chat(agentId, [
+            { role: 'system', content: 'Summarize the following events into a concise narrative:' },
+            { role: 'user', content: events },
+          ] as any, { maxTokens: 500, temperature: 0.2 });
+          text = resp.text || '';
+        }
+      }
+    } catch (_) {}
+    if (!text) {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: 'Summarize the following events into a concise narrative:' },
+          { role: 'user', content: events },
+        ],
+        max_tokens: 500,
+      });
+      text = response.choices[0].message.content || 'Summary unavailable';
+    }
+    return text;
   }
   
   private async extractAbstractions(

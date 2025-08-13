@@ -85,12 +85,22 @@ export async function getVectorSearchResults(
 
     console.log(`[DEBUG] Pinecone config validated for datastore ${datastore.id}`);
 
-    // Generate embedding
-    const embedding = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: message,
-      encoding_format: 'float',
-    });
+    // Generate embedding (prefer router embedding model if enabled)
+    let embeddingValues: number[] = [];
+    const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+    if (useRouter) {
+      const { LLMRouter } = await import('../shared/llm/router.ts');
+      const router = new LLMRouter();
+      const vectors = await router.embed(agentId, [message]);
+      embeddingValues = vectors[0] || [];
+    } else {
+      const embedding = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: message,
+        encoding_format: 'float',
+      });
+      embeddingValues = embedding.data[0].embedding as any;
+    }
 
     // Instantiate Pinecone client with ONLY required fields
     const pinecone = new Pinecone({
@@ -106,7 +116,7 @@ export async function getVectorSearchResults(
     console.log(`[DEBUG] Querying Pinecone index ${indexName} with topK=${datastore.max_results}, threshold=${datastore.similarity_threshold}`);
     
     const results = await index.query({
-      vector: embedding.data[0].embedding,
+      vector: embeddingValues,
       topK: datastore.max_results || 10,
       includeMetadata: true,
       includeValues: false,
