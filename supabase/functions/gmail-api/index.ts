@@ -225,13 +225,20 @@ serve(async (req) => {
 // Helper function to get required scopes for each action
 function getRequiredScopes(action: string): string[] {
   const scopeMap: Record<string, string[]> = {
-    'send_email': ['https://www.googleapis.com/auth/gmail.send'],
-    'read_emails': ['https://www.googleapis.com/auth/gmail.readonly'],
-    'search_emails': ['https://www.googleapis.com/auth/gmail.readonly'],
-    'manage_labels': ['https://www.googleapis.com/auth/gmail.labels'],
-  }
-  
-  return scopeMap[action] || []
+    send_email: ['https://www.googleapis.com/auth/gmail.send'],
+    read_emails: ['https://www.googleapis.com/auth/gmail.readonly'],
+    search_emails: ['https://www.googleapis.com/auth/gmail.readonly'],
+    manage_labels: [
+      'https://www.googleapis.com/auth/gmail.labels',
+      // modify includes label changes on messages
+      'https://www.googleapis.com/auth/gmail.modify',
+    ],
+    email_actions: [
+      // delete/archive/mark read require modify scope
+      'https://www.googleapis.com/auth/gmail.modify',
+    ],
+  };
+  return scopeMap[action] || [];
 }
 
 // Gmail API Operations
