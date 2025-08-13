@@ -139,39 +139,12 @@ export function useGmailConnection() {
 
     const { auth_url, state } = response.data;
 
-    // Force re-consent and ensure required scopes are present in the URL
-    try {
-      const url = new URL(auth_url);
-      const requiredScopes = [
-        'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/gmail.send',
-        'https://www.googleapis.com/auth/gmail.modify',
-        'openid',
-        'email',
-        'profile',
-      ];
-      // Merge existing scopes with required
-      const existing = decodeURIComponent(url.searchParams.get('scope') || '')
-        .split(/[\s+]/)
-        .filter(Boolean);
-      const merged = Array.from(new Set([...existing, ...requiredScopes]));
-      url.searchParams.set('scope', merged.join(' '));
-      // Force consent to show new scopes when already connected
-      url.searchParams.set('prompt', 'consent');
-      url.searchParams.set('include_granted_scopes', 'false');
-      url.searchParams.set('access_type', 'offline');
-      // Replace the auth_url with our modified one
-      (response as any).data.auth_url = url.toString();
-    } catch (_) {
-      // Best-effort; continue with original URL
-    }
-
     // Store state for later use in callback
     sessionStorage.setItem('gmail_oauth_state', state);
     
     // Open OAuth flow in popup
     const popup = window.open(
-      (response as any).data.auth_url || auth_url,
+      auth_url,
       'gmail-oauth',
       'width=600,height=700,scrollbars=yes,resizable=yes'
     );
