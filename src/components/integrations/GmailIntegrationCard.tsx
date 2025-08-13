@@ -247,22 +247,30 @@ export function GmailIntegrationCard({
                   Configure Agent Access
                 </Button>
               )}
-              
+
+              {/* Allow adding additional Gmail accounts from Integrations; management stays on Credentials */}
               <Button
-                onClick={handleDisconnect}
-                disabled={isDisconnecting}
-                variant="destructive"
+                onClick={handleConnect}
+                disabled={isConnecting}
                 className="w-full"
+                variant="secondary"
               >
-                {isDisconnecting ? (
+                {isConnecting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Disconnecting...
+                    Connecting...
                   </>
                 ) : (
-                  'Disconnect Gmail'
+                  'Connect another Gmail account'
                 )}
               </Button>
+
+              <a
+                href="/credentials"
+                className="w-full text-center text-sm text-blue-600 hover:underline"
+              >
+                Manage Gmail credentials
+              </a>
             </div>
           </div>
         ) : (
