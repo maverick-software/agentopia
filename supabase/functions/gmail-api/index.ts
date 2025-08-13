@@ -146,6 +146,11 @@ serve(async (req) => {
           quotaConsumed = 5 * (params.max_results || 50)
           break
         
+        case 'email_actions':
+          result = await emailActions(accessToken, params)
+          quotaConsumed = 5
+          break
+
         case 'manage_labels':
           result = await manageLabels(accessToken, params)
           quotaConsumed = 5 // Label operations cost 5 units
@@ -502,6 +507,69 @@ async function manageLabels(accessToken: string, parameters: any): Promise<any> 
     
     default:
       throw new Error(`Unsupported label action: ${action}`)
+  }
+}
+
+// Perform common mailbox actions on messages
+async function emailActions(accessToken: string, parameters: any): Promise<any> {
+  const { action, message_ids = [] } = parameters
+  if (!Array.isArray(message_ids) || message_ids.length === 0) {
+    throw new Error('message_ids is required and must be a non-empty array')
+  }
+
+  const modifyUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify'
+  const deleteUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/batchDelete'
+
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  }
+
+  const doModify = async (addLabelIds: string[] = [], removeLabelIds: string[] = []) => {
+    const resp = await fetch(modifyUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ids: message_ids, addLabelIds, removeLabelIds }),
+    })
+    if (!resp.ok) {
+      const err = await resp.text()
+      throw new Error(`Failed to modify messages: ${err}`)
+    }
+    return { success: true, modified: message_ids.length }
+  }
+
+  switch (action) {
+    case 'mark_read':
+      return await doModify([], ['UNREAD'])
+    case 'mark_unread':
+      return await doModify(['UNREAD'], [])
+    case 'archive':
+      return await doModify([], ['INBOX'])
+    case 'unarchive':
+      return await doModify(['INBOX'], [])
+    case 'star':
+      return await doModify(['STARRED'], [])
+    case 'unstar':
+      return await doModify([], ['STARRED'])
+    case 'delete':
+      // Move to Trash via label
+      return await doModify(['TRASH'], [])
+    case 'delete_forever':
+      // Permanently delete
+      {
+        const resp = await fetch(deleteUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ids: message_ids }),
+        })
+        if (!resp.ok) {
+          const err = await resp.text()
+          throw new Error(`Failed to delete messages: ${err}`)
+        }
+        return { success: true, deleted: message_ids.length }
+      }
+    default:
+      throw new Error(`Unsupported email action: ${action}`)
   }
 }
 
