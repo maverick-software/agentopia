@@ -324,21 +324,25 @@ export function IntegrationsPage() {
                       <div className="flex items-center space-x-2">
                         {isConnected && !isComingSoon ? (
                           <>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="flex-1 border-border text-foreground hover:bg-accent"
-                              onClick={() => handleAddCredentials(integration)}
-                            >
-                              <Settings className="h-4 w-4 mr-2" />
-                              Manage
-                            </Button>
+                            {/* Add Another Account when already connected */}
+                            {integration.name === 'Gmail' ? (
+                              <Button
+                                onClick={() => handleAddCredentials(integration)}
+                                size="sm"
+                                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Another Account
+                              </Button>
+                            ) : null}
                             <Button 
                               variant="outline" 
                               size="sm" 
                               className="border-border text-foreground hover:bg-accent"
+                              onClick={() => handleAddCredentials(integration)}
                             >
-                              <ChevronRight className="h-4 w-4" />
+                              <Settings className="h-4 w-4 mr-2" />
+                              Manage
                             </Button>
                           </>
                         ) : (
@@ -352,9 +356,7 @@ export function IntegrationsPage() {
                             disabled={isComingSoon}
                           >
                             <Plus className="h-4 w-4 mr-2" />
-                            {isComingSoon ? 'Coming Soon' : 
-                              integration.name === 'Gmail' && isConnected ? 'Add Another Account' : 'Add Credentials'
-                            }
+                            {isComingSoon ? 'Coming Soon' : 'Add Credentials'}
                           </Button>
                         )}
                       </div>
