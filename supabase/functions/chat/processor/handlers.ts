@@ -371,7 +371,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
       role: 'assistant',
       content: { type: 'text', text },
       timestamp: new Date().toISOString(),
-      metadata: { model: 'gpt-4', tokens: { prompt: promptTokens, completion: completionTokens, total: tokensTotal }, source: 'api' },
+      metadata: { model: effectiveModel, tokens: { prompt: promptTokens, completion: completionTokens, total: tokensTotal }, source: 'api' },
     } as any;
 
     // FEEDBACK LOOP: Persist memories (episodic always; semantic if Pinecone configured)
