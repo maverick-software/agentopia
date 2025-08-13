@@ -497,14 +497,14 @@ export class FunctionCallingManager {
         .eq('user_oauth_connections.oauth_providers.name', 'gmail')
         .eq('user_oauth_connections.credential_type', 'oauth')
         .eq('is_active', true)
-        .maybeSingle();
+        .limit(5);
 
-      if (!permissions) {
+      if (!permissions || permissions.length === 0) {
         console.log(`[FunctionCalling] No Gmail permissions found for agent ${agentId}`);
         return [];
       }
 
-      const grantedScopes = permissions.allowed_scopes || [];
+      const grantedScopes = (permissions[0]?.allowed_scopes || []) as string[];
       console.log(`[FunctionCalling] Agent ${agentId} has Gmail scopes:`, grantedScopes);
       console.log(`[FunctionCalling] Available Gmail tool definitions:`, Object.keys(GMAIL_MCP_TOOLS));
       
@@ -737,6 +737,7 @@ export class FunctionCallingManager {
     }
   }
 
+  // (No unified tool helpers; MCP-native tools only)
   /**
    * Execute Gmail tool
    */

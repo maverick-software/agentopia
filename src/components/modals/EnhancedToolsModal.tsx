@@ -66,6 +66,7 @@ export function EnhancedToolsModal({
   const [connectingService, setConnectingService] = useState<string | null>(null);
   const [setupService, setSetupService] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [selectingCredentialFor, setSelectingCredentialFor] = useState<string | null>(null);
   
   // Setup form state
   const [selectedProvider, setSelectedProvider] = useState('');
@@ -73,62 +74,69 @@ export function EnhancedToolsModal({
   const [connectionName, setConnectionName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Available tool services organized by category
-  const TOOL_CATEGORIES = [
-    {
-      id: 'research',
-      name: 'Research & Data',
-      icon: Search,
-      gradient: 'from-blue-500 to-cyan-500',
-      tools: [
-        {
-          id: 'serper_api',
-          name: 'Serper API',
-          description: 'Fast Google search results with real-time data',
-          type: 'api_key',
-          setupUrl: 'https://serper.dev',
-          rateLimit: '2,500 queries/month free',
-          features: ['Web Search', 'News Search', 'Image Search', 'Maps Search']
-        },
-        {
-          id: 'serpapi',
-          name: 'SerpAPI',
-          description: 'Comprehensive search engine results API',
-          type: 'api_key',
-          setupUrl: 'https://serpapi.com',
-          rateLimit: '100 queries/month free',
-          features: ['Google Search', 'Bing Search', 'DuckDuckGo', 'Local Results']
-        },
-        {
-          id: 'brave_search',
-          name: 'Brave Search API',
-          description: 'Privacy-focused independent search results',
-          type: 'api_key',
-          setupUrl: 'https://brave.com/search/api',
-          rateLimit: '2,000 queries/month free',
-          features: ['Web Search', 'Privacy Focused', 'Ad-free Results']
-        }
-      ]
-    },
-    {
-      id: 'productivity',
-      name: 'Productivity & Analysis',
-      icon: BarChart3,
-      gradient: 'from-green-500 to-emerald-500',
-      tools: [
-        // We can add more productivity tools here
-      ]
-    },
-    {
-      id: 'content',
-      name: 'Content & Media',
-      icon: FileText,
-      gradient: 'from-purple-500 to-pink-500',
-      tools: [
-        // We can add content tools here
-      ]
+  // Agent-level permissions for tools
+  type AgentPermission = {
+    id: string;
+    connection_id: string;
+    provider_name: string;
+    external_username?: string | null;
+    is_active: boolean;
+    allowed_scopes?: string[];
+  };
+  const [agentPermissions, setAgentPermissions] = useState<AgentPermission[]>([]);
+
+  // DB-driven capabilities for tools
+  type CapabilityRow = { capability_key: string; display_label: string; display_order: number };
+  const [capabilitiesByIntegrationId, setCapabilitiesByIntegrationId] = useState<Record<string, CapabilityRow[]>>({});
+
+  // Load capabilities for current tool integrations
+  useEffect(() => {
+    (async () => {
+      try {
+        const ids = integrations.map(i => i.id);
+        if (!ids.length) return;
+        const { data } = await supabase
+          .from('integration_capabilities')
+          .select('integration_id, capability_key, display_label, display_order')
+          .in('integration_id', ids)
+          .order('display_order');
+        const map: Record<string, CapabilityRow[]> = {};
+        (data || []).forEach((row: any) => {
+          if (!map[row.integration_id]) map[row.integration_id] = [];
+          map[row.integration_id].push({ capability_key: row.capability_key, display_label: row.display_label, display_order: row.display_order ?? 0 });
+        });
+        setCapabilitiesByIntegrationId(map);
+      } catch {}
+    })();
+  }, [integrations, supabase]);
+
+  // Fetch agent permissions (tools)
+  const fetchAgentPermissions = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      const { data, error: rpcError } = await supabase.rpc('get_agent_integration_permissions', { p_agent_id: agentId });
+      if (rpcError) throw rpcError;
+      const rows = (data || []).map((r: any) => ({
+        id: r.permission_id,
+        connection_id: r.connection_id,
+        provider_name: r.provider_name,
+        external_username: r.external_username,
+        is_active: r.is_active,
+        allowed_scopes: r.allowed_scopes || []
+      }));
+      setAgentPermissions(rows);
+    } catch (e) {
+      console.error('Failed fetching agent tool permissions', e);
     }
-  ];
+  }, [agentId, supabase]);
+
+  useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
+
+  // Available tool services organized by category
+  // DB-driven tool integrations
+  const TOOL_INTEGRATIONS = (integrations || [])
+    .filter((i: any) => i.status === 'available')
+    .sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.name.localeCompare(b.name));
 
   // Clear saved state after 3 seconds
   useEffect(() => {
@@ -215,21 +223,92 @@ export function EnhancedToolsModal({
     }
   };
 
-  const getToolStatus = (toolId: string) => {
-    // Check if this tool is connected using centralized connections
-    const hasConnection = connections.some(conn => 
-      (conn.provider_name === toolId || conn.provider_name === `${toolId}_api`) &&
-      conn.connection_status === 'connected'
+  const getToolStatus = (providerName: string) => {
+    // Connected if this AGENT has the tool added (permission exists)
+    const exists = agentPermissions.some(p => p.provider_name === providerName && p.is_active);
+    if (exists) return 'connected';
+    // Otherwise available if user has a credential
+    const hasCredential = connections.some(c => c.provider_name === providerName && c.connection_status === 'active');
+    return hasCredential ? 'available' : 'available';
+  };
+
+  const defaultScopesForProvider = (provider: string): string[] => {
+    if (['serper_api','serpapi','brave_search'].includes(provider)) return ['web_search','news_search','image_search','local_search'];
+    return [];
+  };
+
+  const renderCapabilitiesBadges = (integrationId?: string) => {
+    const caps = integrationId ? (capabilitiesByIntegrationId as any)?.[integrationId] : null;
+    if (!caps || caps.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-2 mt-2">
+        {caps.map((c: any) => (
+          <Badge key={c.capability_key} variant="secondary" className="text-xs">{c.display_label}</Badge>
+        ))}
+      </div>
     );
-    return hasConnection ? 'connected' : 'available';
+  };
+
+  const renderCredentialSelector = (provider: string, integrationId?: string) => {
+    const creds = connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    return (
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Shield className="h-5 w-5 text-blue-500" />
+            <span>Select credential</span>
+          </CardTitle>
+          <CardDescription>Choose an existing credential or add a new one.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Capabilities</div>
+            {renderCapabilitiesBadges(integrationId)}
+          </div>
+          {creds.length === 0 && (
+            <div className="text-sm text-muted-foreground">No saved credentials for this provider.</div>
+          )}
+          {creds.map((c) => (
+            <div key={c.connection_id} className="flex items-center justify-between p-3 border rounded">
+              <div className="text-sm">
+                <div className="font-medium">{c.provider_display_name}</div>
+                <div className="text-muted-foreground">{c.external_username || c.connection_name}</div>
+              </div>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setConnectingService(provider);
+                    const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
+                      p_agent_id: agentId,
+                      p_connection_id: c.connection_id,
+                      p_allowed_scopes: defaultScopesForProvider(provider),
+                      p_permission_level: 'custom'
+                    });
+                    if (grantError) throw grantError;
+                    await fetchAgentPermissions();
+                    setSelectingCredentialFor(null);
+                    setActiveTab('connected');
+                  } catch (e) {
+                    console.error('Grant permission error', e);
+                    toast.error('Failed to authorize agent');
+                  } finally {
+                    setConnectingService(null);
+                  }
+                }}
+              >
+                Authorize Agent
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    );
   };
 
   const renderConnectedTools = () => {
-    // Filter connections for tools only (web search providers)
-    const toolConnections = connections.filter(c => 
-      ['serper_api', 'serpapi', 'brave_search'].includes(c.provider_name) && 
-      c.connection_status === 'connected'
-    );
+    // Show tools added to the AGENT
+    const toolConnections = agentPermissions.filter(p => p.is_active);
 
     if (toolConnections.length === 0) {
       return (
@@ -263,14 +342,7 @@ export function EnhancedToolsModal({
         </div>
         
         {toolConnections.map((connection) => {
-          // Get the tool info for display
-          const toolInfo = TOOL_CATEGORIES
-            .flatMap(cat => cat.tools)
-            .find(tool => 
-              tool.id === connection.provider_name || 
-              `${tool.id}_api` === connection.provider_name
-            );
-          
+          const matched = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase().includes((connection as any).provider_name?.toLowerCase() || ''));
           return (
             <div
               key={connection.id}
@@ -281,10 +353,11 @@ export function EnhancedToolsModal({
                   <Search className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-medium">{toolInfo?.name || connection.provider_display_name}</h3>
+                  <h3 className="font-medium">{matched?.name || connection.provider_name}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {connection.external_username || connection.connection_name || 'Connected'}
+                    {(connection as any).external_username || 'Authorized'}
                   </p>
+                  {renderCapabilitiesBadges(matched?.id)}
                 </div>
               </div>
               <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
@@ -416,110 +489,87 @@ export function EnhancedToolsModal({
   const renderAvailableTools = () => {
     return (
       <div className="space-y-6">
-        <div className="text-sm text-muted-foreground mb-4">
-          Choose tools to enhance your agent's capabilities:
-        </div>
-        
-        {TOOL_CATEGORIES.map((category) => {
-          if (category.tools.length === 0) return null;
-          
-          const CategoryIcon = category.icon;
-          
-          return (
-            <div key={category.id} className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${category.gradient} flex items-center justify-center`}>
-                  <CategoryIcon className="h-4 w-4 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-medium">{category.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {category.tools.length} tool{category.tools.length !== 1 ? 's' : ''} available
-                  </p>
-                </div>
-              </div>
-              
-              <div className="ml-11 space-y-3">
-                {category.tools.map((tool) => {
-                  const status = getToolStatus(tool.id);
-                  const isConnected = status === 'connected';
-                  const isSetupMode = setupService === tool.id;
-                  
-                  if (isSetupMode) {
-                    return (
-                      <div key={tool.id} className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-medium">{tool.name}</h4>
-                              <Badge variant="outline" className="text-xs">Setting up...</Badge>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSetupService(null);
-                              resetForm();
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                        {renderApiKeySetup(tool)}
-                      </div>
-                    );
-                  }
-                  
-                  return (
-                    <div
-                      key={tool.id}
-                      className={`flex items-center justify-between p-4 rounded-lg border transition-all ${
-                        isConnected
-                          ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20'
-                          : 'border-border hover:border-border hover:bg-accent/50'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <h4 className="font-medium">{tool.name}</h4>
-                          {isConnected && (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                              Connected
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">{tool.description}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {tool.features.map((feature, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {feature}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2 ml-4">
-                        {isConnected ? (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <Button
-                            onClick={() => setSetupService(tool.id)}
-                            size="sm"
-                            className={`bg-gradient-to-r ${category.gradient} hover:opacity-90 text-white`}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Connect
-                          </Button>
-                        )}
+        <div className="text-sm text-muted-foreground mb-4">Choose tools to enhance your agent's capabilities:</div>
+        <div className="space-y-3">
+          {TOOL_INTEGRATIONS.map((integration: any) => {
+            const provider = integration.name.toLowerCase();
+            const status = getToolStatus(provider);
+            const isConnected = status === 'connected';
+            const isSetupMode = setupService === provider;
+            const isSelecting = selectingCredentialFor === provider;
+            
+            if (isSetupMode && ['serper api','serper_api','serpapi','brave search api','brave_search'].includes(provider)) {
+              // Show API key setup for known providers
+              const display = integration.name;
+              return (
+                <div key={integration.id} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-medium">{display}</h4>
+                        <Badge variant="outline" className="text-xs">Setting up...</Badge>
                       </div>
                     </div>
-                  );
-                })}
+                    <Button variant="ghost" size="sm" onClick={() => { setSetupService(null); resetForm(); }}>Cancel</Button>
+                  </div>
+                  {renderApiKeySetup({ id: provider, name: display } as any)}
+                </div>
+              );
+            }
+
+            if (isSelecting) {
+              return (
+                <div key={integration.id} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center"><Search className="h-5 w-5 text-white" /></div>
+                      <div>
+                        <h3 className="font-medium">{integration.name}</h3>
+                        <p className="text-sm text-muted-foreground">Choose credential</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectingCredentialFor(null)}>Cancel</Button>
+                  </div>
+                  {renderCredentialSelector(provider, integration.id)}
+                </div>
+              );
+            }
+
+            return (
+              <div key={integration.id} className={`flex items-center justify-between p-4 rounded-lg border transition-all ${isConnected ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20' : 'border-border hover:bg-accent/50'}`}>
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <h4 className="font-medium">{integration.name}</h4>
+                    {isConnected && (<Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">Connected</Badge>)}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">{integration.description}</p>
+                  {renderCapabilitiesBadges(integration.id)}
+                </div>
+                <div className="flex items-center space-x-2 ml-4">
+                  {isConnected ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Button
+                      onClick={() => {
+                        // If we know how to set up API key, open setup; else go credential selection
+                        if (['serper api','serper_api','serpapi','brave search api','brave_search'].includes(provider)) {
+                          setSetupService(provider);
+                        } else {
+                          setSelectingCredentialFor(provider);
+                        }
+                      }}
+                      size="sm"
+                      className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 text-white"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Connect
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     );
   };

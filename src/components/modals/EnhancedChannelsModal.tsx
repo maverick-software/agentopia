@@ -68,6 +68,9 @@ export function EnhancedChannelsModal({
   const [setupService, setSetupService] = useState<string | null>(null);
   const [selectingCredentialFor, setSelectingCredentialFor] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [editingPermission, setEditingPermission] = useState<AgentPermission | null>(null);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   
   // Setup form state
   const [connectionName, setConnectionName] = useState('');
@@ -460,15 +463,16 @@ export function EnhancedChannelsModal({
         </div>
         
         {channelConnections.map((connection) => {
-          const isSendGrid = (connection as any).provider_name === 'sendgrid';
-          const isMailgun = (connection as any).provider_name === 'mailgun';
+          const providerName = (connection as any).provider_name;
+          const isSendGrid = providerName === 'sendgrid';
+          const isMailgun = providerName === 'mailgun';
           const gradient = isSendGrid
             ? 'from-blue-500 to-indigo-500'
             : isMailgun
             ? 'from-rose-500 to-pink-500'
             : 'from-red-500 to-orange-500';
           const name = isSendGrid ? 'SendGrid' : isMailgun ? 'Mailgun' : 'Gmail';
-          const matched = integrations.find(i => i.name.toLowerCase().includes(((connection as any).provider_name || '').toLowerCase()));
+          const matched = integrations.find(i => i.name.toLowerCase().includes((providerName || '').toLowerCase()));
           
           return (
             <div
@@ -484,12 +488,41 @@ export function EnhancedChannelsModal({
                    <p className="text-sm text-muted-foreground">
                     {(connection as any).external_username || 'Authorized'}
                    </p>
-                  {renderCapabilitiesBadges((connection as any).provider_name, matched?.id)}
+                  {renderCapabilitiesBadges(providerName, matched?.id)}
                 </div>
               </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                Connected
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">Connected</Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditingPermission(connection);
+                    setSelectedScopes(connection.allowed_scopes || defaultScopesForService(providerName));
+                    setShowPermissionsModal(true);
+                  }}
+                >
+                  Modify Permissions
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-500"
+                  onClick={async () => {
+                    try {
+                      const { error } = await supabase.rpc('revoke_agent_integration_permission', { p_permission_id: connection.id });
+                      if (error) throw error;
+                      await fetchAgentPermissions();
+                      toast.success('Channel removed from agent');
+                    } catch (e: any) {
+                      console.error('Revoke permission error', e);
+                      toast.error('Failed to remove channel');
+                    }
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
             </div>
           );
         })}
@@ -722,7 +755,11 @@ export function EnhancedChannelsModal({
   };
 
   const defaultScopesForService = (serviceId: string): string[] => {
-    if (serviceId === 'gmail') return ['gmail.readonly', 'gmail.send', 'gmail.modify'];
+    if (serviceId === 'gmail') return [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.modify'
+    ];
     if (serviceId === 'sendgrid') return ['send_email'];
     if (serviceId === 'mailgun') return ['send_email', 'validate', 'stats', 'suppressions'];
     return [];
@@ -945,6 +982,96 @@ export function EnhancedChannelsModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+      {/* Permissions Modal */}
+      <Dialog open={showPermissionsModal} onOpenChange={setShowPermissionsModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Modify Permissions
+            </DialogTitle>
+            <DialogDescription>
+              Choose what this agent can do with {(editingPermission as any)?.external_username || (editingPermission as any)?.provider_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {(() => {
+              const provider = (editingPermission as any)?.provider_name?.toLowerCase() || '';
+              if (provider === 'gmail') {
+                return (
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.send')} onChange={(e)=>{
+                        setSelectedScopes(prev => e.target.checked ? [...prev, 'https://www.googleapis.com/auth/gmail.send'] : prev.filter(s=>s!=='https://www.googleapis.com/auth/gmail.send'));
+                      }} />
+                      Send Email
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.readonly')} onChange={(e)=>{
+                        setSelectedScopes(prev => e.target.checked ? [...prev, 'https://www.googleapis.com/auth/gmail.readonly'] : prev.filter(s=>s!=='https://www.googleapis.com/auth/gmail.readonly'));
+                      }} />
+                      Read/Search Emails
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.modify')} onChange={(e)=>{
+                        setSelectedScopes(prev => e.target.checked ? [...prev, 'https://www.googleapis.com/auth/gmail.modify'] : prev.filter(s=>s!=='https://www.googleapis.com/auth/gmail.modify'));
+                      }} />
+                      Email Actions (modify)
+                    </label>
+                  </div>
+                );
+              }
+              if (provider === 'mailgun') {
+                const opts = ['send_email','validate','stats','suppressions'];
+                return (
+                  <div className="space-y-2">
+                    {opts.map(opt => (
+                      <label key={opt} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={selectedScopes.includes(opt)} onChange={(e)=>{
+                          setSelectedScopes(prev => e.target.checked ? [...prev, opt] : prev.filter(s=>s!==opt));
+                        }} />
+                        {opt.replace('_',' ')}
+                      </label>
+                    ))}
+                  </div>
+                );
+              }
+              if (provider === 'sendgrid') {
+                return (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={selectedScopes.includes('send_email')} onChange={(e)=>{
+                      setSelectedScopes(prev => e.target.checked ? [...prev, 'send_email'] : prev.filter(s=>s!=='send_email'));
+                    }} />
+                    Send Email
+                  </label>
+                );
+              }
+              return null;
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=>setShowPermissionsModal(false)}>Cancel</Button>
+            <Button onClick={async ()=>{
+              try {
+                if (!editingPermission) return;
+                const { error } = await supabase.rpc('grant_agent_integration_permission', {
+                  p_agent_id: agentId,
+                  p_connection_id: editingPermission.connection_id,
+                  p_allowed_scopes: selectedScopes,
+                  p_permission_level: 'custom'
+                });
+                if (error) throw error;
+                await fetchAgentPermissions();
+                setShowPermissionsModal(false);
+                toast.success('Permissions updated');
+              } catch(e:any) {
+                console.error('Update permissions error', e);
+                toast.error('Failed to update permissions');
+              }
+            }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
