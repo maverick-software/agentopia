@@ -267,15 +267,28 @@ Remember: ALWAYS use blank lines between elements for readability!`
       msgs.push({ role: 'system', content: guidance });
     }
 
-    // First reasoning/act step
-    let completion = await this.openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: msgs,
-      temperature: 0.7,
-      max_tokens: 1200,
-      tools: availableTools.map((fn) => ({ type: 'function', function: fn })),
-      tool_choice: 'auto',
-    });
+    // First reasoning/act step (LLMRouter when enabled)
+    const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+    let completion: any;
+    let router: any = null;
+    if (useRouter && context.agent_id) {
+      const { LLMRouter } = await import('../../shared/llm/router.ts');
+      router = new LLMRouter();
+      const resp = await router.chat(context.agent_id, msgs as any, { tools: availableTools as any, temperature: 0.7, maxTokens: 1200 });
+      completion = {
+        choices: [{ message: { content: resp.text, tool_calls: (resp.toolCalls || []).map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
+        usage: resp.usage ? { prompt_tokens: resp.usage.prompt, completion_tokens: resp.usage.completion, total_tokens: resp.usage.total } : undefined,
+      };
+    } else {
+      completion = await this.openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: msgs,
+        temperature: 0.7,
+        max_tokens: 1200,
+        tools: availableTools.map((fn) => ({ type: 'function', function: fn })),
+        tool_choice: 'auto',
+      });
+    }
 
     // Handle tool calls (Act → Observe → Reflect)
     const toolCalls = (completion.choices?.[0]?.message?.tool_calls || []) as OpenAIToolCall[];
@@ -324,12 +337,20 @@ Remember: ALWAYS use blank lines between elements for readability!`
         }
       }
       // Reflect: ask model to produce final answer
-      completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: msgs,
-        temperature: 0.5,
-        max_tokens: 1200,
-      });
+      if (router && useRouter && context.agent_id) {
+        const resp2 = await router.chat(context.agent_id, msgs as any, { temperature: 0.5, maxTokens: 1200 });
+        completion = {
+          choices: [{ message: { content: resp2.text } }],
+          usage: resp2.usage ? { prompt_tokens: resp2.usage.prompt, completion_tokens: resp2.usage.completion, total_tokens: resp2.usage.total } : undefined,
+        };
+      } else {
+        completion = await this.openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: msgs,
+          temperature: 0.5,
+          max_tokens: 1200,
+        });
+      }
     }
 
     let text = completion.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
