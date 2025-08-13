@@ -5,9 +5,21 @@ Our agents should have a short term memory that tracks a maximum amount of chat 
 
 These additional memory types should, whenever activated and assigned, be storing user messages properly, building on episodic and semantic memory which each iterative conversation, up to a maximum storage limit that is set by the user plan and managed by the platform admins through the administration pages.
 
+## Context Board ##
+
+The agent should have a small space in memory that retains two paragraph summary of what just happened, what is currently happening, and what it predicts will happen next. This should be provided via the assistant message area of the LLM.
+
 ## Memory ##
 
-Change 'Knowledge' to 'Memory.' We will work inside different types of memory: episodic, semantic, working memory. All memory types will be optional and adjustable within the users pop up modal.
+Change 'Knowledge' to 'Memory.' We will work inside different types of memory: episodic, semantic, working memory. All memory types will be optional and adjustable within the users pop up modal. 
+
+## Time Server ##
+
+Add time server as a tool
+
+## Document Creation ##
+
+Add PDF creation, .docx, .txt, as tools for the agent
 
 ## Background chat summaries ##
 

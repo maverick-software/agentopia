@@ -1,5 +1,5 @@
 import type { AdvancedChatMessage } from '../types/message.types.ts';
-import type { ProcessingContext, ProcessingMetrics } from './MessageProcessor.ts';
+import type { ProcessingContext, ProcessingMetrics } from './types.ts';
 import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
 
@@ -125,7 +125,7 @@ export class TextMessageHandler implements MessageHandler {
     const msgs: Array<{ role: 'system'|'user'|'assistant'|'tool'; content: string }> = [];
     
     if (context.agent_id) {
-      const { data: agent, error } = await this.supabase
+      const { data: agent } = await this.supabase
         .from('agents')
         .select('system_instructions, assistant_instructions, description, personality, name')
         .eq('id', context.agent_id)
@@ -268,7 +268,10 @@ Remember: ALWAYS use blank lines between elements for readability!`
     }
 
     // First reasoning/act step (LLMRouter when enabled)
-    const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+    // Guard for environments without Deno types
+    const useRouter = (typeof (globalThis as any).Deno !== 'undefined')
+      ? ((((globalThis as any).Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true'))
+      : false;
     let completion: any;
     let router: any = null;
     let effectiveModel = 'gpt-4';
@@ -278,8 +281,9 @@ Remember: ALWAYS use blank lines between elements for readability!`
       const resolved = await router.resolveAgent(context.agent_id);
       effectiveModel = resolved?.prefs?.model || effectiveModel;
       const resp = await router.chat(context.agent_id, msgs as any, { tools: availableTools as any, temperature: 0.7, maxTokens: 1200 });
+      const respToolCalls = (resp.toolCalls || []) as Array<{ id: string; name: string; arguments: string }>;
       completion = {
-        choices: [{ message: { content: resp.text, tool_calls: (resp.toolCalls || []).map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
+        choices: [{ message: { content: resp.text, tool_calls: respToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
         usage: resp.usage ? { prompt_tokens: resp.usage.prompt, completion_tokens: resp.usage.completion, total_tokens: resp.usage.total } : undefined,
       };
     } else {
@@ -300,12 +304,13 @@ Remember: ALWAYS use blank lines between elements for readability!`
     const discoveredToolsForMetrics = availableTools.map(t => ({ name: t.name }));
     if (toolCalls.length > 0) {
       // Per OpenAI protocol, include the assistant message containing tool_calls before tool messages
+      const typedToolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = toolCalls as any;
       msgs.push({
         role: 'assistant',
         content: '',
-        tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.function.name, arguments: tc.function.arguments } })),
+        tool_calls: typedToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.function.name, arguments: tc.function.arguments } })),
       } as any);
-      for (const tc of toolCalls) {
+      for (const tc of typedToolCalls) {
         const started = Date.now();
         try {
           const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
@@ -398,7 +403,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
         tokens_used: tokensTotal,
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
-        model_used: 'gpt-4',
+        model_used: effectiveModel,
         memory_searches: 0,
         tool_executions: toolDetails.length,
         tool_details: toolDetails,

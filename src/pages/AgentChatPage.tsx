@@ -51,6 +51,12 @@ export function AgentChatPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
+  // Reasoning toggle (persist per agent in localStorage)
+  const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
+    const key = `agent_${agentId}_reasoning_enabled`;
+    const v = localStorage.getItem(key);
+    return v === null ? true : v === 'true';
+  });
   
   // AI State tracking
   const [aiState, setAiState] = useState<AIState | null>(null);
@@ -676,7 +682,10 @@ export function AgentChatPage() {
           role: 'user',
           content: { type: 'text', text: messageText }
         },
-        options: { context: { max_messages: contextSize } }
+        options: { 
+          context: { max_messages: contextSize },
+          reasoning: { enabled: reasoningEnabled, threshold: 0.3 }
+        }
       };
       // Ensure we do not send nulls for optional string fields
       if (!agent?.id) delete requestBody.context.agent_id;
@@ -1359,6 +1368,18 @@ export function AgentChatPage() {
             <div className="flex items-center justify-between mt-2 px-2">
               {/* Left side - Tools */}
               <div className="flex items-center">
+                {/* Reasoning toggle */}
+                <label className="flex items-center gap-2 text-xs mr-3 select-none">
+                  <input
+                    type="checkbox"
+                    checked={reasoningEnabled}
+                    onChange={(e) => {
+                      setReasoningEnabled(e.target.checked);
+                      if (agentId) localStorage.setItem(`agent_${agentId}_reasoning_enabled`, String(e.target.checked));
+                    }}
+                  />
+                  <span className="text-muted-foreground">Reasoning</span>
+                </label>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button

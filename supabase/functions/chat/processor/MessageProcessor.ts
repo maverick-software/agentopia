@@ -86,11 +86,13 @@ export class MessageProcessor {
         get name() { return 'reasoning'; }
         async process(message: any, context: ProcessingContext, metrics: ProcessingMetrics): Promise<any> {
           try {
-            const opts = (context.request_options?.reasoning || { enabled: false }) as ReasoningOptions;
+            // Enable reasoning by default; UI can turn it off via options.reasoning.enabled = false
+            const defaultOpts: ReasoningOptions = { enabled: true, threshold: 0.3 } as any;
+            const opts = ({ ...defaultOpts, ...(context.request_options?.reasoning || {}) }) as ReasoningOptions;
             const contentText = message.content?.type === 'text' ? (message.content.text || '') : '';
             const scoreInfo = ReasoningScorer.score(contentText, (metrics.context_tokens || 0) / 4000);
-            const enabled = !!opts.enabled;
-            const threshold = opts.threshold ?? 0.6;
+            const enabled = opts.enabled !== false; // default on
+            const threshold = opts.threshold ?? 0.3;
             const style: ReasoningStyle = ReasoningSelector.select(contentText, (message.tools || []).map((t: any)=>t.function?.name).filter(Boolean), opts.styles_allowed, opts.style_bias);
             metrics.reasoning = { score: scoreInfo.score, enabled, style, reason: scoreInfo.reason };
             if (enabled && scoreInfo.score >= threshold) {

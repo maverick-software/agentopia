@@ -277,9 +277,35 @@ export class MainProcessingStage extends ProcessingStage {
     // Process with handler
     const result = await handler.handle(message, context);
     
-    // Update metrics
+    // Update metrics (aggregate from handler result)
     metrics.tokens_used += result.metrics.tokens_used;
     metrics.tool_executions += result.metrics.tool_executions;
+    
+    // Carry through model/tokens if provided
+    if (result.metrics.prompt_tokens) {
+      metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (result.metrics.prompt_tokens || 0);
+    }
+    if (result.metrics.completion_tokens) {
+      metrics.completion_tokens = (metrics.completion_tokens || 0) + (result.metrics.completion_tokens || 0);
+    }
+    if (result.metrics.model_used) {
+      metrics.model_used = result.metrics.model_used;
+    }
+
+    // Merge tool details for processing_details modal
+    if (Array.isArray(result.metrics.tool_details) && result.metrics.tool_details.length > 0) {
+      metrics.tool_details = [
+        ...((metrics.tool_details as any[]) || []),
+        ...result.metrics.tool_details,
+      ];
+    }
+    // Propagate discovered tools and whether any were requested
+    if ((result.metrics as any).discovered_tools) {
+      (metrics as any).discovered_tools = (result.metrics as any).discovered_tools;
+    }
+    if ((result.metrics as any).tool_requested !== undefined) {
+      (metrics as any).tool_requested = (result.metrics as any).tool_requested;
+    }
     
     return result.message;
   }
