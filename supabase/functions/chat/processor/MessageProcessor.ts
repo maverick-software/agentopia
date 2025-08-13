@@ -108,19 +108,37 @@ export class MessageProcessor {
                 style,
                 Math.min(6, opts.max_steps ?? 4),
                 async (q) => {
-                  const resp = await this.outerOpenAI.chat.completions.create({
-                    model: 'gpt-4o-mini',
-                    messages: [
+                  // Use router for consistency with per-agent model selection when enabled
+                  let hypothesis = '';
+                  const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+                  if (useRouter && (context as any)?.agent_id) {
+                    const { LLMRouter } = await import('../../shared/llm/router.ts');
+                    const router = new LLMRouter();
+                    const resp = await router.chat((context as any).agent_id, [
                       { role: 'system', content: 'Answer the user’s question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary.' },
                       { role: 'user', content: q },
-                    ],
-                    temperature: 0.1,
-                    max_tokens: 80,
-                  });
-                  const hypothesis = resp.choices?.[0]?.message?.content || '';
-                  metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage?.prompt_tokens || 0);
-                  metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage?.completion_tokens || 0);
-                  metrics.tokens_used = (metrics.tokens_used || 0) + ((resp.usage?.total_tokens) || 0);
+                    ] as any, { temperature: 0.1, maxTokens: 80 });
+                    hypothesis = resp.text || '';
+                    if (resp.usage) {
+                      metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage.prompt || 0);
+                      metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage.completion || 0);
+                      metrics.tokens_used = (metrics.tokens_used || 0) + (resp.usage.total || 0);
+                    }
+                  } else {
+                    const resp = await this.outerOpenAI.chat.completions.create({
+                      model: 'gpt-4o-mini',
+                      messages: [
+                        { role: 'system', content: 'Answer the user’s question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary.' },
+                        { role: 'user', content: q },
+                      ],
+                      temperature: 0.1,
+                      max_tokens: 80,
+                    });
+                    hypothesis = resp.choices?.[0]?.message?.content || '';
+                    metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage?.prompt_tokens || 0);
+                    metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage?.completion_tokens || 0);
+                    metrics.tokens_used = (metrics.tokens_used || 0) + ((resp.usage?.total_tokens) || 0);
+                  }
                   return hypothesis;
                 },
                 async (_h) => ({ needed: false, gap: 0 }), // TODO: tool test hook

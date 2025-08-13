@@ -30,6 +30,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
 import { GenerateAvatarModal } from './GenerateAvatarModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getModelsByProvider } from '@/lib/llm/modelRegistry';
 import { toast } from 'react-hot-toast';
 
 interface AboutMeModalProps {
@@ -92,6 +94,8 @@ export function AboutMeModal({
   const [showImageEditor, setShowImageEditor] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [model, setModel] = useState<string>('gpt-4o-mini');
+  const [modelSaving, setModelSaving] = useState(false);
 
   // Initialize form data when modal opens or agent data changes
   useEffect(() => {
@@ -102,6 +106,17 @@ export function AboutMeModal({
       setAvatarUrl(agentData.avatar_url || null);
       setSaved(false);
       setShowImageEditor(false);
+      // Load agent llm preferences (wrap await in IIFE)
+      (async () => {
+        try {
+          const { data: prefs } = await supabase
+            .from('agent_llm_preferences')
+            .select('provider, model')
+            .eq('agent_id', agentId)
+            .maybeSingle();
+          if (prefs?.model) setModel(prefs.model);
+        } catch (_) {}
+      })();
     }
   }, [isOpen, agentData]);
 
@@ -320,6 +335,40 @@ export function AboutMeModal({
             <p className="text-sm text-muted-foreground text-center">
               Click the avatar to upload or generate an image
             </p>
+
+            {/* Model selection under avatar */}
+            <div className="w-full max-w-sm space-y-2">
+              <Label className="text-sm font-medium">Model</Label>
+              <Select
+                value={model}
+                onValueChange={async (val) => {
+                  setModel(val);
+                  try {
+                    setModelSaving(true);
+                    const { error } = await supabase
+                      .from('agent_llm_preferences')
+                      .upsert({ agent_id: agentId, provider: 'openai', model: val }, { onConflict: 'agent_id' });
+                    if (error) throw error;
+                  } catch (e) {
+                    console.error('Failed to save model preference', e);
+                  } finally {
+                    setModelSaving(false);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getModelsByProvider('openai').map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {modelSaving && <div className="text-xs text-muted-foreground">Saving…</div>}
+            </div>
           </div>
 
           {/* Name Section */}

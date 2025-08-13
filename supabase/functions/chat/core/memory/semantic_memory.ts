@@ -462,12 +462,30 @@ export class SemanticMemoryManager {
       .map(m => m.content.text)
       .join('\n\n');
     
-    // Use LLM to extract structured knowledge
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{
-        role: 'system',
-        content: `Extract factual knowledge from the conversation. Return JSON with:
+    // Use LLM to extract structured knowledge (router if enabled)
+    let extractionText = '';
+    const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+    if (useRouter && (messages[0] as any)?.context?.agent_id) {
+      const { LLMRouter } = await import('../../shared/llm/router.ts');
+      const router = new LLMRouter();
+      const resp = await router.chat((messages[0] as any).context.agent_id, [
+        { role: 'system', content: `Extract factual knowledge from the conversation. Return JSON with:
+{
+  "concepts": [{"concept": "name", "definition": "definition", "confidence": 0.8}],
+  "relationships": [{"source": "concept1", "target": "concept2", "type": "is_a", "strength": 0.7}],
+  "facts": [{"fact": "statement", "confidence": 0.9, "source": "user/assistant"}]
+}
+
+Only include information that is stated as fact, not opinions or questions.` },
+        { role: 'user', content: conversationText },
+      ] as any);
+      extractionText = resp.text || '';
+    } else {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{
+          role: 'system',
+          content: `Extract factual knowledge from the conversation. Return JSON with:
 {
   "concepts": [{"concept": "name", "definition": "definition", "confidence": 0.8}],
   "relationships": [{"source": "concept1", "target": "concept2", "type": "is_a", "strength": 0.7}],
@@ -475,15 +493,17 @@ export class SemanticMemoryManager {
 }
 
 Only include information that is stated as fact, not opinions or questions.`,
-      }, {
-        role: 'user',
-        content: conversationText,
-      }],
-      response_format: { type: 'json_object' },
-    });
+        }, {
+          role: 'user',
+          content: conversationText,
+        }],
+        response_format: { type: 'json_object' },
+      });
+      extractionText = response.choices[0].message.content || '';
+    }
     
     try {
-      const extracted = JSON.parse(response.choices[0].message.content || '{}');
+      const extracted = JSON.parse(extractionText || '{}');
       
       return {
         concepts: extracted.concepts || [],

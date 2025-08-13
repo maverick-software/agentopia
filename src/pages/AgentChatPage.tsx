@@ -12,8 +12,6 @@ import {
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
 import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { getModelsByProvider } from '../lib/llm/modelRegistry';
 import { AboutMeModal } from '../components/modals/AboutMeModal';
 import { HowIThinkModal } from '../components/modals/HowIThinkModal';
 import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
@@ -53,9 +51,6 @@ export function AgentChatPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
-  // LLM Model selection state (per agent; persisted to agent_llm_preferences)
-  const [modelSaving, setModelSaving] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
   
   // AI State tracking
   const [aiState, setAiState] = useState<AIState | null>(null);
@@ -489,16 +484,6 @@ export function AgentChatPage() {
         }
         
         setAgent(data);
-
-        // Load agent LLM preferences to preselect model
-        try {
-          const { data: prefs } = await supabase
-            .from('agent_llm_preferences')
-            .select('provider, model')
-            .eq('agent_id', data.id)
-            .maybeSingle();
-          if (prefs?.model) setSelectedModel(prefs.model);
-        } catch (_) {}
       } catch (err) {
         if (!isMounted.current) return;
         
@@ -878,43 +863,6 @@ export function AgentChatPage() {
                   <User className="h-4 w-4 mr-2 text-blue-500" />
                   Profile
                 </DropdownMenuItem>
-                {/* Inline model selector under Profile */}
-                <div className="px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground mb-1">Model</div>
-                  <Select
-                    value={selectedModel}
-                    onValueChange={async (val) => {
-                      setSelectedModel(val);
-                      if (!agent?.id || !user?.id) return;
-                      try {
-                        setModelSaving(true);
-                        // Upsert agent_llm_preferences
-                        const { error } = await supabase
-                          .from('agent_llm_preferences')
-                          .upsert({ agent_id: agent.id, provider: 'openai', model: val }, { onConflict: 'agent_id' });
-                        if (error) throw error;
-                      } catch (e) {
-                        console.error('Failed to save model preference', e);
-                      } finally {
-                        setModelSaving(false);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full h-8 text-xs">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getModelsByProvider('openai').map((m) => (
-                        <SelectItem key={m.id} value={m.id} className="text-xs">
-                          {m.displayName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {modelSaving && (
-                    <div className="mt-1 text-[10px] text-muted-foreground">Saving…</div>
-                  )}
-                </div>
                 <DropdownMenuItem
                   onClick={() => setShowHowIThinkModal(true)}
                   className="cursor-pointer"
