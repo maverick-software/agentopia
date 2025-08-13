@@ -89,39 +89,40 @@ Content-Type: application/json
 }
 ```
 
-#### Search Messages
+#### Read Emails
 ```json
 {
-  "action": "search",
-  "connectionId": "uuid",
-  "agentId": "uuid (optional)",
+  "action": "read_emails",
+  "agentId": "uuid",
   "params": {
-    "query": "from:user@example.com",
-    "maxResults": 20,
-    "includeBody": false
+    "max_results": 10,
+    "query": "is:unread",
+    "include_body": true
   }
+}
+```
+
+#### Search Emails
+```json
+{
+  "action": "search_emails",
+  "agentId": "uuid",
+  "params": { "query": "from:user@example.com subject:invoice", "max_results": 20 }
+}
+```
+
+#### Email Actions
+```json
+{
+  "action": "email_actions",
+  "agentId": "uuid",
+  "params": { "action": "mark_read", "message_ids": ["msgId1","msgId2"] }
 }
 ```
 
 **Response**:
 ```json
-{
-  "messages": [
-    {
-      "id": "message-id",
-      "threadId": "thread-id",
-      "labelIds": ["INBOX"],
-      "snippet": "Email preview...",
-      "headers": {
-        "From": "sender@example.com",
-        "To": "recipient@example.com",
-        "Subject": "Email subject",
-        "Date": "2024-01-01T12:00:00Z"
-      }
-    }
-  ],
-  "totalResults": 42
-}
+{ "success": true, "total": 2, "messages": [{ "id": "...", "subject": "...", "from": "...", "date": "...", "snippet": "...", "body_preview": "..." }] }
 ```
 
 ---

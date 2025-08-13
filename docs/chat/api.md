@@ -13,6 +13,7 @@ A versioned HTTP interface for the chat Edge Function supporting legacy (V1) and
 - Version detection: `APIVersionRouter.detectVersion(req)` in `index.ts`
 - Validation: `validation/SchemaValidator.ts` (Zod)
 - Adaptation: `adapters/message_adapter.ts`
+ - Auth forwarding: The handler extracts `Authorization: Bearer <JWT>` and injects it into `body.options.auth.token` so downstream tool execution can call provider Edge Functions with user auth.
 
 ### How to interact
 - V1 client: send `{ agentId, message }` → adapter creates V2

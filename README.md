@@ -379,7 +379,7 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   **🆕 `create-secret`**: Securely creates and stores API keys and sensitive data in Supabase Vault with proper CORS handling.
 *   **🆕 `web-search-api`**: Handles web search, page scraping, and content summarization for agent research capabilities.
 *   **🆕 `gmail-oauth`**: Manages Gmail OAuth authentication flow for email integration.
-*   **🆕 `gmail-api`**: Executes Gmail operations like sending emails on behalf of authenticated users.
+*   **🆕 `gmail-api`**: Executes Gmail operations on behalf of authenticated users. Supported actions: `send_email`, `read_emails` (optional body preview), `search_emails`, and `email_actions` (mark_read, mark_unread, archive, unarchive, star, unstar, delete, delete_forever).
 *   **🆕 `sendgrid-api`**: Executes SendGrid operations including email sending, templates, analytics, and agent inbox management.
 *   **🆕 `sendgrid-inbound`**: Processes inbound emails via SendGrid Inbound Parse webhook with smart routing and auto-reply capabilities.
 
@@ -509,7 +509,7 @@ Agentopia implements a sophisticated tool use system that allows agents to perfo
 1. **Tool Definition**: Tools are defined with OpenAI function schemas that specify parameters, descriptions, and required OAuth scopes
 2. **Permission System**: Fine-grained permissions control which agents can use which tools based on user-granted OAuth scopes
 3. **Tool Execution**: When agents request tool use, the system validates permissions, executes the tool, and returns results
-4. **Integration Support**: Currently supports Gmail with extensible architecture for additional providers
+4. **Integration Support**: Gmail (send/read/search/actions) with extensible architecture for additional providers
 
 ### Database Schema for Tool Use
 
@@ -535,10 +535,10 @@ The system uses PostgreSQL functions to manage tool availability:
 1. **User grants OAuth permissions**: User connects their Gmail/other accounts via OAuth flow
 2. **User assigns permissions to agent**: Through the AgentEdit UI, users grant specific OAuth scopes to agents
 3. **Agent receives user message**: When a user asks an agent to perform an action (e.g., "send an email")
-4. **Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()`
+4. **Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()` (normalizes Gmail scope URIs and consults `agent_oauth_permissions`)
 5. **Tools are passed to OpenAI**: Available tools are included in the OpenAI API call as function definitions
 6. **Agent requests tool use**: OpenAI returns tool calls in its response
-7. **System validates and executes**: The system validates permissions and executes the requested tools
+7. **System validates and executes**: The system validates permissions and executes the requested tools. The chat function injects the caller JWT into `options.auth.token`; `FunctionCallingManager` forwards it in the `Authorization` header to provider edge functions (e.g., `gmail-api`).
 8. **Results returned to agent**: Tool execution results are sent back to OpenAI for final response
 
 ### Gmail Integration Example
