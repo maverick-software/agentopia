@@ -287,7 +287,17 @@ export function compose(...middlewares: Array<(req: Request) => Promise<Response
 export const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Version, X-Request-ID',
+  // Include both common Supabase client headers and our custom headers (case-insensitive but some environments are picky)
+  'Access-Control-Allow-Headers': [
+    'authorization',
+    'content-type',
+    'x-client-info',
+    'apikey',
+    'Authorization',
+    'Content-Type',
+    'X-API-Version',
+    'X-Request-ID',
+  ].join(', '),
   'Access-Control-Max-Age': '86400',
 } as const;
 

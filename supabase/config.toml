@@ -46,6 +46,12 @@ entrypoint = "./functions/register-agent-commands/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/register-agent-commands/*.html" ]
 
+[functions.chat]
+enabled = true
+# Allow OPTIONS preflight without JWT verification to satisfy browser CORS
+verify_jwt = false
+entrypoint = "./functions/chat/index.ts"
+
 [functions.update-agent-discord-token]
 enabled = true
 verify_jwt = true

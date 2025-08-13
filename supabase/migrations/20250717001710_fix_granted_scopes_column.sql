@@ -28,10 +28,17 @@ BEGIN
         RETURN FALSE;
     END IF;
     
-    -- Validate each required scope
+    -- Validate each required scope (support short names and full URLs)
     FOREACH v_scope IN ARRAY p_required_scopes
     LOOP
-        IF NOT (v_allowed_scopes ? v_scope) THEN
+        -- Normalize required scope
+        -- Strip common prefix to compare against short names stored in allowed_scopes
+        -- Example: 'https://www.googleapis.com/auth/gmail.send' -> 'gmail.send'
+        IF NOT (
+            v_allowed_scopes ? v_scope OR
+            v_allowed_scopes ? replace(v_scope, 'https://www.googleapis.com/auth/', '') OR
+            v_allowed_scopes ? replace(v_scope, 'https://mail.google.com/', 'mail.google.com')
+        ) THEN
             RETURN FALSE;
         END IF;
     END LOOP;

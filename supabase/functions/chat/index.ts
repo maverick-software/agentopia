@@ -104,8 +104,49 @@ async function handler(req: Request): Promise<Response> {
     const corsResponse = handleCORS(req);
     if (corsResponse) return corsResponse;
     
+    // Validate Authorization for non-preflight requests
+    const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid authorization header' }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          ...CORS_HEADERS,
+        },
+      });
+    }
+    
+    // Verify the JWT token
+    try {
+      const token = authHeader.split(' ')[1];
+      const { data: { user }, error: userError } = await (supabase as any).auth.getUser(token);
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
+        });
+      }
+    } catch (_authErr) {
+      return new Response(JSON.stringify({ error: 'Authentication failed' }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          ...CORS_HEADERS,
+        },
+      });
+    }
+    
     // Parse request body
     const body = await req.json();
+    // Sanitize optional string fields that may arrive as null from legacy clients
+    if (body?.context) {
+      for (const key of ['channel_id','workspace_id','agent_id','user_id','conversation_id','session_id']) {
+        if (body.context[key] === null) delete body.context[key];
+      }
+    }
     
     // Infer API version: prefer explicit, but fall back to body shape
     let apiVersion = APIVersionRouter.detectVersion(req);
@@ -296,6 +337,10 @@ async function handleMetrics(): Promise<Response> {
 async function routeHandler(req: Request): Promise<Response> {
   const url = new URL(req.url);
   
+  // Handle CORS preflight at top-level as well
+  const preflight = handleCORS(req);
+  if (preflight) return preflight;
+  
   // Special endpoints
   if (url.pathname === '/health') {
     return handleHealthCheck();
@@ -324,8 +369,8 @@ async function routeHandler(req: Request): Promise<Response> {
     }
   }
   
-  // API routes
-  if (url.pathname.startsWith('/v2/') || url.pathname === '/chat') {
+  // API routes (treat root path as chat entrypoint)
+  if (url.pathname === '/' || url.pathname === '' || url.pathname.startsWith('/v2/') || url.pathname === '/chat') {
     return handler(req);
   }
   

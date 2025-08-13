@@ -663,14 +663,14 @@ export function AgentChatPage() {
       localStorage.setItem(`agent_${agent.id}_conversation_id`, conversationId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessionId);
 
-      const requestBody = {
+      const requestBody: any = {
         version: '2.0.0',
         context: {
           agent_id: agent.id,
           user_id: user.id,
           conversation_id: conversationId,
           session_id: sessionId,
-          channel_id: null
+          // Omit channel_id if not present; null fails v2 schema (expects string if provided)
         },
         message: {
           role: 'user',
@@ -678,6 +678,11 @@ export function AgentChatPage() {
         },
         options: { context: { max_messages: contextSize } }
       };
+      // Ensure we do not send nulls for optional string fields
+      if (!agent?.id) delete requestBody.context.agent_id;
+      if (!user?.id) delete requestBody.context.user_id;
+      // Only include channel_id if we have a real channel to target
+      // (Agent chat is not scoped to a channel)
 
       // Wait for both the API response and the processing simulation
       const [response] = await Promise.all([

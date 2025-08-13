@@ -513,14 +513,13 @@ export class FunctionCallingManager {
       
       for (const [toolName, tool] of Object.entries(GMAIL_MCP_TOOLS)) {
         const hasRequiredScopes = tool.required_scopes.every(scope => {
-          // Check if the granted scopes include the required scope
-          // Handle both full URLs and short names
-          return grantedScopes.includes(scope) || 
-                 grantedScopes.some((grantedScope: string) => {
-                   // Check if granted scope ends with the required scope
-                   return grantedScope.endsWith(scope) || 
-                          scope.endsWith(grantedScope);
-                 });
+          // Normalize both sides to allow short names (e.g., 'gmail.send') or full URLs
+          const normalize = (s: string) => s.toLowerCase().replace('https://www.googleapis.com/auth/', '').replace('https://mail.google.com/', 'mail.google.com');
+          const req = normalize(scope);
+          return grantedScopes.some((grantedScope: string) => {
+            const g = normalize(grantedScope);
+            return g === req || g.endsWith(req) || req.endsWith(g);
+          });
         });
         
         if (hasRequiredScopes) {
