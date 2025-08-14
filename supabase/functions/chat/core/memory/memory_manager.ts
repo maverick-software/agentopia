@@ -1098,16 +1098,18 @@ class MemoryConsolidator {
     const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
     try {
       if (useRouter) {
-        const { LLMRouter } = await import('../../shared/llm/router.ts');
-        const router = new LLMRouter();
-        // We may not have agent_id here; summaries are generic. Fallback to default agent if provided in config.
-        const agentId = (this.config as any)?.agent_id || '';
-        if (agentId) {
-          const resp = await router.chat(agentId, [
-            { role: 'system', content: 'Summarize the following events into a concise narrative:' },
-            { role: 'user', content: events },
-          ] as any, { maxTokens: 500, temperature: 0.2 });
-          text = resp.text || '';
+        const module = await import(['..','..','shared','llm','router.ts'].join('/'));
+        const LLMRouter = (module as any).LLMRouter;
+        if (LLMRouter) {
+          const router = new LLMRouter();
+          const agentId = (this.config as any)?.agent_id || '';
+          if (agentId) {
+            const resp = await router.chat(agentId, [
+              { role: 'system', content: 'Summarize the following events into a concise narrative:' },
+              { role: 'user', content: events },
+            ] as any, { maxTokens: 500, temperature: 0.2 });
+            text = resp.text || '';
+          }
         }
       }
     } catch (_) {}

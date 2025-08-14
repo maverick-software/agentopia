@@ -89,10 +89,21 @@ export async function getVectorSearchResults(
     let embeddingValues: number[] = [];
     const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
     if (useRouter) {
-      const { LLMRouter } = await import('../shared/llm/router.ts');
-      const router = new LLMRouter();
-      const vectors = await router.embed(agentId, [message]);
-      embeddingValues = vectors[0] || [];
+      try {
+        const routerModulePath = ['..', 'shared', 'llm', 'router.ts'].join('/');
+        const { LLMRouter } = await import(routerModulePath);
+        const router = new LLMRouter();
+        const vectors = await router.embed(agentId, [message]);
+        embeddingValues = vectors[0] || [];
+      } catch (_e) {
+        // Fallback to OpenAI embeddings if router module not present
+        const embedding = await openai.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: message,
+          encoding_format: 'float',
+        });
+        embeddingValues = embedding.data[0].embedding as any;
+      }
     } else {
       const embedding = await openai.embeddings.create({
         model: 'text-embedding-3-small',

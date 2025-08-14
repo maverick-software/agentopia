@@ -276,16 +276,30 @@ Remember: ALWAYS use blank lines between elements for readability!`
     let router: any = null;
     let effectiveModel = 'gpt-4';
     if (useRouter && context.agent_id) {
-      const { LLMRouter } = await import('../../shared/llm/router.ts');
-      router = new LLMRouter();
-      const resolved = await router.resolveAgent(context.agent_id);
-      effectiveModel = resolved?.prefs?.model || effectiveModel;
-      const resp = await router.chat(context.agent_id, msgs as any, { tools: availableTools as any, temperature: 0.7, maxTokens: 1200 });
-      const respToolCalls = (resp.toolCalls || []) as Array<{ id: string; name: string; arguments: string }>;
-      completion = {
-        choices: [{ message: { content: resp.text, tool_calls: respToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
-        usage: resp.usage ? { prompt_tokens: resp.usage.prompt, completion_tokens: resp.usage.completion, total_tokens: resp.usage.total } : undefined,
-      };
+      try {
+        const mod = await import(['..','..','shared','llm','router.ts'].join('/'));
+        const LLMRouter = (mod as any).LLMRouter;
+        router = LLMRouter ? new LLMRouter() : null;
+      } catch (_) {
+        router = null;
+      }
+      if (!router) {
+        // Fallback to OpenAI if router unavailable
+        effectiveModel = 'gpt-4';
+        completion = await this.openai.chat.completions.create({
+          model: 'gpt-4', messages: msgs, temperature: 0.7, max_tokens: 1200,
+          tools: availableTools.map((fn) => ({ type: 'function', function: fn })), tool_choice: 'auto'
+        });
+      } else {
+        const resolved = await router.resolveAgent(context.agent_id).catch(() => null);
+        effectiveModel = resolved?.prefs?.model || effectiveModel;
+        const resp = await router.chat(context.agent_id, msgs as any, { tools: availableTools as any, temperature: 0.7, maxTokens: 1200 });
+        const respToolCalls = (resp.toolCalls || []) as Array<{ id: string; name: string; arguments: string }>;
+        completion = {
+          choices: [{ message: { content: resp.text, tool_calls: respToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
+          usage: resp.usage ? { prompt_tokens: resp.usage.prompt, completion_tokens: resp.usage.completion, total_tokens: resp.usage.total } : undefined,
+        };
+      }
     } else {
       effectiveModel = 'gpt-4';
       completion = await this.openai.chat.completions.create({

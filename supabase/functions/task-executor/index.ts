@@ -427,9 +427,48 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
   }
 
   try {
-    // Here we would actually execute the agent with the given instructions and tools
-    // For now, we'll simulate the execution
-    const output = await simulateAgentExecution(task, triggerData)
+    // Post a v2 user message into chat_messages_v2 and invoke chat to get assistant reply
+    const conversationId = task.conversation_id || crypto.randomUUID()
+    const sessionId = crypto.randomUUID()
+
+    // Insert the scheduled user message (visible in UI)
+    const { error: insertMsgErr } = await supabase
+      .from('chat_messages_v2')
+      .insert({
+        conversation_id: conversationId,
+        session_id: sessionId,
+        channel_id: null,
+        role: 'user',
+        content: { type: 'text', text: task.instructions },
+        sender_user_id: task.user_id,
+        sender_agent_id: null,
+        metadata: { target_agent_id: task.agent_id, source: 'scheduler', task_id: task.id, trigger_type: triggerType },
+        context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId }
+      })
+    if (insertMsgErr) throw insertMsgErr
+
+    // Call chat edge function to produce assistant reply (service role, act-as)
+    const chatUrl = Deno.env.get('SUPABASE_URL') + '/functions/v1/chat'
+    const chatResp = await fetch(chatUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'X-Agentopia-Service': 'task-executor',
+      },
+      body: JSON.stringify({
+        version: '2.0.0',
+        message: { role: 'user', content: { type: 'text', text: task.instructions } },
+        context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId },
+        options: { context: { max_messages: 20 } }
+      })
+    })
+    if (!chatResp.ok) {
+      const errTxt = await chatResp.text()
+      throw new Error(`chat invocation failed: ${chatResp.status} ${errTxt}`)
+    }
+    const chatData = await chatResp.json()
+    const output = typeof chatData?.data?.message?.content?.text === 'string' ? chatData.data.message.content.text : 'Task executed. Reply generated.'
     
     const completedAt = new Date().toISOString()
     const duration = Date.now() - startTime
@@ -443,12 +482,14 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
         duration_ms: duration,
         output: output,
         tool_outputs: [], // Would contain actual tool outputs
+        conversation_id: conversationId,
       })
       .eq('id', execution.id)
 
     return {
       success: true,
       output: output,
+      conversation_id: conversationId,
       execution_id: execution.id,
       duration_ms: duration
     }

@@ -114,7 +114,11 @@ export class MessageProcessor {
                   let hypothesis = '';
                   const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
                   if (useRouter && (context as any)?.agent_id) {
-                    const { LLMRouter } = await import('../../shared/llm/router.ts');
+        let LLMRouter: any = null;
+        try {
+          const mod = await import(['..','..','shared','llm','router.ts'].join('/'));
+          LLMRouter = (mod as any).LLMRouter;
+        } catch (_) {}
                     const router = new LLMRouter();
                     const resp = await router.chat((context as any).agent_id, [
                       { role: 'system', content: 'Answer the user’s question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary.' },

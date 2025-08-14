@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight, BarChart3, Plus } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -27,102 +27,12 @@ import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicat
 import { InlineThinkingIndicator } from '../components/InlineThinkingIndicator';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
-import { useConversations } from '../hooks/useConversations';
-
-function ConversationSelector({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
-  const { items, createConversation } = useConversations(agentId, userId);
-  return (
-    <div className="flex items-center space-x-2">
-      <select
-        className="text-xs bg-accent/50 rounded px-2 py-1 text-foreground"
-        value={selectedConversationId || ''}
-        onChange={(e) => onSelect(e.target.value || null)}
-      >
-        <option value="">All conversations</option>
-        {items.map((c) => (
-          <option key={c.conversation_id} value={c.conversation_id}>
-            {c.title || c.conversation_id.slice(0, 8)}
-          </option>
-        ))}
-      </select>
-      <button
-        className="p-1.5 hover:bg-accent rounded-lg transition-colors"
-        title="New conversation"
-        onClick={async () => {
-          const id = await createConversation(null);
-          onSelect(id);
-        }}
-      >
-        <Plus className="h-4 w-4 text-muted-foreground" />
-      </button>
-    </div>
-  );
-}
-
-function SidebarConversations({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
-  const { items, renameConversation, archiveConversation, createConversation } = useConversations(agentId, userId);
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="px-2 pb-2">
-        <button
-          className="w-full text-xs border border-border rounded-md px-2 py-1 hover:bg-accent"
-          onClick={async () => {
-            const id = await createConversation('New Conversation');
-            onSelect(id);
-          }}
-        >
-          + New conversation
-        </button>
-      </div>
-      {items.map((c) => {
-        const isActive = c.conversation_id === selectedConversationId;
-        return (
-          <div key={c.conversation_id} className={`px-3 py-2 cursor-pointer text-sm flex items-center justify-between ${isActive ? 'bg-accent' : 'hover:bg-accent/50'}`} onClick={() => onSelect(c.conversation_id)}>
-            <div className="flex-1 min-w-0 pr-2">
-              <div className="truncate font-medium">{c.title || c.conversation_id.slice(0, 8)}</div>
-              {c.last_message && (
-                <div className="truncate text-xs text-muted-foreground/80">{c.last_message}</div>
-              )}
-            </div>
-            {c.last_message_at && (
-              <div className="text-[10px] text-muted-foreground/70 ml-2 whitespace-nowrap">
-                {new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
-            <div className="flex items-center space-x-2 opacity-70">
-              <button
-                className="text-[11px] hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const title = prompt('Rename conversation', c.title || '') || undefined;
-                  if (title !== undefined) renameConversation(c.conversation_id, title);
-                }}
-              >
-                Rename
-              </button>
-              <button
-                className="text-[11px] hover:underline text-red-500"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  archiveConversation(c.conversation_id);
-                }}
-              >
-                Archive
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
 export function AgentChatPage() {
   const { user } = useAuth();
   const { agentId } = useParams<{ agentId: string }>();
-  const location = useLocation();
   const navigate = useNavigate();
   const { updateAgent } = useAgents();
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -141,9 +51,6 @@ export function AgentChatPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(() => {
-    return agentId ? localStorage.getItem(`agent_${agentId}_conversation_id`) : null;
-  });
   // Reasoning toggle (persist per agent in localStorage)
   const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
     const key = `agent_${agentId}_reasoning_enabled`;
@@ -210,26 +117,6 @@ export function AgentChatPage() {
   }, []);
 
   // Auto-resize textarea
-  // Sync selected conversation with URL ?conv= param and localStorage
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const conv = params.get('conv');
-    if (conv && conv !== selectedConversationId) {
-      setSelectedConversationId(conv);
-      if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
-    }
-    if (!conv && agentId && !selectedConversationId) {
-      const stored = localStorage.getItem(`agent_${agentId}_conversation_id`);
-      if (stored) setSelectedConversationId(stored);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search, agentId]);
-
-  // Reset messages when switching agent or conversation
-  useEffect(() => {
-    setMessages([]);
-    setIsHistoryLoading(true);
-  }, [agentId, selectedConversationId]);
   const adjustTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -627,23 +514,21 @@ export function AgentChatPage() {
 
       setIsHistoryLoading(true);
       try {
-        // Assistant messages from this agent (v2) optionally scoped to selected conversation
-        let query = supabase
+        // Assistant messages from this agent (v2)
+        const { data: assistantData, error: assistantErr } = await supabase
           .from('chat_messages_v2')
           .select('*')
-          .eq('sender_agent_id', agentId);
-        if (selectedConversationId) query = query.eq('conversation_id', selectedConversationId as string);
-        const { data: assistantData, error: assistantErr } = await query.order('created_at', { ascending: true });
+          .eq('sender_agent_id', agentId)
+          .order('created_at', { ascending: true });
         if (assistantErr) throw assistantErr;
 
         // User messages to this agent (tracked via metadata.target_agent_id)
-        let q2 = supabase
+        const { data: userDataTagged, error: userErr } = await supabase
           .from('chat_messages_v2')
           .select('*')
           .eq('sender_user_id', user.id)
-          .contains('metadata', { target_agent_id: agentId });
-        if (selectedConversationId) q2 = q2.eq('conversation_id', selectedConversationId as string);
-        const { data: userDataTagged, error: userErr } = await q2.order('created_at', { ascending: true });
+          .contains('metadata', { target_agent_id: agentId })
+          .order('created_at', { ascending: true });
         if (userErr) throw userErr;
 
         // Legacy user messages without tag (fallback)
@@ -705,7 +590,7 @@ export function AgentChatPage() {
     };
 
     fetchHistory();
-  }, [agentId, user?.id, selectedConversationId]);
+  }, [agentId, user?.id]);
 
   // Submit Message Handler - Enhanced with AI state tracking
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -738,7 +623,7 @@ export function AgentChatPage() {
       startAIProcessing();
       
       // Save user message to database (v2 schema)
-      const convId = selectedConversationId || localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
+      const convId = localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
       const sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
       localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
@@ -779,7 +664,7 @@ export function AgentChatPage() {
       );
 
       // Provide minimal v2 context with conversation/session IDs
-      const conversationId = selectedConversationId || localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
+      const conversationId = localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
       const sessionId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
       localStorage.setItem(`agent_${agent.id}_conversation_id`, conversationId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessionId);
@@ -934,9 +819,7 @@ export function AgentChatPage() {
   }
 
   return (
-    <div className="flex h-full bg-background overflow-hidden">
-      {/* Main Column */}
-      <div className="flex flex-col flex-1 min-w-0">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Fixed Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
                   <div className="flex items-center space-x-3">
@@ -971,19 +854,7 @@ export function AgentChatPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            {/* Conversation selector */}
-            {agent && (
-              <ConversationSelector
-                agentId={agent.id}
-                userId={user?.id || null}
-                selectedConversationId={selectedConversationId}
-                onSelect={(id) => {
-                  setSelectedConversationId(id);
-                  if (id) localStorage.setItem(`agent_${agent.id}_conversation_id`, id);
-                }}
-              />
-            )}
+          <div className="flex items-center space-x-1">
             <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
               <RefreshCw className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -1364,7 +1235,7 @@ export function AgentChatPage() {
                             })}
                           </span>
                         </div>
-                      <div className={`inline-block p-3 rounded-2xl shadow-sm ${
+                        <div className={`inline-block p-3 rounded-2xl shadow-sm ${
                           message.role === 'user' 
                             ? 'bg-primary text-primary-foreground' 
                             : 'bg-card text-card-foreground'
@@ -1452,12 +1323,7 @@ export function AgentChatPage() {
                             </div>
                           ) : (
                             <div className="text-sm leading-relaxed">
-                              <div className="flex items-center justify-between">
-                                <span>{message.content}</span>
-                                {message?.metadata?.source === 'scheduler' && (
-                                  <span className="ml-2 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">Scheduled</span>
-                                )}
-                              </div>
+                              {message.content}
                             </div>
                           )}
                         </div>
@@ -1707,7 +1573,6 @@ export function AgentChatPage() {
         onClose={() => setShowProcessModal(false)}
         processingDetails={currentProcessingDetails}
       />
-    </div>
     </div>
   );
 }

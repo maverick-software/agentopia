@@ -7,7 +7,7 @@ import {
   GitBranch, FolderKanban,
   Building2,
   User as UserIcon,
-  Server, Key, Zap
+  Server, Key, Zap, Plus, MessageSquarePlus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useConversations } from '../hooks/useConversations';
 
 // Define type for a single navigation item, allowing for children
 interface NavItem {
@@ -273,6 +274,7 @@ interface SidebarProps {
 export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Filter nav items based on admin status - no longer needed for the main list
   // const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
@@ -302,6 +304,40 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </div>
           
           <div className="space-y-2">
+            {/* New Chat (global top link) */}
+            {(() => {
+              const m = location.pathname.match(/^\/agents\/([^/]+)\/chat/);
+              const agentId = m?.[1];
+              if (!agentId || !user) return null;
+              return (
+                <button
+                  onClick={async () => {
+                    if (!agentId || !user) { navigate('/agents'); return; }
+                    // create a one-off client hook usage via dynamic function call is not possible; instead, route to chat and let page create on first message
+                    // Fallback: simple local creation using RPC-like insert
+                    try {
+                      const { supabase } = await import('../lib/supabase');
+                      const id = crypto.randomUUID();
+                      // optimistic local persistence; if RLS blocks, route without
+                      await supabase.from('conversation_sessions').insert({ conversation_id: id, user_id: user.id, agent_id: agentId, title: 'New Conversation', status: 'active' });
+                      // proactively refresh sidebar list by emitting a synthetic change (fetch hook is already subscribed)
+                      try { (await import('../hooks/useConversations')); } catch {}
+                      const convId = id;
+                      localStorage.setItem(`agent_${agentId}_conversation_id`, convId);
+                      navigate(`/agents/${agentId}/chat?conv=${convId}`);
+                    } catch {
+                      navigate(`/agents/${agentId}/chat`);
+                    }
+                  }}
+                  className={`flex items-center space-x-3 rounded-md transition-colors px-4 py-3 w-full text-left text-sidebar-foreground hover:bg-sidebar-accent`}
+                  title="New Chat"
+                >
+                  <MessageSquarePlus className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/chat/new', 'New Chat')}`} />
+                  {!isCollapsed && <span className="font-medium truncate">New Chat</span>}
+                </button>
+              );
+            })()}
+
             {visibleNavItems.map((item) => {
               if (item.isCustom && item.label === 'Agents') {
                 return <AgentsNavRenderer key={item.to} isCollapsed={isCollapsed} />;
@@ -309,6 +345,24 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 return <NavItemRenderer key={item.to} item={item} isCollapsed={isCollapsed} />;
               }
             })}
+
+            {/* Conversations injected under Automations only on agent chat page */}
+            {(() => {
+              const m = location.pathname.match(/^\/agents\/([^/]+)\/chat/);
+              if (!m || !user) return null;
+              const agentId = m[1];
+              return (
+                <ConversationsForAgentSidebar
+                  agentId={agentId}
+                  userId={user.id}
+                  isCollapsed={isCollapsed}
+                  onOpen={(convId) => {
+                    localStorage.setItem(`agent_${agentId}_conversation_id`, convId);
+                    navigate(`/agents/${agentId}/chat?conv=${convId}`);
+                  }}
+                />
+              );
+            })()}
           </div>
         </div>
 
@@ -398,5 +452,29 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         </DropdownMenu>
       )}
     </nav>
+  );
+}
+
+function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: { agentId: string; userId: string; isCollapsed: boolean; onOpen: (id: string) => void }) {
+  const { items, createConversation, renameConversation, archiveConversation } = useConversations(agentId, userId);
+  if (isCollapsed) return null;
+  return (
+    <div className="mt-2">
+      <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">Conversations</div>
+      <div className="space-y-1">
+        {items.map(c => (
+          <div key={c.conversation_id} className="px-4 py-2 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id); }}>
+            <div className="min-w-0 flex-1 pr-2">
+              <div className="truncate text-sm text-sidebar-foreground">{c.title || c.conversation_id.slice(0,8)}</div>
+              {c.last_message && <div className="truncate text-[11px] text-muted-foreground/80">{c.last_message}</div>}
+            </div>
+            <div className="flex items-center space-x-2 opacity-70">
+              <button className="text-[11px] hover:underline" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); const t = prompt('Rename conversation', c.title || '') || undefined; if (t !== undefined) { await renameConversation(c.conversation_id, t); } }}>Rename</button>
+              <button className="text-[11px] hover:underline text-red-500" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); await archiveConversation(c.conversation_id); }}>Archive</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

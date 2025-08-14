@@ -106,6 +106,7 @@ async function handler(req: Request): Promise<Response> {
     
     // Validate Authorization for non-preflight requests
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+    const serviceHeader = req.headers.get('X-Agentopia-Service') || req.headers.get('x-agentopia-service');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Missing or invalid authorization header' }), {
         status: 401,
@@ -116,13 +117,24 @@ async function handler(req: Request): Promise<Response> {
       });
     }
     
-    // Verify the JWT token
+    // Verify the JWT token unless invoked by approved service
     let token: string | undefined;
-    try {
-      token = authHeader.split(' ')[1];
-      const { data: { user }, error: userError } = await (supabase as any).auth.getUser(token);
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
+    const isServiceCall = !!serviceHeader && serviceHeader === 'task-executor';
+    if (!isServiceCall) {
+      try {
+        token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await (supabase as any).auth.getUser(token);
+        if (userError || !user) {
+          return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+            },
+          });
+        }
+      } catch (_authErr) {
+        return new Response(JSON.stringify({ error: 'Authentication failed' }), {
           status: 401,
           headers: {
             'Content-Type': 'application/json',
@@ -130,14 +142,6 @@ async function handler(req: Request): Promise<Response> {
           },
         });
       }
-    } catch (_authErr) {
-      return new Response(JSON.stringify({ error: 'Authentication failed' }), {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          ...CORS_HEADERS,
-        },
-      });
     }
     
     // Parse request body
