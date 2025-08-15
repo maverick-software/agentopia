@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
-import { Cron } from 'https://esm.sh/croner@4'
+import Croner from 'https://esm.sh/croner@4'
 
 // Helper function to calculate next run time using croner
 function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC'): string | null {
   try {
-    const cronJob = new Cron(cronExpression, { timezone });
-    const nextRun = cronJob.nextRun();
+    const cronJob = new Croner(cronExpression, { timezone });
+    const nextRun = (cronJob as any).nextRun ? (cronJob as any).nextRun() : (cronJob as any).next();
     return nextRun ? nextRun.toISOString() : null;
   } catch (error) {
     console.error('Error calculating next run time:', error);
@@ -122,7 +122,8 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    const origin = req.headers.get('Origin') || req.headers.get('origin') || ''
+    return new Response('ok', { headers: corsHeaders(origin) })
   }
 
   try {
@@ -131,33 +132,37 @@ serve(async (req) => {
     const method = req.method
 
     switch (method) {
-      case 'POST':
-        const body = await req.json()
-        
-        if (body.action === 'execute_scheduled_tasks') {
+      case 'POST': {
+        let body: any = null;
+        try { body = await req.json(); } catch { body = null; }
+        // Default to scheduled run if no body/action provided
+        if (!body || !body.action || body.action === 'execute_scheduled_tasks' || body.action === 'scheduled') {
           return await executeScheduledTasks(supabase)
-        } else if (body.action === 'execute_task') {
+        }
+        if (body.action === 'execute_task') {
           return await executeSpecificTask(supabase, body.task_id, body.trigger_type, body.trigger_data)
         } else if (body.action === 'execute_event_task') {
           return await executeEventBasedTask(supabase, body.event_type, body.event_data)
         }
-        
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
         )
-      
+      }
+      case 'GET':
+        // Allow scheduled invocation via GET
+        return await executeScheduledTasks(supabase)
       default:
         return new Response(
           JSON.stringify({ error: 'Method not allowed' }),
-          { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 405, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
         )
     }
   } catch (error) {
     console.error('Error in task-executor function:', error)
     return new Response(
       JSON.stringify({ error: 'Internal server error', details: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders(req.headers.get('origin') || ''), 'Content-Type': 'application/json' } }
     )
   }
 })
@@ -187,7 +192,7 @@ async function executeScheduledTasks(supabase: any) {
     console.error('Error fetching due tasks:', fetchError)
     return new Response(
       JSON.stringify({ error: 'Failed to fetch due tasks', details: fetchError.message }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -248,7 +253,7 @@ async function executeScheduledTasks(supabase: any) {
       results,
       processed_count: results.length
     }),
-    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
   )
 }
 
@@ -256,7 +261,7 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
   if (!taskId) {
     return new Response(
       JSON.stringify({ error: 'Task ID is required' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -278,14 +283,14 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
   if (fetchError || !task) {
     return new Response(
       JSON.stringify({ error: 'Task not found' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 404, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   }
 
   if (task.status !== 'active') {
     return new Response(
       JSON.stringify({ error: 'Task is not active' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -308,15 +313,16 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
         message: 'Task executed successfully',
         execution_id: result.execution_id,
         success: result.success,
-        output: result.output
+        output: result.output,
+        conversation_id: result.conversation_id
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   } catch (error) {
     console.error(`Error executing task ${taskId}:`, error)
     return new Response(
       JSON.stringify({ error: 'Task execution failed', details: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   }
 }
@@ -344,7 +350,7 @@ async function executeEventBasedTask(supabase: any, eventType: string, eventData
     console.error('Error fetching event-based tasks:', fetchError)
     return new Response(
       JSON.stringify({ error: 'Failed to fetch event-based tasks', details: fetchError.message }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -394,7 +400,7 @@ async function executeEventBasedTask(supabase: any, eventType: string, eventData
       results,
       processed_count: results.length
     }),
-    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
   )
 }
 
@@ -428,8 +434,29 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
 
   try {
     // Post a v2 user message into chat_messages_v2 and invoke chat to get assistant reply
-    const conversationId = task.conversation_id || crypto.randomUUID()
+    const conversationId = task.conversation_id || (task.event_trigger_config && task.event_trigger_config.conversation_id) || crypto.randomUUID()
     const sessionId = crypto.randomUUID()
+
+    // Ensure a session row exists so the sidebar can display it immediately (update-or-insert without unique constraint)
+    try {
+      const base = {
+        agent_id: task.agent_id,
+        user_id: task.user_id,
+        title: 'New Conversation',
+        status: 'active' as const,
+        last_active: new Date().toISOString(),
+      };
+      const upd = await (supabase as any)
+        .from('conversation_sessions')
+        .update(base)
+        .eq('conversation_id', conversationId)
+        .select('conversation_id');
+      if (!upd || !Array.isArray(upd.data) || upd.data.length === 0) {
+        await (supabase as any)
+          .from('conversation_sessions')
+          .insert({ conversation_id: conversationId, ...base });
+      }
+    } catch (_e) { /* non-fatal */ }
 
     // Insert the scheduled user message (visible in UI)
     const { error: insertMsgErr } = await supabase
@@ -469,6 +496,26 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
     }
     const chatData = await chatResp.json()
     const output = typeof chatData?.data?.message?.content?.text === 'string' ? chatData.data.message.content.text : 'Task executed. Reply generated.'
+
+    // Touch conversation_sessions to ensure it appears in lists immediately
+    try {
+      const base2 = {
+        agent_id: task.agent_id,
+        user_id: task.user_id,
+        status: 'active' as const,
+        last_active: new Date().toISOString(),
+      };
+      const upd2 = await (supabase as any)
+        .from('conversation_sessions')
+        .update(base2)
+        .eq('conversation_id', conversationId)
+        .select('conversation_id');
+      if (!upd2 || !Array.isArray(upd2.data) || upd2.data.length === 0) {
+        await (supabase as any)
+          .from('conversation_sessions')
+          .insert({ conversation_id: conversationId, ...base2 });
+      }
+    } catch (_e) { /* non-fatal */ }
     
     const completedAt = new Date().toISOString()
     const duration = Date.now() - startTime

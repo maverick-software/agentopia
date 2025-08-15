@@ -77,17 +77,20 @@ export function useConversations(agentId: string | null, userId: string | null) 
   }, [agentId, fetchConversations]);
 
   const createConversation = useCallback(async (title?: string | null) => {
-    // Creating a conversation is implicit: we just return a new UUID and let first message create a session row
     const id = crypto.randomUUID();
-    if (title) {
-      // Best-effort: insert a session row to save title early
-      await supabase.from('conversation_sessions').insert({
+    // Create a placeholder row immediately so the UI can show something,
+    // but mark it generic so the backend will replace it after first user message.
+    const placeholder = title || 'New Conversation';
+    try {
+      await supabase.from('conversation_sessions').upsert({
         conversation_id: id,
         user_id: userId,
         agent_id: agentId,
-        title,
-      });
-    }
+        title: placeholder,
+        status: 'active',
+        last_active: new Date().toISOString(),
+      }, { onConflict: 'conversation_id' });
+    } catch { /* non-fatal */ }
     return id;
   }, [agentId, userId]);
 
@@ -111,6 +114,15 @@ export function useConversations(agentId: string | null, userId: string | null) 
       setItems(prev => prev.filter(i => i.conversation_id !== conversationId));
       // Ensure consistency
       await fetchConversations();
+
+      // If the archived conversation is currently selected for this agent, clear it so the chat view resets
+      try {
+        const key = `agent_${agentId}_conversation_id`;
+        const current = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+        if (current && current === conversationId && typeof localStorage !== 'undefined') {
+          localStorage.removeItem(key);
+        }
+      } catch { /* non-fatal */ }
     } catch (e: any) {
       setError(e?.message || 'Failed to archive conversation');
     }

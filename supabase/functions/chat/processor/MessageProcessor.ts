@@ -244,7 +244,8 @@ export class MessageProcessor {
             context.user_id ?? null,
             context.agent_id || null,
             workingLimit,
-            this.supabase as any
+            this.supabase as any,
+            context.conversation_id ?? null
           );
         }
 

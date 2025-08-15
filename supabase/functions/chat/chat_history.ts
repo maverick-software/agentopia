@@ -11,11 +11,12 @@ import { ChatMessage } from './context_builder.ts';
  * @returns Array of chat messages
  */
 export async function getRelevantChatHistory(
-    channelId: string | null, 
-    userId: string | null, 
-    targetAgentId: string | null, 
+    channelId: string | null,
+    userId: string | null,
+    targetAgentId: string | null,
     limit: number,
-    supabaseClient: SupabaseClient
+    supabaseClient: SupabaseClient,
+    conversationId?: string | null
 ): Promise<ChatMessage[]> {
   if (limit <= 0) return [];
   console.log(`[getRelevantChatHistory] Attempting fetch - channelId: ${channelId}, userId: ${userId}, targetAgentId: ${targetAgentId}, limit: ${limit}`);
@@ -32,6 +33,10 @@ export async function getRelevantChatHistory(
         // Workspace Channel History
         console.log(`[getRelevantChatHistory] Mode: Workspace Channel`);
         v2Query = v2Query.eq('channel_id', channelId);
+    } else if (conversationId) {
+        // Direct Chat History scoped to a specific conversation
+        console.log(`[getRelevantChatHistory] Mode: Direct Chat (conversation-scoped)`);
+        v2Query = v2Query.eq('conversation_id', conversationId);
     } else if (userId && targetAgentId) {
         // Direct Chat History (User <-> Agent)
         console.log(`[getRelevantChatHistory] Mode: Direct Chat`);

@@ -52,6 +52,12 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/chat/index.ts"
 
+[functions.task-executor]
+enabled = true
+# Allow OPTIONS preflight without JWT verification; runtime calls validate auth
+verify_jwt = false
+entrypoint = "./functions/task-executor/index.ts"
+
 [functions.update-agent-discord-token]
 enabled = true
 verify_jwt = true

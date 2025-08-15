@@ -7,7 +7,8 @@ import {
   GitBranch, FolderKanban,
   Building2,
   User as UserIcon,
-  Server, Key, Zap, Plus, MessageSquarePlus
+  Server, Key, Zap, Plus, MessageSquarePlus,
+  MoreVertical, Pencil, Archive, Trash2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -292,9 +293,9 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   return (
     <nav 
-      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-auto transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16 p-2' : 'w-64 p-4'}`}
+      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16 p-2' : 'w-64 p-4'}`}
     >
-      <div className="flex-1 mb-4 flex flex-col">
+      <div className="flex-1 mb-4 flex flex-col min-h-0 overflow-y-auto">
         <div>
           <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
             <Bot size={isCollapsed ? 28 : 24} className="text-icon-agents" />
@@ -357,8 +358,29 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                   userId={user.id}
                   isCollapsed={isCollapsed}
                   onOpen={(convId) => {
-                    localStorage.setItem(`agent_${agentId}_conversation_id`, convId);
-                    navigate(`/agents/${agentId}/chat?conv=${convId}`);
+                    // Validate conversation is active before opening
+                    (async () => {
+                      try {
+                        const { supabase } = await import('../lib/supabase');
+                        const { data: row } = await supabase
+                          .from('conversation_sessions')
+                          .select('status')
+                          .eq('conversation_id', convId)
+                          .eq('agent_id', agentId)
+                          .eq('user_id', user.id)
+                          .maybeSingle();
+                        if (!row || row.status !== 'active') {
+                          // If not active, clear selection and go to new chat screen
+                          try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+                          navigate(`/agents/${agentId}/chat`);
+                          return;
+                        }
+                        localStorage.setItem(`agent_${agentId}_conversation_id`, convId);
+                        navigate(`/agents/${agentId}/chat?conv=${convId}`);
+                      } catch {
+                        navigate(`/agents/${agentId}/chat`);
+                      }
+                    })();
                   }}
                 />
               );
@@ -381,7 +403,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
-              className={`flex items-center w-full rounded-md hover:bg-sidebar-accent transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
+              className={`flex items-center w-full rounded-md hover:bg-sidebar-accent transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'} sticky bottom-2`}
               title="Account options"
             >
               <Avatar className={`flex-shrink-0 w-8 h-8 ${!isCollapsed ? 'mr-3' : ''}`}> 
@@ -457,23 +479,58 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
 function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: { agentId: string; userId: string; isCollapsed: boolean; onOpen: (id: string) => void }) {
   const { items, createConversation, renameConversation, archiveConversation } = useConversations(agentId, userId);
+  const navigate = useNavigate();
   if (isCollapsed) return null;
   return (
     <div className="mt-2">
       <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">Conversations</div>
       <div className="space-y-1">
-        {items.map(c => (
-          <div key={c.conversation_id} className="px-4 py-2 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id); }}>
-            <div className="min-w-0 flex-1 pr-2">
-              <div className="truncate text-sm text-sidebar-foreground">{c.title || c.conversation_id.slice(0,8)}</div>
-              {c.last_message && <div className="truncate text-[11px] text-muted-foreground/80">{c.last_message}</div>}
+        {items.map(c => {
+          const displayTitle = c.title || (c.last_message ? 'Conversation' : 'New conversation');
+          return (
+            <div key={c.conversation_id} className="px-4 py-2 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id); }}>
+              <div className="min-w-0 flex-1 pr-2">
+                <div className="truncate text-sm text-sidebar-foreground">{displayTitle}</div>
+                {c.last_message && <div className="truncate text-[11px] text-muted-foreground/80">{c.last_message}</div>}
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-1.5 hover:bg-sidebar-accent rounded text-sidebar-foreground" onClick={(e) => { e.stopPropagation(); }}>
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 bg-popover text-popover-foreground border-border">
+                  <DropdownMenuItem className="cursor-pointer" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); const t = prompt('Rename conversation', c.title || '') || undefined; if (t !== undefined) { await renameConversation(c.conversation_id, t); } }}>
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onClick={async (e) => { 
+                    e.preventDefault(); 
+                    e.stopPropagation(); 
+                    await archiveConversation(c.conversation_id); 
+                    try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+                    navigate(`/agents/${agentId}/chat`);
+                  }}>
+                    <Archive className="w-4 h-4 mr-2" />
+                    Archive
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer focus:bg-red-900/50 focus:text-red-300" onClick={async (e) => { 
+                    e.preventDefault(); 
+                    e.stopPropagation(); 
+                    if (confirm('Delete this conversation? This will archive it.')) { 
+                      await archiveConversation(c.conversation_id); 
+                      try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+                      navigate(`/agents/${agentId}/chat`);
+                    } 
+                  }}>
+                    <Trash2 className="w-4 h-4 mr-2 text-red-500" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <div className="flex items-center space-x-2 opacity-70">
-              <button className="text-[11px] hover:underline" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); const t = prompt('Rename conversation', c.title || '') || undefined; if (t !== undefined) { await renameConversation(c.conversation_id, t); } }}>Rename</button>
-              <button className="text-[11px] hover:underline text-red-500" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); await archiveConversation(c.conversation_id); }}>Archive</button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

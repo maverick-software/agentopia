@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, RefreshCw, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, Target, ChevronRight, BarChart3, Plus } from 'lucide-react';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, ChevronDown, BarChart3, Plus, Paperclip, Clock, Pencil, Archive, Share2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -212,15 +212,38 @@ export function AgentChatPage() {
   // Auto-resize textarea
   // Sync selected conversation with URL ?conv= param and localStorage
   useEffect(() => {
+    // Listen for task modal activating a conversation
+    const handler = (e: any) => {
+      const detail = e?.detail;
+      if (!detail) return;
+      if (detail.agentId === agentId && detail.conversationId) {
+        setSelectedConversationId(detail.conversationId);
+        try { localStorage.setItem(`agent_${agentId}_conversation_id`, detail.conversationId); } catch {}
+        // Force a quick refresh of history
+        setMessages([]);
+        // Ensure sidebar list refreshes by touching last_active
+        try {
+          supabase.from('conversation_sessions')
+            .upsert({ conversation_id: detail.conversationId, agent_id: agentId, user_id: user?.id || null, last_active: new Date().toISOString(), status: 'active' });
+        } catch {}
+      }
+    };
+    window.addEventListener('agentopia:conversation:activated', handler as EventListener);
+    return () => window.removeEventListener('agentopia:conversation:activated', handler as EventListener);
+  }, [agentId]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const conv = params.get('conv');
     if (conv && conv !== selectedConversationId) {
       setSelectedConversationId(conv);
       if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
+      return;
     }
-    if (!conv && agentId && !selectedConversationId) {
-      const stored = localStorage.getItem(`agent_${agentId}_conversation_id`);
-      if (stored) setSelectedConversationId(stored);
+    // UX: opening an agent always lands on a fresh new chat until first send
+    if (!conv && agentId) {
+      try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+      setSelectedConversationId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, agentId]);
@@ -238,6 +261,46 @@ export function AgentChatPage() {
       textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
     }
   }, []);
+
+  // Conversation actions: rename, archive, share
+  const handleRenameConversation = useCallback(async () => {
+    if (!selectedConversationId || !agentId || !user?.id) return;
+    const currentTitle = '';
+    const next = prompt('Rename conversation', currentTitle);
+    if (next === null) return;
+    const title = next.trim();
+    try {
+      await supabase
+        .from('conversation_sessions')
+        .upsert({ conversation_id: selectedConversationId, agent_id: agentId, user_id: user.id, title }, { onConflict: 'conversation_id' });
+    } catch {}
+  }, [selectedConversationId, agentId, user?.id]);
+
+  const handleArchiveConversation = useCallback(async () => {
+    if (!selectedConversationId || !agentId) return;
+    try {
+      await supabase
+        .from('conversation_sessions')
+        .update({ status: 'abandoned', ended_at: new Date().toISOString() })
+        .eq('conversation_id', selectedConversationId)
+        .eq('agent_id', agentId);
+    } catch {}
+    setSelectedConversationId(null);
+    try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+    navigate(`/agents/${agentId}/chat`, { replace: true });
+    setMessages([]);
+  }, [selectedConversationId, agentId, navigate]);
+
+  const handleShareConversation = useCallback(async () => {
+    if (!agentId || !selectedConversationId) return;
+    const link = `${window.location.origin}/agents/${agentId}/chat?conv=${selectedConversationId}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      alert('Shareable link copied to clipboard');
+    } catch {
+      prompt('Copy link to share:', link);
+    }
+  }, [agentId, selectedConversationId]);
 
   useEffect(() => {
     adjustTextareaHeight();
@@ -620,92 +683,76 @@ export function AgentChatPage() {
     fetchAgent();
   }, [agentId, user]);
 
-  // Fetch chat history (scoped to this agent)
-  useEffect(() => {
-    const fetchHistory = async () => {
-      if (!agentId || !user?.id) return;
+	// Fetch chat history (strictly scoped to selected conversation)
+	useEffect(() => {
+		const fetchHistory = async () => {
+			if (!agentId || !user?.id) return;
+			setIsHistoryLoading(true);
+			try {
+				// If no conversation is selected, show a clean slate
+				if (!selectedConversationId) {
+					setMessages([]);
+					return;
+				}
 
-      setIsHistoryLoading(true);
-      try {
-        // Assistant messages from this agent (v2) optionally scoped to selected conversation
-        let query = supabase
-          .from('chat_messages_v2')
-          .select('*')
-          .eq('sender_agent_id', agentId);
-        if (selectedConversationId) query = query.eq('conversation_id', selectedConversationId as string);
-        const { data: assistantData, error: assistantErr } = await query.order('created_at', { ascending: true });
-        if (assistantErr) throw assistantErr;
+				// Validate conversation is active; if archived or missing, clear selection and redirect
+				try {
+					const { data: sessionRow } = await supabase
+						.from('conversation_sessions')
+						.select('status')
+						.eq('conversation_id', selectedConversationId)
+						.eq('agent_id', agentId)
+						.eq('user_id', user.id)
+						.maybeSingle();
+					if (!sessionRow || sessionRow.status !== 'active') {
+						setSelectedConversationId(null);
+						try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+						// Remove conv param from URL to show new conversation screen
+						navigate(`/agents/${agentId}/chat`, { replace: true });
+						setMessages([]);
+						return;
+					}
+				} catch { /* non-fatal; proceed */ }
 
-        // User messages to this agent (tracked via metadata.target_agent_id)
-        let q2 = supabase
-          .from('chat_messages_v2')
-          .select('*')
-          .eq('sender_user_id', user.id)
-          .contains('metadata', { target_agent_id: agentId });
-        if (selectedConversationId) q2 = q2.eq('conversation_id', selectedConversationId as string);
-        const { data: userDataTagged, error: userErr } = await q2.order('created_at', { ascending: true });
-        if (userErr) throw userErr;
+				const { data: assistantData, error: assistantErr } = await supabase
+					.from('chat_messages_v2')
+					.select('*')
+					.eq('sender_agent_id', agentId)
+					.eq('conversation_id', selectedConversationId as string)
+					.order('created_at', { ascending: true });
+				if (assistantErr) throw assistantErr;
 
-        // Legacy user messages without tag (fallback)
-        const { data: userDataAll, error: userAllErr } = await supabase
-          .from('chat_messages_v2')
-          .select('*')
-          .eq('sender_user_id', user.id)
-          .order('created_at', { ascending: true })
-          .limit(500);
-        if (userAllErr) throw userAllErr;
+				const { data: userData, error: userErr } = await supabase
+					.from('chat_messages_v2')
+					.select('*')
+					.eq('sender_user_id', user.id)
+					.eq('conversation_id', selectedConversationId as string)
+					.order('created_at', { ascending: true });
+				if (userErr) throw userErr;
 
-        // Heuristic: include untagged user messages that are within 15 minutes of any assistant message from this agent
-        const assistantTimes = new Set((assistantData || []).map((a: any) => new Date(a.created_at).getTime()));
-        const assistantArr = (assistantData || []).map((a: any) => new Date(a.created_at).getTime());
-        const fifteenMin = 15 * 60 * 1000;
-        const userUntagged = (userDataAll || []).filter((u: any) => {
-          const tagged = u?.metadata && u.metadata.target_agent_id === agentId;
-          if (tagged) return false; // already handled in tagged set
-          const t = new Date(u.created_at).getTime();
-          return assistantArr.some(at => Math.abs(at - t) <= fifteenMin);
-        });
+				const rows = [...(assistantData || []), ...(userData || [])].sort(
+					(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+				);
 
-        const rows = [...(assistantData || []), ...(userDataTagged || []), ...userUntagged].sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
+				const formatted: Message[] = rows.map((msg: any) => ({
+					role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
+					content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
+					timestamp: new Date(msg.created_at),
+					agentId: msg.sender_agent_id,
+					userId: msg.sender_agent_id ? user.id : msg.sender_user_id,
+				}));
 
-        const formatted: Message[] = rows.map((msg: any) => ({
-          role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
-          content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
-          timestamp: new Date(msg.created_at),
-          agentId: msg.sender_agent_id,
-          userId: msg.sender_agent_id ? user.id : msg.sender_user_id,
-        }));
+				setMessages(formatted);
+			} catch (err) {
+				console.error('Failed to fetch chat history:', err);
+				setError('Could not load chat history.');
+			} finally {
+				setIsHistoryLoading(false);
+			}
+		};
 
-        setMessages(prevMessages => {
-          const merged = [...formatted];
-          // Preserve assistant messages with Thoughts UI details
-          const thoughts = prevMessages.filter(m => m.role === 'assistant' && m.aiProcessDetails);
-          thoughts.forEach(th => {
-            const idx = merged.findIndex(m => m.role === 'assistant' && m.content === th.content && Math.abs(m.timestamp.getTime() - th.timestamp.getTime()) < 60000);
-            if (idx !== -1) merged[idx] = th; else merged.push(th);
-          });
-
-          // Preserve any recent user messages already in UI that may not yet be tagged in DB
-          const recentUserMsgs = prevMessages.filter(m => m.role === 'user' && m.userId === user.id);
-          recentUserMsgs.forEach(um => {
-            const exists = merged.find(m => m.role === 'user' && m.content === um.content && Math.abs(m.timestamp.getTime() - um.timestamp.getTime()) < 60000);
-            if (!exists) merged.push(um);
-          });
-
-          return merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        });
-      } catch (err) {
-        console.error('Failed to fetch chat history:', err);
-        setError('Could not load chat history.');
-      } finally {
-        setIsHistoryLoading(false);
-      }
-    };
-
-    fetchHistory();
-  }, [agentId, user?.id, selectedConversationId]);
+		fetchHistory();
+	}, [agentId, user?.id, selectedConversationId]);
 
   // Submit Message Handler - Enhanced with AI state tracking
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -738,8 +785,13 @@ export function AgentChatPage() {
       startAIProcessing();
       
       // Save user message to database (v2 schema)
-      const convId = selectedConversationId || localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
-      const sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+      const convId = selectedConversationId || crypto.randomUUID();
+      if (!selectedConversationId) {
+        setSelectedConversationId(convId);
+        // Reflect in URL for consistency
+        navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
+      }
+      const sessId = crypto.randomUUID();
       localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
 
@@ -758,6 +810,38 @@ export function AgentChatPage() {
         });
 
       if (saveError) throw saveError;
+
+      // Frontend fallback: ensure a session row exists with a reasonable title so the sidebar updates immediately
+      try {
+        const fallbackTitle = (() => {
+          const words = messageText.trim().split(/\s+/).slice(0, 6);
+          const titleCase = words
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+          return titleCase || 'New Conversation';
+        })();
+
+        // Check existing title first to avoid overwriting a good one
+        const { data: existing } = await supabase
+          .from('conversation_sessions')
+          .select('conversation_id, title')
+          .eq('conversation_id', convId)
+          .maybeSingle();
+
+        const needsTitle = !existing || !existing.title || existing.title.toLowerCase() === 'new conversation';
+        if (needsTitle) {
+          await supabase
+            .from('conversation_sessions')
+            .upsert({
+              conversation_id: convId,
+              agent_id: agent.id,
+              user_id: user.id,
+              title: fallbackTitle,
+              status: 'active',
+              last_active: new Date().toISOString(),
+            }, { onConflict: 'conversation_id' });
+        }
+      } catch { /* non-fatal */ }
 
       // Run AI processing simulation in parallel with actual request
       const processingPromise = simulateAIProcessing();
@@ -779,8 +863,13 @@ export function AgentChatPage() {
       );
 
       // Provide minimal v2 context with conversation/session IDs
-      const conversationId = selectedConversationId || localStorage.getItem(`agent_${agent.id}_conversation_id`) || crypto.randomUUID();
-      const sessionId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+      // Use the explicitly selected conversation and a unique session per conversation
+      const conversationId = selectedConversationId || crypto.randomUUID();
+      if (!selectedConversationId) {
+        setSelectedConversationId(conversationId);
+        navigate(`/agents/${agentId}/chat?conv=${conversationId}`, { replace: true });
+      }
+      const sessionId = crypto.randomUUID();
       localStorage.setItem(`agent_${agent.id}_conversation_id`, conversationId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessionId);
 
@@ -939,112 +1028,97 @@ export function AgentChatPage() {
       <div className="flex flex-col flex-1 min-w-0">
       {/* Fixed Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
-                  <div className="flex items-center space-x-3">
-            <button
-              onClick={() => navigate('/agents')}
-              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-            </button>
-            <div className="flex items-center space-x-3">
-              {agent?.avatar_url ? (
-                <img 
-                  src={agent.avatar_url} 
-                  alt={agent.name || 'Agent'}
-                  className="w-6 h-6 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-medium">
-                    {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                  </span>
-                </div>
-              )}
-              <div>
-                <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
-                <DiscreetAIStatusIndicator 
-                  aiState={aiState}
-                  currentTool={currentTool}
-                  agentName={agent?.name || 'Agent'}
-                  isExecuting={aiState === 'executing_tool'}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            {/* Conversation selector */}
-            {agent && (
-              <ConversationSelector
-                agentId={agent.id}
-                userId={user?.id || null}
-                selectedConversationId={selectedConversationId}
-                onSelect={(id) => {
-                  setSelectedConversationId(id);
-                  if (id) localStorage.setItem(`agent_${agent.id}_conversation_id`, id);
-                }}
-              />
-            )}
-            <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
-              <RefreshCw className="h-4 w-4 text-muted-foreground" />
-            </button>
+	          <div className="flex items-center space-x-3">
+	            <button
+	              onClick={() => navigate('/agents')}
+	              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
+	            >
+	              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+	            </button>
+	            <div className="flex items-center space-x-3">
+	              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="group flex items-center space-x-3 rounded-md focus:outline-none hover:bg-accent/50 p-1 cursor-pointer">
+	                    {agent?.avatar_url ? (
+	                      <img 
+	                        src={agent.avatar_url} 
+	                        alt={agent.name || 'Agent'}
+	                        className="w-6 h-6 rounded-full object-cover"
+	                      />
+	                    ) : (
+	                      <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+	                        <span className="text-white text-xs font-medium">
+	                          {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+	                        </span>
+	                      </div>
+	                    )}
+                    <div className="flex items-center">
+                      <div className="text-left">
+                        <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
+                        <DiscreetAIStatusIndicator 
+                          aiState={aiState}
+                          currentTool={currentTool}
+                          agentName={agent?.name || 'Agent'}
+                          isExecuting={aiState === 'executing_tool'}
+                        />
+                      </div>
+                      <ChevronDown className="ml-2 w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
+                    </div>
+	                  </button>
+	                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+	                  <DropdownMenuItem onClick={() => setShowAboutMeModal(true)} className="cursor-pointer">
+	                    <User className="h-4 w-4 mr-2 text-blue-500" />
+	                    Personality
+	                  </DropdownMenuItem>
+	                  <DropdownMenuItem onClick={() => setShowHowIThinkModal(true)} className="cursor-pointer">
+	                    <Brain className="h-4 w-4 mr-2 text-purple-500" />
+	                    Behavior
+	                  </DropdownMenuItem>
+	                  <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
+	                    <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
+	                    Memory
+	                  </DropdownMenuItem>
+	                  <DropdownMenuSeparator />
+	                  <DropdownMenuItem onClick={() => setShowTeamAssignmentModal(true)} className="cursor-pointer">
+	                    <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
+	                    Add to Team
+	                  </DropdownMenuItem>
+	                </DropdownMenuContent>
+	              </DropdownMenu>
+	            </div>
+	          </div>
+	          <div className="flex items-center space-x-2">
+	            {/* Schedule action moved here as a red icon + label button */}
+	            <button
+	              type="button"
+	              onClick={() => setShowTasksModal(true)}
+	              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-accent transition-colors"
+	              title="Schedule"
+	            >
+	              <Clock className="h-4 w-4 text-red-500" />
+	              <span className="text-sm text-red-500">Schedule</span>
+	            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
                   <MoreVertical className="h-4 w-4 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={() => setShowAboutMeModal(true)}
-                  className="cursor-pointer"
-                >
-                  <User className="h-4 w-4 mr-2 text-blue-500" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setShowHowIThinkModal(true)}
-                  className="cursor-pointer"
-                >
-                  <Brain className="h-4 w-4 mr-2 text-purple-500" />
-                  Behavior  
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setShowWhatIKnowModal(true)}
-                  className="cursor-pointer"
-                >
-                  <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
-                  Knowledge
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setShowToolsModal(true)}
-                  className="cursor-pointer"
-                >
-                  <Wrench className="h-4 w-4 mr-2 text-cyan-500" />
-                  Tools
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setShowChannelsModal(true)}
-                  className="cursor-pointer"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2 text-green-500" />
-                  Channels
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setShowTasksModal(true)}
-                  className="cursor-pointer"
-                >
-                  <Target className="h-4 w-4 mr-2 text-red-500" />
-                  Schedule
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setShowTeamAssignmentModal(true)}
-                  className="cursor-pointer"
-                >
-                  <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
-                  Add to Team
-                </DropdownMenuItem>
-              </DropdownMenuContent>
+	              <DropdownMenuContent align="end" className="w-44">
+	                <DropdownMenuItem onClick={handleRenameConversation} className="cursor-pointer">
+	                  <Pencil className="h-4 w-4 mr-2" />
+	                  Rename
+	                </DropdownMenuItem>
+	                <DropdownMenuItem onClick={handleArchiveConversation} className="cursor-pointer">
+	                  <Archive className="h-4 w-4 mr-2" />
+	                  Archive
+	                </DropdownMenuItem>
+	                <DropdownMenuItem onClick={handleShareConversation} className="cursor-pointer">
+	                  <Share2 className="h-4 w-4 mr-2" />
+	                  Share link
+	                </DropdownMenuItem>
+	              </DropdownMenuContent>
             </DropdownMenu>
           </div>
       </div>
@@ -1501,40 +1575,65 @@ export function AgentChatPage() {
             {/* Bottom controls - Outside the text area like Claude */}
             <div className="flex items-center justify-between mt-2 px-2">
               {/* Left side - Tools */}
-              <div className="flex items-center">
-                {/* Reasoning toggle */}
-                <label className="flex items-center gap-2 text-xs mr-3 select-none">
-                  <input
-                    type="checkbox"
-                    checked={reasoningEnabled}
-                    onChange={(e) => {
-                      setReasoningEnabled(e.target.checked);
-                      if (agentId) localStorage.setItem(`agent_${agentId}_reasoning_enabled`, String(e.target.checked));
-                    }}
-                  />
-                  <span className="text-muted-foreground">Reasoning</span>
-                </label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                      disabled={sending || !agent}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                    </button>
-                  </DropdownMenuTrigger>
+	              <div className="flex items-center">
+	                {/* Reasoning toggle (icon button) */}
+	                <button
+	                  type="button"
+	                  title="Reasoning"
+	                  aria-pressed={reasoningEnabled}
+	                  onClick={() => {
+	                    const next = !reasoningEnabled;
+	                    setReasoningEnabled(next);
+	                    if (agentId) localStorage.setItem(`agent_${agentId}_reasoning_enabled`, String(next));
+	                  }}
+	                  className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent`}
+	                >
+	                  <Brain className={`w-4 h-4 ${reasoningEnabled ? 'text-purple-500' : 'text-muted-foreground'}`} />
+	                </button>
+	                {/* New actions dropdown under input */}
+	                <DropdownMenu>
+	                  <DropdownMenuTrigger asChild>
+	                    <button
+	                      type="button"
+	                      title="Actions"
+	                      className="p-2 rounded-lg hover:bg-accent transition-colors"
+	                      disabled={sending || !agent}
+	                    >
+	                      <Wrench className="w-4 h-4 text-cyan-500" />
+	                    </button>
+	                  </DropdownMenuTrigger>
+	                  <DropdownMenuContent align="start" className="w-44">
+	                    <DropdownMenuItem onClick={() => setShowToolsModal(true)} className="cursor-pointer">
+	                      <Wrench className="w-4 h-4 mr-2 text-cyan-500" />
+	                      Tools
+	                    </DropdownMenuItem>
+	                    <DropdownMenuItem onClick={() => setShowChannelsModal(true)} className="cursor-pointer">
+	                      <MessageSquare className="w-4 h-4 mr-2 text-green-500" />
+	                      Channels
+	                    </DropdownMenuItem>
+	                    <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
+	                      <BookOpen className="w-4 h-4 mr-2 text-orange-500" />
+	                      Sources
+	                    </DropdownMenuItem>
+	                  </DropdownMenuContent>
+	                </DropdownMenu>
+	                <DropdownMenu>
+	                  <DropdownMenuTrigger asChild>
+	                    <button
+	                      type="button"
+	                      className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent transition-colors"
+	                      disabled={sending || !agent}
+	                    >
+	                      <Paperclip className="w-4 h-4 text-emerald-500" />
+	                    </button>
+	                  </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-48">
-                    <DropdownMenuItem className="cursor-pointer">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                      </svg>
-                      Attach file
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+	                    <DropdownMenuItem className="cursor-pointer">
+	                      <Paperclip className="w-4 h-4 mr-2 text-emerald-500" />
+	                      Attach file
+	                    </DropdownMenuItem>
+	                    <DropdownMenuItem className="cursor-pointer">
+	                      <svg className="w-4 h-4 mr-2 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       Upload image

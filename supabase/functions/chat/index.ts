@@ -88,6 +88,70 @@ const messageProcessor = new MessageProcessor(
 // Initialize API components
 const validator = new SchemaValidator();
 
+// Utility: Generate a short conversation title from initial user text
+async function generateConversationTitleFromText(text: string): Promise<string> {
+  try {
+    const prompt = `Create a concise 3-6 word title for a chat based on the user's first message. 
+Rules: Title Case, no quotes, no trailing punctuation.
+User message: "${text.slice(0, 500)}"`;
+    const resp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You generate short, informative chat titles.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 24,
+    });
+    const out = (resp.choices?.[0]?.message?.content || '').trim();
+    // Basic sanitation fallback
+    return out.replace(/^"|"$/g, '').replace(/[.!?\s]+$/g, '').slice(0, 80) ||
+      text.trim().split(/\s+/).slice(0, 6).join(' ').replace(/(^.|\s+.)/g, s => s.toUpperCase());
+  } catch (_e) {
+    // Fallback to truncated text if OpenAI fails
+    const base = text.trim().split(/\s+/).slice(0, 6).join(' ');
+    // Title Case simple fallback
+    const titled = base.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    return titled || 'New Conversation';
+  }
+}
+
+// Ensure a conversation_sessions row exists and has a title
+async function ensureConversationSession(convId: string, agentId: string, userId: string, firstUserText?: string) {
+  try {
+    const { data: existing } = await supabase
+      .from('conversation_sessions')
+      .select('conversation_id, title')
+      .eq('conversation_id', convId)
+      .maybeSingle();
+    // Update rules:
+    // - If no row: insert with AI title
+    // - If title is empty or a generic placeholder ('New Conversation', 'Conversation', 'Untitled'): replace with AI title
+    const isGeneric = (t?: string | null) => {
+      if (!t) return true;
+      const s = t.trim().toLowerCase();
+      return s === 'new conversation' || s === 'conversation' || s === 'untitled' || s.length < 3;
+    };
+
+    if (!existing || isGeneric(existing.title)) {
+      const title = firstUserText ? await generateConversationTitleFromText(firstUserText) : 'New Conversation';
+      await supabase
+        .from('conversation_sessions')
+        .upsert({
+          conversation_id: convId,
+          agent_id: agentId,
+          user_id: userId,
+          title,
+          status: 'active',
+          last_active: new Date().toISOString(),
+        }, { onConflict: 'conversation_id' });
+    }
+  } catch (err) {
+    // Non-fatal; proceed without title
+    logger.warn('ensureConversationSession failed', err as any);
+  }
+}
+
 // Feature flags are configured via environment variables
 // Advanced JSON chat system is controlled by getFeatureFlags()
 
@@ -195,6 +259,16 @@ async function handler(req: Request): Promise<Response> {
       
       // Process regular request
       log.info('Processing standard request');
+      // Ensure conversation record + AI title (only for first user message flows)
+      try {
+        const convId = body?.context?.conversation_id;
+        const agentId = body?.context?.agent_id || body?.message?.context?.agent_id;
+        const userId = body?.context?.user_id || body?.message?.context?.user_id;
+        const userText = (body?.message?.content?.text ?? '') as string;
+        if (convId && agentId && userId && userText) {
+          await ensureConversationSession(convId, agentId, userId, userText);
+        }
+      } catch (_e) {}
       const response = await messageProcessor.process(body, {
         validate: true,
         timeout: 30000,
