@@ -830,16 +830,24 @@ export function AgentChatPage() {
 
         const needsTitle = !existing || !existing.title || existing.title.toLowerCase() === 'new conversation';
         if (needsTitle) {
-          await supabase
+          // Avoid ON CONFLICT since conversation_id is not unique-indexed
+          const base: any = {
+            agent_id: agent.id,
+            user_id: user.id,
+            title: fallbackTitle,
+            status: 'active',
+            last_active: new Date().toISOString(),
+          };
+          const upd = await supabase
             .from('conversation_sessions')
-            .upsert({
-              conversation_id: convId,
-              agent_id: agent.id,
-              user_id: user.id,
-              title: fallbackTitle,
-              status: 'active',
-              last_active: new Date().toISOString(),
-            }, { onConflict: 'conversation_id' });
+            .update(base)
+            .eq('conversation_id', convId)
+            .select('conversation_id');
+          if (!upd || !upd.data || upd.data.length === 0) {
+            await supabase
+              .from('conversation_sessions')
+              .insert({ conversation_id: convId, ...base });
+          }
         }
       } catch { /* non-fatal */ }
 
@@ -862,14 +870,15 @@ export function AgentChatPage() {
         localStorage.getItem(`agent_${agent.id}_context_size`) || '25'
       );
 
-      // Provide minimal v2 context with conversation/session IDs
-      // Use the explicitly selected conversation and a unique session per conversation
-      const conversationId = selectedConversationId || crypto.randomUUID();
+      // Provide minimal v2 context with the SAME IDs used for the DB insert above
+      // Avoid generating a second conversation/session ID in the same submit handler
+      const conversationId = convId;
+      const sessionId = sessId;
+      // Ensure URL reflects the new conversation exactly once
       if (!selectedConversationId) {
         setSelectedConversationId(conversationId);
         navigate(`/agents/${agentId}/chat?conv=${conversationId}`, { replace: true });
       }
-      const sessionId = crypto.randomUUID();
       localStorage.setItem(`agent_${agent.id}_conversation_id`, conversationId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessionId);
 
@@ -1565,7 +1574,7 @@ export function AgentChatPage() {
                   onKeyDown={handleKeyDown}
                   placeholder={`Message ${agent?.name || 'Agent'}...`}
                   className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-normal disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
-                  disabled={sending || !agent}
+                  disabled={!agent}
                   rows={1}
                   style={{ minHeight: '22px', maxHeight: '120px' }}
                 />
@@ -1597,7 +1606,7 @@ export function AgentChatPage() {
 	                      type="button"
 	                      title="Actions"
 	                      className="p-2 rounded-lg hover:bg-accent transition-colors"
-	                      disabled={sending || !agent}
+	                      disabled={!agent}
 	                    >
 	                      <Wrench className="w-4 h-4 text-cyan-500" />
 	                    </button>
@@ -1622,7 +1631,7 @@ export function AgentChatPage() {
 	                    <button
 	                      type="button"
 	                      className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent transition-colors"
-	                      disabled={sending || !agent}
+	                      disabled={!agent}
 	                    >
 	                      <Paperclip className="w-4 h-4 text-emerald-500" />
 	                    </button>
@@ -1645,7 +1654,7 @@ export function AgentChatPage() {
                 <button
                   type="button"
                   className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors ml-1"
-                  disabled={sending || !agent}
+                  disabled={!agent}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />

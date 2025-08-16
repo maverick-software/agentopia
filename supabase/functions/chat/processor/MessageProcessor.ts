@@ -91,11 +91,13 @@ export class MessageProcessor {
             const opts = ({ ...defaultOpts, ...(context.request_options?.reasoning || {}) }) as ReasoningOptions;
             const contentText = message.content?.type === 'text' ? (message.content.text || '') : '';
             const scoreInfo = ReasoningScorer.score(contentText, (metrics.context_tokens || 0) / 4000);
-            const enabled = opts.enabled !== false; // default on
+            const requestedEnabled = opts.enabled !== false; // default on
             const threshold = opts.threshold ?? 0.3;
             const style: ReasoningStyle = ReasoningSelector.select(contentText, (message.tools || []).map((t: any)=>t.function?.name).filter(Boolean), opts.styles_allowed, opts.style_bias);
-            metrics.reasoning = { score: scoreInfo.score, enabled, style, reason: scoreInfo.reason };
-            if (enabled && scoreInfo.score >= threshold) {
+            const passes = requestedEnabled && scoreInfo.score >= threshold;
+            metrics.reasoning = { score: scoreInfo.score, enabled: passes, style, reason: scoreInfo.reason };
+            (metrics as any).reasoning_ran = passes;
+            if (passes) {
               // Use structured sections, not segments
               const segsForFacts = (message?.context?.context_window?.sections || []) as any[];
               const factsSeed: string[] = [];
@@ -158,8 +160,8 @@ export class MessageProcessor {
                 const text = typeof c?.content === 'string' ? c.content : (c?.content?.text || c?.summary || '');
                 if (text) facts.push(String(text).slice(0, 280));
               }
-              // Map detailed steps
-              metrics.reasoning_steps = steps.map(s => ({
+              // Map detailed steps (ensure at least one step recorded)
+              const mapped = steps.map(s => ({
                 step: s.step,
                 type: s.state === 'conclude' ? 'decision' : 'analysis',
                 description: s.hypothesis || s.question,
@@ -172,6 +174,19 @@ export class MessageProcessor {
                 observation: s.observation,
                 facts_considered: facts,
               }));
+              metrics.reasoning_steps = mapped.length > 0 ? mapped : [{
+                step: 1,
+                type: 'analysis',
+                description: 'Reasoning engaged (fallback): no explicit steps captured.',
+                confidence: 0.0,
+                time_ms: 0,
+                state: 'analyze',
+                question: '',
+                hypothesis: '',
+                action: undefined,
+                observation: undefined,
+                facts_considered: facts,
+              } as any];
               (metrics as any).reasoning_graph = { states: steps.map(s => s.state) };
               (context as any).reasoning_style = style;
             }

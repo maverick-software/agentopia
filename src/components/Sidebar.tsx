@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useConversations } from '../hooks/useConversations';
+import { useTheme } from '../contexts/ThemeContext';
+import { Sun, Moon } from 'lucide-react';
 
 // Define type for a single navigation item, allowing for children
 interface NavItem {
@@ -276,6 +278,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
 
   // Filter nav items based on admin status - no longer needed for the main list
   // const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
@@ -433,6 +436,11 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               </div>
             </DropdownMenuLabel>
                         <DropdownMenuSeparator className="border-border" />
+            <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
+              {theme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+              <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="border-border" />
             {isAdmin && (
               <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
                 <Link to="/admin" className="flex items-center w-full">

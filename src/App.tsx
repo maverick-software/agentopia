@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { DatabaseProvider } from './contexts/DatabaseContext';
 import { AppRouter } from './routing';
 import { useRoutePrefetch } from './hooks/useRoutePrefetch';
+import { ThemeProvider } from './contexts/ThemeContext';
 // import { BrowserRouter } from 'react-router-dom';
 
 // Rename to App and make default export
@@ -13,11 +14,13 @@ function App() {
   // Dark mode can be enabled by adding the 'dark' class via ThemeContext (coming next)
 
   return (
-    <AuthProvider>
-      <DatabaseProvider>
-        <AppRouter />
-      </DatabaseProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <DatabaseProvider>
+          <AppRouter />
+        </DatabaseProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

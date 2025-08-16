@@ -269,10 +269,50 @@ async function handler(req: Request): Promise<Response> {
           await ensureConversationSession(convId, agentId, userId, userText);
         }
       } catch (_e) {}
-      const response = await messageProcessor.process(body, {
-        validate: true,
-        timeout: 30000,
-      });
+      // Robust overflow handling: retry up to 3 times trimming history via max_messages
+      let response: any = null;
+      const originalMax = Number((body?.options?.context?.max_messages ?? 0)) || undefined;
+      let attempt = 0;
+      let currentMax = originalMax;
+      while (attempt < 3) {
+        try {
+          response = await messageProcessor.process(body, { validate: true, timeout: 30000 });
+          break;
+        } catch (err: any) {
+          const msg = String(err?.message || '');
+          const code = String((err as any)?.code || '');
+          const looksLikeOverflow =
+            code === 'context_length_exceeded' ||
+            /context[_\s-]?length|maximum context|token limit|too many tokens/i.test(msg);
+          if (!looksLikeOverflow) throw err;
+          // Reduce max_messages aggressively but safely
+          const prev = currentMax ?? 20;
+          const next = Math.max(1, prev > 10 ? Math.floor(prev * 0.5) : prev - 1);
+          currentMax = next;
+          body.options = body.options || {};
+          body.options.context = { ...(body.options.context || {}), max_messages: next };
+          attempt += 1;
+          if (attempt >= 3) {
+            const headers = createResponseHeaders({ requestId });
+            return new Response(
+              JSON.stringify({
+                error: 'context_overflow',
+                title: 'Message is too long to process',
+                message:
+                  'I tried trimming older history three times, but this request still exceeds the model\'s limits.',
+                tips: [
+                  'Clear chat history or start a new conversation',
+                  'Shorten the message or remove large attachments',
+                  'Choose a model with a larger context window',
+                ],
+              }),
+              { status: 413, headers: { ...headers, ...CORS_HEADERS } }
+            );
+          }
+          // Continue loop with reduced history
+          continue;
+        }
+      }
       // Persist assistant message (dual-write v1/v2) so the UI can load it later
       try {
         const dual = new DualWriteService(supabase as any);

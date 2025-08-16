@@ -609,8 +609,8 @@ export function TasksModal({
                           <option value="weekly">Weekly (based on start date weekday)</option>
                           <option value="monthly">Monthly (based on start date day)</option>
                         </select>
-                      </div>
                     </div>
+                  </div>
                   )}
 
                   <div className="flex space-x-2">
