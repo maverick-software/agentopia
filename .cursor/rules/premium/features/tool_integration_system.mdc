@@ -8,11 +8,15 @@ Create this new integration: [integration]
 
 This integration is a [channel][tool]
 
-Consider our MCP tool use system. Make sure this is made available to our agents via the MCP tool_use 
+Here are the rules:
 
-Consider the agent edit page tools and channels modals, ensuring they are coded to automatically show up.
+1. Consider our MCP tool use system. Investigate the existing documentation and codebae. Make sure this integration is made available to our agents via the MCP tool use protocol.
 
-Consider the comprehensive message adapters and chat system
+2. Consider the agent edit page tools and channels modals, ensuring they are coded to automatically show up. (Creat the UI and wire them up properly)
+
+Consider the comprehensive message adapters and chat system.
+
+a. Ensure you create the integration to work with our MCP system and that it should work inside our adapter system.
 
 Consider the integrations page and the credential page. Ensure these encoded properly.
 

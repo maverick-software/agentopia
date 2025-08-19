@@ -156,6 +156,23 @@ export class TextMessageHandler implements MessageHandler {
         preamble.push(agent.system_instructions);
         preamble.push(`=== END SYSTEM INSTRUCTIONS ===\n`);
       }
+      // Memory handling guidance (episodic + semantic + conclusions/concepts)
+      preamble.push(`=== MEMORY HANDLING INSTRUCTIONS ===\n` +
+        `You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.\n\n` +
+        `Use these rules to apply memory to the current user request:\n` +
+        `1) EPISODIC MEMORY (events/examples):\n` +
+        `   - Purpose: continuity, personalization, and recent task alignment.\n` +
+        `   - Prioritize recency and direct relevance to the current query.\n` +
+        `   - Do NOT restate full content; summarize only what is minimally necessary.\n` +
+        `2) SEMANTIC MEMORY (facts/entities/conclusions/concepts):\n` +
+        `   - Purpose: factual grounding and domain knowledge.\n` +
+        `   - Prefer higher-confidence, multi-source items; prefer well-supported conclusions/concepts derived from 3–6 connected nodes/edges.\n` +
+        `   - If conflicts exist, resolve by (a) higher confidence, (b) greater evidence, (c) more recent; if unresolved, note uncertainty briefly.\n` +
+        `3) SAFETY & PRIVACY:\n` +
+        `   - Never leak raw sensitive content. Summarize and reference sources (e.g., [source: message 2025-08-12]).\n` +
+        `4) BREVITY & RELEVANCE:\n` +
+        `   - Extract only memory that materially improves the answer. Be concise and avoid repetition.\n` +
+        `=== END MEMORY HANDLING INSTRUCTIONS ===\n`);
       // Output formatting guidance - EXPLICIT MARKDOWN FORMATTING RULES
       preamble.push(
         `CRITICAL FORMATTING INSTRUCTIONS - You MUST format your responses using proper Markdown:
@@ -406,6 +423,67 @@ Remember: ALWAYS use blank lines between elements for readability!`
       }
     } catch (_) {
       // best-effort; do not fail response on memory persistence issues
+    }
+
+    // BATCH GUARANTEE (gated): Every message gets enqueued for graph storage
+    // ONLY if the agent's centralized graph is enabled.
+    console.log(`[TextMessageHandler] Starting graph ingestion check...`);
+    console.log(`[TextMessageHandler] Has conversation_id: ${!!message.conversation_id}`);
+    console.log(`[TextMessageHandler] Has memoryManager: ${!!this.memoryManager}`);
+    
+    try {
+      if (message.conversation_id && this.memoryManager) {
+        const convId = message.conversation_id;
+        console.log(`[TextMessageHandler] Checking graph ingestion for conversation ${convId}`);
+        // Gate on agent setting
+        let graphEnabled = false;
+        try {
+          const { data: a } = await (this.supabase as any)
+            .from('agents')
+            .select('metadata')
+            .eq('id', context.agent_id)
+            .maybeSingle();
+          graphEnabled = ((a?.metadata?.settings || {}).use_account_graph === true);
+          console.log(`[TextMessageHandler] Agent ${context.agent_id} graph enabled: ${graphEnabled}`);
+        } catch (err) {
+          console.error('[TextMessageHandler] Error checking agent settings:', err);
+        }
+        if (!graphEnabled) {
+          console.log('[TextMessageHandler] Graph not enabled, skipping ingestion');
+          return {
+            message: processed,
+            context,
+            metrics: {
+              start_time: startTime,
+              end_time: Date.now(),
+              stages: {},
+              tokens_used: tokensTotal,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              model_used: effectiveModel,
+              memory_searches: 0,
+              tool_executions: toolDetails.length,
+              tool_details: toolDetails,
+              discovered_tools: discoveredToolsForMetrics,
+              tool_requested: toolCalls.length > 0,
+            },
+          } as any;
+        }
+        // Always ingest the current exchange for immediate graph updates
+        console.log(`[TextMessageHandler] Triggering ingestion for current message exchange`);
+        if (true) { // Always ingest every message
+          // Just ingest the current user message and assistant response
+          const batchConvo: AdvancedChatMessage[] = [
+            message,     // User message
+            processed,   // Assistant response
+          ] as any;
+
+          await this.memoryManager.createFromConversation(batchConvo, true);
+        }
+      }
+    } catch (ingestionError) {
+      console.error('[TextMessageHandler] Graph ingestion error:', ingestionError);
+      // best-effort: do not fail the response on batch ingestion errors
     }
     return {
       message: processed,

@@ -4,6 +4,7 @@
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
 import { SemanticMemoryManager } from './semantic_memory.ts';
+import { getVectorSearchResults } from '../../vector_search.ts';
 import OpenAI from 'npm:openai@4.28.0';
 import {
   AgentMemory,
@@ -144,7 +145,7 @@ export class MemoryManager {
     }
     
     // Store in vector database
-    const index = this.pinecone.index(this.config.index_name);
+    const index = this.pinecone.Index(this.config.index_name);
     await index.upsert([{
       id,
       values: completeMemory.embeddings,
@@ -214,7 +215,7 @@ export class MemoryManager {
     
     // Update vector database if embeddings changed
     if (updates.embeddings) {
-      const index = this.pinecone.index(this.config.index_name);
+      const index = this.pinecone.Index(this.config.index_name);
       await index.update({
         id,
         values: updates.embeddings,
@@ -237,7 +238,7 @@ export class MemoryManager {
     }
     
     // Delete from vector database
-    const index = this.pinecone.index(this.config.index_name);
+    const index = this.pinecone.Index(this.config.index_name);
     await index.deleteOne(id);
   }
   
@@ -431,28 +432,237 @@ export class MemoryManager {
   }
   
   /**
+   * Queue graph ingestion for GetZep knowledge graph
+   */
+  private async queueGraphIngestion(payload: any): Promise<void> {
+    try {
+      // Get user's account graph
+      const { data: accountGraph } = await this.supabase
+        .from('account_graphs')
+        .select('id')
+        .eq('user_id', payload.user_id)
+        .maybeSingle();
+      
+      if (!accountGraph) {
+        console.log('[MemoryManager] No account graph found for user');
+        return;
+      }
+
+      // Queue for ingestion
+      const { error } = await this.supabase
+        .from('graph_ingestion_queue')
+        .insert({
+          account_graph_id: accountGraph.id,
+          payload: {
+            content: payload.content,
+            user_id: payload.user_id,
+            agent_id: payload.agent_id,
+            source_kind: payload.source_kind || 'message',
+            entities: payload.entities || [],
+            relations: payload.relations || []
+          },
+          status: 'queued'
+        });
+
+      if (error) {
+        console.error('[MemoryManager] Failed to queue graph ingestion:', error);
+      } else {
+        console.log('[MemoryManager] Queued graph ingestion for user', payload.user_id);
+      }
+    } catch (err) {
+      console.error('[MemoryManager] Error queueing graph ingestion:', err);
+    }
+  }
+
+  /**
    * Create memories from a conversation using the memory factory
    */
   async createFromConversation(
     messages: any[],
     auto_consolidate: boolean = true
   ): Promise<string[]> {
-    if (messages.length === 0) return [];
+    console.log(`[MemoryManager] createFromConversation called with ${messages.length} messages`);
+    
+    if (messages.length === 0) {
+      console.log('[MemoryManager] No messages to process');
+      return [];
+    }
     
     const agent_id = messages[0]?.context?.agent_id || '';
+    const user_id = messages[0]?.context?.user_id || '';
+    console.log(`[MemoryManager] Processing for agent: ${agent_id}, user: ${user_id}`);
     
-    // Create episodic memories
+    // Create episodic memories (DB write)
     const episodicIds = await this.episodicManager.createFromConversation(
       messages,
       auto_consolidate
     );
-    
+
+    // Attempt to resolve an agent-scoped Pinecone datastore for semantic writes and episodic vector upserts
+    let datastore: any | null = null;
+    try {
+      const { data: connection } = await this.supabase
+        .from('agent_datastores')
+        .select(`
+          datastore_id,
+          datastores:datastore_id (
+            id,
+            type,
+            config
+          )
+        `)
+        .eq('agent_id', agent_id)
+        .eq('datastores.type', 'pinecone')
+        .single();
+      datastore = (connection as any)?.datastores || null;
+    } catch (_) {
+      datastore = null;
+    }
+
     // Extract and store semantic knowledge
-    const semanticIds = await this.semanticManager.extractAndStore(
-      agent_id,
-      messages
-    );
-    
+    let semanticIds: string[] = [];
+    try {
+      if (datastore?.config?.apiKey && datastore?.config?.indexName) {
+        // Build a per-agent semantic manager using the agent's Pinecone credentials
+        const dynamicPinecone = new (await import('npm:@pinecone-database/pinecone@2.0.0')).Pinecone({ apiKey: datastore.config.apiKey });
+        const SemanticCtor = this.semanticManager ? (this.semanticManager as any).constructor : (await import('./semantic_memory.ts')).SemanticMemoryManager;
+        const agentSemantic = new (SemanticCtor as any)(
+          this.supabase,
+          dynamicPinecone,
+          this.openai,
+          {
+            index_name: datastore.config.indexName,
+            namespace: this.config.namespace,
+            embedding_model: this.config.embedding_model,
+          }
+        );
+        semanticIds = await agentSemantic.extractAndStore(agent_id, messages);
+      } else if (this.semanticManager) {
+        semanticIds = await this.semanticManager.extractAndStore(agent_id, messages);
+      }
+    } catch (_) {
+      // Best-effort: semantic extraction is optional
+      semanticIds = [];
+    }
+
+    // If we have an agent Pinecone datastore, upsert episodic memories into the agent's index for retrieval
+    try {
+      if (datastore?.config?.apiKey && datastore?.config?.indexName && episodicIds.length > 0) {
+        const { data: episodicRows } = await this.supabase
+          .from('agent_memories')
+          .select('id, agent_id, memory_type, content, created_at, importance')
+          .in('id', episodicIds);
+        const episodicForUpsert = (episodicRows || []).filter((m: any) => m && m.memory_type === 'episodic');
+        if (episodicForUpsert.length > 0) {
+          // Generate embeddings and upsert in small batches
+          const pc = new (await import('npm:@pinecone-database/pinecone@2.0.0')).Pinecone({ apiKey: datastore.config.apiKey });
+          const index = pc.index(datastore.config.indexName);
+          const toUpsert: Array<{ id: string; values: number[]; metadata: Record<string, any> }> = [];
+          for (const mem of episodicForUpsert) {
+            try {
+              const vector = await this.generateEmbeddings({
+                id: mem.id,
+                agent_id: mem.agent_id,
+                memory_type: mem.memory_type,
+                content: mem.content,
+                embeddings: undefined,
+                importance: mem.importance || 0.5,
+                decay_rate: 0.1,
+                access_count: 0,
+                related_memories: [],
+                source_message_id: undefined,
+                last_accessed: mem.created_at,
+                created_at: mem.created_at,
+                expires_at: null,
+              } as any);
+              toUpsert.push({
+                id: mem.id,
+                values: vector,
+                metadata: {
+                  agent_id: mem.agent_id,
+                  memory_type: 'episodic',
+                  created_at: mem.created_at,
+                },
+              });
+            } catch (_) {}
+          }
+          if (toUpsert.length > 0) {
+            await index.upsert(toUpsert as any);
+          }
+        }
+      }
+    } catch (_) {
+      // Non-fatal; vector upsert for episodic can be skipped
+    }
+
+    // Enqueue for account-wide graph ingestion (best-effort)
+    console.log('[MemoryManager] Starting graph ingestion enqueueing...');
+    try {
+      if (agent_id) {
+        console.log(`[MemoryManager] Looking up user for agent ${agent_id}`);
+        // Resolve user -> account graph
+        const { data: agentRow } = await this.supabase
+          .from('agents')
+          .select('user_id')
+          .eq('id', agent_id)
+          .maybeSingle();
+        const userId = (agentRow as any)?.user_id;
+        console.log(`[MemoryManager] Found user: ${userId}`);
+        
+        if (userId) {
+          const { data: graph } = await this.supabase
+            .from('account_graphs')
+            .select('id')
+            .eq('user_id', userId)
+            .maybeSingle();
+          const accountGraphId = (graph as any)?.id;
+          console.log(`[MemoryManager] Found account graph: ${accountGraphId}`);
+          
+          if (accountGraphId) {
+            // Format content for GetZep ingestion
+            const content = messages.map((m: any) => {
+              const text = m?.content?.text || m?.content || '';
+              const role = m?.role || 'user';
+              return `${role}: ${text}`;
+            }).join('\n');
+            
+            const payload = {
+              source_kind: 'message',
+              source_id: messages[0]?.id || null,
+              agent_id,
+              user_id: userId,
+              content: content, // GetZep expects 'content' field
+              // Also keep messages for backward compatibility
+              messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
+              episodic_ids: episodicIds,
+              semantic_ids: semanticIds,
+            };
+            
+            console.log(`[MemoryManager] Queueing payload with content length: ${content.length}`);
+            
+            const { error } = await this.supabase
+              .from('graph_ingestion_queue')
+              .insert({ account_graph_id: accountGraphId, payload, status: 'queued' });
+            
+            if (error) {
+              console.error('[MemoryManager] Failed to queue graph ingestion:', error);
+            } else {
+              console.log(`[MemoryManager] ✅ Successfully queued graph ingestion for account ${accountGraphId}`);
+            }
+          } else {
+            console.log('[MemoryManager] No account graph ID found');
+          }
+        } else {
+          console.log('[MemoryManager] No user ID found');
+        }
+      } else {
+        console.log('[MemoryManager] No agent ID provided');
+      }
+    } catch (queueError) {
+      console.error('[MemoryManager] Error during graph ingestion queueing:', queueError);
+      // non-fatal
+    }
+
     return [...episodicIds, ...semanticIds];
   }
   
@@ -532,12 +742,14 @@ export class MemoryManager {
     semantic: any[];
     procedural: any[];
     relevance_scores: number[];
+    external?: any[];
   }> {
     const results = {
       episodic: [] as any[],
       semantic: [] as any[],
       procedural: [] as any[],
       relevance_scores: [] as number[],
+      external: [] as any[],
     };
     
     // Search episodic memories via vector search (Pinecone) if available; fallback to DB query
@@ -551,7 +763,8 @@ export class MemoryManager {
             datastores:datastore_id (
               id,
               type,
-              config
+              config,
+              user_id
             )
           `)
           .eq('agent_id', agent_id)
@@ -559,7 +772,29 @@ export class MemoryManager {
           .single();
 
         const ds = (connection as any)?.datastores;
-        if (ds?.config?.apiKey && ds?.config?.indexName) {
+        // Resolve API key from Vault when present
+        let apiKey: string | null = null;
+        try {
+          if (ds?.config?.connectionId && connection?.datastores?.user_id) {
+            const { data: connRow } = await this.supabase
+              .from('user_oauth_connections')
+              .select('vault_access_token_id')
+              .eq('id', ds.config.connectionId)
+              .eq('user_id', (connection as any).datastores.user_id)
+              .maybeSingle();
+            const vaultId = (connRow as any)?.vault_access_token_id;
+            if (vaultId) {
+              const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: vaultId });
+              apiKey = decrypted as string;
+            }
+          } else if (ds?.config?.vaultId) {
+            const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: ds.config.vaultId });
+            apiKey = decrypted as string;
+          } else if (ds?.config?.apiKey) {
+            apiKey = ds.config.apiKey; // backward compatibility
+          }
+        } catch (_) { apiKey = null; }
+        if (apiKey && ds?.config?.indexName) {
           // Generate embedding
           const emb = await this.openai.embeddings.create({
             model: this.config.embedding_model || 'text-embedding-3-small',
@@ -567,9 +802,9 @@ export class MemoryManager {
           });
           const vector = emb.data[0].embedding as number[];
 
-          // Query Pinecone
-          const pc = new Pinecone({ apiKey: ds.config.apiKey });
-          const index = pc.index(ds.config.indexName);
+          // Query Pinecone (support optional host)
+          const pc = new Pinecone({ apiKey });
+          const index = ds.config.host ? pc.Index(ds.config.indexName, ds.config.host) : pc.Index(ds.config.indexName);
           const search = await index.query({
             vector,
             topK: 10,
@@ -613,7 +848,8 @@ export class MemoryManager {
             datastores:datastore_id (
               id,
               type,
-              config
+              config,
+              user_id
             )
           `)
           .eq('agent_id', agent_id)
@@ -621,9 +857,30 @@ export class MemoryManager {
           .single();
 
         const ds = (connection as any)?.datastores;
-        if (ds?.config?.apiKey && ds?.config?.indexName) {
+        let apiKey: string | null = null;
+        try {
+          if (ds?.config?.connectionId && connection?.datastores?.user_id) {
+            const { data: connRow } = await this.supabase
+              .from('user_oauth_connections')
+              .select('vault_access_token_id')
+              .eq('id', ds.config.connectionId)
+              .eq('user_id', (connection as any).datastores.user_id)
+              .maybeSingle();
+            const vaultId = (connRow as any)?.vault_access_token_id;
+            if (vaultId) {
+              const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: vaultId });
+              apiKey = decrypted as string;
+            }
+          } else if (ds?.config?.vaultId) {
+            const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: ds.config.vaultId });
+            apiKey = decrypted as string;
+          } else if (ds?.config?.apiKey) {
+            apiKey = ds.config.apiKey;
+          }
+        } catch (_) { apiKey = null; }
+        if (apiKey && ds?.config?.indexName) {
           // Build a per-agent semantic manager with the agent's Pinecone credentials
-          const dynamicPinecone = new Pinecone({ apiKey: ds.config.apiKey });
+          const dynamicPinecone = new Pinecone({ apiKey });
           const SemanticCtor = this.semanticManager ? (this.semanticManager as any).constructor : SemanticMemoryManager;
           const agentSemantic = new SemanticCtor(
             this.supabase,
@@ -649,6 +906,16 @@ export class MemoryManager {
       }
     }
     
+    // External datastore vector search (connected Pinecone index via agent_datastores)
+    try {
+      const externalText = await getVectorSearchResults(query, agent_id, this.supabase, this.openai);
+      if (externalText) {
+        results.external = [{ id: `external_${crypto.randomUUID()}`, content: { definition: externalText, concept: 'External Knowledge' } }];
+      }
+    } catch (_e) {
+      // ignore
+    }
+
     // Search procedural memories
     if (!context?.memory_types || context.memory_types.includes('procedural')) {
       results.procedural = await this.getProcedural(agent_id, query);
@@ -703,7 +970,7 @@ export class MemoryManager {
     });
     
     // Search in Pinecone
-    const index = this.pinecone.index(this.config.index_name);
+    const index = this.pinecone.Index(this.config.index_name);
     const searchResults = await index.query({
       vector: queryEmbedding.data[0].embedding,
       topK: query.limit || 10,

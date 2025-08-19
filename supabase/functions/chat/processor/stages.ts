@@ -219,10 +219,113 @@ export class EnrichmentStage extends ProcessingStage {
           });
         }
 
+        // Include low-confidence external fallback (vector_search.ts) when present
+        if ((memoryResults as any)?.external && (memoryResults as any).external.length > 0) {
+          for (const m of (memoryResults as any).external.slice(0, 1)) {
+            const text = typeof m?.content?.definition === 'string' ? m.content.definition : String(m?.content || '');
+            memorySections.push({
+              id: `external_${crypto.randomUUID()}`,
+              title: 'Vector Results (low confidence)',
+              content: text,
+              source: 'episodic_memory',
+              priority: 3,
+              token_count: estimateTokens(text),
+              relevance_score: 0.3,
+            });
+          }
+        }
+
+        // GetZep Knowledge Graph retrieval (semantic memory)
+        try {
+          console.log('[EnrichmentStage] Checking for GetZep knowledge graph...');
+          const { data: agentRow } = await (this.memoryManager as any).supabase
+            .from('agents')
+            .select('user_id, metadata')
+            .eq('id', context.agent_id)
+            .maybeSingle();
+          const userId = (agentRow as any)?.user_id;
+          const agentSettings = ((agentRow as any)?.metadata?.settings || {}) as Record<string, any>;
+          const useAccountGraph = agentSettings.use_account_graph === true; // Must be explicitly enabled
+          
+          console.log(`[EnrichmentStage] Agent ${context.agent_id}: useAccountGraph=${useAccountGraph}, userId=${userId}, hasQuery=${!!queryText}`);
+          
+          if (useAccountGraph && userId && queryText) {
+            try {
+              // Import and use GetZep retrieval
+              const { searchGetZepKnowledgeGraph, extractConcepts } = await import('../core/memory/getzep_retrieval.ts');
+              
+              // Search GetZep knowledge graph
+              const graphStart = Date.now();
+              const getzepResults = await searchGetZepKnowledgeGraph(queryText, userId, (this.memoryManager as any).supabase);
+              
+              if (getzepResults.length > 0) {
+                // Add GetZep results to memory sections
+                for (const result of getzepResults.slice(0, 3)) {
+                  memorySections.push({
+                    id: `getzep_${crypto.randomUUID()}`,
+                    title: 'Knowledge Graph',
+                    content: result.content,
+                    source: 'semantic_memory',
+                    priority: 1, // High priority for semantic knowledge
+                    token_count: estimateTokens(result.content),
+                    relevance_score: result.score,
+                    metadata: { 
+                      source: 'getzep',
+                      ...result.metadata 
+                    }
+                  });
+                }
+                
+                // Update metrics to show semantic memory was used
+                if (!metrics.semantic_memory) {
+                  metrics.semantic_memory = {
+                    searched: true,
+                    results_count: 0,
+                    relevance_scores: [],
+                    concepts_retrieved: [],
+                    search_time_ms: 0
+                  };
+                }
+                metrics.semantic_memory.searched = true;
+                metrics.semantic_memory.results_count = getzepResults.length;
+                metrics.semantic_memory.relevance_scores = getzepResults.map(r => r.score);
+                metrics.semantic_memory.concepts_retrieved = extractConcepts(queryText);
+                metrics.semantic_memory.search_time_ms = Date.now() - graphStart;
+                
+                console.log(`[EnrichmentStage] GetZep returned ${getzepResults.length} semantic results`);
+              } else {
+                console.log('[EnrichmentStage] No GetZep results for query');
+              }
+            } catch (err) {
+              console.warn('[EnrichmentStage] GetZep retrieval error:', err);
+            }
+          }
+        } catch (err) {
+          console.warn('[EnrichmentStage] Error checking agent graph settings:', err);
+        }
+
         const mergedSections = [...existingSections, ...memorySections];
         const totalTokens = mergedSections.reduce((sum: number, s: any) => sum + (s.token_count || 0), 0);
         (optimizedContext as any).context_window.sections = mergedSections;
         (optimizedContext as any).context_window.total_tokens = totalTokens;
+
+        // Adjust metrics to reflect injected memory sections so Process UI shows results
+        const episodicCount = memorySections.filter((s) => s.source === 'episodic_memory').length;
+        const semanticCount = memorySections.filter((s) => s.source === 'semantic_memory').length;
+        if ((metrics.episodic_memory?.results_count || 0) === 0 && episodicCount > 0) {
+          metrics.episodic_memory = {
+            ...(metrics.episodic_memory as any),
+            searched: true,
+            results_count: episodicCount,
+          } as any;
+        }
+        if ((metrics.semantic_memory?.results_count || 0) === 0 && semanticCount > 0) {
+          metrics.semantic_memory = {
+            ...(metrics.semantic_memory as any),
+            searched: true,
+            results_count: semanticCount,
+          } as any;
+        }
       }
     } catch (_) {
       // Best-effort; do not fail pipeline on memory fetch issues

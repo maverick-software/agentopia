@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import {
   Mail
 } from 'lucide-react';
 import { useIntegrationCategories, useIntegrationsByCategory } from '@/hooks/useIntegrations';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useConnections } from '@/hooks/useConnections';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
@@ -77,6 +77,7 @@ export function IntegrationsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedIntegration, setSelectedIntegration] = useState<any>(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const location = useLocation();
   
   const { categories, loading: categoriesLoading } = useIntegrationCategories();
   const { integrations, loading: integrationsLoading } = useIntegrationsByCategory(
@@ -104,6 +105,10 @@ export function IntegrationsPage() {
     
     // Web Search providers are available
     if (['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration.name)) {
+      return 'available';
+    }
+    // Pinecone & GetZep API key integrations are available
+    if (['Pinecone', 'GetZep'].includes(integration.name)) {
       return 'available';
     }
     
@@ -158,6 +163,10 @@ export function IntegrationsPage() {
         return 'serpapi';
       case 'Brave Search API':
         return 'brave_search';
+      case 'Pinecone':
+        return 'pinecone';
+      case 'GetZep':
+        return 'getzep';
       default:
         return null;
     }
@@ -180,6 +189,13 @@ export function IntegrationsPage() {
     // Refresh unified connections for live status
     refetchConnections();
   };
+
+  // Ensure modal does not persist when navigating between routes
+  useEffect(() => {
+    setShowSetupModal(false);
+    setSelectedIntegration(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search, location.hash]);
 
   if (categoriesLoading || integrationsLoading || unifiedLoading) {
     return (
@@ -400,7 +416,11 @@ export function IntegrationsPage() {
         <IntegrationSetupModal
           integration={selectedIntegration}
           isOpen={showSetupModal}
-          onClose={() => setShowSetupModal(false)}
+          onClose={() => {
+            // Ensure modal does not auto-reopen after navigation
+            setShowSetupModal(false);
+            setSelectedIntegration(null);
+          }}
           onComplete={handleSetupComplete}
         />
       )}

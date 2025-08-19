@@ -60,6 +60,7 @@ import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { GmailCallbackPage } from '../pages/integrations/GmailCallbackPage';
+import GraphSettingsPage from '../pages/GraphSettingsPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
@@ -93,6 +94,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/credentials', element: CredentialsPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
+  { path: '/graph-settings', element: GraphSettingsPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
   { path: '/workflows/automations', element: AutomationsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },

@@ -111,6 +111,9 @@ export function WhatIKnowModal({
   const [loading, setLoading] = useState(false);
   const [loadingDatastores, setLoadingDatastores] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
+  const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
+  const [graphEnabled, setGraphEnabled] = useState<boolean>(false); // default OFF until loaded
   
   // Document upload state
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
@@ -126,6 +129,42 @@ export function WhatIKnowModal({
       loadDatastores();
     }
   }, [isOpen, user]);
+
+  // Load agent settings (to drive centralized graph toggle)
+  useEffect(() => {
+    const loadAgentSettings = async () => {
+      if (!isOpen || !agentId) return;
+      try {
+        const { data, error } = await supabase
+          .from('agents')
+          .select('metadata')
+          .eq('id', agentId)
+          .maybeSingle();
+        
+        if (error) {
+          console.warn('Error loading agent metadata:', error);
+          // Initialize with defaults if metadata column doesn't exist yet
+          setAgentMetadata({});
+          setAgentSettings({});
+          setGraphEnabled(false); // Default to false if no metadata
+          return;
+        }
+        
+        const meta = (data?.metadata || {}) as Record<string, any>;
+        setAgentMetadata(meta);
+        const settings = (meta.settings || {}) as Record<string, any>;
+        setAgentSettings(settings);
+        // Default to false if not explicitly set
+        setGraphEnabled(settings.use_account_graph === true);
+      } catch (err) {
+        console.warn('Error in loadAgentSettings:', err);
+        setAgentMetadata({});
+        setAgentSettings({});
+        setGraphEnabled(false);
+      }
+    };
+    loadAgentSettings();
+  }, [isOpen, agentId, supabase]);
 
   // Initialize connected datastores from agent data
   useEffect(() => {
@@ -252,16 +291,94 @@ export function WhatIKnowModal({
   };
 
   const handleSelectKnowledgeDatastore = () => {
-    const knowledgeDatastores = getDatastoresByType('getzep');
-    const connectedKnowledge = knowledgeDatastores.find(ds => connectedDatastores.includes(ds.id));
+    // Toggle centralized knowledge graph (account-wide) ON/OFF
+    toggleGraphEnabled();
+  };
+
+  const ensureAccountGraph = async () => {
+    try {
+      const { data: ag } = await supabase
+        .from('account_graphs')
+        .select('id')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+      if (ag?.id) return true;
+
+      // find GetZep connection
+      const { data: provider } = await supabase
+        .from('oauth_providers')
+        .select('id')
+        .eq('name', 'getzep')
+        .single();
+      if (!provider) {
+        toast.error('GetZep provider not found');
+        return false;
+      }
+      const { data: conn } = await supabase
+        .from('user_oauth_connections')
+        .select('id')
+        .eq('oauth_provider_id', provider.id)
+        .eq('user_id', user?.id)
+        .maybeSingle();
+      if (!conn?.id) {
+        toast.error('Connect GetZep in Integrations to enable the knowledge graph');
+        return false;
+      }
+      const { error: insErr } = await supabase
+        .from('account_graphs')
+        .insert({ user_id: user?.id, connection_id: conn.id, settings: { retrieval: { hop_depth: 2, max_results: 50 } } });
+      if (insErr) {
+        toast.error('Failed to create account graph');
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const toggleGraphEnabled = async () => {
+    const prev = graphEnabled;
+    const next = !prev;
+    // Optimistic UI update
+    setGraphEnabled(next);
     
-    if (connectedKnowledge) {
-      // If already connected, disconnect it
-      setConnectedDatastores(prev => prev.filter(id => id !== connectedKnowledge.id));
-      toast.success('Knowledge graph datastore disconnected');
-    } else {
-      // Always open the knowledge graph selection modal (it will handle empty state)
-      setShowKnowledgeSelection(true);
+    // If enabling, ensure an account_graph exists first; rollback on failure
+    if (next) {
+      const ok = await ensureAccountGraph();
+      if (!ok) {
+        setGraphEnabled(prev);
+        return; // do not proceed with setting update
+      }
+    }
+    
+    try {
+      const newSettings = { ...(agentSettings || {}), use_account_graph: next };
+      const mergedMetadata = { ...(agentMetadata || {}), settings: newSettings };
+      
+      const { data, error } = await supabase
+        .from('agents')
+        .update({ metadata: mergedMetadata })
+        .eq('id', agentId)
+        .select('metadata')
+        .single();
+        
+      if (error) {
+        console.error('Error updating agent metadata:', error);
+        throw error;
+      }
+      
+      // Update local state with the returned data to ensure consistency
+      if (data?.metadata) {
+        setAgentMetadata(data.metadata);
+        setAgentSettings(data.metadata.settings || {});
+      }
+      
+      toast.success(next ? 'Knowledge graph enabled' : 'Knowledge graph disabled');
+    } catch (e: any) {
+      console.error('Failed to toggle knowledge graph:', e);
+      setGraphEnabled(prev); // rollback on failure
+      toast.error(`Failed to update knowledge graph setting: ${e.message || 'Unknown error'}`);
     }
   };
 
@@ -634,33 +751,24 @@ export function WhatIKnowModal({
                     
                     return (
                       <div
-                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${
-                          connectedKnowledge
+                        className={`border-2 rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${
+                          graphEnabled
                             ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
                             : 'border-muted-foreground/25 hover:border-green-500/50 hover:bg-green-50/50 dark:hover:bg-green-950/10'
                         }`}
                         onClick={handleSelectKnowledgeDatastore}
                       >
                         <Brain className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                        {connectedKnowledge ? (
+                        {graphEnabled ? (
                           <>
                             <p className="text-sm font-medium text-green-900 dark:text-green-100">Knowledge Graph Datastore</p>
-                            <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                              Connected: {connectedKnowledge.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Click to change or disconnect
-                            </p>
+                            <p className="text-xs text-green-700 dark:text-green-300 mt-1">Enabled (account-wide)</p>
+                            <p className="text-xs text-muted-foreground mt-1">Click to disable</p>
                           </>
                         ) : (
                           <>
                             <p className="text-sm font-medium mb-1">Knowledge Graph Datastore</p>
-                            <p className="text-xs text-muted-foreground">
-                              {knowledgeDatastores.length > 0 
-                                ? 'Click to select a GetZep knowledge graph for entities & relationships'
-                                : 'Click to create a GetZep knowledge graph for entities & relationships'
-                              }
-                            </p>
+                            <p className="text-xs text-muted-foreground">Disabled. Click to enable account-wide knowledge graph</p>
                           </>
                         )}
                       </div>

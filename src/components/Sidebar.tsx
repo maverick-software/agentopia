@@ -8,7 +8,8 @@ import {
   Building2,
   User as UserIcon,
   Server, Key, Zap, Plus, MessageSquarePlus,
-  MoreVertical, Pencil, Archive, Trash2
+  MoreVertical, Pencil, Archive, Trash2,
+  Network
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -65,6 +66,7 @@ const navItems: NavItem[] = [
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/workflows/automations', icon: Zap, label: 'Automations' },
+  { to: '/graph-settings', icon: Network, label: 'Knowledge Graph' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item

@@ -692,3 +692,40 @@ if (error) {
   console.error('Database unhealthy:', error);
 }
 ```
+
+# GetZep Integration Notes
+
+This project integrates with Zep (v3) for a centralized temporal knowledge graph. Ensure alignment with Zep docs:
+
+- Graph Overview: https://help.getzep.com/graph-overview
+- Walkthrough (agent memory and graph): https://help.getzep.com/walkthrough
+- Adding Memory: https://help.getzep.com/adding-memory
+- Retrieving Memory: https://help.getzep.com/retrieving-memory
+- v2 → v3 Migration: https://help.getzep.com/zep-v2-to-v3-migration
+
+## Credentials & Settings
+- API Key: stored in Supabase Vault via `user_oauth_connections` and referenced by `account_graphs.connection_id`.
+- Account/Project: some deployments require a project or account context. We persist optional fields in `account_graphs.settings`:
+
+{
+  "project_id": "<zep project id>",
+  "account_id": "<zep account id>",
+  "migrated_from_datastore_id": "<uuid>"
+}
+
+## Client Construction (planned)
+
+import { ZepClient } from '@getzep/zep-cloud';
+const client = new ZepClient({ apiKey, projectId /* optional */ });
+
+Then use `client.graph.add`/batch add/read/search per Zep docs.
+
+## Execution Flow in Agentopia
+- User saves API key in Integrations → creates `account_graphs` → optional project/account saved in `settings`.
+- Chat pipeline enqueues extractions to `graph_ingestion_queue`.
+- `graph-ingestion` function processes queue and upserts to Zep + local mirror tables (planned), or directly to Zep first.
+- Enrichment queries graph neighborhood and fuses with vector search context.
+
+## TODOs
+- Implement real HTTP calls to Zep in `GetZepService` (auth header `Authorization: Bearer <key>`; include `projectId` if required).
+- Add ingestion status polling endpoints and error handling.

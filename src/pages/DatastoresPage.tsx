@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, Database, RefreshCw, X, Brain, Loader2 } from 'luc
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { Datastore as DatastoreType } from '../types';
+import { CredentialSelector } from '@/components/integrations/CredentialSelector';
 
 type ExtendedDatastore = DatastoreType & {
   agent_datastores?: Array<{ agent_id: string }>;
@@ -131,13 +132,19 @@ export function DatastoresPage() {
       if (!formData.type) throw new Error('Type is required');
       
       if (formData.type === 'pinecone') {
-        if (!formData.config?.apiKey) throw new Error('API Key is required');
+        if (!formData.config?.connectionId) throw new Error('API Key Connection is required');
         if (!formData.config?.region) throw new Error('Region is required');
         if (!formData.config?.host) throw new Error('Host is required');
         if (!formData.config?.indexName) throw new Error('Index Name is required');
         if (!formData.config?.dimensions) throw new Error('Dimensions is required');
+        if (typeof formData.similarity_threshold !== 'number' || (formData.similarity_threshold as number) < 0 || (formData.similarity_threshold as number) > 1) {
+          throw new Error('Similarity threshold must be between 0 and 1');
+        }
+        if (typeof formData.max_results !== 'number' || (formData.max_results as number) < 1) {
+          throw new Error('Max results must be at least 1');
+        }
       } else if (formData.type === 'getzep') {
-        if (!formData.config?.apiKey) throw new Error('API Key is required');
+        if (!formData.config?.connectionId) throw new Error('API Key Connection is required');
         if (!formData.config?.projectId) throw new Error('Project ID is required');
         if (!formData.config?.collectionName) throw new Error('Collection Name is required');
       }
@@ -413,6 +420,8 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
     description: datastore?.description || '',
     type: datastore?.type || 'pinecone',
     config: datastore?.config || {},
+    similarity_threshold: (datastore as any)?.similarity_threshold ?? 0.5,
+    max_results: (datastore as any)?.max_results ?? 5,
   });
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -434,9 +443,9 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
         return formData.type;
       case 4:
         if (formData.type === 'pinecone') {
-          return formData.config?.apiKey && formData.config?.region && formData.config?.host && formData.config?.indexName && formData.config?.dimensions;
+          return formData.config?.connectionId && formData.config?.region && formData.config?.host && formData.config?.indexName && formData.config?.dimensions;
         } else if (formData.type === 'getzep') {
-          return formData.config?.apiKey && formData.config?.projectId && formData.config?.collectionName;
+          return formData.config?.connectionId && formData.config?.projectId && formData.config?.collectionName;
         }
         return false;
       default:
@@ -663,22 +672,16 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-foreground flex items-center gap-1">
-                          API Key
+                          API Key Connection
                           <span className="text-destructive text-xs">*</span>
                         </label>
-                        <input
-                          type="password"
-                          required
-                          value={formData.config?.apiKey || ''}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            config: { ...formData.config, apiKey: e.target.value }
-                          })}
-                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
-                          placeholder="pk-..."
+                        <CredentialSelector
+                          providerName="pinecone"
+                          value={formData.config?.connectionId || ''}
+                          onChange={(id) => setFormData({ ...formData, config: { ...formData.config, connectionId: id } })}
                           disabled={isSaving}
                         />
-                        <p className="text-xs text-muted-foreground">Get this from your Pinecone dashboard</p>
+                        <p className="text-xs text-muted-foreground">Choose your saved Pinecone API key from Integrations.</p>
                       </div>
 
                       <div className="space-y-2">
@@ -762,6 +765,89 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                       />
                       <p className="text-xs text-muted-foreground">1536 for OpenAI, 768 for others</p>
                     </div>
+
+                    {/* Search Tuning */}
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Similarity Threshold
+                          <span className="text-muted-foreground text-[10px]">(0–1)</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="1"
+                          value={(formData.similarity_threshold as number) ?? 0.5}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            similarity_threshold: parseFloat(e.target.value)
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="0.50"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Lower to include more results.</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Max Results
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={(formData.max_results as number) ?? 5}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            max_results: parseInt(e.target.value, 10)
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="5"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">Controls topK in vector search.</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Preview Length (chars)
+                        </label>
+                        <input
+                          type="number"
+                          min="50"
+                          value={formData.config?.previewLength ?? 400}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, previewLength: parseInt(e.target.value, 10) }
+                          })}
+                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200 text-sm"
+                          placeholder="400"
+                          disabled={isSaving}
+                        />
+                        <p className="text-xs text-muted-foreground">How much of each match to show.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-foreground flex items-center gap-1">
+                          Include Low-Confidence Fallback
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={(formData.config?.lowConfidenceFallback ?? true) as boolean}
+                            onChange={(e) => setFormData({
+                              ...formData,
+                              config: { ...formData.config, lowConfidenceFallback: e.target.checked }
+                            })}
+                            className="h-4 w-4"
+                            disabled={isSaving}
+                          />
+                          <span className="text-xs text-muted-foreground">Show top matches even if below threshold</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -772,22 +858,16 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-foreground flex items-center gap-1">
-                          API Key
+                          API Key Connection
                           <span className="text-destructive text-xs">*</span>
                         </label>
-                        <input
-                          type="password"
-                          required
-                          value={formData.config?.apiKey || ''}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            config: { ...formData.config, apiKey: e.target.value }
-                          })}
-                          className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all duration-200 text-sm"
-                          placeholder="gz-..."
+                        <CredentialSelector
+                          providerName="getzep"
+                          value={formData.config?.connectionId || ''}
+                          onChange={(id) => setFormData({ ...formData, config: { ...formData.config, connectionId: id } })}
                           disabled={isSaving}
                         />
-                        <p className="text-xs text-muted-foreground">Get this from your GetZep console</p>
+                        <p className="text-xs text-muted-foreground">Choose your saved GetZep API key from Integrations.</p>
                       </div>
 
                       <div className="space-y-2">

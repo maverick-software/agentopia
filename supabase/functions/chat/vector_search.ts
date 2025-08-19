@@ -113,15 +113,13 @@ export async function getVectorSearchResults(
       embeddingValues = embedding.data[0].embedding as any;
     }
 
-    // Instantiate Pinecone client with ONLY required fields
-    const pinecone = new Pinecone({
-      apiKey: datastore.config.apiKey, 
-      environment: datastore.config.region 
-    });
+    // Instantiate Pinecone client (v2 expects only apiKey)
+    const pinecone = new Pinecone({ apiKey: datastore.config.apiKey });
 
-    // Get index name separately
+    // Use index host when provided by UI; otherwise default resolution
     const indexName = datastore.config.indexName;
-    const index = pinecone.Index(indexName);
+    const indexHost: string | undefined = datastore.config.host;
+    const index = indexHost ? pinecone.Index(indexName, indexHost) : pinecone.Index(indexName);
 
     // Query vector store
     console.log(`[DEBUG] Querying Pinecone index ${indexName} with topK=${datastore.max_results}, threshold=${datastore.similarity_threshold}`);
@@ -171,14 +169,38 @@ export async function getVectorSearchResults(
 
     if (!relevantResults.length) {
       console.log(`[DEBUG] No relevant results after filtering. Original matches: ${results.matches?.length}, threshold: ${datastore.similarity_threshold || 0.7}`);
-      return null;
+      const allowFallback = (datastore.config?.lowConfidenceFallback ?? true) as boolean;
+      if (!allowFallback) {
+        return null;
+      }
+      // Fallback: provide top 1-3 low-confidence matches so the Process UI shows something useful
+      const fallback = (results.matches || []).slice(0, Math.max(1, Math.min(3, datastore.max_results || 3))).map((m) => ({
+        text: (m.metadata as any)?.text || '',
+        score: m.score || 0,
+        source: (m.metadata as any)?.source,
+        timestamp: (m.metadata as any)?.timestamp,
+      }));
+      if (fallback.length === 0) return null;
+      const memories = fallback
+        .map(result => {
+          const previewLen = (datastore.config?.previewLength ?? 400) as number;
+          const text = result.text?.slice(0, previewLen);
+          let memory = `Memory (similarity: ${(result.score * 100).toFixed(1)}% - low confidence):\n${text}`;
+          if (result.source) memory += `\nSource: ${result.source}`;
+          if (result.timestamp) memory += `\nTimestamp: ${result.timestamp}`;
+          return memory;
+        })
+        .join('\n\n');
+      return `Here are some possibly relevant memories (low confidence):\n\n${memories}`;
     }
 
     // Format context message
     console.log(`[DEBUG] Returning ${relevantResults.length} memories to chat context`);
     const memories = relevantResults
       .map(result => {
-        let memory = `Memory (similarity: ${(result.score * 100).toFixed(1)}%):\n${result.text}`;
+        const previewLen = (datastore.config?.previewLength ?? 400) as number;
+        const text = result.text?.slice(0, previewLen);
+        let memory = `Memory (similarity: ${(result.score * 100).toFixed(1)}%):\n${text}`;
         if (result.source) {
           memory += `\nSource: ${result.source}`;
         }

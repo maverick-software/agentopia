@@ -438,7 +438,7 @@ export class SemanticMemoryManager {
     }
     
     // Store in vector database
-    const index = this.pinecone.index(this.config.index_name);
+    const index = this.pinecone.Index(this.config.index_name);
     await index.upsert([{
       id: data.id,
       values: embedding,
@@ -531,7 +531,7 @@ Only include information that is stated as fact, not opinions or questions.`,
     const queryEmbedding = await this.generateEmbedding(query.concept);
     
     // Search in Pinecone
-    const index = this.pinecone.index(this.config.index_name);
+    const index = this.pinecone.Index(this.config.index_name);
     const searchResults = await index.query({
       vector: queryEmbedding,
       topK: query.limit || 10,
@@ -614,7 +614,7 @@ Only include information that is stated as fact, not opinions or questions.`,
       .eq('id', memory_id);
     
     // Update vector database
-    const index = this.pinecone.index(this.config.index_name);
+    const index = this.pinecone.Index(this.config.index_name);
     await index.update({
       id: memory_id,
       values: embedding,

@@ -19,7 +19,7 @@ Knowledge graphs store factual information as interconnected nodes (entities) an
 ## Vendor Recommendations
 
 ### Primary Recommendation: Zep (getzep.com)
-**Rating**: ⭐⭐⭐⭐⭐ (Preferred)
+**Rating**: ⭐⭐⭐⭐⭐ (Preferred - IMPLEMENTED IN AGENTOPIA)
 
 **Strengths**:
 - Purpose-built for AI memory management
@@ -28,12 +28,21 @@ Knowledge graphs store factual information as interconnected nodes (entities) an
 - Built-in temporal reasoning and memory decay
 - Production-ready with enterprise features
 - Comprehensive observability and analytics
+- **v3 API**: Simplified graph.add() interface for all data types
+- **Async Processing**: Handles large-scale ingestion efficiently
 
 **Use Cases**:
 - AI agents requiring sophisticated memory management
 - Applications needing automatic knowledge extraction
 - Systems requiring temporal reasoning capabilities
 - Production environments with enterprise requirements
+- **Account-wide knowledge graphs** (as implemented in Agentopia)
+
+**Implementation Status**: ✅ **FULLY INTEGRATED IN AGENTOPIA**
+- Secure API key management via Supabase Vault
+- Async ingestion queue for scalability
+- Automatic graph building from conversations
+- Context injection in chat pipeline
 
 **Pricing**: Contact for enterprise pricing, offers developer tiers
 
@@ -296,24 +305,62 @@ LIMIT 10
 RETURN p.name, connections
 ```
 
-#### Zep-Specific Queries
+#### Zep-Specific Queries (v3 API - As Implemented in Agentopia)
 ```python
-# Using Zep's memory API
-memory_client = ZepClient(api_key="your-key")
+# Using Zep v3 API
+from zep_cloud.client import Zep
 
-# Query semantic memory
-results = memory_client.search_memory(
-    query="What does John know about machine learning?",
-    user_id="user123",
-    memory_type="semantic",
-    limit=10
+client = Zep(api_key="your-key")
+
+# Add data to graph (automatic knowledge extraction)
+episode = client.graph.add(
+    userId="user_id",
+    type='text',  # or 'message' or 'json'
+    data="The user is building an AI agent platform..."
 )
 
-# Get related concepts
-related = memory_client.get_related_memories(
-    memory_id="mem_123",
-    relationship_types=["SIMILAR_TO", "PART_OF"]
+# Get user context (includes graph-derived knowledge)
+context = client.thread.getUserContext(
+    threadId="thread_123",
+    query="What does the user know about AI agents?"
 )
+
+# Add message data with speaker attribution
+episode = client.graph.add(
+    userId="user_id",
+    type='message',
+    data="John: I need help with the GetZep integration"
+)
+
+# Add structured JSON data
+import json
+episode = client.graph.add(
+    userId="user_id",
+    type='json',
+    data=json.dumps({"project": "Agentopia", "status": "active"})
+)
+```
+
+**Agentopia Implementation**:
+```typescript
+// Automatic ingestion via queue
+await supabase.from('graph_ingestion_queue').insert({
+    account_graph_id: graphId,
+    payload: {
+        user_id: userId,
+        agent_id: agentId,
+        content: conversationText,
+        entities: extractedEntities,
+        relations: extractedRelations
+    }
+});
+
+// Edge function processes queue
+const episode = await client.graph.add({
+    userId: userId,
+    type: 'text',
+    data: content
+});
 ```
 
 ### 5. Memory Integration Patterns
@@ -412,6 +459,63 @@ semantic_retriever = ZepRetriever(
 )
 ```
 
+### Agentopia Production Implementation
+```typescript
+// File: supabase/functions/graph-ingestion/index.ts
+import { ZepClient } from '@getzep/zep-cloud';
+
+// Process ingestion queue
+const processQueue = async () => {
+    // Get pending items from queue
+    const { data: queueItems } = await supabase
+        .from('graph_ingestion_queue')
+        .select('*')
+        .eq('status', 'pending')
+        .limit(10);
+    
+    for (const item of queueItems) {
+        // Resolve API key from vault
+        const apiKey = await resolveApiKey(item.account_graph_id);
+        
+        // Initialize Zep client
+        const client = new ZepClient({ apiKey });
+        
+        // Add to graph
+        const episode = await client.graph.add({
+            userId: item.payload.user_id,
+            type: 'text',
+            data: item.payload.content
+        });
+        
+        // Mark as completed
+        await supabase
+            .from('graph_ingestion_queue')
+            .update({ status: 'completed' })
+            .eq('id', item.id);
+    }
+};
+
+// Context enrichment in chat pipeline
+// File: supabase/functions/chat/processor/stages.ts
+if (isFeatureEnabled('enable_account_graph', userId, agentId)) {
+    const graphContext = await getGraphNeighborhood(
+        supabase,
+        accountGraphId,
+        extractedConcepts,
+        hopDepth,
+        maxResults
+    );
+    
+    // Inject into context window
+    memorySections.push({
+        title: 'Knowledge Graph Context',
+        content: formatGraphContext(graphContext),
+        source: 'knowledge_graph',
+        priority: 1
+    });
+}
+```
+
 ### Custom Graph Integration
 ```python
 from neo4j import GraphDatabase
@@ -475,6 +579,21 @@ class SemanticMemoryRetriever:
 - Implement entity linking
 - Review extraction coverage
 
+#### GetZep v3 API Issues (Agentopia-Specific)
+**Symptoms**: 404 errors, "thread not found", "not found"
+**Solutions**:
+- Use `client.graph.add()` directly, not thread methods
+- Ensure correct data type ('text', 'message', or 'json')
+- Verify API key has correct permissions
+- Check Account ID matches GetZep dashboard
+
+#### Vault Decryption Failures
+**Symptoms**: "invalid ciphertext" errors
+**Solutions**:
+- API keys stored directly as fallback
+- Check vault configuration in Supabase dashboard
+- Use `vault_decrypt` RPC function for edge functions
+
 ### Performance Tuning Checklist
 - [ ] Appropriate indexes created
 - [ ] Query cache configured
@@ -503,8 +622,38 @@ class SemanticMemoryRetriever:
 - Monitor and optimize query patterns
 - Regular cost reviews and adjustments
 
+## Agentopia-Specific Implementation Notes
+
+### Current Status
+✅ **PRODUCTION READY** - GetZep v3 fully integrated and operational
+
+### Architecture Decisions
+1. **Account-Wide Graphs**: Single graph per user, shared across all agents
+2. **Async Processing**: Queue-based ingestion for scalability
+3. **Vault Integration**: Secure API key storage with fallback mechanism
+4. **Feature Flags**: Gradual rollout capability built-in
+
+### Key Files
+- **Edge Function**: `supabase/functions/graph-ingestion/index.ts`
+- **Memory Manager**: `supabase/functions/chat/core/memory/memory_manager.ts`
+- **Context Enrichment**: `supabase/functions/chat/processor/stages.ts`
+- **UI Component**: `src/pages/GraphSettingsPage.tsx`
+- **Documentation**: `docs/integrations/getzep.mdc`
+
+### Testing Scripts
+- `scripts/tests/check_zep_connection.ts` - Verify connection
+- `scripts/tests/send_to_getzep.ts` - Test data ingestion
+- `scripts/tests/e2e_graph.ts` - End-to-end testing
+
+### Monitoring
+- Queue depth via `graph_ingestion_queue` table
+- Node/edge counts via `graph_nodes` and `graph_edges` tables
+- Processing metrics in Knowledge Graph UI page
+- Error tracking in edge function logs
+
 ---
 
-*Last Updated: [Current Date]*
-*Next Review: [Quarterly Review Date]*
-*Owner: AI Architecture Team* 
+*Last Updated: January 2025*
+*Next Review: April 2025*
+*Owner: AI Architecture Team*
+*Implementation Lead: Agentopia Development Team* 

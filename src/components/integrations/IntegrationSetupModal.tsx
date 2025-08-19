@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +52,9 @@ export function IntegrationSetupModal({
   const [formData, setFormData] = useState({
     connection_name: '',
     api_key: '',
+    zep_project_id: '',
+    zep_project_name: '',
+    zep_account_id: '',
     default_location: '',
     default_language: 'en',
     default_engine: 'google',
@@ -64,6 +67,52 @@ export function IntegrationSetupModal({
   const isWebSearchIntegration = ['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration?.name);
   const isSendGridIntegration = integration?.name === 'SendGrid';
   const isMailgunIntegration = integration?.name === 'Mailgun';
+  const isPineconeIntegration = integration?.name === 'Pinecone';
+  const isGetZepIntegration = integration?.name === 'GetZep';
+
+  // Persist draft values so accidental remounts or navigation don't lose input
+  const getDraftKey = () => {
+    const provider = isGetZepIntegration ? 'getzep' : isPineconeIntegration ? 'pinecone' : 'other';
+    return `integration_draft_${provider}_${user?.id || 'anon'}`;
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const key = getDraftKey();
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        // Only hydrate missing fields to avoid clobbering
+        setFormData(prev => ({
+          connection_name: draft.connection_name ?? prev.connection_name,
+          api_key: draft.api_key ?? prev.api_key,
+          zep_project_id: draft.zep_project_id ?? prev.zep_project_id,
+          zep_project_name: draft.zep_project_name ?? prev.zep_project_name,
+          zep_account_id: draft.zep_account_id ?? prev.zep_account_id,
+          default_location: draft.default_location ?? prev.default_location,
+          default_language: draft.default_language ?? prev.default_language,
+          default_engine: draft.default_engine ?? prev.default_engine,
+          safesearch: draft.safesearch ?? prev.safesearch,
+          from_email: draft.from_email ?? prev.from_email,
+          from_name: draft.from_name ?? prev.from_name,
+        }));
+      }
+    } catch (_) {
+      // ignore hydration errors
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      sessionStorage.setItem(getDraftKey(), JSON.stringify(formData));
+    } catch (_) {
+      // best-effort persistence
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData]);
 
   // Reset state when modal is closed
   const resetModalState = () => {
@@ -74,10 +123,15 @@ export function IntegrationSetupModal({
     setFormData({
       connection_name: '',
       api_key: '',
+      zep_project_id: '',
+      zep_project_name: '',
+      zep_account_id: '',
       default_location: '',
       default_language: 'en',
       default_engine: 'google',
-      safesearch: 'moderate'
+      safesearch: 'moderate',
+      from_email: '',
+      from_name: ''
     });
   };
 
@@ -178,6 +232,126 @@ export function IntegrationSetupModal({
       console.error('Error setting up web search integration:', error);
       setError(error.message || 'Failed to setup integration');
       toast.error('Failed to setup web search integration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApiKeyProviderSetup = async (providerName: 'pinecone' | 'getzep') => {
+    if (!formData.api_key || !user) {
+      setError('Please enter your API key');
+      return;
+    }
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Resolve provider id
+      const { data: providerData, error: providerError } = await supabase
+        .from('oauth_providers')
+        .select('id')
+        .eq('name', providerName)
+        .single();
+      if (providerError) throw providerError;
+
+      // Store API key in Vault
+      const vault_secret_id = await vaultService.createSecret(
+        `${providerName}_api_key_${user.id}_${Date.now()}`,
+        formData.api_key,
+        `${providerName} API key for user ${user.id}`
+      );
+
+      // Create or update unified connection record with explicit deconflict logic
+      const grantedScopes = providerName === 'getzep'
+        ? ['graph_read','graph_write','memory_read','memory_write']
+        : ['vector_search','vector_upsert'];
+
+      // Look for an existing connection for this user+provider (any connection_name)
+      const { data: existingConn, error: findErr } = await supabase
+        .from('user_oauth_connections')
+        .select('id, connection_name')
+        .eq('user_id', user.id)
+        .eq('oauth_provider_id', providerData.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (findErr) throw findErr;
+
+      const desiredName = (formData.connection_name && formData.connection_name.trim().length > 0)
+        ? formData.connection_name.trim()
+        : (existingConn?.connection_name || `${integration.name} Connection`);
+
+      if (existingConn?.id) {
+        const { error: updErr } = await supabase
+          .from('user_oauth_connections')
+          .update({
+            external_user_id: user.id,
+            external_username: desiredName,
+            connection_name: desiredName,
+            vault_access_token_id: vault_secret_id,
+            connection_status: 'active',
+            credential_type: 'api_key',
+            scopes_granted: grantedScopes,
+            connection_metadata: providerName === 'getzep' ? {
+              project_id: formData.zep_project_id || null,
+              project_name: formData.zep_project_name || null,
+              account_id: formData.zep_account_id || null,
+            } : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingConn.id);
+        if (updErr) throw updErr;
+      } else {
+        const { error: insErr } = await supabase
+          .from('user_oauth_connections')
+          .insert({
+            user_id: user.id,
+            oauth_provider_id: providerData.id,
+            external_user_id: user.id,
+            external_username: desiredName,
+            connection_name: desiredName,
+            vault_access_token_id: vault_secret_id,
+            connection_status: 'active',
+            credential_type: 'api_key',
+            scopes_granted: grantedScopes,
+            connection_metadata: providerName === 'getzep' ? {
+              project_id: formData.zep_project_id || null,
+              project_name: formData.zep_project_name || null,
+              account_id: formData.zep_account_id || null,
+            } : null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        if (insErr) throw insErr;
+      }
+
+      // Optional: user_integrations entry
+      const { error: integrationError } = await supabase
+        .from('user_integrations')
+        .insert({
+          user_id: user.id,
+          integration_id: integration.id,
+          connection_name: formData.connection_name || `${integration.name} Connection`,
+          connection_status: 'connected',
+          configuration: {},
+        });
+      if (integrationError && !String(integrationError.message || '').includes('duplicate')) {
+        throw integrationError;
+      }
+
+      setSuccess(true);
+      setSuccessMessage(`${integration.name} key saved to Vault.`);
+      toast.success(`${integration.name} API key added successfully!`);
+
+      setTimeout(() => {
+        try { sessionStorage.removeItem(getDraftKey()); } catch (_) {}
+        refetchConnections();
+        onComplete();
+        handleClose();
+      }, 1200);
+    } catch (e: any) {
+      setError(e.message || 'Failed to save API key');
+      toast.error(e.message || 'Failed to save API key');
     } finally {
       setLoading(false);
     }
@@ -414,6 +588,21 @@ export function IntegrationSetupModal({
         'Template-based email sending'
       ];
     }
+    if (isPineconeIntegration) {
+      return [
+        'Store and query vector embeddings for RAG',
+        'Per-agent datastore connections',
+        'Secure API key storage in Vault',
+        'No global keys required'
+      ];
+    }
+    if (isGetZepIntegration) {
+      return [
+        'Knowledge graph with entities and relationships',
+        'Concept search and retrieval',
+        'Secure API key storage in Vault'
+      ];
+    }
     return [
       'Send and receive emails through your agents',
       'Read and search your email messages',
@@ -423,7 +612,10 @@ export function IntegrationSetupModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      // Only reset/close when the dialog is actually being closed
+      if (!open) handleClose();
+    }}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] bg-gray-900 border-gray-800 overflow-hidden flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle className="text-white flex items-center gap-2">
@@ -802,6 +994,97 @@ export function IntegrationSetupModal({
                             Connect {integration.name}
                           </>
                         )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (isPineconeIntegration || isGetZepIntegration) ? (
+                  <Card className="bg-gray-800 border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <Key className="h-5 w-5 text-blue-400" />
+                        {integration.name} {isGetZepIntegration ? 'Configuration' : 'API Key'}
+                      </CardTitle>
+                      <CardDescription className="text-gray-400">
+                        {isGetZepIntegration 
+                          ? 'Configure your GetZep account for knowledge graph storage'
+                          : 'Store your API key securely in Vault. You\'ll provide index and other non-secret settings when creating a datastore.'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {error && (
+                        <Alert className="bg-red-900/20 border-red-500/20">
+                          <AlertCircle className="h-4 w-4 text-red-400" />
+                          <AlertDescription className="text-red-400">{error}</AlertDescription>
+                        </Alert>
+                      )}
+                      <div>
+                        <Label htmlFor="connection_name" className="text-white">Connection Name (Optional)</Label>
+                        <Input id="connection_name" value={formData.connection_name} onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))} placeholder={`My ${integration.name} Connection`} className="bg-gray-800 border-gray-700 text-white mt-1" />
+                      </div>
+                      <div>
+                        <Label htmlFor="api_key" className="text-white">API Key *</Label>
+                        <Input id="api_key" type="password" value={formData.api_key} onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))} placeholder={isGetZepIntegration ? "z_..." : "Enter your API key"} className="bg-gray-800 border-gray-700 text-white mt-1" />
+                        <p className="text-xs text-gray-500 mt-1">
+                          {isGetZepIntegration 
+                            ? 'Your GetZep API key from app.getzep.com'
+                            : 'Saved to Vault. No global keys are used.'}
+                        </p>
+                      </div>
+                      {isGetZepIntegration && (
+                        <>
+                          <div>
+                            <Label htmlFor="zep_account_id" className="text-white">Account ID *</Label>
+                            <Input 
+                              id="zep_account_id" 
+                              value={formData.zep_account_id || ''} 
+                              onChange={(e) => setFormData(prev => ({ ...prev, zep_account_id: e.target.value }))} 
+                              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" 
+                              className="bg-gray-800 border-gray-700 text-white mt-1" 
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Your GetZep account ID (UUID format)</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="zep_project_name" className="text-white">Project Name *</Label>
+                            <Input 
+                              id="zep_project_name" 
+                              value={formData.zep_project_name || ''} 
+                              onChange={(e) => setFormData(prev => ({ ...prev, zep_project_name: e.target.value }))} 
+                              placeholder="e.g., agentopia" 
+                              className="bg-gray-800 border-gray-700 text-white mt-1" 
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Exact project name from your GetZep Project Settings</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="zep_project_id" className="text-white">Project ID (Optional)</Label>
+                            <Input 
+                              id="zep_project_id" 
+                              value={formData.zep_project_id || ''} 
+                              onChange={(e) => setFormData(prev => ({ ...prev, zep_project_id: e.target.value }))} 
+                              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" 
+                              className="bg-gray-800 border-gray-700 text-white mt-1" 
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Optional: Your GetZep project ID</p>
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm text-gray-400">
+                            <ExternalLink className="h-4 w-4" />
+                            <a 
+                              href="https://app.getzep.com" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hover:text-white underline"
+                            >
+                              Get your GetZep credentials
+                            </a>
+                          </div>
+                        </>
+                      )}
+                      <Button 
+                        type="button" 
+                        onClick={() => handleApiKeyProviderSetup(isPineconeIntegration ? 'pinecone' : 'getzep')} 
+                        disabled={loading || success || !formData.api_key || (isGetZepIntegration && !formData.zep_account_id)} 
+                        className={`w-full mt-4 ${success ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                      >
+                        {success ? (<><CheckCircle className="h-4 w-4 mr-2" /> Success!</>) : loading ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>) : (<><Key className="h-4 w-4 mr-2" /> Connect {integration.name}</>)}
                       </Button>
                     </CardContent>
                   </Card>

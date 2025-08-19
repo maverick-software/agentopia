@@ -3,7 +3,6 @@
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
-import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
 import OpenAI from 'npm:openai@4.28.0';
 
 // Import components
@@ -32,17 +31,16 @@ import { logger, createLogger, metrics } from './utils/index.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
-const PINECONE_API_KEY = Deno.env.get('PINECONE_API_KEY');
-const PINECONE_INDEX = Deno.env.get('PINECONE_INDEX') || 'agentopia';
+// Pinecone keys are NEVER read from env. They are stored per-user in Vault via integrations
 
 // Initialize services
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-const pinecone = PINECONE_API_KEY ? new Pinecone({ apiKey: PINECONE_API_KEY }) : null;
+const pinecone = null; // Do not initialize a global Pinecone client
 
 // Initialize core components
 const memoryManager = new MemoryManager(supabase, pinecone, openai, {
-  index_name: PINECONE_INDEX,
+  index_name: 'agentopia',
   namespace: 'memories',
   embedding_model: 'text-embedding-3-small',
   max_memories_per_agent: 1000,
@@ -519,12 +517,9 @@ serve(withErrorHandling(routeHandler));
 logger.info('Advanced JSON Chat System started', {
   version: '2.0.0',
   features: {
-    memory: isFeatureEnabled('enable_memory_system'),
+    memory: true,
     state: isFeatureEnabled('enable_state_management'),
     advanced_json: isFeatureEnabled('use_advanced_messages'),
   },
-  environment: {
-    supabase_url: SUPABASE_URL,
-    pinecone_index: PINECONE_INDEX,
-  },
+  environment: { supabase_url: SUPABASE_URL },
 });

@@ -35,7 +35,7 @@ export interface FeatureFlags {
 const DEFAULT_FLAGS: FeatureFlags = {
   // Start with core features disabled
   use_advanced_messages: false,
-  enable_memory_system: false,
+  enable_memory_system: true,
   enable_state_management: false,
   use_new_tool_framework: false,
   enable_streaming_responses: false,
@@ -46,7 +46,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enable_compatibility_mode: true,
   
   // Gradual rollout
-  rollout_percentage: 0,
+  rollout_percentage: 100,
   enabled_agent_ids: [],
   enabled_user_ids: [],
   

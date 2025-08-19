@@ -35,7 +35,7 @@ interface RefreshStatus {
 
 export function CredentialsPage() {
   const { user } = useAuth();
-  const { connections: unifiedConnections, loading: loadingUnified, revoke: revokeUnified, refetch } = useConnections({ includeRevoked: false });
+  const { connections: unifiedConnections, loading: loadingUnified, revoke: revokeUnified, remove: removeUnified, refetch } = useConnections({ includeRevoked: false });
   const [connections, setConnections] = useState<OAuthConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>({});
@@ -190,9 +190,10 @@ export function CredentialsPage() {
     }
   };
 
-  const handleRevokeConnection = async (connectionId: string) => {
+  const handleRemoveConnection = async (connectionId: string) => {
     try {
-      await revokeUnified(connectionId)
+      // Prefer hard delete; hook will fall back to revoke if FKs block deletion
+      await removeUnified(connectionId)
       // Remove immediately from local state for responsive UX
       setConnections(prev => prev.filter(c => c.connection_id !== connectionId))
     } catch (error) {
@@ -382,7 +383,7 @@ export function CredentialsPage() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
-                            onClick={() => handleRevokeConnection(connection.connection_id)}
+                            onClick={() => handleRemoveConnection(connection.connection_id)}
                           >
                             <Trash2 className="w-3 h-3 mr-1" />
                             Disconnect
@@ -441,7 +442,7 @@ export function CredentialsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleRevokeConnection(connection.connection_id)}
+                      onClick={() => handleRemoveConnection(connection.connection_id)}
                       className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />

@@ -5,6 +5,12 @@ Our agents should have a short term memory that tracks a maximum amount of chat 
 
 These additional memory types should, whenever activated and assigned, be storing user messages properly, building on episodic and semantic memory which each iterative conversation, up to a maximum storage limit that is set by the user plan and managed by the platform admins through the administration pages.
 
+## Media Library ##
+
+Create an Account based media library where we store file uploads. The system will pull from the supabase buckets /user folders, and will allow all sorts of document types, including image files, documents, powerpoints, excel spreadsheets. Wherever documents flow in from, whether from a chat, or from uploading to an agent, or uploaded directly to the media library, they will be stored in the /user/media/ folders.
+
+The planning process should include adding the file upload feature to the chat page, wiring it up to the media library, adding a media library link to the sidebar, as well as the file ingestion for vector, sql (supabase) and knowledge graph. Also for the agent knowledge modal, where users can already add documents. Investigate that system and include it in the plan to extend it with this more comprehensive media library system.
+
 ## Context Board ##
 
 The agent should have a small space in memory that retains two paragraph summary of what just happened, what is currently happening, and what it predicts will happen next. This should be provided via the assistant message area of the LLM.
