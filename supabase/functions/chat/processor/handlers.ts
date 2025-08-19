@@ -427,14 +427,16 @@ Remember: ALWAYS use blank lines between elements for readability!`
 
     // BATCH GUARANTEE (gated): Every message gets enqueued for graph storage
     // ONLY if the agent's centralized graph is enabled.
+    const convId = context.conversation_id || (message as any).conversation_id;
     console.log(`[TextMessageHandler] Starting graph ingestion check...`);
-    console.log(`[TextMessageHandler] Has conversation_id: ${!!message.conversation_id}`);
+    console.log(`[TextMessageHandler] Conversation ID from context: ${context.conversation_id}`);
+    console.log(`[TextMessageHandler] Conversation ID from message: ${(message as any).conversation_id}`);
+    console.log(`[TextMessageHandler] Final conversation_id: ${convId}`);
     console.log(`[TextMessageHandler] Has memoryManager: ${!!this.memoryManager}`);
     
     try {
-      if (message.conversation_id && this.memoryManager) {
-        const convId = message.conversation_id;
-        console.log(`[TextMessageHandler] Checking graph ingestion for conversation ${convId}`);
+      if (convId && this.memoryManager) {
+        console.log(`[TextMessageHandler] Processing conversation ${convId} for graph ingestion`);
         // Gate on agent setting
         let graphEnabled = false;
         try {

@@ -489,14 +489,32 @@ export class MemoryManager {
     }
     
     const agent_id = messages[0]?.context?.agent_id || '';
-    const user_id = messages[0]?.context?.user_id || '';
-    console.log(`[MemoryManager] Processing for agent: ${agent_id}, user: ${user_id}`);
+    let resolvedUserId: string | null = messages[0]?.context?.user_id || null;
+    // Resolve user_id from agents table if not present on the message
+    if (!resolvedUserId && agent_id) {
+      try {
+        const { data: agentRow } = await this.supabase
+          .from('agents')
+          .select('user_id')
+          .eq('id', agent_id)
+          .maybeSingle();
+        resolvedUserId = (agentRow as any)?.user_id || null;
+      } catch (_) {
+        resolvedUserId = null;
+      }
+    }
+    console.log(`[MemoryManager] Processing for agent: ${agent_id}, user: ${resolvedUserId || ''}`);
     
     // Create episodic memories (DB write)
-    const episodicIds = await this.episodicManager.createFromConversation(
-      messages,
-      auto_consolidate
-    );
+    let episodicIds: string[] = [];
+    try {
+      episodicIds = await this.episodicManager.createFromConversation(
+        messages,
+        auto_consolidate
+      );
+    } catch (e) {
+      console.warn('[MemoryManager] Episodic write failed, continuing:', (e as any)?.message || e);
+    }
 
     // Attempt to resolve an agent-scoped Pinecone datastore for semantic writes and episodic vector upserts
     let datastore: any | null = null;
@@ -598,65 +616,109 @@ export class MemoryManager {
     // Enqueue for account-wide graph ingestion (best-effort)
     console.log('[MemoryManager] Starting graph ingestion enqueueing...');
     try {
-      if (agent_id) {
-        console.log(`[MemoryManager] Looking up user for agent ${agent_id}`);
-        // Resolve user -> account graph
-        const { data: agentRow } = await this.supabase
-          .from('agents')
-          .select('user_id')
-          .eq('id', agent_id)
+      const userIdForGraph = resolvedUserId || null;
+      if (agent_id && userIdForGraph) {
+        const { data: graph } = await this.supabase
+          .from('account_graphs')
+          .select('id')
+          .eq('user_id', userIdForGraph)
           .maybeSingle();
-        const userId = (agentRow as any)?.user_id;
-        console.log(`[MemoryManager] Found user: ${userId}`);
+        const accountGraphId = (graph as any)?.id;
+        console.log(`[MemoryManager] Found account graph: ${accountGraphId}`);
         
-        if (userId) {
-          const { data: graph } = await this.supabase
-            .from('account_graphs')
-            .select('id')
-            .eq('user_id', userId)
-            .maybeSingle();
-          const accountGraphId = (graph as any)?.id;
-          console.log(`[MemoryManager] Found account graph: ${accountGraphId}`);
+        if (accountGraphId) {
+          // Format content for GetZep ingestion
+          const content = messages.map((m: any) => {
+            const text = m?.content?.text || m?.content || '';
+            const role = m?.role || 'user';
+            return `${role}: ${text}`;
+          }).join('\n');
           
-          if (accountGraphId) {
-            // Format content for GetZep ingestion
-            const content = messages.map((m: any) => {
-              const text = m?.content?.text || m?.content || '';
-              const role = m?.role || 'user';
-              return `${role}: ${text}`;
-            }).join('\n');
-            
-            const payload = {
-              source_kind: 'message',
-              source_id: messages[0]?.id || null,
-              agent_id,
-              user_id: userId,
-              content: content, // GetZep expects 'content' field
-              // Also keep messages for backward compatibility
-              messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
-              episodic_ids: episodicIds,
-              semantic_ids: semanticIds,
-            };
-            
-            console.log(`[MemoryManager] Queueing payload with content length: ${content.length}`);
-            
-            const { error } = await this.supabase
-              .from('graph_ingestion_queue')
-              .insert({ account_graph_id: accountGraphId, payload, status: 'queued' });
-            
-            if (error) {
-              console.error('[MemoryManager] Failed to queue graph ingestion:', error);
-            } else {
-              console.log(`[MemoryManager] ✅ Successfully queued graph ingestion for account ${accountGraphId}`);
-            }
+          // Minimal payload to mirror the passing test; enrich optionally
+          const payload: any = {
+            content,
+            user_id: userIdForGraph,
+            source_kind: 'message',
+            timestamp: new Date().toISOString(),
+          };
+          payload.agent_id = agent_id || undefined;
+          payload.messages = messages.map((m: any) => ({ role: m.role, content: m.content }));
+          if (episodicIds?.length) payload.episodic_ids = episodicIds;
+          if (semanticIds?.length) payload.semantic_ids = semanticIds;
+          
+          console.log(`[MemoryManager] Queueing payload with content length: ${content.length}`);
+          const { error } = await this.supabase
+            .from('graph_ingestion_queue')
+            .insert({ account_graph_id: accountGraphId, payload, status: 'queued' });
+          
+          if (error) {
+            console.error('[MemoryManager] Failed to queue graph ingestion:', error);
           } else {
-            console.log('[MemoryManager] No account graph ID found');
+            console.log(`[MemoryManager] ✅ Successfully queued graph ingestion for account ${accountGraphId}`);
+
+            // Best-effort direct ingestion to GetZep (in addition to queue) so episodes appear immediately
+            try {
+              // Lookup connection from account_graphs
+              const { data: ag } = await this.supabase
+                .from('account_graphs')
+                .select('connection_id')
+                .eq('id', accountGraphId)
+                .maybeSingle();
+              const connectionId = (ag as any)?.connection_id;
+              if (connectionId) {
+                const { data: conn } = await this.supabase
+                  .from('user_oauth_connections')
+                  .select('vault_access_token_id, connection_metadata')
+                  .eq('id', connectionId)
+                  .maybeSingle();
+                const vaultId = (conn as any)?.vault_access_token_id;
+                if (vaultId) {
+                  const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: vaultId });
+                  const apiKey = decrypted as string;
+                  if (apiKey) {
+                    // Prefer SDK; fall back to REST
+                    try {
+                      const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
+                      const ZepClient = (mod as any)?.default || (mod as any)?.ZepClient || mod;
+                      const client = new ZepClient({ apiKey });
+                      if (client?.graph?.add) {
+                        await client.graph.add({ userId: userIdForGraph, type: 'text', data: content });
+                        console.log('[MemoryManager] ✅ Directly ingested episode to GetZep via SDK');
+                      } else {
+                        // REST fallback
+                        const headers: Record<string, string> = {
+                          'Authorization': `Bearer ${apiKey}`,
+                          'Content-Type': 'application/json',
+                        };
+                        const meta = (conn as any)?.connection_metadata || {};
+                        if (meta.account_id) headers['x-zep-account-id'] = String(meta.account_id);
+                        if (meta.project_id) headers['x-zep-project-id'] = String(meta.project_id);
+                        const resp = await fetch('https://api.getzep.com/api/v3/graph/episodes', {
+                          method: 'POST',
+                          headers,
+                          body: JSON.stringify({ userId: userIdForGraph, type: 'text', data: content }),
+                        });
+                        if (resp.ok) {
+                          console.log('[MemoryManager] ✅ Directly ingested episode to GetZep via REST');
+                        } else {
+                          console.warn('[MemoryManager] GetZep REST ingest failed:', resp.status);
+                        }
+                      }
+                    } catch (sdkErr) {
+                      console.warn('[MemoryManager] Direct SDK ingest failed:', (sdkErr as any)?.message || sdkErr);
+                    }
+                  }
+                }
+              }
+            } catch (ingestErr) {
+              console.warn('[MemoryManager] Best-effort direct GetZep ingest failed:', (ingestErr as any)?.message || ingestErr);
+            }
           }
         } else {
-          console.log('[MemoryManager] No user ID found');
+          console.log('[MemoryManager] No account graph ID found');
         }
       } else {
-        console.log('[MemoryManager] No agent ID provided');
+        console.log('[MemoryManager] Missing agent_id or user_id; skipping queue insert');
       }
     } catch (queueError) {
       console.error('[MemoryManager] Error during graph ingestion queueing:', queueError);

@@ -23,6 +23,15 @@ export async function searchGetZepKnowledgeGraph(
   supabase: SupabaseClient
 ): Promise<GetZepSearchResult[]> {
   try {
+    // Load Zep SDK dynamically via esm.sh (Deno-friendly)
+    let ZepClientLocal: any = null;
+    try {
+      const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
+      ZepClientLocal = (mod as any)?.default || (mod as any)?.ZepClient || mod;
+    } catch (sdkErr) {
+      console.warn('[GetZepRetrieval] Zep SDK import failed; skipping retrieval:', (sdkErr as any)?.message || sdkErr);
+      return [];
+    }
 
     // Get the user's GetZep connection
     const { data: provider } = await supabase
@@ -59,8 +68,58 @@ export async function searchGetZepKnowledgeGraph(
       return [];
     }
 
-    // Initialize GetZep client
-    const client = new ZepClient({ apiKey: apiKey as string });
+    // Initialize GetZep client (guard API shape)
+    const client = new ZepClientLocal({ apiKey: apiKey as string });
+    if (!client || !client.memory || typeof client.memory.searchMemory !== 'function') {
+      console.warn('[GetZepRetrieval] Zep client missing memory API; using REST fallback');
+      try {
+        const baseUrl = 'https://api.getzep.com/api/v3';
+        const body = {
+          userId: userId,
+          text: query,
+          limit: 10,
+        } as any;
+        // Optional metadata headers if present
+        const headers: Record<string, string> = {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        };
+        try {
+          const { data: connMeta } = await supabase
+            .from('user_oauth_connections')
+            .select('connection_metadata')
+            .eq('oauth_provider_id', provider.id)
+            .eq('user_id', userId)
+            .maybeSingle();
+          const meta = (connMeta as any)?.connection_metadata || {};
+          if (meta.account_id) headers['x-zep-account-id'] = String(meta.account_id);
+          if (meta.project_id) headers['x-zep-project-id'] = String(meta.project_id);
+        } catch (_) {}
+
+        const resp = await fetch(`${baseUrl}/memory/search`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) {
+          console.warn('[GetZepRetrieval] REST search failed:', resp.status);
+          return [];
+        }
+        const json: any = await resp.json();
+        const results = Array.isArray(json?.results) ? json.results : (Array.isArray(json) ? json : []);
+        return results
+          .map((r: any) => ({
+            content: r?.summary || r?.content || '',
+            score: r?.score || r?.dist || 0,
+            metadata: r?.metadata || {},
+            source: 'getzep_rest',
+          }))
+          .filter((r: any) => r.content);
+      } catch (restErr) {
+        console.warn('[GetZepRetrieval] REST fallback error:', (restErr as any)?.message || restErr);
+        return [];
+      }
+    }
 
     // Search the user's knowledge graph
     // GetZep v3 uses memory.searchMemory for semantic search
@@ -102,6 +161,9 @@ export async function searchGetZepKnowledgeGraph(
       
       // Try getting recent memories as fallback
       try {
+        if (!client.memory || typeof client.memory.getMemory !== 'function') {
+          throw new Error('memory.getMemory not available');
+        }
         const memories = await client.memory.getMemory(userId, { limit: 5 });
         if (memories?.messages) {
           return memories.messages
@@ -114,14 +176,14 @@ export async function searchGetZepKnowledgeGraph(
             .filter((r: GetZepSearchResult) => r.content);
         }
       } catch (fallbackError) {
-        console.error('[GetZepRetrieval] Fallback also failed:', fallbackError);
+        console.warn('[GetZepRetrieval] Fallback also failed:', (fallbackError as any)?.message || fallbackError);
       }
     }
 
     return [];
 
   } catch (error: any) {
-    console.error('[GetZepRetrieval] Error searching knowledge graph:', error?.message || error);
+    console.warn('[GetZepRetrieval] Error searching knowledge graph:', error?.message || error);
     return [];
   }
 }

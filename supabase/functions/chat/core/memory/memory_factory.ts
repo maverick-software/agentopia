@@ -72,6 +72,9 @@ export class MemoryFactory {
       content: {
         event: `Message from ${message.role}`,
         participants: [message.role],
+        temporal: {
+          timestamp: message.timestamp || generateTimestamp(),
+        },
         context: {
           conversation_id: message.context?.conversation_id,
           session_id: message.context?.session_id,
@@ -125,6 +128,11 @@ export class MemoryFactory {
       content: {
         event: `Conversation with ${participants.filter(p => p !== 'assistant').join(', ')}`,
         participants,
+        temporal: {
+          start_time: firstMessage.timestamp || generateTimestamp(),
+          end_time: lastMessage.timestamp || generateTimestamp(),
+          duration_ms: summary.duration_ms,
+        },
         context: {
           conversation_id: firstMessage.context?.conversation_id,
           session_id: firstMessage.context?.session_id,

@@ -333,9 +333,21 @@ export class EpisodicMemoryManager {
   // ============================
   
   private async storeEpisodicMemory(memory: EpisodicMemory): Promise<string> {
+    // Ensure we never pass a non-UUID id value (e.g., mem_*) into the table insert
+    const cleanMemory: any = { ...memory };
+    if (cleanMemory && typeof cleanMemory.id === 'string' && cleanMemory.id.startsWith('mem_')) {
+      delete cleanMemory.id; // let DB generate a UUID
+    }
+
+    // If source_message_id is present but not a valid UUID, drop it to satisfy FK
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (cleanMemory && typeof cleanMemory.source_message_id === 'string' && !uuidRegex.test(cleanMemory.source_message_id)) {
+      delete cleanMemory.source_message_id;
+    }
+
     const { data, error } = await this.supabase
       .from('agent_memories')
-      .insert(memory)
+      .insert(cleanMemory)
       .select('id')
       .single();
     
