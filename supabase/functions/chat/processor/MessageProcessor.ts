@@ -86,8 +86,25 @@ export class MessageProcessor {
         get name() { return 'reasoning'; }
         async process(message: any, context: ProcessingContext, metrics: ProcessingMetrics): Promise<any> {
           try {
+            // Load user's reasoning threshold preference
+            let userThreshold = 0.3; // default
+            try {
+              const { data: agent } = await this.supabase
+                .from('agents')
+                .select('metadata')
+                .eq('id', context.agent_id)
+                .single();
+              
+              const reasoningSettings = agent?.data?.metadata?.reasoning_settings;
+              if (reasoningSettings?.threshold !== undefined) {
+                userThreshold = Math.max(0, Math.min(1, reasoningSettings.threshold));
+              }
+            } catch (e) {
+              // Use default if can't load settings
+            }
+
             // Enable reasoning by default; UI can turn it off via options.reasoning.enabled = false
-            const defaultOpts: ReasoningOptions = { enabled: true, threshold: 0.3 } as any;
+            const defaultOpts: ReasoningOptions = { enabled: true, threshold: userThreshold } as any;
             const opts = ({ ...defaultOpts, ...(context.request_options?.reasoning || {}) }) as ReasoningOptions;
             const contentText = message.content?.type === 'text' ? (message.content.text || '') : '';
             const scoreInfo = ReasoningScorer.score(contentText, (metrics.context_tokens || 0) / 4000);
@@ -97,6 +114,8 @@ export class MessageProcessor {
             const passes = requestedEnabled && scoreInfo.score >= threshold;
             metrics.reasoning = { score: scoreInfo.score, enabled: passes, style, reason: scoreInfo.reason };
             (metrics as any).reasoning_ran = passes;
+            
+            console.log(`[ReasoningStage] Reasoning ${passes ? 'ENABLED' : 'DISABLED'} - Style: ${style}, Score: ${scoreInfo.score}, Threshold: ${threshold}`);
             if (passes) {
               // Use structured sections, not segments
               const segsForFacts = (message?.context?.context_window?.sections || []) as any[];

@@ -368,6 +368,10 @@ export class EnrichmentStage extends ProcessingStage {
     metrics.context_tokens = optimizedContext.total_tokens;
     metrics.stage_timings = { ...(metrics.stage_timings || {}), enrichment: Date.now() - startedAt };
     
+    // Set history_length from the recent_messages that were used in context building
+    const recentMessages = (message as any)?.context?.recent_messages || [];
+    metrics.history_length = recentMessages.length;
+    
     return message;
   }
 }
@@ -429,6 +433,14 @@ export class MainProcessingStage extends ProcessingStage {
     }
     if ((result.metrics as any).tool_requested !== undefined) {
       (metrics as any).tool_requested = (result.metrics as any).tool_requested;
+    }
+    
+    // Propagate reasoning chain results from handler
+    if (result.metrics.reasoning_steps) {
+      metrics.reasoning_steps = result.metrics.reasoning_steps;
+    }
+    if (result.metrics.reasoning) {
+      metrics.reasoning = result.metrics.reasoning;
     }
     
     return result.message;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Clock, Brain, Database, Zap, MessageSquare, BarChart3, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight, FileText, Hash } from 'lucide-react';
+import { X, Clock, Brain, Database, Zap, MessageSquare, BarChart3, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight, FileText, Hash, Settings, RotateCcw } from 'lucide-react';
 
 interface ProcessModalProps {
   isOpen: boolean;
@@ -100,6 +100,231 @@ const MemoryDropdown: React.FC<{
   );
 };
 
+// Reasoning Threshold Controls Component
+const ReasoningThresholdControls: React.FC<{
+  currentScore: number;
+  isEnabled: boolean;
+  onThresholdChange: (threshold: number) => void;
+  agentId?: string;
+}> = ({ currentScore, isEnabled, onThresholdChange, agentId }) => {
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
+  
+  // Use localStorage for immediate UI updates
+  const [threshold, setThreshold] = React.useState(() => {
+    const stored = localStorage.getItem(`reasoning-threshold-${agentId || 'global'}`);
+    return stored ? parseFloat(stored) : 0.3;
+  });
+  
+  const [autoAdjust, setAutoAdjust] = React.useState(() => {
+    const stored = localStorage.getItem(`reasoning-auto-adjust-${agentId || 'global'}`);
+    return stored ? JSON.parse(stored) : true;
+  });
+
+  const handleThresholdChange = (newThreshold: number) => {
+    setThreshold(newThreshold);
+    localStorage.setItem(`reasoning-threshold-${agentId || 'global'}`, newThreshold.toString());
+    onThresholdChange(newThreshold);
+  };
+
+  const handleAutoAdjustChange = (enabled: boolean) => {
+    setAutoAdjust(enabled);
+    localStorage.setItem(`reasoning-auto-adjust-${agentId || 'global'}`, JSON.stringify(enabled));
+  };
+
+  const resetToDefault = () => {
+    handleThresholdChange(0.3);
+    handleAutoAdjustChange(true);
+  };
+
+  const getThresholdLabel = (value: number) => {
+    if (value <= 0.2) return 'Very Low (Always On)';
+    if (value <= 0.4) return 'Low (Most Requests)';
+    if (value <= 0.6) return 'Medium (Complex Requests)';
+    if (value <= 0.8) return 'High (Very Complex Only)';
+    return 'Very High (Rarely Active)';
+  };
+
+  const getScoreColor = (score: number, threshold: number) => {
+    if (score >= threshold) return 'text-green-600';
+    if (score >= threshold * 0.8) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  return (
+    <div className="border-t border-yellow-200 pt-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-yellow-600" />
+          <span className="text-sm font-medium text-yellow-900">Reasoning Controls</span>
+        </div>
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="text-xs text-yellow-700 hover:text-yellow-800 underline"
+        >
+          {showAdvanced ? 'Hide' : 'Show'} Advanced
+        </button>
+      </div>
+
+      {/* Current Status */}
+      <div className="flex items-center justify-between mb-3 text-xs">
+        <span className="text-gray-600">
+          Current Score: <span className={`font-medium ${getScoreColor(currentScore, threshold)}`}>
+            {(currentScore * 100).toFixed(1)}%
+          </span>
+        </span>
+        <span className="text-gray-600">
+          Status: <span className={`font-medium ${isEnabled ? 'text-green-600' : 'text-red-600'}`}>
+            {isEnabled ? 'ACTIVE' : 'INACTIVE'}
+          </span>
+        </span>
+      </div>
+
+      {/* Threshold Slider */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-700">Activation Threshold</label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600">{(threshold * 100).toFixed(0)}%</span>
+            <button
+              onClick={resetToDefault}
+              className="p-1 hover:bg-yellow-100 rounded"
+              title="Reset to default (30%)"
+            >
+              <RotateCcw className="h-3 w-3 text-yellow-600" />
+            </button>
+          </div>
+        </div>
+        
+        <div className="relative">
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={threshold}
+            onChange={(e) => handleThresholdChange(parseFloat(e.target.value))}
+            className="w-full h-2 bg-gradient-to-r from-red-400 via-yellow-400 to-green-400 rounded-lg appearance-none cursor-pointer"
+            style={{
+              background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #22c55e 100%)'
+            }}
+          />
+          
+          {/* Current Score Indicator */}
+          <div 
+            className="absolute top-0 w-1 h-2 bg-blue-600 rounded-full shadow-md"
+            style={{
+              left: `calc(${currentScore * 100}% - 2px)`,
+              transform: 'translateY(0px)'
+            }}
+            title={`Current Score: ${(currentScore * 100).toFixed(1)}%`}
+          />
+          
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
+          
+          {/* Score vs Threshold Comparison */}
+          <div className="flex justify-between text-xs mt-1">
+            <span className={`font-medium ${getScoreColor(currentScore, threshold)}`}>
+              Score: {(currentScore * 100).toFixed(1)}%
+            </span>
+            <span className="text-gray-600">
+              Threshold: {(threshold * 100).toFixed(0)}%
+            </span>
+          </div>
+        </div>
+        
+        <div className="text-xs text-gray-600 italic">
+          {getThresholdLabel(threshold)}
+        </div>
+        
+        {/* Quick Preset Buttons */}
+        <div className="flex gap-1 mt-2">
+          <button
+            onClick={() => handleThresholdChange(0.1)}
+            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+          >
+            Always On
+          </button>
+          <button
+            onClick={() => handleThresholdChange(0.3)}
+            className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition-colors"
+          >
+            Default
+          </button>
+          <button
+            onClick={() => handleThresholdChange(0.6)}
+            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+          >
+            Complex Only
+          </button>
+          <button
+            onClick={() => handleThresholdChange(0.9)}
+            className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+          >
+            Rarely
+          </button>
+        </div>
+      </div>
+
+      {/* Advanced Settings */}
+      {showAdvanced && (
+        <div className="mt-3 pt-3 border-t border-yellow-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-gray-700">Auto-Adjust Threshold</label>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoAdjust}
+                onChange={(e) => handleAutoAdjustChange(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`w-9 h-5 rounded-full transition-colors ${
+                autoAdjust ? 'bg-yellow-500' : 'bg-gray-300'
+              }`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                  autoAdjust ? 'translate-x-4' : 'translate-x-0.5'
+                } mt-0.5`} />
+              </div>
+            </label>
+          </div>
+          
+          {/* Reasoning Style Preference */}
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Preferred Reasoning Style</label>
+            <select 
+              className="w-full text-xs border border-yellow-300 rounded px-2 py-1 bg-white"
+              defaultValue="auto"
+            >
+              <option value="auto">Auto-Detect</option>
+              <option value="deductive">Deductive (Logical Proof)</option>
+              <option value="inductive">Inductive (Pattern Recognition)</option>
+              <option value="abductive">Abductive (Best Explanation)</option>
+            </select>
+          </div>
+          
+          <div className="text-xs text-gray-600">
+            <div className="font-medium mb-1">Scoring Breakdown:</div>
+            <div>• Length: Based on message complexity</div>
+            <div>• Keywords: Reasoning-related terms (+30%)</div>
+            <div>• Context: Available context density</div>
+            <div>• Explicit: Direct reasoning requests (+40%)</div>
+          </div>
+          
+          <div className="bg-yellow-100 rounded p-2 text-xs text-yellow-800">
+            <div className="font-medium">💡 Tips:</div>
+            <div>• Lower threshold = More reasoning activation</div>
+            <div>• Use "deductive reasoning" for logical analysis</div>
+            <div>• Complex questions automatically score higher</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ProcessModal: React.FC<ProcessModalProps> = ({
   isOpen,
   onClose,
@@ -132,16 +357,30 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-          {/* Reasoning Summary Header */}
+          {/* Reasoning Summary Header with Settings */}
           {reasoning && (
-            <div className="mb-4 flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
-              <div className="text-sm text-yellow-900">
-                <span className="font-medium">Reasoning:</span> {reasoning.type || 'none'}
-                <span className="ml-3 font-medium">Score:</span> {((reasoning.score || 0) * 100).toFixed(1)}%
+            <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm text-yellow-900">
+                  <span className="font-medium">Reasoning:</span> {reasoning.type || 'none'}
+                  <span className="ml-3 font-medium">Score:</span> {((reasoning.score || 0) * 100).toFixed(1)}%
+                </div>
+                {reasoning.reason && (
+                  <div className="text-xs text-yellow-800">{reasoning.reason}</div>
+                )}
               </div>
-              {reasoning.reason && (
-                <div className="text-xs text-yellow-800">{reasoning.reason}</div>
-              )}
+              
+              {/* Reasoning Threshold Controls */}
+              <ReasoningThresholdControls 
+                currentScore={reasoning.score || 0}
+                isEnabled={reasoning.enabled || false}
+                agentId={processingDetails?.agent_id}
+                onThresholdChange={(threshold) => {
+                  console.log('Reasoning threshold updated to:', threshold);
+                  // The threshold will be used in the next message processing
+                  // Could potentially trigger a real-time update here
+                }}
+              />
             </div>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

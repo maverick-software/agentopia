@@ -1091,19 +1091,183 @@ Located in `services/`. These are designed for persistent execution on a server 
     * Auto-fallback to OpenAI with tools when router is missing or `resolveAgent` fails
     * Eliminates `Cannot read properties of null (reading 'resolveAgent')` errors in production
 
-## Datastores & Memory Integrations (Pinecone, GetZep)
+## Memory Systems & Knowledge Integration
 
-The platform supports per‑agent knowledge connections via `agent_datastores`:
+Agentopia implements a sophisticated dual-memory architecture that enables agents to learn from experiences and access knowledge graphs for intelligent, context-aware responses. The system supports per-agent datastore configurations and provides comprehensive memory retrieval capabilities.
 
-- `datastores` records include a `config` JSON with provider credentials. For Pinecone: `apiKey`, `region`, `indexName`.
-- Agents link to datastores through `agent_datastores`; the chat function resolves these at request time.
+### 🧠 **Dual Memory Architecture**
 
-Retrieval behavior:
+#### **1. Episodic Memory (Experience Storage)**
+- **Purpose**: Stores conversation experiences, interactions, and temporal context
+- **Technology**: Pinecone vector database with embedding-based similarity search
+- **Configuration**: Per-agent datastore connections via `agent_datastores` table
+- **Retrieval**: Vector search using conversation context and user queries
+- **Integration**: Results merged into `context_window.sections` before AI reasoning
+- **Status Tracking**: Real-time status reported in Process Modal ("searched", "disconnected")
 
-- Episodic (experiences): vector search against the agent’s Pinecone index; results added to context and labeled in the assistant message.
-- Semantic (knowledge): GetZep knowledge graph when connected; concept fallback otherwise. Results added to context and labeled accordingly.
+#### **2. Semantic Memory (Knowledge Graph)**
+- **Purpose**: Stores facts, concepts, relationships, and structured knowledge
+- **Technology**: GetZep knowledge graph with concept-based retrieval
+- **Configuration**: Agent-specific GetZep connections via datastore configs
+- **Retrieval**: Knowledge graph queries with concept extraction and relationship mapping
+- **Fallback**: Concept search when GetZep is not connected
+- **Integration**: Results labeled as "SEMANTIC MEMORY" in assistant context
 
-Note: Global Pinecone env vars are supported as a fallback but are not required when agent datastores are configured.
+### 🔧 **Technical Implementation**
+
+#### **Database Schema**
+```sql
+-- Core datastore configuration
+datastores: {
+  id: uuid,
+  name: text,
+  type: 'pinecone' | 'getzep',
+  config: jsonb  -- Provider-specific credentials and settings
+}
+
+-- Per-agent datastore linking
+agent_datastores: {
+  agent_id: uuid,
+  datastore_id: uuid,
+  is_active: boolean
+}
+```
+
+#### **Configuration Examples**
+```json
+// Pinecone Datastore Config
+{
+  "apiKey": "pc-xxx",
+  "region": "us-east-1", 
+  "indexName": "agent-memories",
+  "dimensions": 1536
+}
+
+// GetZep Datastore Config
+{
+  "apiKey": "zep-xxx",
+  "projectUuid": "proj-xxx",
+  "sessionId": "agent-session-xxx"
+}
+```
+
+### 🚀 **Memory Retrieval Process**
+
+#### **1. Query Processing**
+- User message triggers memory search across both systems
+- Query text extracted and used for similarity/concept matching
+- Parallel searches executed for optimal performance
+
+#### **2. Episodic Retrieval (Pinecone)**
+- Vector embeddings generated from query context
+- Similarity search against agent's Pinecone index
+- Results filtered by relevance threshold (configurable)
+- Top matches returned with relevance scores
+
+#### **3. Semantic Retrieval (GetZep)**
+- Knowledge graph queried for related concepts
+- Relationship traversal for contextual information
+- Concept extraction and entity recognition
+- Structured knowledge returned with confidence scores
+
+#### **4. Context Integration**
+- Memory results merged into conversation context
+- Labeled sections added to assistant prompt
+- Token budget managed for optimal context window usage
+- Quality metrics tracked for performance monitoring
+
+### 📊 **Status Reporting & Monitoring**
+
+#### **Real-Time Status Tracking**
+The system provides comprehensive status reporting through the Process Modal:
+
+```typescript
+// Memory Status Types
+type MemoryStatus = 'searched' | 'disabled' | 'disconnected' | 'error';
+
+// Episodic Memory Metrics
+episodic_memory: {
+  status: 'searched',           // Simple: if search attempted = "searched"
+  results_count: 5,             // Number of memories retrieved
+  relevance_scores: [0.89, 0.76, 0.65],
+  search_time_ms: 150,
+  memories: [...memories]       // Actual memory content
+}
+
+// Semantic Memory Metrics  
+semantic_memory: {
+  status: 'searched',           // Simple: if search attempted = "searched"
+  results_count: 3,
+  concepts_retrieved: ['AI', 'memory', 'search'],
+  search_time_ms: 200,
+  memories: [...concepts]       // Knowledge graph results
+}
+```
+
+#### **Status Determination Logic**
+- **"searched"**: Memory retrieval was attempted (regardless of result count)
+- **"disabled"**: Memory system not configured for this agent
+- **"disconnected"**: Datastore configuration exists but connection failed
+- **"error"**: System error during memory retrieval
+
+### 🔄 **Memory Lifecycle**
+
+#### **Storage Process**
+1. **Conversation Ingestion**: Messages processed for memory creation
+2. **Episodic Storage**: Experiences stored with temporal and participant context
+3. **Semantic Extraction**: Concepts and facts extracted for knowledge graph
+4. **Relationship Mapping**: Connections established between related information
+5. **Quality Scoring**: Relevance and importance metrics assigned
+
+#### **Retrieval Process**
+1. **Query Analysis**: User message analyzed for memory relevance
+2. **Parallel Search**: Both episodic and semantic systems queried simultaneously
+3. **Result Filtering**: Relevance thresholds applied to ensure quality
+4. **Context Merging**: Results integrated into conversation context
+5. **Token Management**: Context optimized within available token budget
+
+### 🛠️ **Configuration & Setup**
+
+#### **Agent Datastore Setup**
+1. Create datastore record with provider credentials
+2. Link agent to datastore via `agent_datastores`
+3. Verify connection through admin interface
+4. Monitor status through Process Modal
+
+#### **Fallback Behavior**
+- **No Datastore**: Memory systems report "disabled" status
+- **Connection Issues**: Graceful degradation with "disconnected" status
+- **Global Env Vars**: Pinecone fallback supported for backward compatibility
+- **Error Handling**: Robust error recovery with detailed logging
+
+### 📈 **Performance & Optimization**
+
+#### **Search Optimization**
+- **Parallel Execution**: Episodic and semantic searches run simultaneously
+- **Relevance Filtering**: Quality thresholds prevent noise
+- **Token Budgeting**: Context window optimization for maximum effectiveness
+- **Caching**: Frequently accessed memories cached for performance
+
+#### **Monitoring & Metrics**
+- **Search Times**: Millisecond-precision timing for performance tracking
+- **Result Quality**: Relevance scores and concept confidence metrics
+- **Usage Analytics**: Memory system utilization and effectiveness tracking
+- **Error Rates**: Connection stability and failure pattern analysis
+
+### 🔧 **Troubleshooting & Diagnostics**
+
+#### **Common Issues**
+1. **"Unknown" Status in UI**: Fixed with simplified status logic - if search attempted, shows "searched"
+2. **No Results**: Check datastore configuration and API key validity
+3. **Connection Errors**: Verify network connectivity and provider service status
+4. **Performance Issues**: Monitor search times and optimize relevance thresholds
+
+#### **Debug Tools**
+- **Process Modal**: Real-time memory system status and metrics
+- **Chat Logs**: Detailed memory retrieval logging in Supabase functions
+- **Admin Interface**: Datastore connection testing and configuration validation
+
+This memory system transforms agents from stateless responders into intelligent, learning entities that build knowledge over time and provide increasingly contextual and relevant responses.
     *   Executed comprehensive knowledge transfer protocol following premium standards
     *   Created complete handoff documentation suite in `docs/handoff/20250729_161128_*`
     *   Synchronized project documentation, database schema, and policies
