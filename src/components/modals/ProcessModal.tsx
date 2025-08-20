@@ -1,11 +1,104 @@
 import React from 'react';
-import { X, Clock, Brain, Database, Zap, MessageSquare, BarChart3, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { X, Clock, Brain, Database, Zap, MessageSquare, BarChart3, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight, FileText, Hash } from 'lucide-react';
 
 interface ProcessModalProps {
   isOpen: boolean;
   onClose: () => void;
   processingDetails: any;
 }
+
+// Memory Dropdown Component
+const MemoryDropdown: React.FC<{
+  title: string;
+  memories: any[];
+  type: 'episodic' | 'semantic';
+}> = ({ title, memories, type }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
+  const formatMemoryContent = (content: any) => {
+    if (typeof content === 'string') return content;
+    if (typeof content === 'object') {
+      // For episodic memories
+      if (content.event) {
+        return (
+          <div className="space-y-1">
+            <div className="font-medium">{content.event}</div>
+            {content.context && (
+              <div className="text-xs text-gray-500">
+                Context: {JSON.stringify(content.context, null, 2).substring(0, 200)}...
+              </div>
+            )}
+            {content.participants && (
+              <div className="text-xs text-gray-500">
+                Participants: {content.participants.join(', ')}
+              </div>
+            )}
+          </div>
+        );
+      }
+      // For semantic memories or generic objects
+      return (
+        <pre className="text-xs whitespace-pre-wrap overflow-hidden">
+          {JSON.stringify(content, null, 2).substring(0, 300)}...
+        </pre>
+      );
+    }
+    return String(content);
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-colors"
+      >
+        {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        {title} ({memories.length})
+      </button>
+      {isExpanded && (
+        <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
+          {memories.map((memory, index) => (
+            <div
+              key={memory.id || index}
+              className="p-2 bg-white rounded border border-gray-200 text-xs"
+            >
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  {type === 'episodic' ? (
+                    <FileText className="h-3 w-3 text-blue-500" />
+                  ) : (
+                    <Hash className="h-3 w-3 text-purple-500" />
+                  )}
+                  <span className="font-medium text-gray-700">
+                    {type === 'episodic' ? 'Episode' : 'Context'} #{index + 1}
+                  </span>
+                </div>
+                {memory.relevance_score && (
+                  <span className="text-xs text-gray-500">
+                    Relevance: {(memory.relevance_score * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <div className="text-gray-600">
+                {formatMemoryContent(memory.content)}
+              </div>
+              {memory.created_at && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Created: {new Date(memory.created_at).toLocaleString()}
+                </div>
+              )}
+              {memory.importance && (
+                <div className="text-xs text-gray-400">
+                  Importance: {(memory.importance * 100).toFixed(0)}%
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ProcessModal: React.FC<ProcessModalProps> = ({
   isOpen,
@@ -63,16 +156,37 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
               {/* Episodic Memory */}
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className={`h-2 w-2 rounded-full ${memory_operations?.episodic_search?.searched ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  <div className={`h-2 w-2 rounded-full ${
+                    memory_operations?.episodic_search?.status === 'searched' ? 'bg-green-500' :
+                    memory_operations?.episodic_search?.status === 'disconnected' ? 'bg-orange-500' :
+                    memory_operations?.episodic_search?.status === 'disabled' ? 'bg-gray-400' :
+                    memory_operations?.episodic_search?.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                  }`} />
                   <span className="font-medium text-sm">Episodic Memory</span>
                 </div>
                 {memory_operations?.episodic_search ? (
                   <div className="ml-4 text-sm text-gray-600 space-y-1">
-                    <div>Status: {memory_operations.episodic_search.searched ? 'Searched' : 'Not searched'}</div>
-                    <div>Results: {memory_operations.episodic_search.results_count}</div>
-                    <div>Search Time: {formatTime(memory_operations.episodic_search.search_time_ms)}</div>
-                    {memory_operations.episodic_search.relevance_scores.length > 0 && (
-                      <div>Avg Relevance: {formatPercent(memory_operations.episodic_search.relevance_scores.reduce((a, b) => a + b, 0) / memory_operations.episodic_search.relevance_scores.length)}</div>
+                    <div>Status: {
+                      memory_operations.episodic_search.status === 'searched' ? 'Searched' :
+                      memory_operations.episodic_search.status === 'disconnected' ? 'Disconnected (No Pinecone)' :
+                      memory_operations.episodic_search.status === 'disabled' ? 'Disabled' :
+                      memory_operations.episodic_search.status === 'error' ? 'Error' : 'Unknown'
+                    }</div>
+                    {memory_operations.episodic_search.status === 'searched' && (
+                      <>
+                        <div>Results: {memory_operations.episodic_search.results_count}</div>
+                        <div>Search Time: {formatTime(memory_operations.episodic_search.search_time_ms)}</div>
+                        {memory_operations.episodic_search.relevance_scores.length > 0 && (
+                          <div>Avg Relevance: {formatPercent(memory_operations.episodic_search.relevance_scores.reduce((a, b) => a + b, 0) / memory_operations.episodic_search.relevance_scores.length)}</div>
+                        )}
+                        {memory_operations.episodic_search.memories && memory_operations.episodic_search.memories.length > 0 && (
+                          <MemoryDropdown 
+                            title="View Retrieved Memories" 
+                            memories={memory_operations.episodic_search.memories}
+                            type="episodic"
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
@@ -83,16 +197,37 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
               {/* Semantic Memory */}
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className={`h-2 w-2 rounded-full ${memory_operations?.semantic_search?.searched ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  <div className={`h-2 w-2 rounded-full ${
+                    memory_operations?.semantic_search?.status === 'searched' ? 'bg-green-500' :
+                    memory_operations?.semantic_search?.status === 'disconnected' ? 'bg-orange-500' :
+                    memory_operations?.semantic_search?.status === 'disabled' ? 'bg-gray-400' :
+                    memory_operations?.semantic_search?.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                  }`} />
                   <span className="font-medium text-sm">Semantic Memory</span>
                 </div>
                 {memory_operations?.semantic_search ? (
                   <div className="ml-4 text-sm text-gray-600 space-y-1">
-                    <div>Status: {memory_operations.semantic_search.searched ? 'Searched' : 'Not searched'}</div>
-                    <div>Results: {memory_operations.semantic_search.results_count}</div>
-                    <div>Search Time: {formatTime(memory_operations.semantic_search.search_time_ms)}</div>
-                    {memory_operations.semantic_search.concepts_retrieved.length > 0 && (
-                      <div>Concepts: {memory_operations.semantic_search.concepts_retrieved.join(', ')}</div>
+                    <div>Status: {
+                      memory_operations.semantic_search.status === 'searched' ? 'Searched' :
+                      memory_operations.semantic_search.status === 'disconnected' ? 'Disconnected (No GetZep)' :
+                      memory_operations.semantic_search.status === 'disabled' ? 'Disabled' :
+                      memory_operations.semantic_search.status === 'error' ? 'Error' : 'Unknown'
+                    }</div>
+                    {memory_operations.semantic_search.status === 'searched' && (
+                      <>
+                        <div>Results: {memory_operations.semantic_search.results_count}</div>
+                        <div>Search Time: {formatTime(memory_operations.semantic_search.search_time_ms)}</div>
+                        {memory_operations.semantic_search.concepts_retrieved.length > 0 && (
+                          <div>Concepts: {memory_operations.semantic_search.concepts_retrieved.join(', ')}</div>
+                        )}
+                        {memory_operations.semantic_search.memories && memory_operations.semantic_search.memories.length > 0 && (
+                          <MemoryDropdown 
+                            title="View Retrieved Context" 
+                            memories={memory_operations.semantic_search.memories}
+                            type="semantic"
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (

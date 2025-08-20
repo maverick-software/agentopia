@@ -736,8 +736,8 @@ export class MemoryManager {
     const episodicPromise = (async () => {
       if (!context?.memory_types || context.memory_types.includes('episodic')) {
         try {
-        // Prefer agent-scoped Pinecone configuration
-        const { data: connection } = await this.supabase
+        // Check if agent has Pinecone datastore connected
+        const { data: connection, error: connError } = await this.supabase
           .from('agent_datastores')
           .select(`
             datastore_id,
@@ -750,7 +750,13 @@ export class MemoryManager {
           `)
           .eq('agent_id', agent_id)
           .eq('datastores.type', 'pinecone')
-          .single();
+          .maybeSingle();
+        
+        // If no connection found, return empty
+        if (!connection || connError) {
+          console.log('[MemoryManager] No Pinecone datastore connected for episodic memory');
+          return [];
+        }
 
         const ds = (connection as any)?.datastores;
         // Resolve API key from Vault when present
@@ -805,16 +811,19 @@ export class MemoryManager {
             return [];
           }
         } else {
-          // Fallback: DB episodic query
-          return await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
-        }
-      } catch (err) {
-        console.warn('[MemoryManager] Episodic vector search failed; falling back:', (err as Error)?.message);
-        try {
-          return await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
-        } catch {
+          // No Pinecone connected - return empty (no fallback to DB)
+          console.log('[MemoryManager] No Pinecone datastore connected for episodic memory');
           return [];
         }
+      } catch (err) {
+        // If error is "no rows" it means no Pinecone is connected
+        if ((err as any)?.message?.includes('no) rows returned')) {
+          console.log('[MemoryManager] No Pinecone datastore connected for episodic memory');
+          return [];
+        }
+        console.warn('[MemoryManager] Episodic vector search failed:', (err as Error)?.message);
+        // No fallback to DB - if Pinecone fails, return empty
+        return [];
       }
       } else {
         return [];

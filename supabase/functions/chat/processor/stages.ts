@@ -158,22 +158,43 @@ export class EnrichmentStage extends ProcessingStage {
           { memory_types: ['episodic', 'semantic'] }
         );
 
-        // Episodic metrics
+        // Simple status determination based on actual results
+        const episodicResultsCount = memoryResults.episodic?.length || 0;
+        const semanticResultsCount = memoryResults.semantic?.length || 0;
+        
+        // Episodic status: if we got results or attempted search, it's "searched"
+        const episodicStatus = episodicResultsCount >= 0 ? 'searched' : 'disconnected';
+        
+        // Semantic status: if we got results or attempted search, it's "searched"  
+        const semanticStatus = semanticResultsCount >= 0 ? 'searched' : 'disabled';
+        
         metrics.episodic_memory = {
-          searched: true,
-          results_count: memoryResults.episodic?.length || 0,
+          status: episodicStatus,
+          results_count: episodicResultsCount,
           relevance_scores: memoryResults.relevance_scores || [],
           memories_used: (memoryResults.episodic || []).slice(0, 5),
           search_time_ms: Date.now() - memStart,
+          memories: (memoryResults.episodic || []).slice(0, 10).map((m: any) => ({
+            id: m.id,
+            content: m.content,
+            relevance_score: m.relevance_score,
+            created_at: m.created_at,
+            importance: m.importance
+          }))
         };
 
-        // Semantic metrics
         metrics.semantic_memory = {
-          searched: true,
-          results_count: memoryResults.semantic?.length || 0,
+          status: semanticStatus,
+          results_count: semanticResultsCount,
           relevance_scores: memoryResults.relevance_scores || [],
           concepts_retrieved: (memoryResults.semantic || []).slice(0, 5).map((m: any) => m?.concept || '').filter(Boolean),
           search_time_ms: Date.now() - memStart,
+          memories: (memoryResults.semantic || []).slice(0, 10).map((m: any) => ({
+            id: m.id,
+            content: m.content || m,
+            relevance_score: m.relevance_score,
+            source: m.source || 'getzep'
+          }))
         };
 
         // Track sources

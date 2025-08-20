@@ -38,18 +38,31 @@ export interface ProcessingMetrics {
   
   // Memory operation details
   episodic_memory?: {
-    searched: boolean;
+    status: 'searched' | 'disabled' | 'disconnected' | 'error';
     results_count: number;
     relevance_scores: number[];
     memories_used: any[];
     search_time_ms: number;
+    memories?: Array<{
+      id: string;
+      content: any;
+      relevance_score?: number;
+      created_at: string;
+      importance?: number;
+    }>;
   };
   semantic_memory?: {
-    searched: boolean;
+    status: 'searched' | 'disabled' | 'disconnected' | 'error';
     results_count: number;
     relevance_scores: number[];
     concepts_retrieved: string[];
     search_time_ms: number;
+    memories?: Array<{
+      id?: string;
+      content: any;
+      relevance_score?: number;
+      source?: string;
+    }>;
   };
   procedural_memory?: {
     searched: boolean;

@@ -44,22 +44,25 @@ export async function getVectorSearchResults(
       `)
       .eq('agent_id', agentId)
       .eq('datastores.type', 'pinecone')
-      .single();
+      .maybeSingle();
 
     if (connectionError) {
-      console.error('Vector store connection error:', {
-        error: connectionError,
-        message: connectionError.message,
-        details: connectionError.details,
-        code: connectionError.code,
-        agentId: agentId
-      });
-      
-      // Check if it's a "no rows returned" error (agent has no Pinecone datastore)
-      if (connectionError.code === 'PGRST116') {
-        console.log(`[DEBUG] Agent ${agentId} has no Pinecone datastore connected`);
+      // Only log as error if it's not the expected "no rows" case
+      if (connectionError.code !== 'PGRST116') {
+        console.error('Vector store connection error:', {
+          error: connectionError,
+          message: connectionError.message,
+          details: connectionError.details,
+          code: connectionError.code,
+          agentId: agentId
+        });
       }
-      
+      return null;
+    }
+    
+    // Check if no connection was found
+    if (!connection) {
+      console.log(`[DEBUG] Agent ${agentId} has no Pinecone datastore connected`);
       return null;
     }
 

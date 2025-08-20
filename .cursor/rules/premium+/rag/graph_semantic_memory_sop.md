@@ -312,55 +312,76 @@ from zep_cloud.client import Zep
 
 client = Zep(api_key="your-key")
 
-# Add data to graph (automatic knowledge extraction)
-episode = client.graph.add(
-    userId="user_id",
-    type='text',  # or 'message' or 'json'
-    data="The user is building an AI agent platform..."
-)
+# INGESTION - Add messages to thread (automatic knowledge extraction)
+# Note: Uses thread.addMessages, NOT graph.add (which doesn't exist in v3)
+messages = [
+    {
+        "role": "user",
+        "content": "The user is building an AI agent platform..."
+    },
+    {
+        "role": "assistant", 
+        "content": "That's interesting! Tell me more about the platform."
+    }
+]
 
-# Get user context (includes graph-derived knowledge)
-context = client.thread.getUserContext(
-    threadId="thread_123",
-    query="What does the user know about AI agents?"
-)
+# Create thread if needed
+thread_id = f"user_{user_id}_graph"
+try:
+    await client.thread.addMessages(thread_id, {"messages": messages})
+except Exception as e:
+    if "thread not found" in str(e):
+        # Create thread first
+        await client.thread.create({"threadId": thread_id, "userId": user_id})
+        await client.thread.addMessages(thread_id, {"messages": messages})
 
-# Add message data with speaker attribution
-episode = client.graph.add(
-    userId="user_id",
-    type='message',
-    data="John: I need help with the GetZep integration"
-)
-
-# Add structured JSON data
-import json
-episode = client.graph.add(
-    userId="user_id",
-    type='json',
-    data=json.dumps({"project": "Agentopia", "status": "active"})
-)
+# RETRIEVAL - Get user context (includes graph-derived knowledge)
+# Note: Uses thread.getUserContext, NOT memory.searchMemory
+try:
+    context = await client.thread.getUserContext(thread_id)
+    # context.context contains the formatted context string
+    # Parse and use as needed
+except Exception as e:
+    if "not found" in str(e):
+        # Thread doesn't exist yet, return empty
+        context = None
 ```
 
 **Agentopia Implementation**:
 ```typescript
-// Automatic ingestion via queue
-await supabase.from('graph_ingestion_queue').insert({
-    account_graph_id: graphId,
-    payload: {
-        user_id: userId,
-        agent_id: agentId,
-        content: conversationText,
-        entities: extractedEntities,
-        relations: extractedRelations
-    }
-});
+// Direct ingestion in chat function (no queue needed)
+// File: supabase/functions/chat/core/memory/getzep_semantic_manager.ts
 
-// Edge function processes queue
-const episode = await client.graph.add({
-    userId: userId,
-    type: 'text',
-    data: content
-});
+// INGESTION
+const threadId = `user_${this.config.userId}_graph`;
+const messages = this.parseContentToMessages(content);
+
+try {
+    // Try to add messages to existing thread
+    await this.client.thread.addMessages(threadId, { messages });
+} catch (error: any) {
+    if (error?.message?.includes('thread not found')) {
+        // Create thread if it doesn't exist
+        await this.client.thread.create({ 
+            threadId: threadId, 
+            userId: this.config.userId 
+        });
+        // Retry adding messages
+        await this.client.thread.addMessages(threadId, { messages });
+    }
+}
+
+// RETRIEVAL
+try {
+    const context = await this.client.thread.getUserContext(threadId);
+    return this.parseContextToMemories(context);
+} catch (error: any) {
+    if (error?.message?.includes('not found')) {
+        // Thread doesn't exist yet, return empty
+        return [];
+    }
+    throw error;
+}
 ```
 
 ### 5. Memory Integration Patterns
@@ -461,58 +482,42 @@ semantic_retriever = ZepRetriever(
 
 ### Agentopia Production Implementation
 ```typescript
-// File: supabase/functions/graph-ingestion/index.ts
-import { ZepClient } from '@getzep/zep-cloud';
-
-// Process ingestion queue
-const processQueue = async () => {
-    // Get pending items from queue
-    const { data: queueItems } = await supabase
-        .from('graph_ingestion_queue')
-        .select('*')
-        .eq('status', 'pending')
-        .limit(10);
+// File: supabase/functions/chat/core/memory/memory_manager.ts
+// Direct ingestion - no queue needed
+const semanticPromise = (async () => {
+    if (!this.getzepManager) return;
     
-    for (const item of queueItems) {
-        // Resolve API key from vault
-        const apiKey = await resolveApiKey(item.account_graph_id);
-        
-        // Initialize Zep client
-        const client = new ZepClient({ apiKey });
-        
-        // Add to graph
-        const episode = await client.graph.add({
-            userId: item.payload.user_id,
-            type: 'text',
-            data: item.payload.content
-        });
-        
-        // Mark as completed
-        await supabase
-            .from('graph_ingestion_queue')
-            .update({ status: 'completed' })
-            .eq('id', item.id);
+    try {
+        // Direct ingestion to GetZep
+        await this.getzepManager.ingest(
+            `User: ${messages[0].content}\nAssistant: ${messages[1].content}`
+        );
+        console.log('[MemoryManager] ✅ Successfully ingested to GetZep');
+    } catch (error) {
+        console.warn('[MemoryManager] GetZep ingestion failed:', error);
     }
-};
+})();
 
-// Context enrichment in chat pipeline
+// Context retrieval in chat pipeline
 // File: supabase/functions/chat/processor/stages.ts
-if (isFeatureEnabled('enable_account_graph', userId, agentId)) {
-    const graphContext = await getGraphNeighborhood(
-        supabase,
-        accountGraphId,
-        extractedConcepts,
-        hopDepth,
-        maxResults
+if (agent.metadata?.settings?.use_account_graph) {
+    const memoryResults = await this.memoryManager.contextualSearch(
+        context.agent_id,
+        queryText,
+        { memory_types: ['episodic', 'semantic'] }
     );
     
-    // Inject into context window
-    memorySections.push({
-        title: 'Knowledge Graph Context',
-        content: formatGraphContext(graphContext),
-        source: 'knowledge_graph',
-        priority: 1
-    });
+    // Semantic metrics with actual memory content
+    metrics.semantic_memory = {
+        searched: true,
+        results_count: memoryResults.semantic?.length || 0,
+        memories: memoryResults.semantic?.slice(0, 10).map((m: any) => ({
+            id: m.id,
+            content: m.content || m,
+            relevance_score: m.relevance_score,
+            source: 'getzep'
+        }))
+    };
 }
 ```
 
@@ -582,10 +587,12 @@ class SemanticMemoryRetriever:
 #### GetZep v3 API Issues (Agentopia-Specific)
 **Symptoms**: 404 errors, "thread not found", "not found"
 **Solutions**:
-- Use `client.graph.add()` directly, not thread methods
-- Ensure correct data type ('text', 'message', or 'json')
-- Verify API key has correct permissions
-- Check Account ID matches GetZep dashboard
+- Use `client.thread.addMessages()` for ingestion, NOT `graph.add()` (doesn't exist)
+- Use `client.thread.getUserContext()` for retrieval, NOT `memory.searchMemory()`
+- Auto-create threads on first message: catch "thread not found" and create
+- Thread ID format must be consistent: `user_${userId}_graph`
+- API key must use `Api-Key` header, not `Bearer` for REST (SDK handles this)
+- Verify API key starts with `z_` and has correct permissions
 
 #### Vault Decryption Failures
 **Symptoms**: "invalid ciphertext" errors
@@ -634,10 +641,12 @@ class SemanticMemoryRetriever:
 4. **Feature Flags**: Gradual rollout capability built-in
 
 ### Key Files
-- **Edge Function**: `supabase/functions/graph-ingestion/index.ts`
-- **Memory Manager**: `supabase/functions/chat/core/memory/memory_manager.ts`
+- **GetZep Manager**: `supabase/functions/chat/core/memory/getzep_semantic_manager.ts`
+- **Memory Orchestrator**: `supabase/functions/chat/core/memory/memory_manager.ts`
 - **Context Enrichment**: `supabase/functions/chat/processor/stages.ts`
+- **Message Handler**: `supabase/functions/chat/processor/handlers.ts`
 - **UI Component**: `src/pages/GraphSettingsPage.tsx`
+- **Process Modal**: `src/components/modals/ProcessModal.tsx`
 - **Documentation**: `docs/integrations/getzep.mdc`
 
 ### Testing Scripts
@@ -646,10 +655,11 @@ class SemanticMemoryRetriever:
 - `scripts/tests/e2e_graph.ts` - End-to-end testing
 
 ### Monitoring
-- Queue depth via `graph_ingestion_queue` table
-- Node/edge counts via `graph_nodes` and `graph_edges` tables
-- Processing metrics in Knowledge Graph UI page
-- Error tracking in edge function logs
+- Ingestion success via Edge Function logs: `[GetZepSemantic] ✅ Successfully ingested`
+- Retrieval metrics in Process Modal (episodic & semantic memory sections)
+- Memory content visible in expandable dropdowns in Process Modal
+- Error tracking in Edge Function logs (404s auto-handled)
+- Knowledge Graph toggle status per agent in UI
 
 ---
 
