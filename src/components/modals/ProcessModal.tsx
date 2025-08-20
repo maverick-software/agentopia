@@ -373,7 +373,27 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
               {/* Reasoning Threshold Controls */}
               <ReasoningThresholdControls 
                 currentScore={reasoning.score || 0}
-                isEnabled={reasoning.enabled || false}
+                isEnabled={(() => {
+                  // Determine if reasoning was actually executed
+                  const score = reasoning?.score || 0;
+                  const threshold = reasoning?.threshold || 0.3;
+                  const hasSteps = reasoning_chain && reasoning_chain.length > 0;
+                  const isExecuted = score >= threshold && hasSteps;
+                  
+                  // Debug logging
+                  console.log('Reasoning Status Debug:', {
+                    score,
+                    threshold,
+                    hasSteps,
+                    stepsCount: reasoning_chain?.length || 0,
+                    isExecuted,
+                    reasoningEnabled: reasoning?.enabled,
+                    reasoning: reasoning
+                  });
+                  
+                  // Reasoning is active if score >= threshold AND we have steps, OR if explicitly enabled
+                  return isExecuted || reasoning?.enabled || false;
+                })()}
                 agentId={processingDetails?.agent_id}
                 onThresholdChange={(threshold) => {
                   console.log('Reasoning threshold updated to:', threshold);
