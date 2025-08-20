@@ -91,7 +91,8 @@ export class MemoryFactory {
       decay_rate: options.decay_rate || 0.1,
       access_count: 0,
       related_memories: options.related_memories || [],
-      source_message_id: message.id,
+      // Don't set source_message_id unless we know it exists in chat_messages_v2
+      // source_message_id: message.id,
       created_at: generateTimestamp(),
       last_accessed: generateTimestamp(),
       expires_at: options.expires_in_days ? 
