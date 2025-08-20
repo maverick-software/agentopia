@@ -73,9 +73,9 @@ export async function searchGetZepKnowledgeGraph(
     if (!client || !client.memory || typeof client.memory.searchMemory !== 'function') {
       console.warn('[GetZepRetrieval] Zep client missing memory API; using REST fallback');
       try {
-        const baseUrl = 'https://api.getzep.com/api/v3';
+        const baseUrl = 'https://api.getzep.com/v3';
         const body = {
-          userId: userId,
+          user_id: userId,
           text: query,
           limit: 10,
         } as any;
@@ -92,8 +92,8 @@ export async function searchGetZepKnowledgeGraph(
             .eq('user_id', userId)
             .maybeSingle();
           const meta = (connMeta as any)?.connection_metadata || {};
-          if (meta.account_id) headers['x-zep-account-id'] = String(meta.account_id);
-          if (meta.project_id) headers['x-zep-project-id'] = String(meta.project_id);
+          // GetZep v3 uses X-Project-Id header
+          if (meta.project_id) headers['X-Project-Id'] = String(meta.project_id);
         } catch (_) {}
 
         const resp = await fetch(`${baseUrl}/memory/search`, {

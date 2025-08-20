@@ -18,6 +18,7 @@ import { generateMemoryId, generateTimestamp } from '../../types/utils.ts';
 import { EpisodicMemoryManager } from './episodic_memory.ts';
 import { MemoryConsolidationManager } from './memory_consolidation.ts';
 import { MemoryFactory } from './memory_factory.ts';
+import { GetZepSemanticManager } from './getzep_semantic_manager.ts';
 
 // ============================
 // Interfaces
@@ -76,6 +77,7 @@ export class MemoryManager {
   private consolidator: MemoryConsolidator;
   public episodicManager: EpisodicMemoryManager;
   public semanticManager: SemanticMemoryManager | null;
+  public getzepManager: GetZepSemanticManager | null = null;
   public consolidationManager: MemoryConsolidationManager;
   
   constructor(
@@ -490,6 +492,12 @@ export class MemoryManager {
     
     const agent_id = messages[0]?.context?.agent_id || '';
     let resolvedUserId: string | null = messages[0]?.context?.user_id || null;
+    
+    // Initialize GetZep manager for this agent if not already done
+    if (!this.getzepManager && agent_id) {
+      this.getzepManager = new GetZepSemanticManager(this.supabase, agent_id);
+    }
+    
     // Resolve user_id from agents table if not present on the message
     if (!resolvedUserId && agent_id) {
       try {
@@ -505,227 +513,136 @@ export class MemoryManager {
     }
     console.log(`[MemoryManager] Processing for agent: ${agent_id}, user: ${resolvedUserId || ''}`);
     
-    // Create episodic memories (DB write)
-    let episodicIds: string[] = [];
-    try {
-      episodicIds = await this.episodicManager.createFromConversation(
-        messages,
-        auto_consolidate
-      );
-    } catch (e) {
-      console.warn('[MemoryManager] Episodic write failed, continuing:', (e as any)?.message || e);
-    }
-
-    // Attempt to resolve an agent-scoped Pinecone datastore for semantic writes and episodic vector upserts
-    let datastore: any | null = null;
-    try {
-      const { data: connection } = await this.supabase
-        .from('agent_datastores')
-        .select(`
-          datastore_id,
-          datastores:datastore_id (
-            id,
-            type,
-            config
-          )
-        `)
-        .eq('agent_id', agent_id)
-        .eq('datastores.type', 'pinecone')
-        .single();
-      datastore = (connection as any)?.datastores || null;
-    } catch (_) {
-      datastore = null;
-    }
-
-    // Extract and store semantic knowledge
-    let semanticIds: string[] = [];
-    try {
-      if (datastore?.config?.apiKey && datastore?.config?.indexName) {
-        // Build a per-agent semantic manager using the agent's Pinecone credentials
-        const dynamicPinecone = new (await import('npm:@pinecone-database/pinecone@2.0.0')).Pinecone({ apiKey: datastore.config.apiKey });
-        const SemanticCtor = this.semanticManager ? (this.semanticManager as any).constructor : (await import('./semantic_memory.ts')).SemanticMemoryManager;
-        const agentSemantic = new (SemanticCtor as any)(
-          this.supabase,
-          dynamicPinecone,
-          this.openai,
-          {
-            index_name: datastore.config.indexName,
-            namespace: this.config.namespace,
-            embedding_model: this.config.embedding_model,
-          }
-        );
-        semanticIds = await agentSemantic.extractAndStore(agent_id, messages);
-      } else if (this.semanticManager) {
-        semanticIds = await this.semanticManager.extractAndStore(agent_id, messages);
-      }
-    } catch (_) {
-      // Best-effort: semantic extraction is optional
-      semanticIds = [];
-    }
-
-    // If we have an agent Pinecone datastore, upsert episodic memories into the agent's index for retrieval
-    try {
-      if (datastore?.config?.apiKey && datastore?.config?.indexName && episodicIds.length > 0) {
-        const { data: episodicRows } = await this.supabase
-          .from('agent_memories')
-          .select('id, agent_id, memory_type, content, created_at, importance')
-          .in('id', episodicIds);
-        const episodicForUpsert = (episodicRows || []).filter((m: any) => m && m.memory_type === 'episodic');
-        if (episodicForUpsert.length > 0) {
-          // Generate embeddings and upsert in small batches
-          const pc = new (await import('npm:@pinecone-database/pinecone@2.0.0')).Pinecone({ apiKey: datastore.config.apiKey });
-          const index = pc.index(datastore.config.indexName);
-          const toUpsert: Array<{ id: string; values: number[]; metadata: Record<string, any> }> = [];
-          for (const mem of episodicForUpsert) {
-            try {
-              const vector = await this.generateEmbeddings({
-                id: mem.id,
-                agent_id: mem.agent_id,
-                memory_type: mem.memory_type,
-                content: mem.content,
-                embeddings: undefined,
-                importance: mem.importance || 0.5,
-                decay_rate: 0.1,
-                access_count: 0,
-                related_memories: [],
-                source_message_id: undefined,
-                last_accessed: mem.created_at,
-                created_at: mem.created_at,
-                expires_at: null,
-              } as any);
-              toUpsert.push({
-                id: mem.id,
-                values: vector,
-                metadata: {
-                  agent_id: mem.agent_id,
-                  memory_type: 'episodic',
-                  created_at: mem.created_at,
-                },
-              });
-            } catch (_) {}
-          }
-          if (toUpsert.length > 0) {
-            await index.upsert(toUpsert as any);
-          }
-        }
-      }
-    } catch (_) {
-      // Non-fatal; vector upsert for episodic can be skipped
-    }
-
-    // Enqueue for account-wide graph ingestion (best-effort)
-    console.log('[MemoryManager] Starting graph ingestion enqueueing...');
-    try {
-      const userIdForGraph = resolvedUserId || null;
-      if (agent_id && userIdForGraph) {
-        const { data: graph } = await this.supabase
-          .from('account_graphs')
-          .select('id')
-          .eq('user_id', userIdForGraph)
-          .maybeSingle();
-        const accountGraphId = (graph as any)?.id;
-        console.log(`[MemoryManager] Found account graph: ${accountGraphId}`);
-        
-        if (accountGraphId) {
-          // Format content for GetZep ingestion
+    // ========================================
+    // PARALLEL ASYNC OPERATIONS - COMPLETELY INDEPENDENT
+    // ========================================
+    
+    // OPERATION 1: Episodic memories (Pinecone/vector) - runs independently
+    const episodicPromise = this.episodicManager.createFromConversation(
+      messages,
+      auto_consolidate
+    ).catch(e => {
+      console.warn('[MemoryManager] Episodic write failed:', (e as any)?.message || e);
+      return [];
+    });
+    
+    // OPERATION 2: Semantic memories (GetZep/graph) - runs independently
+    const semanticPromise = (async () => {
+      if (this.getzepManager) {
+        try {
           const content = messages.map((m: any) => {
             const text = m?.content?.text || m?.content || '';
             const role = m?.role || 'user';
             return `${role}: ${text}`;
           }).join('\n');
           
-          // Minimal payload to mirror the passing test; enrich optionally
-          const payload: any = {
-            content,
-            user_id: userIdForGraph,
-            source_kind: 'message',
-            timestamp: new Date().toISOString(),
-          };
-          payload.agent_id = agent_id || undefined;
-          payload.messages = messages.map((m: any) => ({ role: m.role, content: m.content }));
-          if (episodicIds?.length) payload.episodic_ids = episodicIds;
-          if (semanticIds?.length) payload.semantic_ids = semanticIds;
-          
-          console.log(`[MemoryManager] Queueing payload with content length: ${content.length}`);
-          const { error } = await this.supabase
-            .from('graph_ingestion_queue')
-            .insert({ account_graph_id: accountGraphId, payload, status: 'queued' });
-          
-          if (error) {
-            console.error('[MemoryManager] Failed to queue graph ingestion:', error);
-          } else {
-            console.log(`[MemoryManager] ✅ Successfully queued graph ingestion for account ${accountGraphId}`);
-
-            // Best-effort direct ingestion to GetZep (in addition to queue) so episodes appear immediately
-            try {
-              // Lookup connection from account_graphs
-              const { data: ag } = await this.supabase
-                .from('account_graphs')
-                .select('connection_id')
-                .eq('id', accountGraphId)
-                .maybeSingle();
-              const connectionId = (ag as any)?.connection_id;
-              if (connectionId) {
-                const { data: conn } = await this.supabase
-                  .from('user_oauth_connections')
-                  .select('vault_access_token_id, connection_metadata')
-                  .eq('id', connectionId)
-                  .maybeSingle();
-                const vaultId = (conn as any)?.vault_access_token_id;
-                if (vaultId) {
-                  const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: vaultId });
-                  const apiKey = decrypted as string;
-                  if (apiKey) {
-                    // Prefer SDK; fall back to REST
-                    try {
-                      const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
-                      const ZepClient = (mod as any)?.default || (mod as any)?.ZepClient || mod;
-                      const client = new ZepClient({ apiKey });
-                      if (client?.graph?.add) {
-                        await client.graph.add({ userId: userIdForGraph, type: 'text', data: content });
-                        console.log('[MemoryManager] ✅ Directly ingested episode to GetZep via SDK');
-                      } else {
-                        // REST fallback
-                        const headers: Record<string, string> = {
-                          'Authorization': `Bearer ${apiKey}`,
-                          'Content-Type': 'application/json',
-                        };
-                        const meta = (conn as any)?.connection_metadata || {};
-                        if (meta.account_id) headers['x-zep-account-id'] = String(meta.account_id);
-                        if (meta.project_id) headers['x-zep-project-id'] = String(meta.project_id);
-                        const resp = await fetch('https://api.getzep.com/api/v3/graph/episodes', {
-                          method: 'POST',
-                          headers,
-                          body: JSON.stringify({ userId: userIdForGraph, type: 'text', data: content }),
-                        });
-                        if (resp.ok) {
-                          console.log('[MemoryManager] ✅ Directly ingested episode to GetZep via REST');
-                        } else {
-                          console.warn('[MemoryManager] GetZep REST ingest failed:', resp.status);
-                        }
-                      }
-                    } catch (sdkErr) {
-                      console.warn('[MemoryManager] Direct SDK ingest failed:', (sdkErr as any)?.message || sdkErr);
-                    }
-                  }
-                }
-              }
-            } catch (ingestErr) {
-              console.warn('[MemoryManager] Best-effort direct GetZep ingest failed:', (ingestErr as any)?.message || ingestErr);
-            }
+          if (content) {
+            await this.getzepManager.ingest(content, {
+              agent_id,
+              conversation_id: messages[0]?.context?.conversation_id,
+              timestamp: new Date().toISOString()
+            });
+            console.log('[MemoryManager] ✅ GetZep semantic ingestion completed');
           }
-        } else {
-          console.log('[MemoryManager] No account graph ID found');
+        } catch (error) {
+          console.error('[MemoryManager] GetZep semantic ingestion failed:', error);
         }
-      } else {
-        console.log('[MemoryManager] Missing agent_id or user_id; skipping queue insert');
       }
-    } catch (queueError) {
-      console.error('[MemoryManager] Error during graph ingestion queueing:', queueError);
-      // non-fatal
-    }
+      return [];
+    })();
 
-    return [...episodicIds, ...semanticIds];
+    // OPERATION 3: Pinecone vector upserts for episodic retrieval (if configured)
+    const pineconeUpsertPromise = (async () => {
+      try {
+        // Wait for episodic IDs to be created first
+        const episodicIds = await episodicPromise;
+        
+        if (episodicIds.length === 0) return;
+        
+        // Check for agent-scoped Pinecone datastore
+        const { data: connection } = await this.supabase
+          .from('agent_datastores')
+          .select(`
+            datastore_id,
+            datastores:datastore_id (
+              id,
+              type,
+              config
+            )
+          `)
+          .eq('agent_id', agent_id)
+          .eq('datastores.type', 'pinecone')
+          .maybeSingle();
+        
+        const datastore = (connection as any)?.datastores;
+        if (!datastore?.config?.apiKey || !datastore?.config?.indexName) return;
+        
+        // Fetch episodic memories and upsert to Pinecone
+        const { data: episodicRows } = await this.supabase
+          .from('agent_memories')
+          .select('id, agent_id, memory_type, content, created_at, importance')
+          .in('id', episodicIds);
+        
+        const episodicForUpsert = (episodicRows || []).filter((m: any) => m?.memory_type === 'episodic');
+        if (episodicForUpsert.length === 0) return;
+        
+        const pc = new (await import('npm:@pinecone-database/pinecone@2.0.0')).Pinecone({ apiKey: datastore.config.apiKey });
+        const index = pc.index(datastore.config.indexName);
+        const toUpsert: Array<{ id: string; values: number[]; metadata: Record<string, any> }> = [];
+        
+        for (const mem of episodicForUpsert) {
+          try {
+            const vector = await this.generateEmbeddings({
+              id: mem.id,
+              agent_id: mem.agent_id,
+              memory_type: mem.memory_type,
+              content: mem.content,
+              embeddings: undefined,
+              importance: mem.importance || 0.5,
+              decay_rate: 0.1,
+              access_count: 0,
+              related_memories: [],
+              source_message_id: undefined,
+              last_accessed: mem.created_at,
+              created_at: mem.created_at,
+              expires_at: null,
+            } as any);
+            
+            toUpsert.push({
+              id: mem.id,
+              values: vector,
+              metadata: {
+                agent_id: mem.agent_id,
+                memory_type: 'episodic',
+                created_at: mem.created_at,
+              },
+            });
+          } catch (_) {}
+        }
+        
+        if (toUpsert.length > 0) {
+          await index.upsert(toUpsert as any);
+          console.log(`[MemoryManager] ✅ Upserted ${toUpsert.length} episodic memories to Pinecone`);
+        }
+      } catch (error) {
+        console.warn('[MemoryManager] Pinecone upsert failed:', error);
+      }
+    })();
+
+    // ========================================
+    // WAIT FOR ALL PARALLEL OPERATIONS
+    // ========================================
+    
+    // Wait for episodic and semantic operations to complete
+    const [episodicIds] = await Promise.all([
+      episodicPromise,
+      semanticPromise,
+      pineconeUpsertPromise
+    ]);
+    
+    console.log(`[MemoryManager] Memory operations complete - Episodic: ${episodicIds.length} memories created`);
+    
+    return episodicIds;
   }
   
   /**
@@ -806,17 +723,19 @@ export class MemoryManager {
     relevance_scores: number[];
     external?: any[];
   }> {
-    const results = {
-      episodic: [] as any[],
-      semantic: [] as any[],
-      procedural: [] as any[],
-      relevance_scores: [] as number[],
-      external: [] as any[],
-    };
+    // Initialize GetZep manager if needed
+    if (!this.getzepManager && agent_id) {
+      this.getzepManager = new GetZepSemanticManager(this.supabase, agent_id);
+    }
     
-    // Search episodic memories via vector search (Pinecone) if available; fallback to DB query
-    if (!context?.memory_types || context.memory_types.includes('episodic')) {
-      try {
+    // ========================================
+    // PARALLEL RETRIEVAL - COMPLETELY INDEPENDENT
+    // ========================================
+    
+    // OPERATION 1: Episodic retrieval (Pinecone/vector)
+    const episodicPromise = (async () => {
+      if (!context?.memory_types || context.memory_types.includes('episodic')) {
+        try {
         // Prefer agent-scoped Pinecone configuration
         const { data: connection } = await this.supabase
           .from('agent_datastores')
@@ -881,109 +800,83 @@ export class MemoryManager {
               .from('agent_memories')
               .select('*')
               .in('id', ids);
-            results.episodic = (memories || []) as any[];
+            return (memories || []) as any[];
           } else {
-            results.episodic = [];
+            return [];
           }
         } else {
           // Fallback: DB episodic query
-          results.episodic = await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
+          return await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
         }
       } catch (err) {
         console.warn('[MemoryManager] Episodic vector search failed; falling back:', (err as Error)?.message);
         try {
-          results.episodic = await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
+          return await this.episodicManager.query({ agent_id, timeframe: context?.timeframe });
         } catch {
-          results.episodic = [];
+          return [];
         }
       }
-    }
+      } else {
+        return [];
+      }
+    })();
     
-    // Search semantic memories if available (never throw)
-    if (!context?.memory_types || context.memory_types.includes('semantic')) {
-      try {
-        // Prefer agent-scoped datastore configuration if available
-        const { data: connection } = await this.supabase
-          .from('agent_datastores')
-          .select(`
-            datastore_id,
-            datastores:datastore_id (
-              id,
-              type,
-              config,
-              user_id
-            )
-          `)
-          .eq('agent_id', agent_id)
-          .eq('datastores.type', 'pinecone')
-          .single();
-
-        const ds = (connection as any)?.datastores;
-        let apiKey: string | null = null;
+    // OPERATION 2: Semantic retrieval (GetZep/graph)
+    const semanticPromise = (async () => {
+      if (this.getzepManager) {
         try {
-          if (ds?.config?.connectionId && connection?.datastores?.user_id) {
-            const { data: connRow } = await this.supabase
-              .from('user_oauth_connections')
-              .select('vault_access_token_id')
-              .eq('id', ds.config.connectionId)
-              .eq('user_id', (connection as any).datastores.user_id)
-              .maybeSingle();
-            const vaultId = (connRow as any)?.vault_access_token_id;
-            if (vaultId) {
-              const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: vaultId });
-              apiKey = decrypted as string;
-            }
-          } else if (ds?.config?.vaultId) {
-            const { data: decrypted } = await this.supabase.rpc('vault_decrypt', { vault_id: ds.config.vaultId });
-            apiKey = decrypted as string;
-          } else if (ds?.config?.apiKey) {
-            apiKey = ds.config.apiKey;
-          }
-        } catch (_) { apiKey = null; }
-        if (apiKey && ds?.config?.indexName) {
-          // Build a per-agent semantic manager with the agent's Pinecone credentials
-          const dynamicPinecone = new Pinecone({ apiKey });
-          const SemanticCtor = this.semanticManager ? (this.semanticManager as any).constructor : SemanticMemoryManager;
-          const agentSemantic = new SemanticCtor(
-            this.supabase,
-            dynamicPinecone,
-            this.openai,
-            {
-              index_name: ds.config.indexName,
-              namespace: this.config.namespace,
-              embedding_model: this.config.embedding_model,
-            }
-          );
-          results.semantic = await agentSemantic.query({ agent_id, concept: query });
-        } else if (this.semanticManager) {
-          // Fallback to default semantic manager
-          results.semantic = await this.semanticManager.query({ agent_id, concept: query });
-        } else {
-          console.info('[MemoryManager] Semantic memory not configured for agent');
-          results.semantic = [];
+          const results = await this.getzepManager.retrieve(query, 10);
+          console.log(`[MemoryManager] GetZep semantic retrieval returned ${results.length} results`);
+          return results;
+        } catch (error) {
+          console.error('[MemoryManager] GetZep semantic retrieval failed:', error);
+          return [];
         }
-      } catch (err) {
-        console.warn('[MemoryManager] Semantic search failed:', (err as Error)?.message);
-        results.semantic = [];
       }
-    }
+      return [];
+    })();
     
-    // External datastore vector search (connected Pinecone index via agent_datastores)
-    try {
-      const externalText = await getVectorSearchResults(query, agent_id, this.supabase, this.openai);
-      if (externalText) {
-        results.external = [{ id: `external_${crypto.randomUUID()}`, content: { definition: externalText, concept: 'External Knowledge' } }];
+    // No legacy semantic - GetZep handles all semantic memory now
+    
+    // OPERATION 4: External datastore vector search
+    const externalPromise = (async () => {
+      try {
+        const externalText = await getVectorSearchResults(query, agent_id, this.supabase, this.openai);
+        if (externalText) {
+          return [{ id: `external_${crypto.randomUUID()}`, content: { definition: externalText, concept: 'External Knowledge' } }];
+        }
+      } catch (_e) {
+        // ignore
       }
-    } catch (_e) {
-      // ignore
-    }
-
-    // Search procedural memories
-    if (!context?.memory_types || context.memory_types.includes('procedural')) {
-      results.procedural = await this.getProcedural(agent_id, query);
-    }
+      return [];
+    })();
     
-    return results;
+    // OPERATION 5: Procedural memories
+    const proceduralPromise = (async () => {
+      if (!context?.memory_types || context.memory_types.includes('procedural')) {
+        return await this.getProcedural(agent_id, query);
+      }
+      return [];
+    })();
+    
+    // ========================================
+    // WAIT FOR ALL PARALLEL OPERATIONS
+    // ========================================
+    
+    const [episodic, semantic, external, procedural] = await Promise.all([
+      episodicPromise,
+      semanticPromise,
+      externalPromise,
+      proceduralPromise
+    ]);
+    
+    return {
+      episodic,
+      semantic, // Only GetZep semantic memory now
+      procedural,
+      relevance_scores: [],
+      external
+    };
   }
   
   // ============================
