@@ -88,19 +88,30 @@ export class MessageProcessor {
           try {
             // Load user's reasoning threshold preference
             let userThreshold = 0.3; // default
-            try {
-              const { data: agent } = await this.supabase
-                .from('agents')
-                .select('metadata')
-                .eq('id', context.agent_id)
-                .single();
-              
-              const reasoningSettings = agent?.data?.metadata?.reasoning_settings;
-              if (reasoningSettings?.threshold !== undefined) {
-                userThreshold = Math.max(0, Math.min(1, reasoningSettings.threshold));
+            
+            // First check if threshold is passed in request options
+            if (context.request_options?.reasoning?.threshold !== undefined) {
+              userThreshold = context.request_options.reasoning.threshold;
+              console.log(`[ReasoningStage] Using threshold from request: ${userThreshold}`);
+            } else {
+              // Otherwise try to load from agent settings
+              try {
+                const { data: agent } = await this.supabase
+                  .from('agents')
+                  .select('metadata')
+                  .eq('id', context.agent_id)
+                  .single();
+                
+                const reasoningSettings = agent?.metadata?.reasoning_settings;
+                if (reasoningSettings?.threshold !== undefined) {
+                  userThreshold = Math.max(0, Math.min(1, reasoningSettings.threshold));
+                  console.log(`[ReasoningStage] Loaded threshold from agent settings: ${userThreshold}`);
+                } else {
+                  console.log(`[ReasoningStage] Using default threshold: ${userThreshold}`);
+                }
+              } catch (e) {
+                console.log(`[ReasoningStage] Error loading settings, using default: ${userThreshold}`, e);
               }
-            } catch (e) {
-              // Use default if can't load settings
             }
 
             // Enable reasoning by default; UI can turn it off via options.reasoning.enabled = false
@@ -115,8 +126,12 @@ export class MessageProcessor {
             metrics.reasoning = { score: scoreInfo.score, enabled: passes, style, reason: scoreInfo.reason };
             (metrics as any).reasoning_ran = passes;
             
-            console.log(`[ReasoningStage] Reasoning ${passes ? 'ENABLED' : 'DISABLED'} - Style: ${style}, Score: ${scoreInfo.score}, Threshold: ${threshold}`);
-            if (passes) {
+            console.log(`[ReasoningStage] Score: ${scoreInfo.score.toFixed(3)} vs Threshold: ${threshold.toFixed(3)} = ${passes ? 'ACTIVE' : 'INACTIVE'}`);
+            console.log(`[ReasoningStage] Details - Enabled: ${requestedEnabled}, Style: ${style}, Reason: ${scoreInfo.reason}`);
+            // Always generate reasoning steps when score is above threshold, even if not "enabled"
+            // This allows users to see what reasoning would have done
+            if (scoreInfo.score >= threshold || passes) {
+              console.log(`[ReasoningStage] Executing reasoning chain (score ${scoreInfo.score.toFixed(3)} >= threshold ${threshold.toFixed(3)})`);
               // Use structured sections, not segments
               const segsForFacts = (message?.context?.context_window?.sections || []) as any[];
               const factsSeed: string[] = [];
@@ -126,11 +141,17 @@ export class MessageProcessor {
                 if (txt) factsSeed.push(String(txt).slice(0, 180));
               }
               const availableTools = (message.tools || []).map((t: any)=>t.function?.name).filter(Boolean);
+              console.log(`[ReasoningStage] Creating ReasoningMarkov with style: ${style}, tools: ${availableTools.length}, facts: ${factsSeed.length}`);
               const markov = new ReasoningMarkov({ style, toolsAvailable: availableTools, facts: factsSeed });
-              const steps = await markov.run(
-                style,
-                Math.min(6, opts.max_steps ?? 4),
-                async (q) => {
+              
+              let steps: any[] = [];
+              try {
+                console.log(`[ReasoningStage] Starting markov.run with max_steps: ${Math.min(6, opts.max_steps ?? 4)}`);
+                steps = await markov.run(
+                  style,
+                  Math.min(6, opts.max_steps ?? 4),
+                  async (q) => {
+                    console.log(`[ReasoningStage] Markov asking question: ${q?.substring(0, 100)}...`);
                   // Use router for consistency with per-agent model selection when enabled
                   let hypothesis = '';
                   const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
@@ -139,7 +160,9 @@ export class MessageProcessor {
         try {
           const mod = await import(['..','..','shared','llm','router.ts'].join('/'));
           LLMRouter = (mod as any).LLMRouter;
-        } catch (_) {}
+        } catch (importErr) {
+          console.error(`[ReasoningStage] Failed to import LLMRouter:`, importErr);
+        }
                     const router = new LLMRouter();
                     const resp = await router.chat((context as any).agent_id, [
                       { role: 'system', content: 'Answer the user’s question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary.' },
@@ -166,11 +189,16 @@ export class MessageProcessor {
                     metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage?.completion_tokens || 0);
                     metrics.tokens_used = (metrics.tokens_used || 0) + ((resp.usage?.total_tokens) || 0);
                   }
-                  return hypothesis;
-                },
-                async (_h) => ({ needed: false, gap: 0 }), // TODO: tool test hook
-                async (_a) => ({})
-              );
+                    return hypothesis;
+                  },
+                  async (_h) => ({ needed: false, gap: 0 }), // TODO: tool test hook
+                  async (_a) => ({})
+                );
+                console.log(`[ReasoningStage] Markov.run completed with ${steps.length} steps`);
+              } catch (markovErr) {
+                console.error(`[ReasoningStage] Markov.run failed:`, markovErr);
+                steps = [];
+              }
               // Collect lightweight facts from context (top segments)
               const facts: string[] = [];
               const segs = (message?.context?.context_window?.sections || []) as any[];
@@ -180,6 +208,7 @@ export class MessageProcessor {
                 if (text) facts.push(String(text).slice(0, 280));
               }
               // Map detailed steps (ensure at least one step recorded)
+              console.log(`[ReasoningStage] Mapping ${steps.length} raw steps to structured format`);
               const mapped = steps.map(s => ({
                 step: s.step,
                 type: s.state === 'conclude' ? 'decision' : 'analysis',
@@ -193,6 +222,7 @@ export class MessageProcessor {
                 observation: s.observation,
                 facts_considered: facts,
               }));
+              console.log(`[ReasoningStage] Mapped to ${mapped.length} structured steps`);
               metrics.reasoning_steps = mapped.length > 0 ? mapped : [{
                 step: 1,
                 type: 'analysis',
@@ -208,6 +238,21 @@ export class MessageProcessor {
               } as any];
               (metrics as any).reasoning_graph = { states: steps.map(s => s.state) };
               (context as any).reasoning_style = style;
+              
+              // Log reasoning chain capture
+              console.log(`[ReasoningStage] Captured ${metrics.reasoning_steps.length} reasoning steps`);
+              if (metrics.reasoning_steps.length > 0) {
+                console.log(`[ReasoningStage] First step: ${JSON.stringify(metrics.reasoning_steps[0].description)}`);
+              }
+              
+              // Pass reasoning info to the message context so handlers can access it
+              (message.context as any).reasoning = {
+                style,
+                steps: metrics.reasoning_steps,
+                enabled: passes,
+                score: scoreInfo.score,
+                threshold,
+              };
             }
             } catch (err) {
               try { this.outerMonitoring.captureError(err as Error, { operation: 'reasoning_stage' }); } catch {}

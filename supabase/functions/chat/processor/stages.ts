@@ -435,11 +435,11 @@ export class MainProcessingStage extends ProcessingStage {
       (metrics as any).tool_requested = (result.metrics as any).tool_requested;
     }
     
-    // Propagate reasoning chain results from handler
-    if (result.metrics.reasoning_steps) {
+    // Propagate reasoning chain results from handler (only if not already set by ReasoningStage)
+    if (result.metrics.reasoning_steps && !metrics.reasoning_steps) {
       metrics.reasoning_steps = result.metrics.reasoning_steps;
     }
-    if (result.metrics.reasoning) {
+    if (result.metrics.reasoning && !metrics.reasoning) {
       metrics.reasoning = result.metrics.reasoning;
     }
     
