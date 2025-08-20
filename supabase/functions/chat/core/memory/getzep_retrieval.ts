@@ -1,5 +1,5 @@
-// GetZep Knowledge Graph Retrieval
-// Handles retrieval of semantic knowledge from GetZep cloud service
+// GetZep Knowledge Graph Retrieval - v3 API Updated
+// Handles retrieval of semantic knowledge from GetZep cloud service using thread.getUserContext
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 
@@ -68,115 +68,54 @@ export async function searchGetZepKnowledgeGraph(
       return [];
     }
 
-    // Initialize GetZep client (guard API shape)
+    // Initialize GetZep client with v3 API - UPDATED VERSION
     const client = new ZepClientLocal({ apiKey: apiKey as string });
-    if (!client || !client.memory || typeof client.memory.searchMemory !== 'function') {
-      console.warn('[GetZepRetrieval] Zep client missing memory API; using REST fallback');
-      try {
-        const baseUrl = 'https://api.getzep.com/v3';
-        const body = {
-          user_id: userId,
-          text: query,
-          limit: 10,
-        } as any;
-        // Optional metadata headers if present
-        const headers: Record<string, string> = {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        };
-        try {
-          const { data: connMeta } = await supabase
-            .from('user_oauth_connections')
-            .select('connection_metadata')
-            .eq('oauth_provider_id', provider.id)
-            .eq('user_id', userId)
-            .maybeSingle();
-          const meta = (connMeta as any)?.connection_metadata || {};
-          // GetZep v3 uses X-Project-Id header
-          if (meta.project_id) headers['X-Project-Id'] = String(meta.project_id);
-        } catch (_) {}
-
-        const resp = await fetch(`${baseUrl}/memory/search`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (!resp.ok) {
-          console.warn('[GetZepRetrieval] REST search failed:', resp.status);
-          return [];
-        }
-        const json: any = await resp.json();
-        const results = Array.isArray(json?.results) ? json.results : (Array.isArray(json) ? json : []);
-        return results
-          .map((r: any) => ({
-            content: r?.summary || r?.content || '',
-            score: r?.score || r?.dist || 0,
-            metadata: r?.metadata || {},
-            source: 'getzep_rest',
-          }))
-          .filter((r: any) => r.content);
-      } catch (restErr) {
-        console.warn('[GetZepRetrieval] REST fallback error:', (restErr as any)?.message || restErr);
-        return [];
-      }
+    
+    // FORCE CACHE REFRESH - Use thread-based API only
+    const threadId = `user_${userId}_graph`;
+    
+    console.log(`[GetZepRetrieval] UPDATED: Using v3 thread API for user ${userId}`);
+    
+    if (!client || !client.thread || typeof client.thread.getUserContext !== 'function') {
+      console.error('[GetZepRetrieval] CRITICAL: GetZep v3 SDK missing thread.getUserContext - this should not happen with latest SDK');
+      return [];
     }
 
-    // Search the user's knowledge graph
-    // GetZep v3 uses memory.searchMemory for semantic search
+    // UPDATED: Get user context from GetZep v3 thread API ONLY
     try {
-      console.log(`[GetZepRetrieval] Searching graph for user ${userId} with query: "${query.substring(0, 50)}..."`);
+      console.log(`[GetZepRetrieval] UPDATED VERSION: Getting context for user ${userId} with thread ${threadId}`);
       
-      // Search for relevant memories
-      // Note: GetZep requires a session/thread ID, we use the user ID as a session identifier
-      const searchResults = await client.memory.searchMemory(
-        userId, // session ID
-        {
-          text: query,
-          limit: 10,
-          searchType: 'similarity', // or 'mmr' for maximal marginal relevance
-        }
-      );
+      // Get the user's context from their thread using v3 API
+      const memory = await client.thread.getUserContext(threadId);
 
-      if (!searchResults || !searchResults.results) {
-        console.log('[GetZepRetrieval] No results from GetZep search');
+      if (!memory || !memory.context) {
+        console.log('[GetZepRetrieval] No context available from GetZep thread');
         return [];
       }
 
-      // Format results for consumption
-      const formattedResults: GetZepSearchResult[] = searchResults.results
-        .map((result: any) => ({
-          content: result.message?.content || result.content || '',
-          score: result.score || result.dist || 0,
-          metadata: result.metadata || {},
-          source: 'getzep_knowledge_graph'
-        }))
-        .filter((r: GetZepSearchResult) => r.content && r.score > 0.5);
+      // Return context as a single structured result
+      const contextResult: GetZepSearchResult = {
+        content: memory.context,
+        score: 0.8, // High relevance for user context
+        metadata: {
+          thread_id: threadId,
+          retrieved_at: new Date().toISOString(),
+          context_length: memory.context.length,
+          api_version: 'v3_thread'
+        },
+        source: 'getzep_user_context_v3'
+      };
 
-      console.log(`[GetZepRetrieval] Found ${formattedResults.length} relevant results`);
-      return formattedResults;
+      console.log(`[GetZepRetrieval] ✅ UPDATED: Retrieved context (${memory.context.length} chars) via v3 thread API`);
+      return [contextResult];
 
-    } catch (searchError: any) {
-      // If search fails, try alternative methods
-      console.warn('[GetZepRetrieval] Search failed, trying alternative:', searchError?.message);
-      
-      // Try getting recent memories as fallback
-      try {
-        if (!client.memory || typeof client.memory.getMemory !== 'function') {
-          throw new Error('memory.getMemory not available');
-        }
-        const memories = await client.memory.getMemory(userId, { limit: 5 });
-        if (memories?.messages) {
-          return memories.messages
-            .map((msg: any) => ({
-              content: msg.content || '',
-              score: 0.7, // Default relevance score
-              metadata: msg.metadata || {},
-              source: 'getzep_recent_memories'
-            }))
-            .filter((r: GetZepSearchResult) => r.content);
-        }
-      } catch (fallbackError) {
-        console.warn('[GetZepRetrieval] Fallback also failed:', (fallbackError as any)?.message || fallbackError);
+    } catch (contextError: any) {
+      if (contextError?.statusCode === 404) {
+        console.log(`[GetZepRetrieval] Thread ${threadId} not found during retrieval - no context available yet`);
+        return [];
+      } else {
+        console.error('[GetZepRetrieval] UPDATED: Failed to get user context via v3 thread API:', contextError?.message);
+        return [];
       }
     }
 

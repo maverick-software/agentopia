@@ -19,6 +19,61 @@ export class GetZepSemanticManager {
   ) {}
 
   /**
+   * Parse content string into GetZep Message format
+   */
+  private parseContentToMessages(content: string, metadata?: Record<string, any>): any[] {
+    const messages: any[] = [];
+    
+    // Split content by role indicators (user:, assistant:, etc.)
+    const lines = content.split('\n');
+    let currentRole = 'user';
+    let currentContent = '';
+    let currentName = 'User';
+    
+    for (const line of lines) {
+      const roleMatch = line.match(/^(user|assistant|system):\s*(.*)$/i);
+      if (roleMatch) {
+        // Save previous message if we have content
+        if (currentContent.trim()) {
+          messages.push({
+            role: currentRole,
+            content: currentContent.trim(),
+            name: currentRole === 'user' ? 'User' : 'Assistant'
+          });
+        }
+        
+        // Start new message
+        currentRole = roleMatch[1].toLowerCase();
+        currentContent = roleMatch[2];
+        currentName = currentRole === 'user' ? 'User' : 'Assistant';
+      } else {
+        // Continue current message
+        currentContent += (currentContent ? '\n' : '') + line;
+      }
+    }
+    
+    // Add final message
+    if (currentContent.trim()) {
+      messages.push({
+        role: currentRole,
+        content: currentContent.trim(),
+        name: currentName
+      });
+    }
+    
+    // If no role indicators found, treat entire content as user message
+    if (messages.length === 0 && content.trim()) {
+      messages.push({
+        role: 'user',
+        content: content.trim(),
+        name: 'User'
+      });
+    }
+    
+    return messages;
+  }
+
+  /**
    * Initialize GetZep configuration for this agent
    */
   async initialize(): Promise<boolean> {
@@ -97,61 +152,62 @@ export class GetZepSemanticManager {
     try {
       console.log(`[GetZepSemantic] Ingesting content (${content.length} chars)`);
       
-      // Try SDK first
+      // Try SDK with correct v3 API
       try {
         const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
         const ZepClient = (mod as any)?.ZepClient || (mod as any)?.default;
         
         if (ZepClient) {
           const client = new ZepClient({ 
-            apiKey: this.config!.apiKey,
-            projectId: this.config!.projectId,
-            accountId: this.config!.accountId
+            apiKey: this.config!.apiKey
           });
           
-          if (client?.graph?.add) {
-            const episode = await client.graph.add({
-              userId: this.config!.userId,
-              type: 'text',
-              data: content,
-              metadata: metadata || {}
-            });
-            console.log(`[GetZepSemantic] ✅ Ingested via SDK: ${episode?.uuid}`);
-            return;
+          // Use thread-based API - create a user-based thread ID for consistency
+          const threadId = `user_${this.config!.userId}_graph`;
+          
+          // Parse content into messages format
+          const messages = this.parseContentToMessages(content, metadata);
+          
+          if (client?.thread?.addMessages && messages.length > 0) {
+            try {
+              // First, try to add messages directly
+              const episodeUuids = await client.thread.addMessages(threadId, { messages });
+              console.log(`[GetZepSemantic] ✅ Ingested ${messages.length} messages via SDK:`, episodeUuids);
+              return;
+            } catch (addError: any) {
+              if (addError?.statusCode === 404 && addError?.body?.message?.includes('thread not found')) {
+                console.log(`[GetZepSemantic] Thread ${threadId} not found, creating it first...`);
+                
+                // Create the thread first, then add messages
+                try {
+                  // The create method expects an object with threadId and userId
+                  await client.thread.create({ 
+                    threadId: threadId, 
+                    userId: this.config!.userId 
+                  });
+                  console.log(`[GetZepSemantic] ✅ Created thread ${threadId}`);
+                  
+                  // Now try adding messages again
+                  const episodeUuids = await client.thread.addMessages(threadId, { messages });
+                  console.log(`[GetZepSemantic] ✅ Ingested ${messages.length} messages via SDK after creating thread:`, episodeUuids);
+                  return;
+                } catch (createError: any) {
+                  console.error(`[GetZepSemantic] Failed to create thread ${threadId}:`, createError?.message);
+                  throw createError;
+                }
+              } else {
+                throw addError;
+              }
+            }
           }
         }
       } catch (sdkError) {
-        console.warn('[GetZepSemantic] SDK ingestion failed, trying REST:', sdkError);
+        console.warn('[GetZepSemantic] SDK ingestion failed:', sdkError);
       }
 
-      // Fallback to REST API - use v3 endpoint with correct auth
-      const headers: Record<string, string> = {
-        'Api-Key': this.config!.apiKey,
-        'Content-Type': 'application/json',
-      };
-      
-      // GetZep v3 uses X-Project-Id header
-      if (this.config!.projectId) {
-        headers['X-Project-Id'] = this.config!.projectId;
-      }
-
-      const response = await fetch('https://api.getzep.com/v3/graph/messages', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          user_id: this.config!.userId,
-          content,
-          metadata: metadata || {}
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`[GetZepSemantic] ✅ Ingested via REST: ${result?.uuid}`);
-      } else {
-        const error = await response.text();
-        console.error(`[GetZepSemantic] REST ingestion failed (${response.status}):`, error);
-      }
+      // Fallback: Direct REST API is not available in GetZep v3
+      // The SDK is the primary way to interact with GetZep
+      console.error('[GetZepSemantic] SDK is required for GetZep v3 - REST fallback not available');
     } catch (error) {
       console.error('[GetZepSemantic] Ingestion error:', error);
     }
@@ -170,64 +226,59 @@ export class GetZepSemanticManager {
     try {
       console.log(`[GetZepSemantic] Retrieving for query: "${query.substring(0, 50)}..."`);
       
-      // Try SDK first
+      // Try SDK with correct v3 API
       try {
         const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
         const ZepClient = (mod as any)?.ZepClient || (mod as any)?.default;
         
         if (ZepClient) {
           const client = new ZepClient({ 
-            apiKey: this.config!.apiKey,
-            projectId: this.config!.projectId,
-            accountId: this.config!.accountId
+            apiKey: this.config!.apiKey
           });
           
-          if (client?.memory?.searchMemory) {
-            const results = await client.memory.searchMemory(
-              this.config!.userId,
-              { text: query, limit, searchType: 'similarity' }
-            );
-            
-            if (results?.results) {
-              console.log(`[GetZepSemantic] Retrieved ${results.results.length} results via SDK`);
-              return results.results;
+          // Use thread-based API - same thread ID as ingestion
+          const threadId = `user_${this.config!.userId}_graph`;
+          
+          if (client?.thread?.getUserContext) {
+            try {
+              const memory = await client.thread.getUserContext(threadId);
+              
+              if (memory?.context) {
+                console.log(`[GetZepSemantic] Retrieved context via SDK (${memory.context.length} chars)`);
+                
+                // Return context as structured memory items
+                return [{
+                  id: `context_${Date.now()}`,
+                  content: {
+                    definition: memory.context,
+                    concept: 'User Context',
+                    confidence: 0.8
+                  },
+                  metadata: {
+                    source: 'getzep_context',
+                    thread_id: threadId,
+                    retrieved_at: new Date().toISOString()
+                  }
+                }];
+              }
+            } catch (contextError: any) {
+              if (contextError?.statusCode === 404) {
+                console.log(`[GetZepSemantic] Thread ${threadId} not found during retrieval - no context available yet`);
+                return [];
+              } else {
+                throw contextError;
+              }
             }
           }
         }
       } catch (sdkError) {
-        console.warn('[GetZepSemantic] SDK retrieval failed, trying REST:', sdkError);
+        console.warn('[GetZepSemantic] SDK retrieval failed:', sdkError);
       }
 
-      // Fallback to REST API - use v3 search endpoint with correct auth
-      const headers: Record<string, string> = {
-        'Api-Key': this.config!.apiKey,
-        'Content-Type': 'application/json',
-      };
-      
-      // GetZep v3 uses X-Project-Id header
-      if (this.config!.projectId) {
-        headers['X-Project-Id'] = this.config!.projectId;
-      }
-
-      const response = await fetch(`https://api.getzep.com/v3/memory/search`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          user_id: this.config!.userId,
-          text: query,
-          limit
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`[GetZepSemantic] Retrieved ${data?.results?.length || 0} results via REST`);
-        return data?.results || [];
-      } else {
-        const error = await response.text();
-        console.error(`[GetZepSemantic] REST retrieval failed (${response.status}):`, error);
-        return [];
-      }
+      // Fallback: Direct REST API is not available in GetZep v3
+      // The SDK is the primary way to interact with GetZep
+      console.error('[GetZepSemantic] SDK is required for GetZep v3 - REST fallback not available');
+      return [];
     } catch (error) {
       console.error('[GetZepSemantic] Retrieval error:', error);
       return [];
