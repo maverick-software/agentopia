@@ -93,7 +93,7 @@ export async function getVectorSearchResults(
     const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
     if (useRouter) {
       try {
-        const routerModulePath = ['..', 'shared', 'llm', 'router.ts'].join('/');
+        const routerModulePath = '../shared/llm/router.ts';
         const { LLMRouter } = await import(routerModulePath);
         const router = new LLMRouter();
         const vectors = await router.embed(agentId, [message]);

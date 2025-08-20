@@ -599,6 +599,23 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                           <span className="text-xs font-medium text-yellow-800 uppercase">{step.type}</span>
                           <span className="text-xs text-gray-500">({formatTime(step.time_ms)})</span>
                           <span className="text-xs text-gray-500">Confidence: {formatPercent(step.confidence)}</span>
+                          
+                          {/* Memory integration indicators */}
+                          {(step.episodic_count > 0 || step.semantic_count > 0) && (
+                            <div className="flex items-center gap-1">
+                              {step.episodic_count > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                                  🧠 {step.episodic_count}
+                                </span>
+                              )}
+                              {step.semantic_count > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+                                  📚 {step.semantic_count}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          
                           <button
                             className="ml-auto text-xs px-2 py-0.5 rounded border border-yellow-300 text-yellow-900 hover:bg-yellow-100"
                             onClick={() => { setSelectedStep(step); setShowStepModal(true); }}
@@ -607,6 +624,14 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                           </button>
                         </div>
                         <div className="text-sm text-gray-700">{step.description}</div>
+                        
+                        {/* Memory insights preview */}
+                        {step.memory_insights && step.memory_insights.length > 0 && (
+                          <div className="mt-2 text-xs text-gray-600 italic border-l-2 border-gray-300 pl-2">
+                            💡 {step.memory_insights[0]}
+                            {step.memory_insights.length > 1 && ` (+${step.memory_insights.length - 1} more insights)`}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -725,6 +750,79 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                   </div>
                 </div>
               )}
+              
+              {/* Memory Integration Section */}
+              {(selectedStep.memories_used?.episodic?.length > 0 || selectedStep.memories_used?.semantic?.length > 0) && (
+                <div className="space-y-4">
+                  <div className="font-medium text-gray-900 flex items-center gap-2">
+                    <span>🧠 Memory Integration</span>
+                    <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">
+                      {selectedStep.episodic_count || 0} experiences, {selectedStep.semantic_count || 0} concepts
+                    </span>
+                  </div>
+                  
+                  {selectedStep.memories_used?.episodic?.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium text-blue-800 mb-2">📖 Past Experiences</div>
+                      <div className="space-y-2">
+                        {selectedStep.memories_used.episodic.map((memory: any, i: number) => (
+                          <div key={i} className="bg-blue-50 border border-blue-200 rounded p-2 text-xs">
+                            <div className="font-medium text-blue-900">
+                              {memory.content?.event || 'Experience'}
+                            </div>
+                            <div className="text-blue-700 mt-1">
+                              Outcome: {memory.content?.outcome || 'N/A'}
+                            </div>
+                            {memory.relevance_score && (
+                              <div className="text-blue-600 mt-1">
+                                Relevance: {(memory.relevance_score * 100).toFixed(0)}%
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedStep.memories_used?.semantic?.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium text-green-800 mb-2">📚 Known Concepts</div>
+                      <div className="space-y-2">
+                        {selectedStep.memories_used.semantic.map((memory: any, i: number) => (
+                          <div key={i} className="bg-green-50 border border-green-200 rounded p-2 text-xs">
+                            <div className="text-green-900">
+                              {typeof memory.content === 'string' 
+                                ? memory.content.substring(0, 200) 
+                                : (memory.content?.definition || memory.content?.concept || JSON.stringify(memory.content)).substring(0, 200)
+                              }
+                              {((typeof memory.content === 'string' ? memory.content : JSON.stringify(memory.content)).length > 200) && '...'}
+                            </div>
+                            {memory.relevance_score && (
+                              <div className="text-green-600 mt-1">
+                                Relevance: {(memory.relevance_score * 100).toFixed(0)}%
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedStep.memory_insights && selectedStep.memory_insights.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium text-purple-800 mb-2">💡 Memory Insights</div>
+                      <div className="space-y-1">
+                        {selectedStep.memory_insights.map((insight: string, i: number) => (
+                          <div key={i} className="bg-purple-50 border border-purple-200 rounded p-2 text-xs text-purple-900">
+                            {insight}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
               {Array.isArray(selectedStep.facts_considered) && selectedStep.facts_considered.length > 0 && (
                 <div>
                   <div className="font-medium text-gray-900">Facts Considered</div>

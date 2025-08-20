@@ -466,7 +466,7 @@ export class SemanticMemoryManager {
     let extractionText = '';
     const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
     if (useRouter && (messages[0] as any)?.context?.agent_id) {
-      const { LLMRouter } = await import('../../shared/llm/router.ts');
+      const { LLMRouter } = await import('../../../shared/llm/router.ts');
       const router = new LLMRouter();
       const resp = await router.chat((messages[0] as any).context.agent_id, [
         { role: 'system', content: `Extract factual knowledge from the conversation. Return JSON with:

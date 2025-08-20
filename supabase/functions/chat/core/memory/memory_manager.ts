@@ -1329,7 +1329,7 @@ class MemoryConsolidator {
     const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
     try {
       if (useRouter) {
-        const module = await import(['..','..','..','shared','llm','router.ts'].join('/'));
+        const module = await import('../../../shared/llm/router.ts');
         const LLMRouter = (module as any).LLMRouter;
         if (LLMRouter) {
           const router = new LLMRouter();

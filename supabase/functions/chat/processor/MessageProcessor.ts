@@ -21,6 +21,7 @@ import {
 import { ReasoningScorer } from '../core/reasoning/reasoning_scorer.ts';
 import { ReasoningSelector } from '../core/reasoning/reasoning_selector.ts';
 import { ReasoningMarkov } from '../core/reasoning/reasoning_markov.ts';
+import { MemoryIntegratedMarkov } from '../core/reasoning/memory_integrated_markov.ts';
 import type { ReasoningOptions, ReasoningStyle } from '../core/reasoning/types.ts';
 import { 
   TextMessageHandler, 
@@ -82,7 +83,7 @@ export class MessageProcessor {
       new EnrichmentStage(this.contextEngine, this._memoryManager),
       // Reasoning stage using scorer+selector+markov
       new (class ReasoningStage extends ProcessingStage {
-        constructor(private outerOpenAI: any, private outerMonitoring: MonitoringSystem) { super(); }
+        constructor(private outerOpenAI: any, private outerMonitoring: MonitoringSystem, private _memoryManager: any) { super(); }
         get name() { return 'reasoning'; }
         async process(message: any, context: ProcessingContext, metrics: ProcessingMetrics): Promise<any> {
           try {
@@ -141,8 +142,20 @@ export class MessageProcessor {
                 if (txt) factsSeed.push(String(txt).slice(0, 180));
               }
               const availableTools = (message.tools || []).map((t: any)=>t.function?.name).filter(Boolean);
-              console.log(`[ReasoningStage] Creating ReasoningMarkov with style: ${style}, tools: ${availableTools.length}, facts: ${factsSeed.length}`);
-              const markov = new ReasoningMarkov({ style, toolsAvailable: availableTools, facts: factsSeed });
+              console.log(`[ReasoningStage] Creating MemoryIntegratedMarkov with style: ${style}, tools: ${availableTools.length}, facts: ${factsSeed.length}`);
+              
+              // Use memory-integrated reasoning with access to the memory manager
+              console.log(`[ReasoningStage] Memory manager available: ${!!this._memoryManager}, Agent ID: ${context.agent_id}`);
+              const markov = new MemoryIntegratedMarkov({ 
+                style, 
+                toolsAvailable: availableTools, 
+                facts: factsSeed,
+                memoryManager: this._memoryManager,
+                agentId: context.agent_id,
+                query: typeof message.content === 'object' && message.content.type === 'text' 
+                  ? message.content.text 
+                  : String(message.content)
+              });
               
               let steps: any[] = [];
               try {
@@ -152,46 +165,75 @@ export class MessageProcessor {
                   Math.min(6, opts.max_steps ?? 4),
                   async (q) => {
                     console.log(`[ReasoningStage] Markov asking question: ${q?.substring(0, 100)}...`);
-                  // Use router for consistency with per-agent model selection when enabled
-                  let hypothesis = '';
-                  const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
-                  if (useRouter && (context as any)?.agent_id) {
-        let LLMRouter: any = null;
-        try {
-          const mod = await import(['..','..','shared','llm','router.ts'].join('/'));
-          LLMRouter = (mod as any).LLMRouter;
-        } catch (importErr) {
-          console.error(`[ReasoningStage] Failed to import LLMRouter:`, importErr);
-        }
-                    const router = new LLMRouter();
-                    const resp = await router.chat((context as any).agent_id, [
-                      { role: 'system', content: 'Answer the user’s question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary.' },
-                      { role: 'user', content: q },
-                    ] as any, { temperature: 0.1, maxTokens: 80 });
-                    hypothesis = resp.text || '';
-                    if (resp.usage) {
-                      metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage.prompt || 0);
-                      metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage.completion || 0);
-                      metrics.tokens_used = (metrics.tokens_used || 0) + (resp.usage.total || 0);
+                    // Use router for consistency with per-agent model selection when enabled
+                    let hypothesis = '';
+                    const useRouter = (Deno.env.get('USE_LLM_ROUTER') || '').toLowerCase() === 'true';
+                    if (useRouter && (context as any)?.agent_id) {
+                      let LLMRouter: any = null;
+                      try {
+                        const mod = await import('../../shared/llm/router.ts');
+                        LLMRouter = (mod as any).LLMRouter;
+                        console.log(`[ReasoningStage] LLMRouter imported successfully:`, typeof LLMRouter);
+                      } catch (importErr) {
+                        console.error(`[ReasoningStage] Failed to import LLMRouter:`, importErr);
+                        // Fall back to direct OpenAI
+                      }
+                      if (LLMRouter) {
+                        const router = new LLMRouter();
+                        const resp = await router.chat((context as any).agent_id, [
+                          { role: 'system', content: "Answer the user's question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary." },
+                          { role: 'user', content: q },
+                        ] as any, { temperature: 0.1, maxTokens: 80 });
+                        hypothesis = resp.text || '';
+                        if (resp.usage) {
+                          metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage.prompt || 0);
+                          metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage.completion || 0);
+                          metrics.tokens_used = (metrics.tokens_used || 0) + (resp.usage.total || 0);
+                        }
+                      } else {
+                        // Fallback to direct OpenAI when router fails
+                        const resp = await this.outerOpenAI.chat.completions.create({
+                          model: 'gpt-4o-mini',
+                          messages: [
+                            { role: 'system', content: "Answer the user's question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary." },
+                            { role: 'user', content: q },
+                          ],
+                          temperature: 0.1,
+                          max_tokens: 80,
+                        });
+                        hypothesis = resp.choices?.[0]?.message?.content || '';
+                        metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage?.prompt_tokens || 0);
+                        metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage?.completion_tokens || 0);
+                        metrics.tokens_used = (metrics.tokens_used || 0) + ((resp.usage?.total_tokens) || 0);
+                      }
+                    } else {
+                      // Use direct OpenAI when router is disabled
+                      const resp = await this.outerOpenAI.chat.completions.create({
+                        model: 'gpt-4o-mini',
+                        messages: [
+                          { role: 'system', content: "Answer the user's question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary." },
+                          { role: 'user', content: q },
+                        ],
+                        temperature: 0.1,
+                        max_tokens: 80,
+                      });
+                      hypothesis = resp.choices?.[0]?.message?.content || '';
+                      metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage?.prompt_tokens || 0);
+                      metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage?.completion_tokens || 0);
+                      metrics.tokens_used = (metrics.tokens_used || 0) + ((resp.usage?.total_tokens) || 0);
                     }
-                  } else {
-                    const resp = await this.outerOpenAI.chat.completions.create({
-                      model: 'gpt-4o-mini',
-                      messages: [
-                        { role: 'system', content: 'Answer the user’s question with a single, direct sentence. Do not mention reasoning, steps, JSON, or meta commentary.' },
-                        { role: 'user', content: q },
-                      ],
-                      temperature: 0.1,
-                      max_tokens: 80,
-                    });
-                    hypothesis = resp.choices?.[0]?.message?.content || '';
-                    metrics.prompt_tokens = (metrics.prompt_tokens || 0) + (resp.usage?.prompt_tokens || 0);
-                    metrics.completion_tokens = (metrics.completion_tokens || 0) + (resp.usage?.completion_tokens || 0);
-                    metrics.tokens_used = (metrics.tokens_used || 0) + ((resp.usage?.total_tokens) || 0);
-                  }
                     return hypothesis;
                   },
-                  async (_h) => ({ needed: false, gap: 0 }), // TODO: tool test hook
+                  async (_h, memories) => {
+                    // Enhanced tool test hook with memory context
+                    // Check if memories suggest tool usage patterns
+                    const toolsFromMemories = memories?.episodic
+                      ?.flatMap(m => m.content?.context?.tools_used || [])
+                      .filter(Boolean) || [];
+                    
+                    const gap = toolsFromMemories.length > 0 ? 0.3 : 0.1;
+                    return { needed: false, gap };
+                  },
                   async (_a) => ({})
                 );
                 console.log(`[ReasoningStage] Markov.run completed with ${steps.length} steps`);
@@ -221,8 +263,13 @@ export class MessageProcessor {
                 action: (s as any).action,
                 observation: s.observation,
                 facts_considered: facts,
+                // Enhanced memory integration
+                memories_used: s.memories_used || { episodic: [], semantic: [] },
+                memory_insights: s.memory_insights || [],
+                episodic_count: s.memories_used?.episodic?.length || 0,
+                semantic_count: s.memories_used?.semantic?.length || 0,
               }));
-              console.log(`[ReasoningStage] Mapped to ${mapped.length} structured steps`);
+              console.log(`[ReasoningStage] Mapped to ${mapped.length} structured steps with memory integration`);
               metrics.reasoning_steps = mapped.length > 0 ? mapped : [{
                 step: 1,
                 type: 'analysis',
@@ -259,7 +306,7 @@ export class MessageProcessor {
             }
           return message;
         }
-      })(this.openai, this.monitoring),
+      })(this.openai, this.monitoring, this._memoryManager),
       
       new MainProcessingStage(this.getProcessingHandlers()),
       new ResponseStage(),

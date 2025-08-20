@@ -294,7 +294,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
     let effectiveModel = 'gpt-4';
     if (useRouter && context.agent_id) {
       try {
-        const mod = await import(['..','..','shared','llm','router.ts'].join('/'));
+        const mod = await import('../../shared/llm/router.ts');
         const LLMRouter = (mod as any).LLMRouter;
         router = LLMRouter ? new LLMRouter() : null;
       } catch (_) {
