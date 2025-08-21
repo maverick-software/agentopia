@@ -543,38 +543,48 @@ export class FunctionCallingManager {
   }
 
   /**
-   * Get Web Search tools for an agent (using unified OAuth system)
+   * Get Web Search tools for an agent (simplified approach - no complex permissions)
    */
   private async getWebSearchTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
     try {
-      // Check if agent has web search permissions using the unified OAuth system
-      const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
+      // First check if web search is enabled in agent settings
+      const { data: agent } = await this.supabaseClient
+        .from('agents')
+        .select('metadata')
+        .eq('id', agentId)
+        .single();
+        
+      const webSearchEnabled = agent?.metadata?.settings?.web_search_enabled;
+      if (webSearchEnabled !== true) {
+        console.log(`[FunctionCalling] Web search disabled for agent ${agentId} (setting: ${webSearchEnabled})`);
+        return [];
+      }
+      
+      // Simplified approach: Just check if user has any active web search credentials
+      // No need for complex permission grants - if they have credentials and toggle is on, provide tools
+      const { data: connections } = await this.supabaseClient
+        .from('user_oauth_connections')
         .select(`
-          *,
-          user_oauth_connections!inner(
-            oauth_providers!inner(name),
-            credential_type
-          )
+          id,
+          oauth_providers!inner(name, display_name),
+          connection_status,
+          credential_type
         `)
-        .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
-        .eq('user_oauth_connections.credential_type', 'api_key')
-        .eq('is_active', true);
+        .eq('user_id', userId)
+        .in('oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('credential_type', 'api_key')
+        .eq('connection_status', 'active');
 
-      if (!permissions || permissions.length === 0) {
-        console.log(`[FunctionCalling] No web search permissions found for agent ${agentId}`);
+      if (!connections || connections.length === 0) {
+        console.log(`[FunctionCalling] No active web search credentials found for user ${userId}`);
         return [];
       }
 
-      console.log(`[FunctionCalling] Agent ${agentId} has web search permissions`);
+      console.log(`[FunctionCalling] Agent ${agentId} has web search enabled and user has ${connections.length} active web search credentials`);
       console.log(`[FunctionCalling] Available web search tool definitions:`, Object.keys(WEB_SEARCH_MCP_TOOLS));
       
-      // Filter tools based on granted scopes
-      const grantedScopes = permissions[0]?.allowed_scopes || [];
+      // Return all web search tools - no scope filtering needed for API key tools
       const availableTools: OpenAIFunction[] = Object.values(WEB_SEARCH_MCP_TOOLS)
-        .filter(tool => tool.required_scopes.some(scope => grantedScopes.includes(scope)))
         .map(tool => ({
           name: tool.name,
           description: tool.description,
@@ -829,18 +839,10 @@ export class FunctionCallingManager {
     const startTime = Date.now();
     
     try {
-      // Validate permissions
-      const hasPermission = await this.validateWebSearchPermissions(agentId, userId);
-      if (!hasPermission) {
-        return {
-          success: false,
-          error: 'Agent does not have required web search permissions for this operation',
-          metadata: {
-            execution_time_ms: Date.now() - startTime,
-          },
-        };
-      }
-
+      // Simplified approach: No complex permission validation needed
+      // The fact that the tool was made available means the user has credentials
+      // and the agent has web search enabled
+      
       // Call Web Search API via Supabase Edge Function with auth token
       const { data, error } = await this.supabaseClient.functions.invoke('web-search-api', {
         body: {
@@ -1006,26 +1008,31 @@ export class FunctionCallingManager {
   }
 
   /**
-   * Validate web search permissions for an agent (using unified OAuth system)
+   * Validate web search permissions for an agent (simplified - just check settings)
+   * Note: This function is kept for backwards compatibility but is no longer used
    */
   private async validateWebSearchPermissions(agentId: string, userId: string): Promise<boolean> {
     try {
-      const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
-        .select(`
-          *,
-          user_oauth_connections!inner(
-            oauth_providers!inner(name),
-            credential_type
-          )
-        `)
-        .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .in('user_oauth_connections.oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
-        .eq('user_oauth_connections.credential_type', 'api_key')
-        .eq('is_active', true);
-
-      return permissions && permissions.length > 0;
+      // Simplified: Just check if web search is enabled for the agent
+      const { data: agent } = await this.supabaseClient
+        .from('agents')
+        .select('metadata')
+        .eq('id', agentId)
+        .single();
+        
+      const webSearchEnabled = agent?.metadata?.settings?.web_search_enabled;
+      
+      // Also check if user has any web search credentials
+      const { data: connections } = await this.supabaseClient
+        .from('user_oauth_connections')
+        .select('id')
+        .eq('user_id', userId)
+        .in('oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
+        .eq('credential_type', 'api_key')
+        .eq('connection_status', 'active')
+        .limit(1);
+        
+      return webSearchEnabled === true && connections && connections.length > 0;
     } catch (error) {
       console.error('[FunctionCalling] Error validating web search permissions:', error);
       return false;

@@ -58,12 +58,21 @@ export async function revokeConnection(
   supabase: SupabaseClient,
   connectionId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('user_oauth_connections')
-    .update({ connection_status: 'revoked', updated_at: new Date().toISOString() })
-    .eq('id', connectionId)
+  // First try to delete the connection completely
+  const deleted = await deleteConnectionHard(supabase, connectionId)
+  
+  if (!deleted) {
+    // If we can't delete due to foreign key constraints, mark as revoked temporarily
+    const { error } = await supabase
+      .from('user_oauth_connections')
+      .update({ connection_status: 'revoked', updated_at: new Date().toISOString() })
+      .eq('id', connectionId)
 
-  if (error) throw new Error(error.message)
+    if (error) throw new Error(error.message)
+    
+    // Log that this should be cleaned up later
+    console.warn(`Connection ${connectionId} marked as revoked instead of deleted due to foreign key constraints`)
+  }
 }
 
 export async function deleteConnectionHard(

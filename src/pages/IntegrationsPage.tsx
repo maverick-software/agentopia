@@ -103,9 +103,14 @@ export function IntegrationsPage() {
       return 'available';
     }
     
-    // Web Search providers are available
-    if (['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration.name)) {
+    // Unified Web Search integration is available
+    if (integration.name === 'Web Search') {
       return 'available';
+    }
+    
+    // Legacy web search providers are deprecated (but keep them available for existing connections)
+    if (['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration.name)) {
+      return 'deprecated';
     }
     // Pinecone & GetZep API key integrations are available
     if (['Pinecone', 'GetZep'].includes(integration.name)) {
@@ -144,7 +149,7 @@ export function IntegrationsPage() {
       integration.description?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const effectiveStatus = getEffectiveStatus(integration);
-    const isNotDisabled = effectiveStatus !== 'coming_soon';
+    const isNotDisabled = effectiveStatus === 'available' || effectiveStatus === 'beta';
     
     return matchesSearch && isNotDisabled;
   });
@@ -157,6 +162,8 @@ export function IntegrationsPage() {
         return 'sendgrid';
       case 'Mailgun':
         return 'mailgun';
+      case 'Web Search':
+        return 'web_search'; // Unified web search - will check all providers
       case 'Serper API':
         return 'serper_api';
       case 'SerpAPI':
@@ -175,6 +182,15 @@ export function IntegrationsPage() {
   const isIntegrationConnected = (integrationName: string) => {
     const provider = providerNameForIntegration(integrationName);
     if (!provider) return false;
+    
+    // For unified Web Search, check if any web search provider is connected
+    if (provider === 'web_search') {
+      const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
+      return unifiedConnections.some(c => 
+        webSearchProviders.includes(c.provider_name) && c.connection_status === 'active'
+      );
+    }
+    
     return unifiedConnections.some(c => c.provider_name === provider && c.connection_status === 'active');
   };
 

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, ChevronDown, BarChart3, Plus, Paperclip, Clock, Pencil, Archive, Share2 } from 'lucide-react';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, ChevronDown, BarChart3, Plus, Paperclip, Clock, Pencil, Archive, Share2, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
+import { useConnections } from '../hooks/useConnections';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -125,6 +126,7 @@ export function AgentChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { updateAgent } = useAgents();
+  const { connections } = useConnections({ includeRevoked: false });
   const [agent, setAgent] = useState<Agent | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -150,6 +152,62 @@ export function AgentChatPage() {
     const v = localStorage.getItem(key);
     return v === null ? true : v === 'true';
   });
+  
+  // Web search toggle (persist per agent in localStorage)
+  const [webSearchEnabled, setWebSearchEnabled] = useState<boolean>(() => {
+    const key = `agent_${agentId}_web_search_enabled`;
+    const v = localStorage.getItem(key);
+    return v === null ? false : v === 'true';
+  });
+  
+  // Check if user has web search credentials available
+  const hasWebSearchCredentials = connections.some(c => 
+    ['serper_api', 'serpapi', 'brave_search'].includes(c.provider_name) && 
+    c.connection_status === 'active'
+  );
+  
+  // Function to update agent's web search setting in metadata
+  const updateAgentWebSearchSetting = useCallback(async (enabled: boolean) => {
+    if (!agentId || !agent) return;
+    
+    try {
+      const currentMetadata = agent.metadata || {};
+      const currentSettings = currentMetadata.settings || {};
+      
+      const updatedMetadata = {
+        ...currentMetadata,
+        settings: {
+          ...currentSettings,
+          web_search_enabled: enabled
+        }
+      };
+      
+      const { error } = await supabase
+        .from('agents')
+        .update({ metadata: updatedMetadata })
+        .eq('id', agentId);
+        
+      if (error) {
+        console.error('Error updating agent web search setting:', error);
+      } else {
+        console.log(`[AgentChat] Web search ${enabled ? 'enabled' : 'disabled'} for agent ${agentId}`);
+        setAgent(prev => prev ? { ...prev, metadata: updatedMetadata } : null);
+      }
+    } catch (error) {
+      console.error('Error updating agent web search setting:', error);
+    }
+  }, [agentId, agent]);
+  
+  // Sync webSearchEnabled state with agent metadata when agent loads
+  useEffect(() => {
+    if (agent && agentId) {
+      const settingFromDB = agent.metadata?.settings?.web_search_enabled;
+      if (settingFromDB !== undefined) {
+        setWebSearchEnabled(settingFromDB);
+        localStorage.setItem(`agent_${agentId}_web_search_enabled`, String(settingFromDB));
+      }
+    }
+  }, [agent, agentId]);
   
   // AI State tracking
   const [aiState, setAiState] = useState<AIState | null>(null);
@@ -1598,6 +1656,31 @@ export function AgentChatPage() {
 	                  className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent`}
 	                >
 	                  <Brain className={`w-4 h-4 ${reasoningEnabled ? 'text-purple-500' : 'text-muted-foreground'}`} />
+	                </button>
+	                
+	                {/* Web Search toggle (icon button) */}
+	                <button
+	                  type="button"
+	                  title={hasWebSearchCredentials ? (webSearchEnabled ? "Web Search: Enabled" : "Web Search: Disabled") : "Web Search: No credentials configured"}
+	                  aria-pressed={webSearchEnabled}
+	                  disabled={!hasWebSearchCredentials}
+	                  onClick={() => {
+	                    if (!hasWebSearchCredentials) return;
+	                    const next = !webSearchEnabled;
+	                    setWebSearchEnabled(next);
+	                    if (agentId) localStorage.setItem(`agent_${agentId}_web_search_enabled`, String(next));
+	                    // Update agent metadata to persist the setting
+	                    updateAgentWebSearchSetting(next);
+	                  }}
+	                  className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent ${!hasWebSearchCredentials ? 'opacity-50 cursor-not-allowed' : ''}`}
+	                >
+	                  <Globe className={`w-4 h-4 ${
+	                    !hasWebSearchCredentials 
+	                      ? 'text-muted-foreground/50'
+	                      : webSearchEnabled 
+	                        ? 'text-blue-500' 
+	                        : 'text-muted-foreground'
+	                  }`} />
 	                </button>
 	                {/* New actions dropdown under input */}
 	                <DropdownMenu>

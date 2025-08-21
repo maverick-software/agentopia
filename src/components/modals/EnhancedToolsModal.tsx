@@ -132,6 +132,31 @@ export function EnhancedToolsModal({
 
   useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
 
+  // Search providers for unified Web Search integration
+  const SEARCH_PROVIDERS = [
+    { 
+      id: 'serper_api', 
+      name: 'Serper API', 
+      setupUrl: 'https://serper.dev/api-key', 
+      rateLimit: '1,000 queries/month free',
+      description: 'Google search results with rich snippets and knowledge graph'
+    },
+    { 
+      id: 'serpapi', 
+      name: 'SerpAPI', 
+      setupUrl: 'https://serpapi.com/manage-api-key', 
+      rateLimit: '100 queries/month free',
+      description: 'Multiple search engines with location-based results'
+    },
+    { 
+      id: 'brave_search', 
+      name: 'Brave Search API', 
+      setupUrl: 'https://api.search.brave.com/app/keys', 
+      rateLimit: '2,000 queries/month free',
+      description: 'Privacy-focused search with independent index'
+    }
+  ];
+
   // Tool categories for API key setup
   const TOOL_CATEGORIES = [
     {
@@ -139,22 +164,10 @@ export function EnhancedToolsModal({
       name: 'Research & Data',
       tools: [
         { 
-          id: 'serper_api', 
-          name: 'Serper API', 
-          setupUrl: 'https://serper.dev/api-key', 
-          rateLimit: '1,000 queries/month free' 
-        },
-        { 
-          id: 'serpapi', 
-          name: 'SerpAPI', 
-          setupUrl: 'https://serpapi.com/manage-api-key', 
-          rateLimit: '100 queries/month free' 
-        },
-        { 
-          id: 'brave_search', 
-          name: 'Brave Search API', 
-          setupUrl: 'https://api.search.brave.com/app/keys', 
-          rateLimit: '2,000 queries/month free' 
+          id: 'web_search', 
+          name: 'Web Search', 
+          setupUrl: null, // Multiple providers
+          rateLimit: 'Varies by provider'
         }
       ]
     }
@@ -220,15 +233,19 @@ export function EnhancedToolsModal({
           external_username: connectionName || `${selectedProvider} Connection`,
           connection_name: connectionName || `${selectedProvider} Connection`,
           encrypted_access_token: encryptedKey,
+          vault_access_token_id: encryptedKey, // Store in both fields for compatibility
           scopes_granted: ['web_search', 'news_search', 'image_search'],
-          connection_status: 'active'
+          connection_status: 'active',
+          credential_type: 'api_key'
         });
 
       if (insertError) throw insertError;
 
-      const toolName = TOOL_CATEGORIES
-        .flatMap(cat => cat.tools)
-        .find(tool => tool.id === selectedProvider)?.name || selectedProvider;
+      // Get the tool name - for web search, show provider name; for others use the tool name
+      const providerInfo = SEARCH_PROVIDERS.find(p => p.id === selectedProvider);
+      const toolName = toolId === 'web_search' 
+        ? `Web Search (${providerInfo?.name || selectedProvider})`
+        : (TOOL_CATEGORIES.flatMap(cat => cat.tools).find(tool => tool.id === selectedProvider)?.name || selectedProvider);
 
       toast.success(`${toolName} connected successfully! 🎉`);
       setSaved(true);
@@ -252,16 +269,32 @@ export function EnhancedToolsModal({
   };
 
   const getToolStatus = (providerName: string) => {
-    // Connected if this AGENT has the tool added (permission exists)
+    // For unified Web Search, check if any web search provider is connected
+    if (providerName === 'web search' || providerName === 'web_search') {
+      const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
+      const hasWebSearchPermission = agentPermissions.some(p => 
+        webSearchProviders.includes(p.provider_name) && p.is_active
+      );
+      if (hasWebSearchPermission) return 'connected';
+      
+      const hasWebSearchCredential = connections.some(c => 
+        webSearchProviders.includes(c.provider_name) && c.connection_status === 'active'
+      );
+      return hasWebSearchCredential ? 'available' : 'available';
+    }
+    
+    // For other providers, check normally
     const exists = agentPermissions.some(p => p.provider_name === providerName && p.is_active);
     if (exists) return 'connected';
-    // Otherwise available if user has a credential
     const hasCredential = connections.some(c => c.provider_name === providerName && c.connection_status === 'active');
     return hasCredential ? 'available' : 'available';
   };
 
   const defaultScopesForProvider = (provider: string): string[] => {
-    if (['serper_api','serpapi','brave_search'].includes(provider)) return ['web_search','news_search','image_search','local_search'];
+    // For unified web search or individual search providers
+    if (['serper_api','serpapi','brave_search','web_search'].includes(provider)) {
+      return ['web_search','news_search','image_search','local_search'];
+    }
     return [];
   };
 
@@ -369,36 +402,203 @@ export function EnhancedToolsModal({
           </Button>
         </div>
         
-        {toolConnections.map((connection) => {
-          const matched = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase().includes((connection as any).provider_name?.toLowerCase() || ''));
-          return (
-            <div
-              key={connection.id}
-              className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
-            >
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                  <Search className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-medium">{matched?.name || connection.provider_name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {(connection as any).external_username || 'Authorized'}
-                  </p>
-                  {renderCapabilitiesBadges(matched?.id)}
-                </div>
-              </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                Connected
-              </Badge>
-            </div>
+        {(() => {
+          // Group web search providers under unified "Web Search" entry
+          const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
+          const webSearchConnections = toolConnections.filter(c => 
+            webSearchProviders.includes(c.provider_name)
           );
-        })}
+          const otherConnections = toolConnections.filter(c => 
+            !webSearchProviders.includes(c.provider_name)
+          );
+
+          const items = [];
+
+          // Add unified Web Search entry if any web search providers are connected
+          if (webSearchConnections.length > 0) {
+            const webSearchIntegration = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase() === 'web search');
+            const providerNames = webSearchConnections.map(c => {
+              const provider = SEARCH_PROVIDERS.find(p => p.id === c.provider_name);
+              return provider?.name || c.provider_name;
+            }).join(', ');
+
+            items.push(
+              <div
+                key="web_search_unified"
+                className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                    <Search className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Web Search</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Using: {providerNames}
+                    </p>
+                    {renderCapabilitiesBadges(webSearchIntegration?.id)}
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                  Connected
+                </Badge>
+              </div>
+            );
+          }
+
+          // Add other (non-web search) connections
+          otherConnections.forEach((connection) => {
+            const matched = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase().includes((connection as any).provider_name?.toLowerCase() || ''));
+            items.push(
+              <div
+                key={connection.id}
+                className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                    <Settings className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">{matched?.name || connection.provider_name}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {(connection as any).external_username || 'Authorized'}
+                    </p>
+                    {renderCapabilitiesBadges(matched?.id)}
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                  Connected
+                </Badge>
+              </div>
+            );
+          });
+
+          return items;
+        })()}
       </div>
     );
   };
 
   const renderApiKeySetup = (tool: any) => {
+    // For Web Search integration, show provider selection
+    if (tool.id === 'web_search') {
+      return (
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Search className="h-5 w-5 text-blue-500" />
+              <span>Web Search Setup</span>
+            </CardTitle>
+            <CardDescription>
+              Choose a search provider and enter your API key to enable web search capabilities.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="provider_select">
+                Search Provider
+              </Label>
+              <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Choose your search provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SEARCH_PROVIDERS.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      <div className="flex flex-col text-left">
+                        <span className="font-medium">{provider.name}</span>
+                        <span className="text-xs text-muted-foreground">{provider.rateLimit}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedProvider && (
+              <>
+                <div>
+                  <Label htmlFor="connection_name">
+                    Connection Name (Optional)
+                  </Label>
+                  <Input
+                    id="connection_name"
+                    value={connectionName}
+                    onChange={(e) => setConnectionName(e.target.value)}
+                    placeholder={`My ${SEARCH_PROVIDERS.find(p => p.id === selectedProvider)?.name} Connection`}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="api_key">
+                    API Key
+                  </Label>
+                  <Input
+                    id="api_key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your API key"
+                    className="mt-1"
+                  />
+                </div>
+
+                {SEARCH_PROVIDERS.find(p => p.id === selectedProvider) && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <div className="space-y-2">
+                        <p><strong>Provider:</strong> {SEARCH_PROVIDERS.find(p => p.id === selectedProvider)?.description}</p>
+                        <p><strong>Rate Limit:</strong> {SEARCH_PROVIDERS.find(p => p.id === selectedProvider)?.rateLimit}</p>
+                        <p>
+                          <Button variant="link" className="p-0 h-auto" asChild>
+                            <a 
+                              href={SEARCH_PROVIDERS.find(p => p.id === selectedProvider)?.setupUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              Get API Key <ExternalLink className="h-3 w-3 ml-1" />
+                            </a>
+                          </Button>
+                        </p>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button
+                  onClick={() => handleApiKeySetup(tool.id)}
+                  disabled={!apiKey || connectingService === tool.id}
+                  className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 text-white"
+                >
+                  {connectingService === tool.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Connecting Web Search...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Connect Web Search
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Fallback for other tool types (non-web search)
     const availableProviders = TOOL_CATEGORIES
       .find(cat => cat.id === 'research')?.tools || [];
 
@@ -488,7 +688,7 @@ export function EnhancedToolsModal({
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-              )}
+                )}
 
               <Button
                 onClick={() => handleApiKeySetup(tool.id)}
@@ -526,8 +726,8 @@ export function EnhancedToolsModal({
             const isSetupMode = setupService === provider;
             const isSelecting = selectingCredentialFor === provider;
             
-            if (isSetupMode && ['serper api','serper_api','serpapi','brave search api','brave_search'].includes(provider)) {
-              // Show API key setup for known providers
+            if (isSetupMode && (provider === 'web search' || provider === 'web_search' || integration.name.toLowerCase() === 'web search')) {
+              // Show API key setup for Web Search integration
               const display = integration.name;
               return (
                 <div key={integration.id} className="space-y-4">
@@ -540,7 +740,7 @@ export function EnhancedToolsModal({
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => { setSetupService(null); resetForm(); }}>Cancel</Button>
                   </div>
-                  {renderApiKeySetup({ id: provider, name: display } as any)}
+                  {renderApiKeySetup({ id: 'web_search', name: display } as any)}
                 </div>
               );
             }
@@ -579,10 +779,11 @@ export function EnhancedToolsModal({
                   ) : (
                     <Button
                       onClick={() => {
-                        // If we know how to set up API key, open setup; else go credential selection
-                        if (['serper api','serper_api','serpapi','brave search api','brave_search'].includes(provider)) {
+                        // For Web Search integration, show API key setup with provider selection
+                        if (provider === 'web search' || provider === 'web_search' || integration.name.toLowerCase() === 'web search') {
                           setSetupService(provider);
                         } else {
+                          // For other integrations, use credential selection
                           setSelectingCredentialFor(provider);
                         }
                       }}

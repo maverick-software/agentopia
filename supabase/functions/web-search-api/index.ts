@@ -263,30 +263,45 @@ serve(async (req) => {
 
     console.log(`[web-search-api] Processing ${action} request for agent ${agent_id}`);
 
-    // Validate permissions
-    const { data: hasPermissions } = await supabase
-      .rpc('validate_web_search_permissions', {
-        p_agent_id: agent_id,
-        p_user_id: user.id,
-      });
-
-    if (!hasPermissions) {
-      throw new Error('Agent does not have web search permissions');
+    // Simplified approach: Check if web search is enabled in agent settings
+    const { data: agent } = await supabase
+      .from('agents')
+      .select('metadata')
+      .eq('id', agent_id)
+      .single();
+      
+    const webSearchEnabled = agent?.metadata?.settings?.web_search_enabled;
+    if (webSearchEnabled !== true) {
+      throw new Error('Web search is disabled for this agent');
     }
 
+    console.log(`[web-search-api] Web search is enabled for agent ${agent_id}`);
+
     // Get available API keys (filtering by credential_type)
-    const { data: connections } = await supabase
+    const { data: connections, error: connectionsError } = await supabase
       .from('user_oauth_connections')
       .select(`
         *,
-        oauth_providers!inner(name, configuration)
+        oauth_providers!inner(name, display_name)
       `)
       .eq('user_id', user.id)
-      .in('oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])
-      .eq('connection_status', 'active')
       .eq('credential_type', 'api_key');
 
-    if (!connections || connections.length === 0) {
+    if (connectionsError) {
+      console.error('[web-search-api] Error fetching connections:', connectionsError);
+      throw new Error(`Failed to fetch API keys: ${connectionsError.message}`);
+    }
+
+    // Filter for web search providers
+    const webSearchConnections = (connections || []).filter(c => 
+      c.oauth_providers && 
+      ['serper_api', 'serpapi', 'brave_search'].includes(c.oauth_providers.name) &&
+      c.connection_status === 'active'
+    );
+
+    console.log(`[web-search-api] Found ${connections?.length || 0} total connections, ${webSearchConnections.length} web search connections for user ${user.id}`);
+
+    if (!webSearchConnections || webSearchConnections.length === 0) {
       throw new Error('No web search API keys configured');
     }
 
@@ -298,7 +313,7 @@ serve(async (req) => {
     let lastError: Error | null = null;
 
     for (const providerName of preferredProviders) {
-      const connection = connections.find(c => c.oauth_providers.name === providerName);
+      const connection = webSearchConnections.find(c => c.oauth_providers.name === providerName);
       if (!connection) continue;
 
       const provider = searchProviders[providerName];

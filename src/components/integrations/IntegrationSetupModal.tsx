@@ -60,15 +60,42 @@ export function IntegrationSetupModal({
     default_engine: 'google',
     safesearch: 'moderate',
     from_email: '',
-    from_name: ''
+    from_name: '',
+    selected_provider: 'serper_api' // Default provider for unified Web Search
   });
 
-  // Check if this is a web search integration
-  const isWebSearchIntegration = ['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration?.name);
+  // Check if this is a web search integration (unified or legacy)
+  const isWebSearchIntegration = integration?.name === 'Web Search' || ['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration?.name);
+  const isUnifiedWebSearch = integration?.name === 'Web Search';
   const isSendGridIntegration = integration?.name === 'SendGrid';
   const isMailgunIntegration = integration?.name === 'Mailgun';
   const isPineconeIntegration = integration?.name === 'Pinecone';
   const isGetZepIntegration = integration?.name === 'GetZep';
+
+  // Search providers for unified Web Search
+  const SEARCH_PROVIDERS = [
+    { 
+      id: 'serper_api', 
+      name: 'Serper API', 
+      setupUrl: 'https://serper.dev/api-key', 
+      rateLimit: '1,000 queries/month free',
+      description: 'Google search results with rich snippets and knowledge graph'
+    },
+    { 
+      id: 'serpapi', 
+      name: 'SerpAPI', 
+      setupUrl: 'https://serpapi.com/manage-api-key', 
+      rateLimit: '100 queries/month free',
+      description: 'Multiple search engines with location-based results'
+    },
+    { 
+      id: 'brave_search', 
+      name: 'Brave Search API', 
+      setupUrl: 'https://api.search.brave.com/app/keys', 
+      rateLimit: '2,000 queries/month free',
+      description: 'Privacy-focused search with independent index'
+    }
+  ];
 
   // Persist draft values so accidental remounts or navigation don't lose input
   const getDraftKey = () => {
@@ -96,6 +123,7 @@ export function IntegrationSetupModal({
           safesearch: draft.safesearch ?? prev.safesearch,
           from_email: draft.from_email ?? prev.from_email,
           from_name: draft.from_name ?? prev.from_name,
+          selected_provider: draft.selected_provider ?? prev.selected_provider,
         }));
       }
     } catch (_) {
@@ -152,15 +180,22 @@ export function IntegrationSetupModal({
       setError(null);
 
       // Get the web search provider
-      const providerNameMap: { [key: string]: string } = {
-        'Serper API': 'serper_api',
-        'SerpAPI': 'serpapi',
-        'Brave Search API': 'brave_search'
-      };
-
-      const providerName = providerNameMap[integration.name];
-      if (!providerName) {
-        throw new Error('Unknown web search provider');
+      let providerName: string;
+      
+      if (isUnifiedWebSearch) {
+        // For unified Web Search, use the selected provider
+        providerName = formData.selected_provider;
+      } else {
+        // For legacy separate integrations, map by name
+        const providerNameMap: { [key: string]: string } = {
+          'Serper API': 'serper_api',
+          'SerpAPI': 'serpapi',
+          'Brave Search API': 'brave_search'
+        };
+        providerName = providerNameMap[integration.name];
+        if (!providerName) {
+          throw new Error('Unknown web search provider');
+        }
       }
 
       // Get provider details
@@ -175,7 +210,7 @@ export function IntegrationSetupModal({
       const vault_secret_id = await vaultService.createSecret(
         `${providerName}_api_key_${user.id}_${Date.now()}`,
         formData.api_key,
-        `${integration.name} API key for user ${user.id}`
+        `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id}`
       );
 
       // Create user OAuth connection record (unified system for API keys)
@@ -185,8 +220,8 @@ export function IntegrationSetupModal({
           user_id: user.id,
           oauth_provider_id: providerData.id,
           external_user_id: user.id, // Required field
-          external_username: formData.connection_name || `${integration.name} Connection`,
-          connection_name: formData.connection_name || `${integration.name} Connection`,
+          external_username: formData.connection_name || `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} Connection`,
+          connection_name: formData.connection_name || `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} Connection`,
           // Prefer vault id column for new entries
           vault_access_token_id: vault_secret_id,
           scopes_granted: ['web_search', 'news_search', 'scrape_and_summarize'],
@@ -216,9 +251,12 @@ export function IntegrationSetupModal({
         throw integrationError;
       }
 
+      const displayName = isUnifiedWebSearch ? 
+        `Web Search (${SEARCH_PROVIDERS.find(p => p.id === providerName)?.name})` : 
+        integration.name;
       setSuccess(true);
-      setSuccessMessage(`${integration.name} connected successfully!`);
-      toast.success(`${integration.name} API key added successfully!`);
+      setSuccessMessage(`${displayName} connected successfully!`);
+      toast.success(`${displayName} API key added successfully!`);
 
       // Show success message briefly then close modal
       setTimeout(() => {
@@ -878,7 +916,10 @@ export function IntegrationSetupModal({
                         API Key Configuration
                       </CardTitle>
                       <CardDescription className="text-gray-400">
-                        Enter your {integration.name} API key to enable web search functionality
+                        {isUnifiedWebSearch 
+                          ? 'Choose a search provider and enter your API key to enable web search functionality'
+                          : `Enter your ${integration.name} API key to enable web search functionality`
+                        }
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -891,6 +932,30 @@ export function IntegrationSetupModal({
                         </Alert>
                       )}
 
+                      {/* Provider Selection for Unified Web Search */}
+                      {isUnifiedWebSearch && (
+                        <div>
+                          <Label htmlFor="provider_select" className="text-white">
+                            Search Provider *
+                          </Label>
+                          <select
+                            id="provider_select"
+                            value={formData.selected_provider}
+                            onChange={(e) => setFormData(prev => ({ ...prev, selected_provider: e.target.value }))}
+                            className="w-full p-2 mt-1 bg-gray-800 border border-gray-700 rounded-md text-white"
+                          >
+                            {SEARCH_PROVIDERS.map((provider) => (
+                              <option key={provider.id} value={provider.id}>
+                                {provider.name} - {provider.rateLimit}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider)?.description}
+                          </p>
+                        </div>
+                      )}
+
                       <div>
                         <Label htmlFor="connection_name" className="text-white">
                           Connection Name (Optional)
@@ -899,7 +964,11 @@ export function IntegrationSetupModal({
                           id="connection_name"
                           value={formData.connection_name}
                           onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
-                          placeholder={`My ${integration.name} Connection`}
+                          placeholder={
+                            isUnifiedWebSearch 
+                              ? `My ${SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider)?.name} Connection`
+                              : `My ${integration.name} Connection`
+                          }
                           className="bg-gray-800 border-gray-700 text-white mt-1"
                         />
                       </div>
@@ -919,6 +988,20 @@ export function IntegrationSetupModal({
                         <p className="text-xs text-gray-500 mt-1">
                           Your API key will be securely encrypted and stored
                         </p>
+                        {/* Dynamic API key link for unified Web Search */}
+                        {isUnifiedWebSearch && (
+                          <div className="mt-2">
+                            <a
+                              href={SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider)?.setupUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              Get API Key from {SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider)?.name}
+                            </a>
+                          </div>
+                        )}
                       </div>
 
                       {/* Provider-specific configuration */}

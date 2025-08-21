@@ -36,43 +36,25 @@ interface RefreshStatus {
 export function CredentialsPage() {
   const { user } = useAuth();
   const { connections: unifiedConnections, loading: loadingUnified, revoke: revokeUnified, remove: removeUnified, refetch } = useConnections({ includeRevoked: false });
-  const [connections, setConnections] = useState<OAuthConnection[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>({});
 
-  useEffect(() => {
-    if (user) {
-      fetchConnections();
-    }
-  }, [user]);
-
-  const fetchConnections = async () => {
-    if (!user) return;
-
-    try {
-      // Use authoritative RPC only to avoid stale overwrite from hook state
-      const { data, error } = await supabase.rpc('get_user_oauth_connections', { p_user_id: user.id });
-      if (error) throw error;
-      const mapped = (data || []).map((row: any) => ({
-        connection_id: row.connection_id,
-        provider_name: row.provider_name || row.oauth_providers?.name,
-        provider_display_name: row.provider_display_name || row.oauth_providers?.display_name,
-        external_username: row.external_username ?? null,
-        connection_name: row.connection_name ?? null,
-        scopes_granted: row.scopes_granted || [],
-        connection_status: row.connection_status,
-        credential_type: row.credential_type,
-        token_expires_at: row.token_expires_at ?? null,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-      }));
-      setConnections(mapped);
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Use the unified connections hook instead of separate fetchConnections
+  // This ensures proper filtering of revoked connections
+  const connections = unifiedConnections.map((conn: any) => ({
+    connection_id: conn.connection_id,
+    provider_name: conn.provider_name,
+    provider_display_name: conn.provider_display_name,
+    external_username: conn.external_username ?? null,
+    connection_name: conn.connection_name ?? null,
+    scopes_granted: conn.scopes_granted || [],
+    connection_status: conn.connection_status,
+    credential_type: conn.credential_type,
+    token_expires_at: conn.token_expires_at ?? null,
+    created_at: conn.created_at,
+    updated_at: conn.updated_at,
+  }));
+  
+  const loading = loadingUnified;
 
   const handleRefreshToken = async (connectionId: string) => {
     try {
@@ -122,9 +104,8 @@ export function CredentialsPage() {
         }
       }));
 
-      // Refresh the unified hook and then our local list for immediate UI consistency
+      // Refresh the unified hook for immediate UI consistency
       await refetch();
-      await fetchConnections();
       
       // Clear success state after 3 seconds
       setTimeout(() => {
@@ -192,15 +173,14 @@ export function CredentialsPage() {
 
   const handleRemoveConnection = async (connectionId: string) => {
     try {
-      // Prefer hard delete; hook will fall back to revoke if FKs block deletion
-      await removeUnified(connectionId)
-      // Remove immediately from local state for responsive UX
-      setConnections(prev => prev.filter(c => c.connection_id !== connectionId))
+      // Use the unified hook's remove function which handles the state updates
+      await removeUnified(connectionId);
+      // Refetch to ensure UI is synchronized
+      await refetch();
     } catch (error) {
       console.error('Error:', error);
-      // As a fallback, refetch from server
-      await refetch()
-      await fetchConnections()
+      // Refetch on error to ensure accurate state
+      await refetch();
     }
   };
 
@@ -481,7 +461,7 @@ export function CredentialsPage() {
                               size="sm"
                               variant="outline"
                               className="h-7 text-xs border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
-                              onClick={() => handleRevokeConnection(connection.connection_id)}
+                              onClick={() => handleRemoveConnection(connection.connection_id)}
                             >
                               <Trash2 className="w-3 h-3 mr-1" />
                               Disconnect
