@@ -132,6 +132,34 @@ export function EnhancedToolsModal({
 
   useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
 
+  // Tool categories for API key setup
+  const TOOL_CATEGORIES = [
+    {
+      id: 'research',
+      name: 'Research & Data',
+      tools: [
+        { 
+          id: 'serper_api', 
+          name: 'Serper API', 
+          setupUrl: 'https://serper.dev/api-key', 
+          rateLimit: '1,000 queries/month free' 
+        },
+        { 
+          id: 'serpapi', 
+          name: 'SerpAPI', 
+          setupUrl: 'https://serpapi.com/manage-api-key', 
+          rateLimit: '100 queries/month free' 
+        },
+        { 
+          id: 'brave_search', 
+          name: 'Brave Search API', 
+          setupUrl: 'https://api.search.brave.com/app/keys', 
+          rateLimit: '2,000 queries/month free' 
+        }
+      ]
+    }
+  ];
+
   // Available tool services organized by category
   // DB-driven tool integrations
   const TOOL_INTEGRATIONS = (integrations || [])
