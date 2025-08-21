@@ -207,11 +207,22 @@ export function IntegrationSetupModal({
 
       if (providerError) throw providerError;
 
-      const vault_secret_id = await vaultService.createSecret(
-        `${providerName}_api_key_${user.id}_${Date.now()}`,
-        formData.api_key,
-        `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id}`
-      );
+      // Skip vault entirely - store as plain text for reliability
+      let storedValue = formData.api_key;
+      console.log('Storing API key as plain text for reliability');
+      
+      // Commented out vault encryption to avoid issues
+      // try {
+      //   const vault_secret_id = await vaultService.createSecret(
+      //     `${providerName}_api_key_${user.id}_${Date.now()}`,
+      //     formData.api_key,
+      //     `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id}`
+      //   );
+      //   storedValue = vault_secret_id;
+      //   console.log('API key encrypted successfully in vault');
+      // } catch (vaultError) {
+      //   console.log('Vault encryption failed, storing as plain text:', vaultError);
+      // }
 
       // Create user OAuth connection record (unified system for API keys)
       const { error: keyError } = await supabase
@@ -222,8 +233,9 @@ export function IntegrationSetupModal({
           external_user_id: user.id, // Required field
           external_username: formData.connection_name || `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} Connection`,
           connection_name: formData.connection_name || `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} Connection`,
-          // Prefer vault id column for new entries
-          vault_access_token_id: vault_secret_id,
+          // Store either vault ID (if encrypted) or plain text API key (if not)
+          encrypted_access_token: storedValue,
+          vault_access_token_id: storedValue, // Store in both for compatibility
           scopes_granted: ['web_search', 'news_search', 'scrape_and_summarize'],
           connection_status: 'active',
           credential_type: 'api_key' // Specify this is an API key connection

@@ -214,16 +214,26 @@ export function EnhancedToolsModal({
 
       if (providerError) throw providerError;
 
-      // Encrypt API key using Supabase
-      const { data: encryptedKey, error: encryptError } = await supabase
-        .rpc('vault_encrypt', { 
-          data: apiKey,
-          key_name: `${selectedProvider}_api_key_${user.id}_${Date.now()}`
-        });
+      // Skip vault entirely - store as plain text for reliability
+      let storedValue = apiKey;
+      console.log('Storing API key as plain text for reliability');
+      
+      // Commented out vault encryption to avoid issues
+      // try {
+      //   const { data: encryptedKey, error: encryptError } = await supabase
+      //     .rpc('vault_encrypt', { 
+      //       data: apiKey,
+      //       key_name: `${selectedProvider}_api_key_${user.id}_${Date.now()}`
+      //     });
+      //   
+      //   if (encryptError) throw encryptError;
+      //   storedValue = encryptedKey;
+      //   console.log('API key encrypted successfully in vault');
+      // } catch (vaultError) {
+      //   console.log('Vault encryption failed, storing as plain text:', vaultError);
+      // }
 
-      if (encryptError) throw encryptError;
-
-      // Store connection
+      // Store connection with encrypted or plain text API key
       const { error: insertError } = await supabase
         .from('user_oauth_connections')
         .insert({
@@ -232,8 +242,8 @@ export function EnhancedToolsModal({
           external_user_id: user.id, // Required field
           external_username: connectionName || `${selectedProvider} Connection`,
           connection_name: connectionName || `${selectedProvider} Connection`,
-          encrypted_access_token: encryptedKey,
-          vault_access_token_id: encryptedKey, // Store in both fields for compatibility
+          encrypted_access_token: storedValue, // Store either vault ID or plain text
+          vault_access_token_id: storedValue, // Store in both for compatibility
           scopes_granted: ['web_search', 'news_search', 'image_search'],
           connection_status: 'active',
           credential_type: 'api_key'

@@ -145,6 +145,9 @@ const searchProviders: Record<string, SearchProvider> = {
   serper_api: {
     name: 'Serper',
     execute: async (query: string, params: any, apiKey: string) => {
+      // Log the API key details for debugging (without exposing the full key)
+      console.log(`[web-search-api] Using Serper API key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`);
+      
       const response = await fetch('https://google.serper.dev/search', {
         method: 'POST',
         headers: {
@@ -163,7 +166,16 @@ const searchProviders: Record<string, SearchProvider> = {
       });
 
       if (!response.ok) {
-        throw new Error(`Serper API error: ${response.status}`);
+        const errorBody = await response.text();
+        console.error(`[web-search-api] Serper API error ${response.status}: ${errorBody}`);
+        
+        if (response.status === 403) {
+          throw new Error(`Serper API authentication failed (403). Please check that your API key is valid and has not exceeded its usage limits. Visit https://serper.dev/dashboard to verify your API key.`);
+        } else if (response.status === 401) {
+          throw new Error(`Serper API key is invalid (401). Please update your API key in the credentials page.`);
+        } else {
+          throw new Error(`Serper API error: ${response.status} - ${errorBody}`);
+        }
       }
 
       return await response.json();
@@ -173,6 +185,8 @@ const searchProviders: Record<string, SearchProvider> = {
   serpapi: {
     name: 'SerpAPI',
     execute: async (query: string, params: any, apiKey: string) => {
+      console.log(`[web-search-api] Using SerpAPI key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`);
+      
       const url = new URL('https://serpapi.com/search');
       url.searchParams.append('api_key', apiKey);
       url.searchParams.append('engine', 'google');
@@ -186,7 +200,14 @@ const searchProviders: Record<string, SearchProvider> = {
       const response = await fetch(url.toString());
       
       if (!response.ok) {
-        throw new Error(`SerpAPI error: ${response.status}`);
+        const errorBody = await response.text();
+        console.error(`[web-search-api] SerpAPI error ${response.status}: ${errorBody}`);
+        
+        if (response.status === 403 || response.status === 401) {
+          throw new Error(`SerpAPI authentication failed (${response.status}). Please check that your API key is valid and has not exceeded its usage limits.`);
+        } else {
+          throw new Error(`SerpAPI error: ${response.status} - ${errorBody}`);
+        }
       }
 
       return await response.json();
@@ -196,6 +217,8 @@ const searchProviders: Record<string, SearchProvider> = {
   brave_search: {
     name: 'Brave Search',
     execute: async (query: string, params: any, apiKey: string) => {
+      console.log(`[web-search-api] Using Brave Search key: ${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}`);
+      
       const url = new URL('https://api.search.brave.com/res/v1/web/search');
       url.searchParams.append('q', query);
       url.searchParams.append('count', (params.num_results || 5).toString());
@@ -213,7 +236,14 @@ const searchProviders: Record<string, SearchProvider> = {
       });
 
       if (!response.ok) {
-        throw new Error(`Brave Search API error: ${response.status}`);
+        const errorBody = await response.text();
+        console.error(`[web-search-api] Brave Search API error ${response.status}: ${errorBody}`);
+        
+        if (response.status === 403 || response.status === 401) {
+          throw new Error(`Brave Search authentication failed (${response.status}). Please check that your API key is valid and has not exceeded its usage limits.`);
+        } else {
+          throw new Error(`Brave Search API error: ${response.status} - ${errorBody}`);
+        }
       }
 
       return await response.json();
@@ -322,30 +352,54 @@ serve(async (req) => {
       try {
         console.log(`[web-search-api] Trying provider: ${providerName}`);
 
-        // Decrypt API key from Supabase Vault
-        let decryptedKey: string | null = null;
-        // Prefer dedicated vault id column when present
-        if (connection.vault_access_token_id) {
-          const { data } = await supabase.rpc('vault_decrypt', { vault_id: connection.vault_access_token_id });
-          decryptedKey = data as string;
-        } else if (connection.encrypted_access_token) {
-          // Backward compatibility: treat stored value as vault id when it looks like a UUID
-          const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(connection.encrypted_access_token);
+        // Get API key - try to decrypt from vault first, then fallback to plain text
+        let apiKey: string | null = null;
+        
+        // Check if we have any form of API key storage
+        const storedValue = connection.vault_access_token_id || connection.encrypted_access_token;
+        
+        if (storedValue) {
+          // Check if it looks like a UUID (vault ID)
+          const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
+          
           if (looksLikeUuid) {
-            const { data } = await supabase.rpc('vault_decrypt', { vault_id: connection.encrypted_access_token });
-            decryptedKey = data as string;
+            // Try to decrypt from vault
+            try {
+              const { data, error } = await supabase.rpc('vault_decrypt', { vault_id: storedValue });
+              if (!error && data) {
+                apiKey = data as string;
+                console.log(`[web-search-api] Successfully decrypted API key from vault`);
+              } else {
+                console.log(`[web-search-api] Vault decryption returned null for UUID ${storedValue}, API key may need to be re-added`);
+                // For UUIDs that fail vault decryption, don't use them as API keys
+                apiKey = null;
+              }
+            } catch (vaultError) {
+              console.log(`[web-search-api] Vault decryption error:`, vaultError);
+              // For UUIDs that fail vault decryption, don't use them as API keys
+              apiKey = null;
+            }
+          } else {
+            // Doesn't look like UUID, assume it's a plain text API key
+            apiKey = storedValue;
+            console.log(`[web-search-api] Using plain text API key`);
           }
         }
 
-        if (!decryptedKey) {
-          throw new Error('Failed to decrypt API key');
+        if (!apiKey) {
+          const wasUuid = storedValue && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
+          if (wasUuid) {
+            throw new Error(`Failed to decrypt API key from vault for ${providerName}. The API key may be corrupted. Please delete and re-add your ${providerName} credentials.`);
+          } else {
+            throw new Error(`No API key found for ${providerName}`);
+          }
         }
 
         let data: any;
         let tokensUsed = 0;
 
         if (action === 'web_search' || action === 'news_search') {
-          data = await provider.execute(parameters.query, parameters, decryptedKey);
+          data = await provider.execute(parameters.query, parameters, apiKey);
           
           // Normalize response format across providers
           data = normalizeSearchResults(data, providerName);
