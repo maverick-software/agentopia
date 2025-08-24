@@ -1,0 +1,468 @@
+/**
+ * Zapier MCP Manager
+ * 
+ * Manages Zapier MCP server connections for agents, including:
+ * - Connection CRUD operations
+ * - Tool discovery and caching
+ * - Schema conversion and validation
+ * - Connection health monitoring
+ */
+
+import { MCPClient, MCPTool, convertMCPToolToOpenAI, MCPClientError } from './mcp-client';
+import { SupabaseClient } from '@supabase/supabase-js';
+
+export interface AgentMCPConnection {
+  id: string;
+  agent_id: string;
+  connection_name: string;
+  server_url: string;
+  connection_type: string;
+  is_active: boolean;
+  auth_config: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MCPToolCache {
+  id: string;
+  connection_id: string;
+  tool_name: string;
+  tool_schema: MCPTool;
+  openai_schema: {
+    name: string;
+    description: string;
+    parameters: any;
+  };
+  last_updated: string;
+}
+
+export interface ZapierMCPConnectionTest {
+  success: boolean;
+  error?: string;
+  toolCount?: number;
+  tools?: MCPTool[];
+}
+
+export class ZapierMCPManager {
+  constructor(
+    private supabase: SupabaseClient,
+    private userId: string
+  ) {}
+
+  /**
+   * Get all MCP connections for an agent
+   */
+  async getAgentConnections(agentId: string): Promise<AgentMCPConnection[]> {
+    const { data, error } = await this.supabase
+      .from('agent_mcp_connections')
+      .select('*')
+      .eq('agent_id', agentId)
+      .order('connection_name');
+
+    if (error) {
+      throw new Error(`Failed to fetch MCP connections: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Create a new MCP connection for an agent
+   */
+  async createConnection(
+    agentId: string,
+    connectionName: string,
+    serverUrl: string,
+    authConfig: Record<string, any> = {}
+  ): Promise<AgentMCPConnection> {
+    // Validate URL format
+    if (!this.isValidUrl(serverUrl)) {
+      throw new Error('Invalid server URL format');
+    }
+
+    // Test connection before saving
+    const testResult = await this.testConnection(serverUrl);
+    if (!testResult.success) {
+      throw new Error(`Connection test failed: ${testResult.error}`);
+    }
+
+    const { data, error } = await this.supabase
+      .from('agent_mcp_connections')
+      .insert({
+        agent_id: agentId,
+        connection_name: connectionName,
+        server_url: serverUrl,
+        connection_type: 'zapier',
+        auth_config: authConfig,
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create MCP connection: ${error.message}`);
+    }
+
+    // Discover and cache tools
+    await this.refreshConnectionTools(data.id);
+
+    return data;
+  }
+
+  /**
+   * Update an existing MCP connection
+   */
+  async updateConnection(
+    connectionId: string,
+    updates: Partial<Pick<AgentMCPConnection, 'connection_name' | 'server_url' | 'is_active' | 'auth_config'>>
+  ): Promise<AgentMCPConnection> {
+    // If URL is being updated, test the new connection
+    if (updates.server_url) {
+      if (!this.isValidUrl(updates.server_url)) {
+        throw new Error('Invalid server URL format');
+      }
+
+      const testResult = await this.testConnection(updates.server_url);
+      if (!testResult.success) {
+        throw new Error(`Connection test failed: ${testResult.error}`);
+      }
+    }
+
+    const { data, error } = await this.supabase
+      .from('agent_mcp_connections')
+      .update(updates)
+      .eq('id', connectionId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update MCP connection: ${error.message}`);
+    }
+
+    // If URL changed, refresh tools
+    if (updates.server_url) {
+      await this.refreshConnectionTools(connectionId);
+    }
+
+    return data;
+  }
+
+  /**
+   * Delete an MCP connection
+   */
+  async deleteConnection(connectionId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('agent_mcp_connections')
+      .delete()
+      .eq('id', connectionId);
+
+    if (error) {
+      throw new Error(`Failed to delete MCP connection: ${error.message}`);
+    }
+  }
+
+  /**
+   * Test connection to an MCP server
+   */
+  async testConnection(serverUrl: string): Promise<ZapierMCPConnectionTest> {
+    try {
+      const client = new MCPClient(serverUrl, { timeout: 10000 });
+      await client.initialize();
+      
+      const { tools } = await client.listTools();
+      
+      await client.disconnect();
+
+      return {
+        success: true,
+        toolCount: tools.length,
+        tools: tools.slice(0, 5) // Return first 5 tools for preview
+      };
+    } catch (error) {
+      console.error('MCP connection test failed:', error);
+      
+      let errorMessage = 'Unknown connection error';
+      if (error instanceof MCPClientError) {
+        errorMessage = error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Refresh tools for a specific connection
+   */
+  async refreshConnectionTools(connectionId: string): Promise<void> {
+    // Get connection details
+    const { data: connection, error: connectionError } = await this.supabase
+      .from('agent_mcp_connections')
+      .select('*')
+      .eq('id', connectionId)
+      .single();
+
+    if (connectionError || !connection) {
+      throw new Error(`Connection not found: ${connectionError?.message}`);
+    }
+
+    if (!connection.is_active) {
+      return; // Skip inactive connections
+    }
+
+    try {
+      const client = new MCPClient(connection.server_url);
+      await client.initialize();
+      
+      // Get all tools (handle pagination if needed)
+      let allTools: MCPTool[] = [];
+      let cursor: string | undefined;
+      
+      do {
+        const { tools, nextCursor } = await client.listTools(cursor);
+        allTools = allTools.concat(tools);
+        cursor = nextCursor;
+      } while (cursor);
+
+      await client.disconnect();
+
+      // Clear existing cached tools
+      await this.supabase
+        .from('mcp_tools_cache')
+        .delete()
+        .eq('connection_id', connectionId);
+
+      // Insert new tools
+      if (allTools.length > 0) {
+        const toolsToInsert = allTools.map(tool => ({
+          connection_id: connectionId,
+          tool_name: tool.name,
+          tool_schema: tool,
+          openai_schema: convertMCPToolToOpenAI(tool)
+        }));
+
+        const { error: insertError } = await this.supabase
+          .from('mcp_tools_cache')
+          .insert(toolsToInsert);
+
+        if (insertError) {
+          throw new Error(`Failed to cache tools: ${insertError.message}`);
+        }
+      }
+
+      console.log(`Refreshed ${allTools.length} tools for connection ${connectionId}`);
+    } catch (error) {
+      console.error(`Failed to refresh tools for connection ${connectionId}:`, error);
+      
+      // Mark connection as inactive if it's failing
+      await this.supabase
+        .from('agent_mcp_connections')
+        .update({ is_active: false })
+        .eq('id', connectionId);
+
+      throw error;
+    }
+  }
+
+  /**
+   * Get cached tools for an agent
+   */
+  async getAgentTools(agentId: string): Promise<{
+    name: string;
+    description: string;
+    parameters: any;
+    _mcpConnectionId: string;
+    _mcpToolName: string;
+  }[]> {
+    const { data, error } = await this.supabase
+      .rpc('get_agent_mcp_tools', { p_agent_id: agentId });
+
+    if (error) {
+      throw new Error(`Failed to fetch agent MCP tools: ${error.message}`);
+    }
+
+    return (data || []).map((row: any) => ({
+      ...row.openai_schema,
+      _mcpConnectionId: row.connection_id,
+      _mcpToolName: row.tool_name
+    }));
+  }
+
+  /**
+   * Get cached tools for a specific connection
+   */
+  async getConnectionTools(connectionId: string): Promise<MCPToolCache[]> {
+    const { data, error } = await this.supabase
+      .from('mcp_tools_cache')
+      .select('*')
+      .eq('connection_id', connectionId)
+      .order('tool_name');
+
+    if (error) {
+      throw new Error(`Failed to fetch connection tools: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Execute a tool through MCP
+   */
+  async executeTool(
+    connectionId: string,
+    toolName: string,
+    arguments_: Record<string, any>
+  ): Promise<{
+    success: boolean;
+    result?: any;
+    error?: string;
+    content?: string;
+  }> {
+    // Get connection details
+    const { data: connection, error: connectionError } = await this.supabase
+      .from('agent_mcp_connections')
+      .select('*')
+      .eq('id', connectionId)
+      .single();
+
+    if (connectionError || !connection) {
+      return {
+        success: false,
+        error: `Connection not found: ${connectionError?.message}`
+      };
+    }
+
+    if (!connection.is_active) {
+      return {
+        success: false,
+        error: 'Connection is inactive'
+      };
+    }
+
+    try {
+      const client = new MCPClient(connection.server_url);
+      await client.initialize();
+      
+      const result = await client.callTool(toolName, arguments_);
+      
+      await client.disconnect();
+
+      if (result.isError) {
+        const errorContent = result.content.find(c => c.type === 'text')?.text || 'Tool execution failed';
+        return {
+          success: false,
+          error: errorContent
+        };
+      }
+
+      // Extract text content for display
+      const textContent = result.content
+        .filter(c => c.type === 'text')
+        .map(c => c.text)
+        .join('\n');
+
+      return {
+        success: true,
+        result: result.structuredContent || result.content,
+        content: textContent
+      };
+    } catch (error) {
+      console.error(`MCP tool execution failed:`, error);
+      
+      let errorMessage = 'Tool execution failed';
+      if (error instanceof MCPClientError) {
+        errorMessage = error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Refresh tools for all active connections of an agent
+   */
+  async refreshAllAgentTools(agentId: string): Promise<void> {
+    const connections = await this.getAgentConnections(agentId);
+    const activeConnections = connections.filter(c => c.is_active);
+
+    const refreshPromises = activeConnections.map(connection =>
+      this.refreshConnectionTools(connection.id).catch(error => {
+        console.error(`Failed to refresh tools for connection ${connection.id}:`, error);
+        // Continue with other connections even if one fails
+      })
+    );
+
+    await Promise.all(refreshPromises);
+  }
+
+  /**
+   * Get connection health status
+   */
+  async getConnectionHealth(connectionId: string): Promise<{
+    isHealthy: boolean;
+    lastChecked: string;
+    error?: string;
+    toolCount: number;
+  }> {
+    const { data: connection, error: connectionError } = await this.supabase
+      .from('agent_mcp_connections')
+      .select('*')
+      .eq('id', connectionId)
+      .single();
+
+    if (connectionError || !connection) {
+      return {
+        isHealthy: false,
+        lastChecked: new Date().toISOString(),
+        error: 'Connection not found',
+        toolCount: 0
+      };
+    }
+
+    // Get tool count
+    const { count } = await this.supabase
+      .from('mcp_tools_cache')
+      .select('*', { count: 'exact', head: true })
+      .eq('connection_id', connectionId);
+
+    if (!connection.is_active) {
+      return {
+        isHealthy: false,
+        lastChecked: connection.updated_at,
+        error: 'Connection is inactive',
+        toolCount: count || 0
+      };
+    }
+
+    // Test connection
+    const testResult = await this.testConnection(connection.server_url);
+
+    return {
+      isHealthy: testResult.success,
+      lastChecked: new Date().toISOString(),
+      error: testResult.error,
+      toolCount: count || 0
+    };
+  }
+
+  /**
+   * Validate URL format
+   */
+  private isValidUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+}

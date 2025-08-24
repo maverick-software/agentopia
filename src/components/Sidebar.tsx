@@ -63,6 +63,7 @@ const navItems: NavItem[] = [
     label: 'Agents',
     isCustom: true
   },
+  { to: '/teams', icon: Building2, label: 'Teams' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/workflows/automations', icon: Zap, label: 'Automations' },

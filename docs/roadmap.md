@@ -1,5 +1,9 @@
 
-Memory System:
+## Zapier Integration ##
+
+Integrate Zapier MCP so agents have access to a plethora of tools.
+
+## Memory System ## (Completed)
 
 Our agents should have a short term memory that tracks a maximum amount of chat messages set by the user (up to a maximum of 0-100). Then, each chat should have an optional area for episodic memory, which pulls from a vector database (in our case pinecone, but needs to be remain flexible for future options) and semantic understanding through a knowledge graph (in our case GetZep, but needs to remain flexible for future options).
 

@@ -35,7 +35,7 @@ export const TeamDetailsPage: React.FC = () => {
   if (loading && !team) {
     return (
       <div className="p-8 flex justify-center items-center">
-        <Loader2 className="animate-spin h-8 w-8 text-indigo-500" />
+        <Loader2 className="animate-spin h-8 w-8 text-primary" />
       </div>
     );
   }
@@ -55,53 +55,85 @@ export const TeamDetailsPage: React.FC = () => {
   if (!team) {
      // This state might be reached if fetchTeamById returns null without setting an error in the hook
     return (
-        <div className="p-6 text-center text-gray-400">
+        <div className="p-6 text-center text-muted-foreground">
             Team not found or could not be loaded.
-             <Link to="/teams" className="block mt-4 text-indigo-400 hover:text-indigo-500">Back to Teams</Link>
+             <Link to="/teams" className="block mt-4 text-primary hover:text-primary/80">Back to Teams</Link>
         </div>
     );
   }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center mb-6">
+      {/* Header */}
+      <div className="flex items-center mb-8">
         <Link 
             to="/teams"
-            className="mr-4 p-2 rounded-full hover:bg-gray-700 transition-colors"
+            className="mr-4 p-2 rounded-full hover:bg-accent transition-colors"
             title="Back to Teams List"
         >
-            <ArrowLeft className="w-5 h-5 text-gray-400" />
+            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
         </Link>
         <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white truncate" title={team.name}>
+            <h1 className="text-3xl font-bold text-foreground truncate" title={team.name}>
                 {team.name}
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 truncate" title={team.description || ''}>
-                {team.description || 'No description'}
-            </p>
         </div>
         <Link
           to={`/teams/${team.id}/edit`}
-          className="ml-4 inline-flex items-center px-3 py-1.5 border border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
+          className="ml-4 inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md shadow-sm text-foreground bg-card hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
         >
           <Edit className="-ml-1 mr-2 h-4 w-4" aria-hidden="true" />
           Edit Team
         </Link>
       </div>
 
-      {/* Grid container - changed to single column or adjust as needed */}
-      <div className="mt-8 grid grid-cols-1 gap-8">
-          {/* Column 1: Team Member List */}
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg shadow-sm p-6">
-              <TeamMemberList teamId={team.id} />
-          </div>
+      {/* Team Overview Section */}
+      <div className="mb-8">
+        <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-foreground mb-4">Team Overview</h2>
           
-          {/* Column 2: REMOVED Workspace/Chat Room List */}
-          {/* 
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg shadow-sm p-6">
-              <TeamChatRoomList teamId={team.id} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Description */}
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Description</h3>
+              <div className="bg-muted/50 rounded-md p-3 min-h-[80px]">
+                {team.description ? (
+                  <p className="text-foreground whitespace-pre-wrap">{team.description}</p>
+                ) : (
+                  <p className="text-muted-foreground italic">No description provided for this team.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Team Stats */}
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Team Information</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
+                  <span className="text-sm text-muted-foreground">Team ID</span>
+                  <span className="text-sm font-mono text-foreground">{team.id}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
+                  <span className="text-sm text-muted-foreground">Created</span>
+                  <span className="text-sm text-foreground">
+                    {team.created_at ? new Date(team.created_at).toLocaleDateString() : 'Unknown'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    Active
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-          */}
+        </div>
+      </div>
+
+      {/* Team Members Section */}
+      <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+          <TeamMemberList teamId={team.id} />
       </div>
       
     </div>

@@ -119,12 +119,12 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-300">Team Members</h2>
+        <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
         
         {!loading && !error && (
           <button 
             onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm rounded-md shadow-sm text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add Member
@@ -134,7 +134,7 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
 
       {loading && (
         <div className="flex justify-center items-center p-4">
-            <Loader2 className="animate-spin h-6 w-6 text-indigo-400" />
+            <Loader2 className="animate-spin h-6 w-6 text-primary" />
         </div>
       )}
       {error && (
@@ -144,23 +144,23 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
         </div>
       )}
       {!loading && !error && members.length === 0 && (
-        <div className="text-center py-6 px-4 border border-dashed border-gray-700 rounded-lg">
-          <User className="mx-auto h-8 w-8 text-gray-500" />
-          <p className="mt-2 text-sm text-gray-400">This team doesn't have any members yet.</p>
+        <div className="text-center py-6 px-4 border border-dashed border-border rounded-lg">
+          <User className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-2 text-sm text-muted-foreground">This team doesn't have any members yet.</p>
         </div>
       )}
 
       {!loading && !error && members.length > 0 && (
         <ul className="space-y-3">
           {members.map(member => (
-            <li key={member.agent_id} className="bg-gray-800 p-3 rounded-md shadow flex justify-between items-center">
+            <li key={member.agent_id} className="bg-muted/50 border border-border p-4 rounded-md shadow-sm flex justify-between items-center hover:bg-muted/70 transition-colors">
               <div className="flex items-center">
-                <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
                   {member.agent?.name ? member.agent.name.charAt(0).toUpperCase() : '?'}
                 </div>
-                <div className="ml-3">
-                  <span className="text-gray-200 block">{member.agent?.name || 'Anonymous'}</span>
-                  <span className="text-xs text-gray-400 block">
+                <div className="ml-4">
+                  <span className="text-foreground font-medium block">{member.agent?.name || 'Anonymous'}</span>
+                  <span className="text-sm text-muted-foreground block">
                     {getRoleDisplayName(member.team_role || 'member')}
                   </span>
                 </div>
@@ -168,7 +168,7 @@ export const TeamMemberList: React.FC<TeamMemberListProps> = ({ teamId }) => {
               
               <button
                 onClick={() => handleEditMember(member)}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors duration-200"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors duration-200"
                 title="Edit member"
               >
                 <Edit className="h-4 w-4" />

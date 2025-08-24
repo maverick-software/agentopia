@@ -4,6 +4,10 @@ import { Database } from './database.types'; // Import generated types
 export type Agent = Database['public']['Tables']['agents']['Row'];
 export type Datastore = Database['public']['Tables']['datastores']['Row'];
 export type AgentDiscordConnection = Database['public']['Tables']['agent_discord_connections']['Row'];
+export type Team = Database['public']['Tables']['teams']['Row'];
+export type TeamMember = Database['public']['Tables']['team_members']['Row'] & {
+  agent?: Agent;
+};
 
 // Keep existing Message type if needed
 export interface Message {

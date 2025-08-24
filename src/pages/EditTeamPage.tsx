@@ -1,127 +1,197 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Save } from 'lucide-react';
 import { useTeams } from '../hooks/useTeams';
-import { TeamUpdatePayload } from '../types';
+import { Team } from '../types';
 
 export const EditTeamPage: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
   const navigate = useNavigate();
-  const { fetchTeamById, updateTeam, team, loading, error } = useTeams();
+  const { fetchTeamById, updateTeam, loading, error } = useTeams();
 
+  const [team, setTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
   const [description, setDescription] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (teamId) {
-      fetchTeamById(teamId);
-    }
+    const loadTeam = async () => {
+      if (!teamId) {
+        setFetchError('No team ID provided');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setFetchError(null);
+        const fetchedTeam = await fetchTeamById(teamId);
+        
+        if (fetchedTeam) {
+          setTeam(fetchedTeam);
+          setTeamName(fetchedTeam.name || '');
+          setDescription(fetchedTeam.description || '');
+        } else {
+          setFetchError('Team not found');
+        }
+      } catch (err) {
+        console.error('Error loading team:', err);
+        setFetchError('Failed to load team');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTeam();
   }, [teamId, fetchTeamById]);
-
-  useEffect(() => {
-    if (team) {
-      setTeamName(team.name || '');
-      setDescription(team.description || '');
-    }
-  }, [team]);
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!teamId) return;
+    if (!teamId || !teamName.trim()) return;
 
-    const payload: TeamUpdatePayload = {
-        id: teamId,
-        name: teamName,
-        description: description,
-    };
+    try {
+      setIsSaving(true);
+      const updatedTeam = await updateTeam(teamId, {
+        name: teamName.trim(),
+        description: description.trim() || null,
+      });
 
-    const success = await updateTeam(payload);
-    if (success) {
+      if (updatedTeam) {
         navigate(`/teams/${teamId}`);
+      }
+    } catch (err) {
+      console.error('Error saving team:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  if (loading && !team) {
-    return <div className="p-4 text-center text-gray-500 dark:text-gray-400">Loading team details...</div>;
+  if (isLoading) {
+    return (
+      <div className="p-8 flex justify-center items-center">
+        <Loader2 className="animate-spin h-8 w-8 text-primary" />
+      </div>
+    );
   }
 
-  if (error && !team) {
-    return <div className="p-4 text-center text-red-500 dark:text-red-400">Error loading team details: {error}</div>;
+  if (fetchError) {
+    return (
+      <div className="p-6">
+        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md flex items-center">
+          <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0" />
+          <span>{fetchError}</span>
+          <Link to="/teams" className="ml-auto text-sm font-medium hover:underline">
+            Back to Teams
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (!team) {
-    return <div className="p-4 text-center text-gray-500 dark:text-gray-400">Team not found.</div>;
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        Team not found.
+        <Link to="/teams" className="block mt-4 text-primary hover:text-primary/80">
+          Back to Teams
+        </Link>
+      </div>
+    );
   }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center mb-6">
-         <Link
-           to={`/teams/${teamId}`}
-           className="mr-4 p-2 rounded-full hover:bg-gray-700 transition-colors"
-         >
-           <ArrowLeft className="w-5 h-5 text-gray-400" />
-         </Link>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Edit Team {teamName || teamId}</h1>
+      {/* Header */}
+      <div className="flex items-center mb-8">
+        <Link
+          to={`/teams/${teamId}`}
+          className="mr-4 p-2 rounded-full hover:bg-accent transition-colors"
+          title="Back to Team Details"
+        >
+          <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold text-foreground">Edit Team</h1>
+          <p className="text-muted-foreground mt-1">Update your team's information</p>
+        </div>
       </div>
 
+      {/* Error Display */}
       {error && (
-         <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-200 rounded-md">
-           Error updating team: {error}
-         </div>
-       )}
+        <div className="mb-6 bg-destructive/10 border border-destructive text-destructive p-4 rounded-md flex items-center">
+          <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0" />
+          <span>Error updating team: {error.message || 'Unknown error'}</span>
+        </div>
+      )}
 
-       <form onSubmit={handleSave} className="space-y-6 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-         <div>
-           <label htmlFor="teamName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-             Team Name
-           </label>
-           <div className="mt-1">
-             <input
-               type="text"
-               name="teamName"
-               id="teamName"
-               value={teamName}
-               onChange={(e) => setTeamName(e.target.value)}
-               required
-               className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-             />
-           </div>
-         </div>
+      {/* Form */}
+      <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+        <form onSubmit={handleSave} className="space-y-6">
+          <div className="space-y-2">
+            <label htmlFor="teamName" className="text-sm font-medium text-foreground">
+              Team Name *
+            </label>
+            <input
+              type="text"
+              name="teamName"
+              id="teamName"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              required
+              disabled={isSaving}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Enter team name"
+            />
+          </div>
 
-         <div>
-           <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-             Description
-           </label>
-           <div className="mt-1">
-             <textarea
-               id="description"
-               name="description"
-               rows={3}
-               value={description}
-               onChange={(e) => setDescription(e.target.value)}
-               className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-             />
-           </div>
-           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Brief description for your team.</p>
-         </div>
+          <div className="space-y-2">
+            <label htmlFor="description" className="text-sm font-medium text-foreground">
+              Description
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={isSaving}
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Describe the team's purpose and goals"
+            />
+            <p className="text-sm text-muted-foreground">
+              Provide a brief description to help team members understand the team's purpose.
+            </p>
+          </div>
 
-         <div className="flex justify-end space-x-3">
+          <div className="flex justify-end space-x-3 pt-4">
             <Link
               to={`/teams/${teamId}`}
-              className="inline-flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
             >
-                Cancel
+              Cancel
             </Link>
-           <button
-             type="submit"
-             disabled={loading}
-             className="inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-           >
-             {loading ? 'Saving...' : 'Save Changes'}
-           </button>
-         </div>
-       </form>
+            <button
+              type="submit"
+              disabled={isSaving || !teamName.trim()}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }; 

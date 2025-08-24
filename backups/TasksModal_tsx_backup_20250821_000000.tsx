@@ -314,7 +314,7 @@ export function TasksModal({
         name: newTaskTitle.trim(),
         description: newTaskDescription.trim() || null,
         task_type: 'scheduled',
-      status: 'active',
+        status: 'active',
         instructions: newTaskDescription.trim() || newTaskTitle.trim(),
         cron_expression,
         timezone,
@@ -336,16 +336,16 @@ export function TasksModal({
       }
       if (error) throw error;
       toast.success('Task added! 📝');
-    setNewTaskTitle('');
-    setNewTaskDescription('');
-    setNewTaskPriority('medium');
+      setNewTaskTitle('');
+      setNewTaskDescription('');
+      setNewTaskPriority('medium');
       setOneTimeDate('');
       setOneTimeTime('');
       setRecurringStartDate('');
       setRecurringEndDate('');
       setRecurringTime('');
       setRecurringCadence('daily');
-    setShowNewTaskForm(false);
+      setShowNewTaskForm(false);
       setEditingTaskId(null);
       await loadTasks();
     } catch (e: any) {
@@ -721,3 +721,5 @@ export function TasksModal({
     </Dialog>
   );
 }
+
+

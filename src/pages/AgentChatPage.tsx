@@ -18,7 +18,7 @@ import { HowIThinkModal } from '../components/modals/HowIThinkModal';
 import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
 import { EnhancedChannelsModal } from '../components/modals/EnhancedChannelsModal';
 import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
-import { TasksModal } from '../components/modals/TasksModal';
+import { TaskManagerModal } from '../components/modals/TaskManagerModal';
 import { HistoryModal } from '../components/modals/HistoryModal';
 import { ProcessModal } from '../components/modals/ProcessModal';
 import ReactMarkdown from 'react-markdown';
@@ -1156,22 +1156,13 @@ export function AgentChatPage() {
 	            </div>
 	          </div>
 	          <div className="flex items-center space-x-2">
-	            {/* Schedule action moved here as a red icon + label button */}
-	            <button
-	              type="button"
-	              onClick={() => setShowTasksModal(true)}
-	              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-accent transition-colors"
-	              title="Schedule"
-	            >
-	              <Clock className="h-4 w-4 text-red-500" />
-	              <span className="text-sm text-red-500">Schedule</span>
-	            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
-                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
+	            {/* Schedule action removed from header */}
+	            <DropdownMenu>
+	              <DropdownMenuTrigger asChild>
+	                <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
+	                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+	                </button>
+	              </DropdownMenuTrigger>
 	              <DropdownMenuContent align="end" className="w-44">
 	                <DropdownMenuItem onClick={handleRenameConversation} className="cursor-pointer">
 	                  <Pencil className="h-4 w-4 mr-2" />
@@ -1186,8 +1177,8 @@ export function AgentChatPage() {
 	                  Share link
 	                </DropdownMenuItem>
 	              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+	            </DropdownMenu>
+	          </div>
       </div>
 
       {/* Messages Container - Hidden scrollbar */}
@@ -1709,6 +1700,16 @@ export function AgentChatPage() {
 	                    </DropdownMenuItem>
 	                  </DropdownMenuContent>
 	                </DropdownMenu>
+	                {/* Schedule icon next to other tools */}
+	                <button
+	                  type="button"
+	                  onClick={() => setShowTasksModal(true)}
+	                  className="p-2 rounded-lg hover:bg-accent transition-colors ml-1"
+	                  title="Schedule"
+	                  disabled={!agent}
+	                >
+	                  <Clock className="w-4 h-4 text-red-500" />
+	                </button>
 	                <DropdownMenu>
 	                  <DropdownMenuTrigger asChild>
 	                    <button
@@ -1719,7 +1720,7 @@ export function AgentChatPage() {
 	                      <Paperclip className="w-4 h-4 text-emerald-500" />
 	                    </button>
 	                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-48">
+	                  <DropdownMenuContent align="start" className="w-48">
 	                    <DropdownMenuItem className="cursor-pointer">
 	                      <Paperclip className="w-4 h-4 mr-2 text-emerald-500" />
 	                      Attach file
@@ -1865,7 +1866,7 @@ export function AgentChatPage() {
       />
 
       {/* Tasks Modal */}
-      <TasksModal
+      <TaskManagerModal
         isOpen={showTasksModal}
         onClose={() => setShowTasksModal(false)}
         agentId={agentId || ''}

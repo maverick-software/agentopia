@@ -199,6 +199,27 @@ body {
   background: hsl(var(--muted-foreground) / 0.2);
 }
 
+/* Ensure native date/time pickers show their dropdown icons */
+input[type="date"], input[type="time"], select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  background-image: none !important;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  display: inline-block;
+  cursor: pointer;
+  /* Tint to primary blue via CSS filter so the native icon remains clickable */
+  filter: invert(42%) sepia(86%) saturate(2400%) hue-rotate(203deg) brightness(95%) contrast(96%);
+}
+
+/* Dark mode: slightly lighter tint for contrast */
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(62%) sepia(36%) saturate(1144%) hue-rotate(183deg) brightness(101%) contrast(93%);
+}
+
 /* Show scrollbar during scroll activity to provide feedback */
 ::-webkit-scrollbar-thumb:vertical:active {
   background: hsl(var(--muted-foreground) / 0.2);

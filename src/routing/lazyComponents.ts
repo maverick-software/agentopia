@@ -20,7 +20,6 @@ export const DatastoresPage = lazy(() => import('../pages/DatastoresPage.tsx').t
 export const DatastoreEditPage = lazy(() => import('../pages/DatastoreEditPage.tsx'));
 export const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage.tsx').then(module => ({ default: module.AdminDashboardPage })));
 export const TeamsPage = lazy(() => import('../pages/TeamsPage.tsx').then(module => ({ default: module.TeamsPage })));
-export const CreateTeamPage = lazy(() => import('../pages/CreateTeamPage.tsx').then(module => ({ default: module.CreateTeamPage })));
 export const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage.tsx').then(module => ({ default: module.TeamDetailsPage })));
 export const EditTeamPage = lazy(() => import('../pages/EditTeamPage.tsx').then(module => ({ default: module.EditTeamPage })));
 export const SettingsPage = lazy(() => import('../pages/SettingsPage.tsx').then(module => ({ default: module.Settings })));
