@@ -15,6 +15,10 @@ Create an Account based media library where we store file uploads. The system wi
 
 The planning process should include adding the file upload feature to the chat page, wiring it up to the media library, adding a media library link to the sidebar, as well as the file ingestion for vector, sql (supabase) and knowledge graph. Also for the agent knowledge modal, where users can already add documents. Investigate that system and include it in the plan to extend it with this more comprehensive media library system.
 
+## Contact List ##
+
+Create a centralized contact list page and system that allows me to add contacts to the system. Name, Numbers (work, home, cell), email address, home address, work address, birthdate and notes. Then, on the agent chat page add 'Contacts' system so that we can add contacts or enable access to all contacts for that specific agent. Create a 'Contacts Lookup Tool' that we will make available via the MCP tool system our agents already have. Investigate, Research, Plan, Implement using the @plan_and_execute.mdc protocol.
+
 ## Context Board ##
 
 The agent should have a small space in memory that retains two paragraph summary of what just happened, what is currently happening, and what it predicts will happen next. This should be provided via the assistant message area of the LLM.

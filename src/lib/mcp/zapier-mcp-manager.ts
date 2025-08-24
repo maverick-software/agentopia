@@ -166,12 +166,23 @@ export class ZapierMCPManager {
    */
   async testConnection(serverUrl: string): Promise<ZapierMCPConnectionTest> {
     try {
-      const client = new MCPClient(serverUrl, { timeout: 10000 });
+      console.log(`[ZapierMCPManager] Testing connection to: ${serverUrl}`);
+      
+      const client = new MCPClient(serverUrl, { timeout: 15000 }); // Increased timeout
+      
+      // Use the simpler test connection method
+      const isConnected = await client.testConnection();
+      
+      if (!isConnected) {
+        throw new Error('Connection test failed');
+      }
+      
+      // If basic connection works, try to get tools
       await client.initialize();
-      
       const { tools } = await client.listTools();
-      
       await client.disconnect();
+
+      console.log(`[ZapierMCPManager] Connection successful, found ${tools.length} tools`);
 
       return {
         success: true,
@@ -181,11 +192,27 @@ export class ZapierMCPManager {
     } catch (error) {
       console.error('MCP connection test failed:', error);
       
-      let errorMessage = 'Unknown connection error';
+      let errorMessage = 'Connection failed';
       if (error instanceof MCPClientError) {
-        errorMessage = error.message;
+        errorMessage = `MCP Error: ${error.message}`;
+        if (error.code) {
+          errorMessage += ` (Code: ${error.code})`;
+        }
       } else if (error instanceof Error) {
         errorMessage = error.message;
+        
+        // Provide more specific error messages based on common issues
+        if (error.message.includes('Failed to fetch')) {
+          errorMessage = 'Network error: Unable to reach the MCP server. Please check the URL and your internet connection.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Connection timeout: The MCP server took too long to respond.';
+        } else if (error.message.includes('400')) {
+          errorMessage = 'Bad Request: The MCP server rejected the request. Please verify the server URL is correct.';
+        } else if (error.message.includes('404')) {
+          errorMessage = 'Not Found: The MCP server endpoint was not found. Please check the URL path.';
+        } else if (error.message.includes('500')) {
+          errorMessage = 'Server Error: The MCP server encountered an internal error.';
+        }
       }
 
       return {

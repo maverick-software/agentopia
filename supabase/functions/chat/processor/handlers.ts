@@ -346,6 +346,15 @@ Remember: ALWAYS use blank lines between elements for readability!`
         try {
           const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
           const result = await fcm.executeFunction(context.agent_id || '', context.user_id || '', tc.function.name, args);
+          
+          // Check if this is an MCP tool that returned a clarifying question
+          const isMCPQuestion = !result.success && 
+            result.error && 
+            (result.error.toLowerCase().includes('question:') || 
+             result.error.toLowerCase().includes('what') ||
+             result.error.toLowerCase().includes('please provide') ||
+             result.error.toLowerCase().includes('missing'));
+          
           toolDetails.push({
             name: tc.function.name,
             execution_time_ms: Date.now() - started,
@@ -353,7 +362,9 @@ Remember: ALWAYS use blank lines between elements for readability!`
             input_params: args,
             output_result: result.data || null,
             error: result.success ? undefined : result.error,
+            requires_retry: isMCPQuestion
           });
+          
           // Append tool observation
           msgs.push({
             role: 'tool',
@@ -376,6 +387,120 @@ Remember: ALWAYS use blank lines between elements for readability!`
           } as any);
         }
       }
+      // Check if any tools need retry (MCP interactive pattern)
+      const toolsNeedingRetry = toolDetails.filter(td => td.requires_retry);
+      let retryAttempts = 0;
+      const MAX_RETRY_ATTEMPTS = 3;
+      
+      while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
+        retryAttempts++;
+        console.log(`[TextMessageHandler] Retrying ${toolsNeedingRetry.length} MCP tools (attempt ${retryAttempts}/${MAX_RETRY_ATTEMPTS})`);
+        
+        // Add a system message to guide the retry
+        msgs.push({
+          role: 'system',
+          content: `The previous tool call(s) need additional information. Please retry with the missing parameters based on the error messages. For document creation, include a 'text' or 'content' parameter with the document body.`
+        } as any);
+        
+        // Get the model to retry with additional parameters
+        let retryCompletion;
+        if (router && useRouter && context.agent_id) {
+          const retryResp = await router.chat(context.agent_id, msgs as any, { 
+            tools: availableTools.map((fn) => ({ type: 'function', function: fn })), 
+            tool_choice: 'auto',
+            temperature: 0.7, 
+            maxTokens: 1200 
+          });
+          retryCompletion = {
+            choices: [{ message: retryResp }],
+            usage: retryResp.usage ? { prompt_tokens: retryResp.usage.prompt, completion_tokens: retryResp.usage.completion, total_tokens: retryResp.usage.total } : undefined,
+          };
+        } else {
+          retryCompletion = await this.openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: msgs,
+            temperature: 0.7,
+            max_tokens: 1200,
+            tools: availableTools.map((fn) => ({ type: 'function', function: fn })),
+            tool_choice: 'auto',
+          });
+        }
+        
+        // Process retry tool calls
+        const retryToolCalls = (retryCompletion.choices?.[0]?.message?.tool_calls || []) as OpenAIToolCall[];
+        
+        if (retryToolCalls.length > 0) {
+          // Clear the tools needing retry list
+          toolsNeedingRetry.length = 0;
+          
+          // Add assistant message with retry tool calls
+          msgs.push({
+            role: 'assistant',
+            content: '',
+            tool_calls: retryToolCalls.map((tc: any) => ({ 
+              id: tc.id, 
+              type: 'function', 
+              function: { name: tc.function.name, arguments: tc.function.arguments } 
+            })),
+          } as any);
+          
+          // Execute retry tool calls
+          for (const tc of retryToolCalls) {
+            const started = Date.now();
+            try {
+              const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+              const result = await fcm.executeFunction(context.agent_id || '', context.user_id || '', tc.function.name, args);
+              
+              // Check if this still needs retry
+              const stillNeedsRetry = !result.success && 
+                result.error && 
+                (result.error.toLowerCase().includes('question:') || 
+                 result.error.toLowerCase().includes('what') ||
+                 result.error.toLowerCase().includes('please provide') ||
+                 result.error.toLowerCase().includes('missing'));
+              
+              if (stillNeedsRetry && retryAttempts < MAX_RETRY_ATTEMPTS) {
+                toolsNeedingRetry.push({ name: tc.function.name, requires_retry: true });
+              }
+              
+              toolDetails.push({
+                name: tc.function.name,
+                execution_time_ms: Date.now() - started,
+                success: !!result.success,
+                input_params: args,
+                output_result: result.data || null,
+                error: result.success ? undefined : result.error,
+                retry_attempt: retryAttempts
+              });
+              
+              msgs.push({
+                role: 'tool',
+                content: fcm.formatFunctionResult(result, tc.function.name),
+                tool_call_id: tc.id,
+              } as any);
+            } catch (err: any) {
+              toolDetails.push({
+                name: tc.function?.name,
+                execution_time_ms: Date.now() - started,
+                success: false,
+                input_params: {},
+                output_result: null,
+                error: err?.message || 'Tool execution error',
+                retry_attempt: retryAttempts
+              });
+              msgs.push({
+                role: 'tool',
+                content: `Tool ${tc.function?.name} failed: ${err?.message || 'Unknown error'}`,
+                tool_call_id: tc.id,
+              } as any);
+            }
+          }
+        } else {
+          // No retry tool calls generated, stop retrying
+          break;
+        }
+      }
+      
       // Reflect: ask model to produce final answer
       if (router && useRouter && context.agent_id) {
         const resp2 = await router.chat(context.agent_id, msgs as any, { temperature: 0.5, maxTokens: 1200 });

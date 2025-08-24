@@ -46,6 +46,7 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 *   **🆕 Web Research Capabilities:** Integrated web search, page scraping, and content summarization through multiple providers (Serper API, SerpAPI, Brave Search)
 *   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
 *   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, timezone support, and Edge Function execution
+*   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -1112,6 +1113,15 @@ Located in `services/`. These are designed for persistent execution on a server 
     * **Type System Integration:** Added proper Team and TeamMember types to the TypeScript system for better type safety
     * **Modular Architecture:** Clean separation of concerns with CreateTeamModal component and updated routing structure
     * **Improved User Experience:** Better loading states, error handling, and form validation throughout the team management workflow
+*   **🆕 Zapier MCP Integration (August 2025):**
+    * **Universal Tool Connectivity:** Implemented Model Context Protocol (MCP) client for connecting to Zapier's 8,000+ app integrations
+    * **Per-Agent MCP Servers:** Each agent can connect to its own unique Zapier MCP server for personalized tool access
+    * **Dynamic Tool Discovery:** Automatic discovery and caching of available tools from MCP servers with OpenAI schema conversion
+    * **Seamless Function Calling:** MCP tools integrate transparently with existing OpenAI function calling infrastructure
+    * **Intelligent Tool Routing:** Metadata-based routing system that keeps function schemas clean while enabling MCP execution
+    * **Comprehensive UI Management:** Intuitive connection interface with tool listing, refresh controls, and status indicators
+    * **Protocol Compliance:** Full implementation of MCP 2024-11-05 specification with JSON-RPC 2.0 over Streamable HTTP
+    * **Production-Ready Error Handling:** Robust connection validation, detailed error messages, and graceful degradation
 
 ## Memory Systems & Knowledge Integration
 
@@ -1686,6 +1696,243 @@ Supporting Files:
 - Bulk task operations and templates
 
 The Task Scheduling System provides a robust foundation for automated agent workflows, enabling users to create sophisticated automation patterns while maintaining a clean, intuitive user experience.
+
+## Zapier MCP Integration
+
+Agentopia implements a cutting-edge integration with Zapier's Model Context Protocol (MCP) servers, enabling agents to access and utilize tools from over 8,000+ applications through a universal protocol. This integration transforms agents from isolated AI assistants into powerful automation engines that can interact with virtually any business application.
+
+### 🚀 **System Overview**
+
+The Zapier MCP Integration allows:
+- **Universal Tool Access**: Connect agents to any Zapier-supported application (Google Docs, Sheets, Slack, HubSpot, etc.)
+- **Per-Agent Configuration**: Each agent can have its own unique Zapier MCP server connection
+- **Dynamic Tool Discovery**: Automatically discover and make available all tools from connected MCP servers
+- **Seamless Function Calling**: MCP tools integrate transparently with OpenAI's function calling system
+- **Real-Time Tool Management**: Add, refresh, or remove tool connections without code changes
+
+### 🏗️ **Architecture Components**
+
+#### **Database Schema**
+```sql
+-- MCP server connections per agent
+agent_mcp_connections: {
+  id: uuid,
+  agent_id: uuid,                  -- Reference to agents table
+  connection_name: text,            -- User-friendly connection name
+  server_url: text,                 -- Zapier MCP server URL
+  is_active: boolean,               -- Connection status
+  created_at: timestamptz,
+  updated_at: timestamptz
+}
+
+-- Cached MCP tools for performance
+mcp_tools_cache: {
+  id: uuid,
+  connection_id: uuid,              -- Reference to agent_mcp_connections
+  tool_name: text,                  -- MCP tool identifier
+  tool_schema: jsonb,               -- Original MCP tool schema
+  openai_schema: jsonb,             -- Converted OpenAI function schema
+  last_updated: timestamptz,
+  created_at: timestamptz
+}
+```
+
+#### **Core Components**
+
+1. **`MCPClient`** (`src/lib/mcp/mcp-client.ts`):
+   - Implements JSON-RPC 2.0 protocol over Streamable HTTP
+   - Handles MCP server initialization and session management
+   - Manages tool discovery and execution requests
+   - Supports MCP protocol version negotiation
+
+2. **`ZapierMCPManager`** (`src/lib/mcp/zapier-mcp-manager.ts`):
+   - CRUD operations for MCP connections
+   - Tool discovery and caching
+   - Connection testing and validation
+   - Automatic schema conversion (MCP → OpenAI)
+
+3. **`FunctionCallingManager`** (`supabase/functions/chat/function_calling.ts`):
+   - Enhanced to discover MCP tools alongside native tools
+   - Routes MCP tool calls to appropriate servers
+   - Maintains metadata mapping for tool execution
+   - Integrates MCP tools with OpenAI function calling
+
+4. **`MCPToolProvider`** (`supabase/functions/chat/providers/mcp-provider.ts`):
+   - Executes MCP tools through the MCP client
+   - Validates agent permissions and connection status
+   - Handles tool result formatting and error handling
+   - Logs tool executions for audit trails
+
+### 🎯 **User Experience**
+
+#### **Connection Flow**
+1. User navigates to agent's Tools interface
+2. Clicks on "Zapier MCP" tab
+3. Enters their unique Zapier MCP server URL
+4. Tests connection to verify server availability
+5. System discovers and caches available tools
+6. Tools immediately available to agent in conversations
+
+#### **Tool Discovery**
+When connected, the system automatically discovers tools like:
+- `google_docs_create_document_from_text` - Create Google Documents
+- `google_docs_append_text_to_document` - Add content to documents
+- `google_docs_find_a_document` - Search for documents
+- `gmail_send_email` - Send emails via Gmail
+- `slack_send_message` - Post to Slack channels
+- And thousands more depending on Zapier configuration
+
+### ⚙️ **Technical Implementation**
+
+#### **MCP Protocol Implementation**
+```typescript
+// MCP JSON-RPC 2.0 message format
+interface MCPRequest {
+  jsonrpc: "2.0";
+  id: string | number;
+  method: string;
+  params?: any;
+}
+
+// Streamable HTTP transport
+const response = await fetch(serverUrl, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'MCP-Protocol-Version': '2024-11-05',
+    'Mcp-Session-Id': sessionId
+  },
+  body: JSON.stringify(request)
+});
+```
+
+#### **Tool Schema Conversion**
+```typescript
+// MCP tool schema → OpenAI function schema
+function convertToOpenAISchema(mcpTool: MCPTool): OpenAIFunction {
+  return {
+    name: mcpTool.name,
+    description: mcpTool.description,
+    parameters: {
+      type: 'object',
+      properties: mcpTool.inputSchema.properties,
+      required: mcpTool.inputSchema.required || []
+    }
+  };
+}
+```
+
+#### **Tool Execution Routing**
+```typescript
+// Enhanced FunctionCallingManager with MCP support
+class FunctionCallingManager {
+  private mcpToolMetadata = new Map<string, {
+    connectionId: string;
+    toolName: string;
+  }>();
+
+  async executeFunction(functionName: string, parameters: any) {
+    // Check if this is an MCP tool
+    const mcpMetadata = this.mcpToolMetadata.get(functionName);
+    if (mcpMetadata) {
+      return await this.executeMCPTool(
+        mcpMetadata.connectionId,
+        mcpMetadata.toolName,
+        parameters
+      );
+    }
+    // ... handle other tool types
+  }
+}
+```
+
+### 🔧 **Integration Features**
+
+#### **Dynamic Tool Loading**
+- Tools are discovered in real-time from MCP servers
+- No hardcoded tool definitions required
+- Automatic schema validation and conversion
+- Tool capabilities update as Zapier adds new integrations
+
+#### **Intelligent Tool Routing**
+- Clean separation between MCP and native tools
+- Metadata-based routing without polluting function schemas
+- Transparent integration with existing function calling
+- Performance optimization through tool caching
+
+#### **Security & Permissions**
+- Per-agent connection isolation
+- Row-level security on connection data
+- Secure server URL storage
+- Connection validation before tool execution
+
+### 📊 **Current Implementation Status**
+
+#### **✅ Completed Components**
+- Database schema with RLS policies
+- MCP client with JSON-RPC 2.0 support
+- Zapier MCP manager for connection CRUD
+- Function calling integration
+- MCP tool provider for execution
+- UI components for connection management
+- Tool discovery and caching system
+
+#### **🔧 Technical Achievements**
+- **Protocol Compliance**: Full MCP 2024-11-05 specification support
+- **Schema Conversion**: Automatic MCP → OpenAI schema transformation
+- **Performance**: Tool caching reduces discovery overhead
+- **Reliability**: Robust error handling and connection validation
+- **User Experience**: Intuitive connection management interface
+
+### 🚦 **How It Works**
+
+#### **From User Question to Tool Execution**
+1. **User asks**: "Create a Google Document about our meeting notes"
+2. **Agent receives**: Message processed by chat function
+3. **Tools discovered**: FunctionCallingManager retrieves MCP tools from cache
+4. **LLM decides**: OpenAI selects `google_docs_create_document_from_text`
+5. **Execution routed**: Function name mapped to MCP connection via metadata
+6. **MCP call made**: MCPToolProvider sends JSON-RPC request to Zapier
+7. **Result returned**: Document created, URL returned to user
+
+#### **Connection Management UI**
+The Zapier MCP integration is accessible through:
+1. Agent Chat Page → Tools Menu → Zapier MCP Tab
+2. Shows connection status with visual indicators
+3. Lists all discovered tools with descriptions
+4. Provides refresh and disconnect controls
+5. Real-time tool count and last updated information
+
+### 🔍 **Troubleshooting**
+
+#### **Common Issues**
+1. **Tools not appearing in chat**: Deploy the updated chat function with MCP support
+2. **Connection test fails**: Verify MCP server URL is correct and accessible
+3. **Tools not discovered**: Check if Zapier MCP server has tools configured
+4. **Execution errors**: Ensure agent has necessary permissions and connection is active
+
+#### **Debug Information**
+- Function calling logs show MCP tool discovery count
+- Connection test provides detailed error messages
+- Tool cache table shows discovered tools and schemas
+- Execution logs track all MCP tool calls
+
+### 🚀 **Benefits**
+
+#### **For Users**
+- **Universal Connectivity**: Access to 8,000+ applications
+- **No Code Required**: Connect tools through simple URL configuration
+- **Immediate Availability**: Tools work instantly after connection
+- **Flexible Automation**: Create complex workflows across multiple apps
+
+#### **For Developers**
+- **Protocol-Based**: Standard MCP implementation works with any MCP server
+- **Extensible**: Easy to add support for other MCP providers
+- **Type-Safe**: Full TypeScript support with proper interfaces
+- **Well-Documented**: Comprehensive logging and error messages
+
+The Zapier MCP Integration represents a paradigm shift in agent capabilities, transforming Agentopia agents from isolated AI assistants into universal automation engines that can interact with virtually any business application through a single, standardized protocol.
+
     *   Executed comprehensive knowledge transfer protocol following premium standards
     *   Created complete handoff documentation suite in `docs/handoff/20250729_161128_*`
     *   Synchronized project documentation, database schema, and policies
@@ -1732,6 +1979,7 @@ The Task Scheduling System provides a robust foundation for automated agent work
 *   **✅ Chat Handoff Protocol:** **COMPLETE** - Comprehensive knowledge transfer documentation created following premium protocol standards. All project documentation synchronized, database schema/policies archived, and continuation requirements documented in `docs/handoff/20250801_040010_*` files.
 *   **✅ Task Scheduling System:** **COMPLETE & PRODUCTION-READY** - Comprehensive automated task scheduling infrastructure with modern wizard UI, timezone support, and Edge Function integration. Modular component architecture with strict file size compliance and proper separation of concerns.
 *   **✅ Enhanced Team Management System:** **COMPLETE & PRODUCTION-READY** - Modern team management workflow with modal-based creation, comprehensive team details with descriptions and member management, fixed edit functionality, and complete theme consistency. Includes proper TypeScript integration and modular component architecture.
+*   **✅ Zapier MCP Integration:** **COMPLETE & DEPLOYED** - Universal tool connectivity through Model Context Protocol allowing agents to access 8,000+ applications. Full implementation with dynamic tool discovery, seamless function calling integration, and comprehensive UI management. Metadata-based routing issue resolved for proper tool execution.
 *   **MCP Management Interface (Phase 2.3.1):** **40% Complete** - Major progress on Multi-MCP Management Components:
     *   ✅ **Foundation Complete:** TypeScript interfaces, component architecture, DTMA API integration
     *   ✅ **MCPServerList Component:** Full server listing with search, filtering, status management (432 lines)

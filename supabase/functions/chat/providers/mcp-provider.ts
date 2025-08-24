@@ -192,17 +192,22 @@ export class MCPToolProvider {
     toolName: string,
     arguments_: Record<string, any>
   ): Promise<MCPToolExecutionResult> {
-    // Import MCP client dynamically to avoid issues in Edge Functions
-    const { MCPClient, convertMCPResultToStandard } = await import('../../../src/lib/mcp/mcp-client.ts');
+    // Import MCP client from local lib
+    const { MCPClient } = await import('../lib/mcp-client.ts');
     
-    const client = new MCPClient(serverUrl, { timeout: 30000 });
+    const client = new MCPClient(serverUrl);
     
     try {
       await client.initialize();
       const result = await client.callTool(toolName, arguments_);
       await client.disconnect();
       
-      return convertMCPResultToStandard(result);
+      // Convert MCP result to standard format
+      return {
+        success: !result.isError,
+        result: result.content?.[0]?.text || JSON.stringify(result),
+        error: result.isError ? (result.content?.[0]?.text || 'Tool execution failed') : undefined
+      };
     } catch (error) {
       await client.disconnect();
       throw error;

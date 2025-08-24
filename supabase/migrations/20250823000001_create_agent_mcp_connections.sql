@@ -47,28 +47,28 @@ ALTER TABLE mcp_tools_cache ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own agent MCP connections" ON agent_mcp_connections
     FOR SELECT USING (
         agent_id IN (
-            SELECT id FROM agents WHERE owner_user_id = auth.uid()
+            SELECT id FROM agents WHERE user_id = auth.uid()
         )
     );
 
 CREATE POLICY "Users can insert MCP connections for their own agents" ON agent_mcp_connections
     FOR INSERT WITH CHECK (
         agent_id IN (
-            SELECT id FROM agents WHERE owner_user_id = auth.uid()
+            SELECT id FROM agents WHERE user_id = auth.uid()
         )
     );
 
 CREATE POLICY "Users can update their own agent MCP connections" ON agent_mcp_connections
     FOR UPDATE USING (
         agent_id IN (
-            SELECT id FROM agents WHERE owner_user_id = auth.uid()
+            SELECT id FROM agents WHERE user_id = auth.uid()
         )
     );
 
 CREATE POLICY "Users can delete their own agent MCP connections" ON agent_mcp_connections
     FOR DELETE USING (
         agent_id IN (
-            SELECT id FROM agents WHERE owner_user_id = auth.uid()
+            SELECT id FROM agents WHERE user_id = auth.uid()
         )
     );
 
@@ -78,7 +78,7 @@ CREATE POLICY "Users can view MCP tools for their own agent connections" ON mcp_
         connection_id IN (
             SELECT id FROM agent_mcp_connections 
             WHERE agent_id IN (
-                SELECT id FROM agents WHERE owner_user_id = auth.uid()
+                SELECT id FROM agents WHERE user_id = auth.uid()
             )
         )
     );

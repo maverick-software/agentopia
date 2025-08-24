@@ -29,14 +29,117 @@ import {
   Zap,
   Settings,
   FileText,
-  BarChart3
+  BarChart3,
+  RefreshCw,
+  Trash2,
+  Wrench
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useWebSearchConnection } from '@/hooks/useWebSearchIntegration';
 import { useConnections } from '@/hooks/useConnections';
 import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
+import { ZapierMCPModal } from './ZapierMCPModal';
 import { toast } from 'react-hot-toast';
+
+// Zapier Tools List Component
+interface ZapierToolsListProps {
+  agentId: string;
+  connectionId: string;
+  onToolsUpdate: (count: number) => void;
+}
+
+function ZapierToolsList({ agentId, connectionId, onToolsUpdate }: ZapierToolsListProps) {
+  const { user } = useAuth();
+  const supabase = useSupabaseClient();
+  const [tools, setTools] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadTools = async () => {
+    if (!user?.id) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { ZapierMCPManager } = await import('@/lib/mcp/zapier-mcp-manager');
+      const manager = new ZapierMCPManager(supabase, user.id);
+      const connectionTools = await manager.getConnectionTools(connectionId);
+      setTools(connectionTools);
+      onToolsUpdate(connectionTools.length);
+    } catch (err) {
+      console.error('Failed to load tools:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load tools');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadTools();
+  }, [connectionId, user?.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin" />
+        <span className="ml-2">Loading tools...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wrench className="w-5 h-5 text-blue-500" />
+          Available Tools ({tools.length})
+        </CardTitle>
+        <CardDescription>
+          These automation tools are available from the connected Zapier MCP server.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {tools.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Wrench className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No tools discovered yet.</p>
+            <p className="text-sm">Try refreshing to discover available tools.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {tools.map((tool) => (
+              <div key={tool.id} className="border border-border rounded-lg p-4 hover:bg-accent/50 transition-colors">
+                <div className="flex items-start justify-between mb-2">
+                  <h4 className="font-medium text-sm">{tool.tool_name}</h4>
+                  <Badge variant="outline" className="text-xs">
+                    MCP Tool
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                  {tool.tool_schema.description || 'No description available'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Last updated: {new Date(tool.last_updated).toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface EnhancedToolsModalProps {
   isOpen: boolean;
@@ -67,6 +170,10 @@ export function EnhancedToolsModal({
   const [setupService, setSetupService] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [selectingCredentialFor, setSelectingCredentialFor] = useState<string | null>(null);
+  const [showZapierModal, setShowZapierModal] = useState(false);
+  const [zapierConnection, setZapierConnection] = useState<any>(null);
+  const [zapierToolsCount, setZapierToolsCount] = useState(0);
+  const [zapierToolsRefreshKey, setZapierToolsRefreshKey] = useState(0);
   
   // Setup form state
   const [selectedProvider, setSelectedProvider] = useState('');
@@ -131,6 +238,33 @@ export function EnhancedToolsModal({
   }, [agentId, supabase]);
 
   useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
+
+  // Check for existing Zapier MCP connection
+  useEffect(() => {
+    const checkZapierConnection = async () => {
+      if (!agentId || !user?.id) return;
+      
+      try {
+        const { ZapierMCPManager } = await import('@/lib/mcp/zapier-mcp-manager');
+        const manager = new ZapierMCPManager(supabase, user.id);
+        
+        const connections = await manager.getAgentConnections(agentId);
+        const connection = connections.length > 0 ? connections[0] : null;
+        setZapierConnection(connection);
+        
+        if (connection) {
+          const tools = await manager.getConnectionTools(connection.id);
+          setZapierToolsCount(tools.length);
+        }
+      } catch (error) {
+        console.error('Failed to check Zapier connection:', error);
+      }
+    };
+
+    if (isOpen) {
+      checkZapierConnection();
+    }
+  }, [isOpen, agentId, user?.id, supabase]);
 
   // Search providers for unified Web Search integration
   const SEARCH_PROVIDERS = [
@@ -827,14 +961,114 @@ export function EnhancedToolsModal({
         
         <div className="px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="connected">Connected Tools</TabsTrigger>
+              <TabsTrigger value="zapier">Zapier MCP</TabsTrigger>
               <TabsTrigger value="available">Add New Tool</TabsTrigger>
             </TabsList>
             
             <TabsContent value="connected" className="mt-6">
               <div className="min-h-[300px]">
                 {renderConnectedTools()}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="zapier" className="mt-6">
+              <div className="min-h-[300px] space-y-6">
+                {zapierConnection ? (
+                  // Connected State
+                  <>
+                    {/* Connection Status */}
+                    <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-card">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                          <Zap className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Zapier MCP Server Connected</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {zapierToolsCount} tools available
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={zapierConnection.is_active ? "default" : "secondary"}>
+                          {zapierConnection.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!user?.id) return;
+                            try {
+                              const { ZapierMCPManager } = await import('@/lib/mcp/zapier-mcp-manager');
+                              const manager = new ZapierMCPManager(supabase, user.id);
+                              await manager.refreshConnectionTools(zapierConnection.id);
+                              
+                              // Trigger refresh of the tools list component
+                              setZapierToolsRefreshKey(prev => prev + 1);
+                              
+                              toast.success('Tools refreshed successfully');
+                            } catch (error) {
+                              console.error('Failed to refresh tools:', error);
+                              toast.error('Failed to refresh tools');
+                            }
+                          }}
+                          title="Refresh Tools"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!user?.id || !confirm('Are you sure you want to disconnect from the Zapier MCP server?')) return;
+                            try {
+                              const { ZapierMCPManager } = await import('@/lib/mcp/zapier-mcp-manager');
+                              const manager = new ZapierMCPManager(supabase, user.id);
+                              await manager.deleteConnection(zapierConnection.id);
+                              
+                              setZapierConnection(null);
+                              setZapierToolsCount(0);
+                              
+                              toast.success('Disconnected from Zapier MCP server');
+                            } catch (error) {
+                              console.error('Failed to disconnect:', error);
+                              toast.error('Failed to disconnect');
+                            }
+                          }}
+                          title="Disconnect"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Available Tools */}
+                    <ZapierToolsList 
+                      key={zapierToolsRefreshKey}
+                      agentId={agentId}
+                      connectionId={zapierConnection.id}
+                      onToolsUpdate={(count) => setZapierToolsCount(count)}
+                    />
+                  </>
+                ) : (
+                  // Not Connected State
+                  <div className="text-center py-12">
+                    <Zap className="w-16 h-16 mx-auto mb-4 text-orange-500" />
+                    <h3 className="text-lg font-semibold mb-2">Zapier MCP Server</h3>
+                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                      Connect this agent to its unique Zapier MCP server to access automation tools and workflows.
+                    </p>
+                    <Button
+                      onClick={() => setShowZapierModal(true)}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      <Zap className="w-4 h-4 mr-2" />
+                      Connect MCP Server
+                    </Button>
+                  </div>
+                )}
               </div>
             </TabsContent>
             
@@ -852,6 +1086,38 @@ export function EnhancedToolsModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Zapier MCP Modal */}
+      <ZapierMCPModal
+        isOpen={showZapierModal}
+        onClose={() => {
+          setShowZapierModal(false);
+          // Refresh connection status when modal closes
+          if (agentId && user?.id) {
+            setTimeout(async () => {
+              try {
+                const { ZapierMCPManager } = await import('@/lib/mcp/zapier-mcp-manager');
+                const manager = new ZapierMCPManager(supabase, user.id);
+                
+                const connections = await manager.getAgentConnections(agentId);
+                const connection = connections.length > 0 ? connections[0] : null;
+                setZapierConnection(connection);
+                
+                if (connection) {
+                  const tools = await manager.getConnectionTools(connection.id);
+                  setZapierToolsCount(tools.length);
+                } else {
+                  setZapierToolsCount(0);
+                }
+              } catch (error) {
+                console.error('Failed to refresh Zapier connection:', error);
+              }
+            }, 100);
+          }
+        }}
+        agentId={agentId}
+        agentData={agentData}
+      />
     </Dialog>
   );
 }

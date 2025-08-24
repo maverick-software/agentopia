@@ -441,6 +441,8 @@ export const MAILGUN_MCP_TOOLS: Record<string, MCPTool> = {
  * Function Calling Manager
  */
 export class FunctionCallingManager {
+  private mcpToolMetadata = new Map<string, { connectionId: string; toolName: string }>();
+
   constructor(
     private supabaseClient: SupabaseClient,
     private authToken: string = ''
@@ -459,15 +461,20 @@ export class FunctionCallingManager {
       // Get Web Search tools if agent has web search permissions
       const webSearchTools = await this.getWebSearchTools(agentId, userId);
       
+      // Get MCP tools from Zapier and other MCP servers
+      const mcpTools = await this.getMCPTools(agentId, userId);
+      
       // SendGrid transactional email tools (API key based)
       const sendgridTools = await this.getSendgridTools(agentId, userId);
       
       // Mailgun email tools (API key based)
       const mailgunTools = await this.getMailgunTools(agentId, userId);
       
-      const allTools = [...gmailTools, ...webSearchTools, ...sendgridTools, ...mailgunTools];
+      const allTools = [...gmailTools, ...webSearchTools, ...mcpTools, ...sendgridTools, ...mailgunTools];
       
       console.log(`[FunctionCalling] Found ${allTools.length} available tools`);
+      console.log(`[FunctionCalling] All tool names:`, allTools.map(t => t.name));
+      console.log(`[FunctionCalling] MCP tools count: ${mcpTools.length}, Gmail tools count: ${gmailTools.length}, Web search tools count: ${webSearchTools.length}`);
       return allTools;
     } catch (error) {
       console.error('[FunctionCalling] Error getting available tools:', error);
@@ -721,6 +728,12 @@ export class FunctionCallingManager {
       
       if (Object.keys(MAILGUN_MCP_TOOLS).includes(functionName)) {
         return await this.executeMailgunTool(agentId, userId, functionName, parameters);
+      }
+      
+      // Check if this is an MCP tool using the metadata map
+      const mcpMetadata = this.mcpToolMetadata.get(functionName);
+      if (mcpMetadata) {
+        return await this.executeMCPTool(agentId, userId, mcpMetadata.connectionId, mcpMetadata.toolName, parameters);
       }
       
       // Future: Add other providers
@@ -1090,6 +1103,98 @@ export class FunctionCallingManager {
       });
     } catch (error) {
       console.error('[FunctionCalling] Error logging Gmail operation:', error);
+    }
+  }
+
+  /**
+   * Execute MCP tool
+   */
+  private async executeMCPTool(
+    agentId: string,
+    userId: string,
+    connectionId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[FunctionCalling] Executing MCP tool ${toolName} via connection ${connectionId}`);
+      
+      // Import MCP provider dynamically
+      const { MCPToolProvider } = await import('./providers/mcp-provider.ts');
+      const mcpProvider = new MCPToolProvider(this.supabaseClient, this.authToken);
+      
+      // Execute the tool with the provided parameters
+      const result = await mcpProvider.executeTool(agentId, userId, {
+        connectionId,
+        toolName,
+        arguments: parameters
+      });
+      
+      // Convert to MCPToolResult format
+      return {
+        success: result.success,
+        data: result.result,
+        error: result.error,
+        metadata: {
+          execution_time_ms: result.execution_time_ms || Date.now() - startTime,
+          ...result.metadata
+        }
+      };
+    } catch (error) {
+      console.error(`[FunctionCalling] Error executing MCP tool ${toolName}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'MCP tool execution failed',
+        metadata: {
+          execution_time_ms: Date.now() - startTime
+        }
+      };
+    }
+  }
+
+  /**
+   * Get MCP tools for an agent
+   */
+  private async getMCPTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      console.log(`[FunctionCalling] Getting MCP tools for agent ${agentId}`);
+      
+      // Get MCP tools from database using the stored procedure
+      const { data: mcpToolsData, error } = await this.supabaseClient
+        .rpc('get_agent_mcp_tools', { p_agent_id: agentId });
+
+      if (error) {
+        console.error('[FunctionCalling] Error fetching MCP tools:', error);
+        return [];
+      }
+
+      if (!mcpToolsData || mcpToolsData.length === 0) {
+        console.log(`[FunctionCalling] No MCP tools found for agent ${agentId}`);
+        return [];
+      }
+
+      // Convert MCP tools to OpenAI function format
+      const mcpTools: OpenAIFunction[] = mcpToolsData.map((row: any) => {
+        const openaiSchema = row.openai_schema;
+        
+        // Store MCP metadata in a separate map for routing
+        this.mcpToolMetadata.set(openaiSchema.name, {
+          connectionId: row.connection_id,
+          toolName: row.tool_name
+        });
+        
+        // Return clean OpenAI function schema without metadata
+        return openaiSchema;
+      });
+
+      console.log(`[FunctionCalling] Found ${mcpTools.length} MCP tools for agent ${agentId}`);
+      console.log(`[FunctionCalling] MCP tool names:`, mcpTools.map(t => t.name));
+      return mcpTools;
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting MCP tools:', error);
+      return [];
     }
   }
 

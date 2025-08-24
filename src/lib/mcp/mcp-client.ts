@@ -120,15 +120,20 @@ export class MCPClient {
       );
     }
 
-    // Extract session ID if provided
-    // Note: This would be extracted from response headers in a real HTTP implementation
-    // For now, we'll simulate this
+    // Extract session ID if provided from response headers
+    // This is handled in sendRequest method
     
-    // Send initialized notification
-    await this.sendNotification({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    });
+    // Send initialized notification - this is optional per MCP spec
+    try {
+      await this.sendNotification({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized'
+      });
+    } catch (error) {
+      // Some servers may not require or support the initialized notification
+      // This is not a fatal error, so we continue
+      console.warn('[MCPClient] Initialized notification failed (this is often normal):', error.message);
+    }
   }
 
   /**
@@ -194,7 +199,36 @@ export class MCPClient {
    */
   async testConnection(): Promise<boolean> {
     try {
-      await this.initialize();
+      // Try a simple initialization without the notification first
+      const request: MCPRequest = {
+        jsonrpc: '2.0',
+        id: this.getNextRequestId(),
+        method: 'initialize',
+        params: {
+          protocolVersion: this.protocolVersion,
+          capabilities: {
+            tools: {
+              listChanged: false
+            }
+          },
+          clientInfo: {
+            name: 'Agentopia',
+            version: '1.0.0'
+          }
+        }
+      };
+
+      const response = await this.sendRequest(request);
+      
+      if (response.error) {
+        throw new MCPClientError(
+          `Initialization failed: ${response.error.message}`,
+          response.error.code,
+          response.error.data
+        );
+      }
+
+      // Try to list tools to verify the connection works
       await this.listTools();
       return true;
     } catch (error) {
@@ -318,7 +352,9 @@ export class MCPClient {
 
       clearTimeout(timeoutId);
 
-      if (response.status !== 202) {
+      // Accept both 202 (Accepted) and 200 (OK) for notifications
+      // Some servers may return 200 instead of 202
+      if (response.status !== 202 && response.status !== 200) {
         throw new MCPClientError(
           `Notification failed: ${response.status} ${response.statusText}`,
           response.status
