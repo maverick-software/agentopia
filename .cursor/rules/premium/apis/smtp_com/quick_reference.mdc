@@ -1,0 +1,262 @@
+# SMTP.com Quick Reference Guide
+
+## API Endpoints
+
+### Base URL
+```
+https://api.smtp.com/v4
+```
+
+### Authentication Headers
+```http
+# Recommended method
+X-SMTPCOM-API: {your_api_key}
+
+# Alternative methods
+Authorization: Bearer {your_api_key}
+Authorization: Basic base64(api:{your_api_key})
+```
+
+## Common API Calls
+
+### Send Email
+```http
+POST /v4/messages
+Content-Type: application/json
+X-SMTPCOM-API: {api_key}
+
+{
+  "to": "recipient@example.com",
+  "from": "sender@example.com",
+  "subject": "Email Subject",
+  "html": "<h1>HTML Content</h1>",
+  "text": "Plain text content"
+}
+```
+
+### Check Account Status
+```http
+GET /v4/account
+X-SMTPCOM-API: {api_key}
+```
+
+### Get Message Status
+```http
+GET /v4/messages/{message_id}
+X-SMTPCOM-API: {api_key}
+```
+
+## SMTP Relay Settings
+
+### Primary Configuration
+- **Host**: `smtp.smtp.com`
+- **Port**: `2525` (recommended)
+- **Security**: STARTTLS
+- **Authentication**: Username/Password
+
+### Alternative Ports
+- `587` (STARTTLS)
+- `8025` (STARTTLS)
+- `25` (STARTTLS)
+
+## Response Formats (JSend)
+
+### Success Response
+```json
+{
+  "status": "success",
+  "data": {
+    "message_id": "abc123",
+    "status": "queued"
+  }
+}
+```
+
+### Error Response
+```json
+{
+  "status": "error",
+  "message": "Authentication failed",
+  "code": 401
+}
+```
+
+### Fail Response
+```json
+{
+  "status": "fail",
+  "data": {
+    "email": "Invalid email format"
+  }
+}
+```
+
+## HTTP Status Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 200 | Success | Process response |
+| 400 | Bad Request | Check request format |
+| 401 | Unauthorized | Check API key |
+| 403 | Forbidden | Check permissions |
+| 429 | Rate Limited | Implement backoff |
+| 500 | Server Error | Retry with backoff |
+
+## Rate Limiting
+
+### Headers to Monitor
+```http
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640995200
+Retry-After: 60
+```
+
+### Backoff Strategy
+```typescript
+const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+await new Promise(resolve => setTimeout(resolve, delay));
+```
+
+## Email Validation
+
+### Required Fields
+- `to`: Recipient email address
+- `from`: Sender email address
+- `subject`: Email subject line
+- `html` or `text`: Email content
+
+### Optional Fields
+- `cc`: Carbon copy recipients
+- `bcc`: Blind carbon copy recipients
+- `reply_to`: Reply-to address
+- `attachments`: File attachments
+
+## Webhook Events
+
+### Event Types
+- `delivered`: Email delivered successfully
+- `bounced`: Email bounced
+- `complained`: Spam complaint received
+- `opened`: Email opened (tracking required)
+- `clicked`: Link clicked (tracking required)
+
+### Webhook Payload
+```json
+{
+  "event": "delivered",
+  "message_id": "abc123",
+  "email": "recipient@example.com",
+  "timestamp": "2025-01-01T12:00:00Z"
+}
+```
+
+## Error Handling Patterns
+
+### TypeScript Implementation
+```typescript
+interface SMTPComError {
+  status: 'error' | 'fail';
+  message?: string;
+  code?: number;
+  data?: Record<string, any>;
+}
+
+const handleSMTPComResponse = async (response: Response) => {
+  const data = await response.json();
+  
+  if (data.status === 'success') {
+    return data.data;
+  }
+  
+  if (data.status === 'fail') {
+    throw new ValidationError(data.data);
+  }
+  
+  if (data.status === 'error') {
+    throw new SMTPComAPIError(data.message, data.code);
+  }
+};
+```
+
+## Testing Endpoints
+
+### Sandbox Mode
+SMTP.com doesn't have a separate sandbox - use test email addresses:
+- `test@smtp.com` (will not deliver)
+- Your own email addresses for real testing
+
+### Connection Test
+```typescript
+const testConnection = async (apiKey: string): Promise<boolean> => {
+  try {
+    const response = await fetch('https://api.smtp.com/v4/account', {
+      headers: { 'X-SMTPCOM-API': apiKey }
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+```
+
+## Security Best Practices
+
+### API Key Management
+1. Store in secure vault (Supabase Vault)
+2. Use environment variables for development
+3. Rotate keys regularly
+4. Monitor for unauthorized usage
+
+### Request Security
+1. Always use HTTPS
+2. Validate all input data
+3. Implement request signing (if required)
+4. Log security events
+
+## Monitoring and Logging
+
+### Key Metrics to Track
+- Request success/failure rates
+- Response times
+- Rate limit hits
+- Bounce rates
+- Complaint rates
+
+### Log Format Example
+```json
+{
+  "timestamp": "2025-01-01T12:00:00Z",
+  "level": "info",
+  "service": "smtp_com",
+  "action": "send_email",
+  "message_id": "abc123",
+  "recipient": "user@example.com",
+  "status": "success",
+  "response_time_ms": 250
+}
+```
+
+## Troubleshooting Checklist
+
+### Authentication Issues
+- [ ] API key is correct and active
+- [ ] Using proper authentication header
+- [ ] Account has sufficient credits
+
+### Delivery Issues
+- [ ] Recipient email is valid
+- [ ] Sender domain is verified
+- [ ] Content passes spam filters
+- [ ] Not hitting rate limits
+
+### API Issues
+- [ ] Request format is correct JSON
+- [ ] All required fields are present
+- [ ] Content-Type header is set
+- [ ] Using correct endpoint URL
+
+---
+
+*Quick reference for SMTP.com integration in Agentopia*
+*Based on SMTP.com API v4 - Last updated: January 2025*

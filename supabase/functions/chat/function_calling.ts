@@ -5,6 +5,7 @@
  */
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
+import { SMTP_MCP_TOOLS, SMTPToolValidator, SMTPToolResultFormatter } from './smtp-tools.ts';
 
 // Import the tool registry and types
 export interface OpenAIFunction {
@@ -470,7 +471,10 @@ export class FunctionCallingManager {
       // Mailgun email tools (API key based)
       const mailgunTools = await this.getMailgunTools(agentId, userId);
       
-      const allTools = [...gmailTools, ...webSearchTools, ...mcpTools, ...sendgridTools, ...mailgunTools];
+      // SMTP email tools (API key based)
+      const smtpTools = await this.getSMTPTools(agentId, userId);
+      
+      const allTools = [...gmailTools, ...webSearchTools, ...mcpTools, ...sendgridTools, ...mailgunTools, ...smtpTools];
       
       console.log(`[FunctionCalling] Found ${allTools.length} available tools`);
       console.log(`[FunctionCalling] All tool names:`, allTools.map(t => t.name));
@@ -701,6 +705,68 @@ export class FunctionCallingManager {
   }
 
   /**
+   * Get available SMTP tools for agent
+   */
+  private async getSMTPTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
+    try {
+      // Check if agent has SMTP permissions
+      const { data: permissions } = await this.supabaseClient
+        .from('agent_smtp_permissions')
+        .select(`
+          *,
+          smtp_configurations!inner(
+            id,
+            connection_name,
+            from_email,
+            is_active
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('smtp_configurations.user_id', userId)
+        .eq('smtp_configurations.is_active', true)
+        .eq('is_active', true);
+
+      if (!permissions || permissions.length === 0) {
+        console.log(`[FunctionCalling] No SMTP permissions found for agent ${agentId}`);
+        return [];
+      }
+
+      const availableTools: OpenAIFunction[] = [];
+
+      // Add available SMTP tools based on permissions
+      for (const permission of permissions) {
+        const configName = permission.smtp_configurations.connection_name;
+        const fromEmail = permission.smtp_configurations.from_email;
+        
+        // Add send_email tool if permitted
+        if (permission.can_send_email) {
+          const sendEmailTool = SMTP_MCP_TOOLS.send_email;
+          availableTools.push({
+            name: sendEmailTool.name,
+            description: `${sendEmailTool.description} via ${configName} (${fromEmail})`,
+            parameters: sendEmailTool.inputSchema
+          });
+        }
+        
+        // Add test_connection tool (always available for agents with SMTP access)
+        const testConnectionTool = SMTP_MCP_TOOLS.test_connection;
+        availableTools.push({
+          name: testConnectionTool.name,
+          description: `${testConnectionTool.description} for ${configName}`,
+          parameters: testConnectionTool.inputSchema
+        });
+      }
+
+      console.log(`[FunctionCalling] Found ${availableTools.length} SMTP tools for agent ${agentId}`);
+      return availableTools;
+      
+    } catch (error) {
+      console.error('[FunctionCalling] Error getting SMTP tools:', error);
+      return [];
+    }
+  }
+
+  /**
    * Execute a function call
    */
   async executeFunction(
@@ -728,6 +794,10 @@ export class FunctionCallingManager {
       
       if (Object.keys(MAILGUN_MCP_TOOLS).includes(functionName)) {
         return await this.executeMailgunTool(agentId, userId, functionName, parameters);
+      }
+      
+      if (Object.keys(SMTP_MCP_TOOLS).includes(functionName)) {
+        return await this.executeSMTPTool(agentId, userId, functionName, parameters);
       }
       
       // Check if this is an MCP tool using the metadata map
@@ -1021,6 +1091,105 @@ export class FunctionCallingManager {
   }
 
   /**
+   * Execute SMTP tool
+   */
+  private async executeSMTPTool(
+    agentId: string,
+    userId: string,
+    toolName: string,
+    parameters: Record<string, any>
+  ): Promise<MCPToolResult> {
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[SMTP] Executing ${toolName} for agent ${agentId}`);
+      
+      // Validate SMTP configuration access
+      const configId = parameters.smtp_config_id;
+      if (!configId) {
+        throw new Error('smtp_config_id is required');
+      }
+
+      const { data: permission, error: permError } = await this.supabaseClient
+        .from('agent_smtp_permissions')
+        .select(`
+          *,
+          smtp_configurations!inner(
+            id,
+            connection_name,
+            is_active,
+            user_id
+          )
+        `)
+        .eq('agent_id', agentId)
+        .eq('smtp_config_id', configId)
+        .eq('smtp_configurations.user_id', userId)
+        .eq('smtp_configurations.is_active', true)
+        .eq('is_active', true)
+        .single();
+
+      if (permError || !permission) {
+        return {
+          success: false,
+          error: 'SMTP configuration not found or access denied',
+          metadata: { execution_time_ms: Date.now() - startTime }
+        };
+      }
+
+      // Check specific tool permission
+      if (toolName === 'send_email' && !permission.can_send_email) {
+        return {
+          success: false,
+          error: 'Agent does not have permission to send emails',
+          metadata: { execution_time_ms: Date.now() - startTime }
+        };
+      }
+
+      // Call the SMTP Edge Function
+      const { data, error } = await this.supabaseClient.functions.invoke('smtp-api', {
+        body: {
+          action: toolName,
+          agent_id: agentId,
+          user_id: userId,
+          params: parameters
+        },
+        headers: { 'Authorization': `Bearer ${this.authToken}` }
+      });
+
+      if (error) {
+        throw new Error(`SMTP API error: ${error.message}`);
+      }
+
+      if (data && !data.success && data.error) {
+        throw new Error(data.error);
+      }
+
+      return {
+        success: true,
+        data: data?.data || data,
+        metadata: {
+          execution_time_ms: Date.now() - startTime,
+          provider: 'smtp',
+          tool_name: toolName,
+          config_id: configId
+        }
+      };
+
+    } catch (error) {
+      console.error(`[SMTP] Error executing ${toolName}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'SMTP tool execution failed',
+        metadata: {
+          execution_time_ms: Date.now() - startTime,
+          provider: 'smtp',
+          tool_name: toolName
+        }
+      };
+    }
+  }
+
+  /**
    * Validate web search permissions for an agent (simplified - just check settings)
    * Note: This function is kept for backwards compatibility but is no longer used
    */
@@ -1217,6 +1386,11 @@ export class FunctionCallingManager {
    */
   formatFunctionResult(result: MCPToolResult, functionName: string): string {
     if (result.success) {
+      // Use SMTP-specific formatting if available
+      if (Object.keys(SMTP_MCP_TOOLS).includes(functionName)) {
+        return SMTPToolResultFormatter.formatResult(functionName, result.data, true);
+      }
+      
       // Format successful result
       let formattedResult = `✅ Successfully executed ${functionName}`;
       
@@ -1234,6 +1408,11 @@ export class FunctionCallingManager {
       
       return formattedResult;
     } else {
+      // Use SMTP-specific formatting if available
+      if (Object.keys(SMTP_MCP_TOOLS).includes(functionName)) {
+        return SMTPToolResultFormatter.formatResult(functionName, result, false);
+      }
+      
       // Format error result with details
       let errorMessage = `❌ Failed to execute ${functionName}\n\n`;
       errorMessage += `**Error Details:**\n`;

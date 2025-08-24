@@ -24,10 +24,11 @@ import {
   Mail
 } from 'lucide-react';
 import { useIntegrationCategories, useIntegrationsByCategory } from '@/hooks/useIntegrations';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useConnections } from '@/hooks/useConnections';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
+import { useSMTPConfigurations } from '@/hooks/useSMTPConfigurations';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -78,6 +79,7 @@ export function IntegrationsPage() {
   const [selectedIntegration, setSelectedIntegration] = useState<any>(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   
   const { categories, loading: categoriesLoading } = useIntegrationCategories();
   const { integrations, loading: integrationsLoading } = useIntegrationsByCategory(
@@ -85,8 +87,9 @@ export function IntegrationsPage() {
   );
   const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
+  const { configurations: smtpConfigurations } = useSMTPConfigurations();
 
-  // Override integration status - Gmail, SendGrid, Mailgun and Web Search providers are available
+  // Override integration status - Gmail, SendGrid, Mailgun, SMTP and Web Search providers are available
   const getEffectiveStatus = (integration: any) => {
     // Gmail is available
     if (integration.name === 'Gmail') {
@@ -100,6 +103,11 @@ export function IntegrationsPage() {
     
     // Mailgun is available
     if (integration.name === 'Mailgun') {
+      return 'available';
+    }
+    
+    // SMTP is available
+    if (integration.name === 'SMTP') {
       return 'available';
     }
     
@@ -162,6 +170,8 @@ export function IntegrationsPage() {
         return 'sendgrid';
       case 'Mailgun':
         return 'mailgun';
+      case 'SMTP':
+        return 'smtp';
       case 'Web Search':
         return 'web_search'; // Unified web search - will check all providers
       case 'Serper API':
@@ -180,6 +190,11 @@ export function IntegrationsPage() {
   };
 
   const isIntegrationConnected = (integrationName: string) => {
+    // Handle SMTP specially - check if any active SMTP configurations exist
+    if (integrationName === 'SMTP') {
+      return smtpConfigurations.some(config => config.is_active);
+    }
+    
     const provider = providerNameForIntegration(integrationName);
     if (!provider) return false;
     
@@ -204,6 +219,11 @@ export function IntegrationsPage() {
     setSelectedIntegration(null);
     // Refresh unified connections for live status
     refetchConnections();
+    // Refresh SMTP configurations if needed
+    if (selectedIntegration?.name === 'SMTP') {
+      // The SMTP configurations will be refreshed automatically by the hook
+      window.location.reload(); // Simple refresh to update the UI
+    }
   };
 
   // Ensure modal does not persist when navigating between routes
@@ -350,6 +370,9 @@ export function IntegrationsPage() {
                             {integration.name === 'Gmail' && gmailConnections.length > 1 && 
                               ` (${gmailConnections.length} accounts)`
                             }
+                            {integration.name === 'SMTP' && smtpConfigurations.length > 0 && 
+                              ` (${smtpConfigurations.filter(c => c.is_active).length} configurations)`
+                            }
                           </span>
                         </div>
                       )}
@@ -367,20 +390,42 @@ export function IntegrationsPage() {
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add Another Account
                               </Button>
+                            ) : integration.name === 'SMTP' ? (
+                              <Button
+                                onClick={() => handleAddCredentials(integration)}
+                                size="sm"
+                                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Configuration
+                              </Button>
                             ) : (
                               <span className="flex-1" />
                             )}
-                            {/* Manage should navigate to Credentials page */}
-                            <Link to="/credentials" className="flex-1">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="w-full border-border text-foreground hover:bg-accent"
-                              >
-                                <Settings className="h-4 w-4 mr-2" />
-                                Manage
-                              </Button>
-                            </Link>
+                            {/* Manage should navigate to appropriate page */}
+                            {integration.name === 'SMTP' ? (
+                              <Link to="/integrations/smtp" className="flex-1">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="w-full border-border text-foreground hover:bg-accent"
+                                >
+                                  <Settings className="h-4 w-4 mr-2" />
+                                  Manage
+                                </Button>
+                              </Link>
+                            ) : (
+                              <Link to="/credentials" className="flex-1">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="w-full border-border text-foreground hover:bg-accent"
+                                >
+                                  <Settings className="h-4 w-4 mr-2" />
+                                  Manage
+                                </Button>
+                              </Link>
+                            )}
                           </div>
                         ) : (
                           <Button 

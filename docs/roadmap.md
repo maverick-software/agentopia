@@ -1,13 +1,16 @@
 
-## Zapier Integration ##
+## SMTP Tool ##
 
-Integrate Zapier MCP so agents have access to a plethora of tools.
+I want you to add SMTP as an integration. This will be a general SMTP feature not associated with a third party, but that we can create 'credentials' and assign those credentials to an agent for sending emails. It should have all the standard SMTP fields, with port, server, reply-to, cc, bcc, etc. This way the agent can autonomously determine to send an email and send it through a configured SMTP credential using its tool calls.
 
-## Memory System ## (Completed)
+## Memory Storage ##
 
-Our agents should have a short term memory that tracks a maximum amount of chat messages set by the user (up to a maximum of 0-100). Then, each chat should have an optional area for episodic memory, which pulls from a vector database (in our case pinecone, but needs to be remain flexible for future options) and semantic understanding through a knowledge graph (in our case GetZep, but needs to remain flexible for future options).
+As of now, every conversation is being processed and implemented for our knowledge graph and pinecone index. This is not efficient and will result in large databases with mostly useless information. Instead, let's separate memory storage from the chat functionality, and build it as background process for determining what should qualify as 'memorable' and what shouldn't. 
 
-These additional memory types should, whenever activated and assigned, be storing user messages properly, building on episodic and semantic memory which each iterative conversation, up to a maximum storage limit that is set by the user plan and managed by the platform admins through the administration pages.
+Here are a few metrics we can use: our background process can determine whether or not the conversation, research, etc. is related to the core purpose of the agent (which it can find in it's own name and description). If it is not, for example, let's say someone asks a gmail agent about the color of the sky. This is not applicable to a gmail agent's explicit memory, and it does not get stored. If the user asks a question about a process related to the agents core function, for example, let's say the CEO asks an HR agent about current HR laws, and the agent had to perform web research, then that conversation would be processed for storage. 
+
+Specifically, we want to store memories that are related to expertise, systems, processes and procedures or entities within the business itself (agents, humans, etc.). This will improve awareness over time. These should processed for the explicit memory as episodic memories for vector, and separately semantic understanding for the knowledge graph. We already have these systems built, we just need to add these additional features, and ensure that the background processes for memory storage are not interrupting or slowing down our agentic chat sessions.
+
 
 ## Media Library ##
 
@@ -18,6 +21,41 @@ The planning process should include adding the file upload feature to the chat p
 ## Contact List ##
 
 Create a centralized contact list page and system that allows me to add contacts to the system. Name, Numbers (work, home, cell), email address, home address, work address, birthdate and notes. Then, on the agent chat page add 'Contacts' system so that we can add contacts or enable access to all contacts for that specific agent. Create a 'Contacts Lookup Tool' that we will make available via the MCP tool system our agents already have. Investigate, Research, Plan, Implement using the @plan_and_execute.mdc protocol.
+
+## Delegated ##
+
+Create a system where one user can invite other users, whether existing or not, to view and use their agents. This should work similar to GoDaddy's delegated access. If a user invites another user, and the user does not exist, then our system will send the new person an email with an invite link to sign up for an account. Once they sign up for an account, they will have to accept delegated permissions based on what they have been given by the prime account holder. If they already have an account, then they will receive an invitation via email they can follow to login and accept. When they accept, the prime account holder's (inviter) agents will show up in their 'agents' tab. 
+
+## Teams ##
+
+We need to be able to add subaccounts or accounts with deledated access to 'Teams.' This would allow subaccounts to the teams they are a part of within their own login. 
+
+## Workspaces ##
+
+We will modify the 'Workspaces' feature to work for 'Teams.' Teams will have their own workspaces. These are essential chat rooms where agents and human team members can collaborate on tasks. Tagging people or agents with the @ symbold. 
+
+## Tasks ##
+
+Add 'Steps' to tasks, allowing users to add multi-step instructions for the agent to follow. Do this, then do this upon completion, etc. The tasks happen sequentially, and the user can choose to have the output of the previous step(s) included in the context of the next task or not.
+
+## Agentic Task Generation ##
+
+Add a step in our conversational process where, after the agent reasons through the request with integrated and determines tool use, instead of just executing, it should first generate a mini-project plan. The mini-project plan can be one of a select few options, depending on the complexity of the context and the request:
+
+1. respond directly w/ no additional processing
+2. research and respond
+3. research and qualify, design response, quality assure and deliver response
+4. research, design, implement, quality assure, deliver
+
+These mini project plan phases should each come with their own subset of tasks for the agent to generate, perform and check off it's own list. This will require some perceptable autonomy, requiring that each task is reviewed for completion and signed off by the agent after the LLM provides the task response.
+
+This means we also need a classifier step where an LLM determines if the message is general conversational, requires fact-based evidence that might require web search processing or some tool use like searching an inbox. It should measure the sensitivity of the request, meaning what level of expertise should it require? This will determine if there needs to be a qualifying step and quality assurance. 
+
+When the classifier step happens, the LLM should respond within our JSON architecture of course, but also with the response classification, whether it is to respond directly or enter into one of the other phases. Once the agent response process enters into the recommended recommended type, then we have the agent develop its mini-plan with stages and subtasks. Then it completes each subtask through each phase, and then delivers the response.
+
+When these determinants are below the threshold we give them, they become iterative, so that the LLM responses may trigger further research, or trigger further consideration, which a cap on how many iterations can be used before responding. 
+
+This should also be visible through the UI, with the user seeing the various stages the LLM is going through to provide their response. This feature should be enabled/disabled by an icon under the chat input on the agent chat page. Maybe a lightning bolt.
 
 ## Context Board ##
 
@@ -71,16 +109,26 @@ This will allow us to add a model selection to the admin settings/setup area, wi
 
 2. We will give users an area where they can add rules just like Cursor, and they can manage memories just like in Cursor. 
 
-3. Managed episodic memories. We do not want every message to be saved in the vector database, as that would be overwhelming systems. What we need to do is creating a scoring system, and have a background process that investigates the existing vector memories. If there are highly relevant existing memories, then we should discard the most recent (maybe above a threshold percentage). This way we can keep the agentic experience refined to what is most useful to the user and avoid trying to create an AGI/ASI experience at this stage.
-
 4. Public Accessibility - I would like to create an API interface where agents can be accessed by outside systems like an app using authentication, etc.
 
 ---
 
-## Planned: Human-Reasoning Markov CoT Processor
+## Completed: 
+
+## Human-Reasoning Markov CoT Processor ##
 
 - Add automatic chain-of-thought processor with inductive/abductive/deductive styles
 - Score message complexity; select style; run dynamic Markov chain (analyze→hypothesize→test/tool→observe→update→conclude)
 - Integrate RAOR loop for tools without blocking tool usage
 - Persist safe reasoning summaries in responses; show in Process modal
 - Feature-flagged rollout with thresholds and budgets
+
+## Zapier Integration ##
+
+Integrate Zapier MCP so agents have access to a plethora of tools.
+
+## Memory System ## (Completed)
+
+Our agents should have a short term memory that tracks a maximum amount of chat messages set by the user (up to a maximum of 0-100). Then, each chat should have an optional area for episodic memory, which pulls from a vector database (in our case pinecone, but needs to be remain flexible for future options) and semantic understanding through a knowledge graph (in our case GetZep, but needs to remain flexible for future options).
+
+These additional memory types should, whenever activated and assigned, be storing user messages properly, building on episodic and semantic memory which each iterative conversation, up to a maximum storage limit that is set by the user plan and managed by the platform admins through the administration pages.

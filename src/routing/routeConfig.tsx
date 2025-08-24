@@ -59,6 +59,7 @@ import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import { GmailCallbackPage } from '../pages/integrations/GmailCallbackPage';
+import { SMTPIntegrationsPage } from '../pages/integrations/SMTPIntegrationsPage';
 import GraphSettingsPage from '../pages/GraphSettingsPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
@@ -89,6 +90,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces/:roomId/settings', element: WorkspaceSettingsPage, protection: 'protected', layout: false },
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: false },
   { path: '/integrations', element: IntegrationsPage, protection: 'protected', layout: true },
+  { path: '/integrations/smtp', element: SMTPIntegrationsPage, protection: 'protected', layout: true },
   { path: '/credentials', element: CredentialsPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },

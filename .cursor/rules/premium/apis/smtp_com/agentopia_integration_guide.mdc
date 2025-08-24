@@ -1,0 +1,311 @@
+# SMTP.com Integration Guide for Agentopia
+
+## Overview
+
+This guide provides step-by-step instructions for integrating SMTP.com into the Agentopia platform's SMTP tool system. SMTP.com offers both traditional SMTP relay and modern REST API capabilities.
+
+## Integration Architecture
+
+### Dual Integration Approach
+
+Agentopia supports SMTP.com through two methods:
+
+1. **Traditional SMTP Relay** (Current Implementation)
+   - Uses `smtp.smtp.com` with port 2525
+   - Standard username/password authentication
+   - Integrated with existing SMTP tool system
+
+2. **REST API Integration** (Recommended for Advanced Features)
+   - Uses SMTP.com REST API v4
+   - API key authentication
+   - Enhanced tracking and analytics
+
+## Current SMTP Relay Implementation
+
+### Configuration Preset
+```typescript
+{
+  name: 'smtpcom',
+  displayName: 'SMTP.com',
+  host: 'smtp.smtp.com',
+  port: 2525,
+  secure: false,
+  description: 'SMTP.com Professional Email Service',
+  authType: 'password',
+  setupInstructions: 'Use your SMTP.com username and password. Alternative ports: 587, 8025, 25'
+}
+```
+
+### SMTP Server Settings
+- **Primary Host**: `smtp.smtp.com`
+- **Primary Port**: `2525`
+- **Alternative Ports**: `587`, `8025`, `25`
+- **Security**: STARTTLS (not SSL)
+- **Authentication**: Username and Password
+
+## Enhanced API Integration (Future Implementation)
+
+### Database Schema Extensions
+
+Add API-specific fields to the SMTP configuration:
+
+```sql
+-- Add columns to smtp_configurations table
+ALTER TABLE smtp_configurations ADD COLUMN api_key_vault_id UUID REFERENCES vault.secrets(id);
+ALTER TABLE smtp_configurations ADD COLUMN use_api BOOLEAN DEFAULT FALSE;
+ALTER TABLE smtp_configurations ADD COLUMN api_endpoint TEXT DEFAULT 'https://api.smtp.com/v4';
+```
+
+### API Configuration Structure
+```typescript
+interface SMTPComAPIConfig extends SMTPConfiguration {
+  use_api: boolean;
+  api_key_vault_id?: string;
+  api_endpoint: string;
+  webhook_url?: string;
+  tracking_enabled: boolean;
+}
+```
+
+## Implementation Steps
+
+### Phase 1: Current SMTP Relay (✅ Completed)
+
+1. **Provider Preset Added**
+   - SMTP.com preset added to `SMTP_PROVIDER_PRESETS`
+   - Available in quick setup menu
+   - Standard SMTP configuration
+
+2. **User Experience**
+   - Users select "SMTP.com" from dropdown
+   - Enter username and password
+   - Configuration auto-fills host and port
+
+### Phase 2: API Integration Enhancement (Future)
+
+#### Step 1: Database Migration
+```sql
+-- Migration: Add API support to SMTP configurations
+CREATE OR REPLACE FUNCTION add_smtpcom_api_support()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Add API-specific columns
+  ALTER TABLE smtp_configurations 
+  ADD COLUMN IF NOT EXISTS api_key_vault_id UUID REFERENCES vault.secrets(id),
+  ADD COLUMN IF NOT EXISTS use_api BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS api_endpoint TEXT DEFAULT 'https://api.smtp.com/v4',
+  ADD COLUMN IF NOT EXISTS webhook_url TEXT,
+  ADD COLUMN IF NOT EXISTS tracking_enabled BOOLEAN DEFAULT FALSE;
+  
+  -- Update RLS policies to include new columns
+  -- (Add appropriate RLS policy updates here)
+END;
+$$;
+```
+
+#### Step 2: Vault Integration
+```typescript
+// Store SMTP.com API key securely
+const storeSMTPComAPIKey = async (
+  userId: string, 
+  configId: string, 
+  apiKey: string
+): Promise<string> => {
+  const { data, error } = await supabase.rpc('store_smtp_api_key', {
+    user_id: userId,
+    config_id: configId,
+    provider: 'smtp_com',
+    api_key: apiKey
+  });
+  
+  if (error) throw error;
+  return data.vault_id;
+};
+```
+
+#### Step 3: Enhanced SMTP Provider
+```typescript
+class SMTPComProvider {
+  private apiKey: string;
+  private useAPI: boolean;
+  private smtpConfig: SMTPConfiguration;
+  
+  constructor(config: SMTPComAPIConfig) {
+    this.useAPI = config.use_api;
+    this.smtpConfig = config;
+  }
+  
+  async sendEmail(params: SendEmailParams): Promise<SMTPToolResult> {
+    if (this.useAPI) {
+      return await this.sendViaAPI(params);
+    } else {
+      return await this.sendViaSMTP(params);
+    }
+  }
+  
+  private async sendViaAPI(params: SendEmailParams): Promise<SMTPToolResult> {
+    const response = await fetch('https://api.smtp.com/v4/messages', {
+      method: 'POST',
+      headers: {
+        'X-SMTPCOM-API': this.apiKey,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        to: params.to,
+        from: params.from,
+        subject: params.subject,
+        html: params.html_body,
+        text: params.text_body,
+        cc: params.cc,
+        bcc: params.bcc,
+        reply_to: params.reply_to
+      })
+    });
+    
+    const result = await response.json();
+    
+    return {
+      success: response.ok,
+      data: result,
+      provider: 'smtp_com_api',
+      message_id: result.data?.message_id
+    };
+  }
+  
+  private async sendViaSMTP(params: SendEmailParams): Promise<SMTPToolResult> {
+    // Use existing nodemailer implementation
+    return await this.sendViaNodemailer(params);
+  }
+}
+```
+
+#### Step 4: UI Enhancements
+```typescript
+// Enhanced setup modal with API option
+const SMTPComSetupForm: React.FC = () => {
+  const [useAPI, setUseAPI] = useState(false);
+  
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="use-api"
+          checked={useAPI}
+          onCheckedChange={setUseAPI}
+        />
+        <Label htmlFor="use-api">
+          Use SMTP.com REST API (Recommended)
+        </Label>
+      </div>
+      
+      {useAPI ? (
+        <APIConfigurationForm />
+      ) : (
+        <SMTPConfigurationForm />
+      )}
+    </div>
+  );
+};
+```
+
+## Feature Comparison
+
+### SMTP Relay vs REST API
+
+| Feature | SMTP Relay | REST API |
+|---------|------------|----------|
+| **Setup Complexity** | Simple | Moderate |
+| **Authentication** | Username/Password | API Key |
+| **Delivery Tracking** | Basic | Advanced |
+| **Webhooks** | No | Yes |
+| **Analytics** | Limited | Comprehensive |
+| **Rate Limiting** | Connection-based | Request-based |
+| **Error Handling** | SMTP codes | HTTP status + JSON |
+| **Attachments** | Standard MIME | Base64 JSON |
+
+## Best Practices
+
+### Security
+1. **API Key Storage**: Always store API keys in Supabase Vault
+2. **Credential Rotation**: Implement regular API key rotation
+3. **Access Control**: Use RLS policies for configuration access
+4. **Audit Logging**: Log all API interactions
+
+### Performance
+1. **Connection Pooling**: For SMTP relay connections
+2. **Retry Logic**: Implement exponential backoff
+3. **Rate Limiting**: Respect SMTP.com's rate limits
+4. **Caching**: Cache configuration data appropriately
+
+### Monitoring
+1. **Delivery Tracking**: Monitor success/failure rates
+2. **Error Alerting**: Set up alerts for high error rates
+3. **Usage Monitoring**: Track API usage against quotas
+4. **Performance Metrics**: Monitor response times
+
+## Testing Strategy
+
+### Unit Tests
+```typescript
+describe('SMTPComProvider', () => {
+  test('should send email via API', async () => {
+    const provider = new SMTPComProvider({
+      use_api: true,
+      api_key: 'test-key',
+      // ... other config
+    });
+    
+    const result = await provider.sendEmail({
+      to: 'test@example.com',
+      from: 'sender@example.com',
+      subject: 'Test Email',
+      text_body: 'Test content'
+    });
+    
+    expect(result.success).toBe(true);
+  });
+});
+```
+
+### Integration Tests
+1. **SMTP Relay Testing**: Test actual email delivery
+2. **API Testing**: Test REST API endpoints
+3. **Webhook Testing**: Test webhook processing
+4. **Error Scenarios**: Test various failure modes
+
+## Migration Path
+
+### For Existing Users
+1. **Backward Compatibility**: Maintain existing SMTP relay functionality
+2. **Opt-in Upgrade**: Allow users to upgrade to API integration
+3. **Configuration Migration**: Provide tools to migrate configurations
+4. **Documentation**: Clear migration guides
+
+### Rollout Strategy
+1. **Phase 1**: SMTP relay (current implementation)
+2. **Phase 2**: API integration development
+3. **Phase 3**: Beta testing with select users
+4. **Phase 4**: General availability
+5. **Phase 5**: Deprecation of SMTP relay (if desired)
+
+## Support and Troubleshooting
+
+### Common Issues
+1. **Authentication Failures**: Check API key validity
+2. **Rate Limiting**: Implement proper backoff strategies
+3. **Delivery Issues**: Monitor bounce rates and feedback loops
+4. **Configuration Errors**: Validate all required fields
+
+### Debugging Tools
+1. **API Response Logging**: Log all API interactions
+2. **SMTP Transaction Logging**: Log SMTP conversations
+3. **Webhook Processing**: Log webhook events
+4. **Error Categorization**: Classify errors for better handling
+
+---
+
+*This integration guide provides a roadmap for both current and future SMTP.com integration capabilities in Agentopia.*

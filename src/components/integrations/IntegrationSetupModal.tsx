@@ -22,6 +22,7 @@ import {
   Mail
 } from 'lucide-react';
 import { VaultService } from '@/services/VaultService';
+import { SMTPSetupModal } from './SMTPSetupModal';
 
 interface IntegrationSetupModalProps {
   integration: any;
@@ -61,7 +62,14 @@ export function IntegrationSetupModal({
     safesearch: 'moderate',
     from_email: '',
     from_name: '',
-    selected_provider: 'serper_api' // Default provider for unified Web Search
+    selected_provider: 'serper_api', // Default provider for unified Web Search
+    // SMTP fields
+    host: '',
+    port: '587',
+    secure: false,
+    username: '',
+    password: '',
+    reply_to_email: ''
   });
 
   // Check if this is a web search integration (unified or legacy)
@@ -71,6 +79,7 @@ export function IntegrationSetupModal({
   const isMailgunIntegration = integration?.name === 'Mailgun';
   const isPineconeIntegration = integration?.name === 'Pinecone';
   const isGetZepIntegration = integration?.name === 'GetZep';
+  const isSMTPIntegration = integration?.name === 'SMTP';
 
   // Search providers for unified Web Search
   const SEARCH_PROVIDERS = [
@@ -481,6 +490,71 @@ export function IntegrationSetupModal({
     }
   };
 
+  const handleSMTPSetup = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Validate inputs
+      if (!formData.host.trim()) {
+        setError('SMTP host is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.username.trim()) {
+        setError('Username is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.password.trim()) {
+        setError('Password is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.from_email.trim()) {
+        setError('From email is required');
+        setLoading(false);
+        return;
+      }
+      
+      // Create SMTP connection using the new standardized function
+      const { error: smtpError } = await supabase
+        .rpc('create_smtp_connection', {
+          p_user_id: user.id,
+          p_connection_name: formData.connection_name || 'SMTP Connection',
+          p_username: formData.username,
+          p_password: formData.password,
+          p_host: formData.host,
+          p_port: parseInt(formData.port) || 587,
+          p_secure: formData.secure,
+          p_from_email: formData.from_email,
+          p_from_name: formData.from_name || null,
+          p_reply_to_email: formData.reply_to_email || null
+        });
+      
+      if (smtpError) throw smtpError;
+      
+      // Refresh connections
+      await refetchConnections();
+      
+      setSuccess(true);
+      setSuccessMessage('SMTP server connected successfully!');
+      
+      setTimeout(() => {
+        onComplete();
+        handleClose();
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error('SMTP setup error:', error);
+      setError(error.message || 'Failed to connect SMTP server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleMailgunSetup = async () => {
     if (!user) return;
     
@@ -660,6 +734,8 @@ export function IntegrationSetupModal({
       'Secure OAuth authentication'
     ];
   };
+
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -914,6 +990,163 @@ export function IntegrationSetupModal({
                           <>
                             <Mail className="h-4 w-4 mr-2" />
                             Connect Mailgun
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : isSMTPIntegration ? (
+                  // SMTP Server Configuration
+                  <Card className="bg-gray-800 border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <Mail className="h-5 w-5 text-blue-400" />
+                        SMTP Server Configuration
+                      </CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Configure your SMTP server settings for email delivery
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {error && (
+                        <Alert className="bg-red-900/20 border-red-500/20">
+                          <AlertCircle className="h-4 w-4 text-red-400" />
+                          <AlertDescription className="text-red-400">
+                            {error}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div>
+                        <Label htmlFor="connection_name" className="text-white">
+                          Connection Name (Optional)
+                        </Label>
+                        <Input
+                          id="connection_name"
+                          value={formData.connection_name}
+                          onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
+                          placeholder="My SMTP Server"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="host" className="text-white">
+                            SMTP Host *
+                          </Label>
+                          <Input
+                            id="host"
+                            value={formData.host}
+                            onChange={(e) => setFormData(prev => ({ ...prev, host: e.target.value }))}
+                            placeholder="smtp.gmail.com"
+                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="port" className="text-white">
+                            Port *
+                          </Label>
+                          <Input
+                            id="port"
+                            value={formData.port}
+                            onChange={(e) => setFormData(prev => ({ ...prev, port: e.target.value }))}
+                            placeholder="587"
+                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="username" className="text-white">
+                            Username *
+                          </Label>
+                          <Input
+                            id="username"
+                            value={formData.username}
+                            onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
+                            placeholder="your-email@domain.com"
+                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="password" className="text-white">
+                            Password *
+                          </Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            value={formData.password}
+                            onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                            placeholder="Your SMTP password"
+                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="from_email" className="text-white">
+                            From Email *
+                          </Label>
+                          <Input
+                            id="from_email"
+                            type="email"
+                            value={formData.from_email}
+                            onChange={(e) => setFormData(prev => ({ ...prev, from_email: e.target.value }))}
+                            placeholder="noreply@yourdomain.com"
+                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="from_name" className="text-white">
+                            From Name (Optional)
+                          </Label>
+                          <Input
+                            id="from_name"
+                            value={formData.from_name}
+                            onChange={(e) => setFormData(prev => ({ ...prev, from_name: e.target.value }))}
+                            placeholder="Your App Name"
+                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="reply_to_email" className="text-white">
+                          Reply-To Email (Optional)
+                        </Label>
+                        <Input
+                          id="reply_to_email"
+                          type="email"
+                          value={formData.reply_to_email}
+                          onChange={(e) => setFormData(prev => ({ ...prev, reply_to_email: e.target.value }))}
+                          placeholder="support@yourdomain.com"
+                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                        />
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handleSMTPSetup}
+                        disabled={loading || success || !formData.host || !formData.username || !formData.password || !formData.from_email}
+                        className={`w-full mt-4 ${success ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                      >
+                        {success ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Success!
+                          </>
+                        ) : loading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Connect SMTP Server
                           </>
                         )}
                       </Button>

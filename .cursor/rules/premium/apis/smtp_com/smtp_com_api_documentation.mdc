@@ -1,0 +1,296 @@
+# SMTP.com API Documentation
+
+## Overview
+
+SMTP.com is a premium email delivery and email relay solution that enables you to send and track high volume emails effortlessly. This documentation covers the SMTP.com API v4 integration for the Agentopia platform.
+
+**Official Documentation**: [SMTP.com API Documentation](https://www.smtp.com/resources/api-documentation/)
+
+## API Specifications
+
+### Base Information
+- **API Version**: v4
+- **Format**: RESTful JSON API (JSend specification compliant)
+- **Base URL**: `https://api.smtp.com/v4`
+- **Content Type**: `application/json`
+- **Response Format**: JSON according to JSend specification
+
+### Required Headers
+```http
+Accept: application/json
+Content-Type: application/json
+```
+
+## Authentication Methods
+
+SMTP.com API supports multiple authentication methods. Choose the one that best fits your integration:
+
+### 1. URL Authentication
+```
+https://api:{apikey}@api.smtp.com/v4
+```
+
+### 2. Basic Authentication Header
+```http
+Authorization: Basic base64(api:{apikey})
+```
+
+### 3. Bearer Token Header
+```http
+Authorization: Bearer {apikey}
+```
+
+### 4. Custom HTTP Header
+```http
+X-SMTPCOM-API: {apikey}
+```
+
+### 5. Query String Parameter
+```
+https://api.smtp.com/v4?api_key={apikey}
+```
+
+## Integration Patterns for Agentopia
+
+### SMTP Configuration
+When integrating SMTP.com into Agentopia's SMTP tool system, use the following configuration:
+
+```typescript
+{
+  name: 'smtpcom',
+  displayName: 'SMTP.com',
+  host: 'smtp.smtp.com',
+  port: 2525,
+  secure: false,
+  description: 'SMTP.com Professional Email Service',
+  authType: 'api_key',
+  setupInstructions: 'Use your SMTP.com API key for authentication. Alternative ports: 587, 8025, 25'
+}
+```
+
+### API Key Management
+- Store API keys securely in Supabase Vault
+- Use the `X-SMTPCOM-API` header method for consistency
+- Implement proper error handling for authentication failures
+
+### Rate Limiting Considerations
+- SMTP.com has rate limits based on your plan
+- Implement exponential backoff for rate limit responses
+- Monitor usage through their API to stay within limits
+
+## Email Sending Implementation
+
+### Basic Email Send Structure
+```typescript
+interface SMTPComEmailRequest {
+  to: string | string[];
+  from: string;
+  subject: string;
+  html?: string;
+  text?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+  reply_to?: string;
+  attachments?: Array<{
+    filename: string;
+    content: string; // base64 encoded
+    content_type: string;
+  }>;
+}
+```
+
+### Response Handling
+SMTP.com follows the JSend specification:
+
+```typescript
+interface JSendResponse<T = any> {
+  status: 'success' | 'fail' | 'error';
+  data?: T;
+  message?: string;
+  code?: number;
+}
+```
+
+## Error Handling
+
+### Common Error Codes
+- **401**: Authentication failed (invalid API key)
+- **403**: Forbidden (insufficient permissions)
+- **429**: Rate limit exceeded
+- **500**: Internal server error
+
+### Error Response Format
+```json
+{
+  "status": "error",
+  "message": "Authentication failed",
+  "code": 401
+}
+```
+
+## Best Practices for Agentopia Integration
+
+### 1. Secure Credential Storage
+```typescript
+// Store API key in Supabase Vault
+const storeApiKey = async (userId: string, apiKey: string) => {
+  return await supabase.rpc('store_smtp_api_key', {
+    user_id: userId,
+    provider: 'smtp_com',
+    api_key: apiKey
+  });
+};
+```
+
+### 2. Connection Testing
+```typescript
+const testSMTPComConnection = async (apiKey: string): Promise<boolean> => {
+  try {
+    const response = await fetch('https://api.smtp.com/v4/account', {
+      headers: {
+        'X-SMTPCOM-API': apiKey,
+        'Accept': 'application/json'
+      }
+    });
+    
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+};
+```
+
+### 3. Email Sending with Retry Logic
+```typescript
+const sendEmailViaSMTPCom = async (
+  apiKey: string, 
+  emailData: SMTPComEmailRequest,
+  maxRetries: number = 3
+): Promise<JSendResponse> => {
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      const response = await fetch('https://api.smtp.com/v4/messages', {
+        method: 'POST',
+        headers: {
+          'X-SMTPCOM-API': apiKey,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(emailData)
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        return result;
+      }
+      
+      // Handle rate limiting
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        attempt++;
+        continue;
+      }
+      
+      throw new Error(`SMTP.com API error: ${result.message || response.statusText}`);
+      
+    } catch (error) {
+      attempt++;
+      if (attempt >= maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+};
+```
+
+## Webhook Integration (Optional)
+
+SMTP.com supports webhooks for delivery tracking:
+
+### Webhook Event Types
+- `delivered`: Email successfully delivered
+- `bounced`: Email bounced
+- `complained`: Spam complaint received
+- `opened`: Email opened (if tracking enabled)
+- `clicked`: Link clicked (if tracking enabled)
+
+### Webhook Payload Structure
+```typescript
+interface SMTPComWebhookPayload {
+  event: 'delivered' | 'bounced' | 'complained' | 'opened' | 'clicked';
+  message_id: string;
+  email: string;
+  timestamp: string;
+  reason?: string; // For bounces/complaints
+  user_agent?: string; // For opens/clicks
+  ip?: string; // For opens/clicks
+}
+```
+
+## Monitoring and Analytics
+
+### Usage Tracking
+- Monitor API usage through SMTP.com dashboard
+- Implement logging for all API calls
+- Track delivery rates and bounce rates
+- Set up alerts for quota limits
+
+### Performance Metrics
+- Response time monitoring
+- Success/failure rates
+- Retry attempt tracking
+- Error categorization
+
+## Integration Checklist
+
+### Setup Phase
+- [ ] Obtain SMTP.com API key
+- [ ] Configure secure storage in Supabase Vault
+- [ ] Implement connection testing
+- [ ] Set up error handling and logging
+
+### Development Phase
+- [ ] Implement email sending functionality
+- [ ] Add retry logic with exponential backoff
+- [ ] Create webhook endpoints (if needed)
+- [ ] Implement rate limit handling
+
+### Testing Phase
+- [ ] Test authentication methods
+- [ ] Verify email delivery
+- [ ] Test error scenarios
+- [ ] Validate webhook processing (if implemented)
+
+### Production Phase
+- [ ] Monitor API usage and limits
+- [ ] Set up alerting for failures
+- [ ] Regular credential rotation
+- [ ] Performance optimization
+
+## Support and Resources
+
+- **Official Documentation**: [SMTP.com API Documentation](https://www.smtp.com/resources/api-documentation/)
+- **Support**: Available through SMTP.com customer portal
+- **Status Page**: Check SMTP.com status for service availability
+- **Rate Limits**: Vary by plan - check your account dashboard
+
+## Notes for Agentopia Developers
+
+1. **Prefer API over SMTP**: While SMTP.com supports traditional SMTP, their REST API offers better features and monitoring
+2. **JSend Compliance**: All responses follow JSend specification - use appropriate parsing libraries
+3. **Authentication**: Use the `X-SMTPCOM-API` header method for consistency across the platform
+4. **Error Handling**: Implement comprehensive error handling for all possible response codes
+5. **Monitoring**: Set up proper logging and monitoring for production usage
+
+---
+
+*Last Updated: January 2025*
+*Based on SMTP.com API v4 Documentation*
