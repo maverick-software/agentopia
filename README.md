@@ -1933,6 +1933,50 @@ The Zapier MCP integration is accessible through:
 
 The Zapier MCP Integration represents a paradigm shift in agent capabilities, transforming Agentopia agents from isolated AI assistants into universal automation engines that can interact with virtually any business application through a single, standardized protocol.
 
+### 🔄 **Intelligent Retry System**
+
+Agentopia implements an advanced three-attempt retry mechanism for MCP tool execution to handle interactive tool calls and recoverable errors:
+
+#### **Automatic Retry Logic**
+- **Up to 3 attempts** for tools that return clarifying questions or missing parameter errors
+- **Smart error detection** identifies interactive prompts (e.g., "Question: What content would you like in the body of the document?")
+- **Context-aware retries** with system guidance to help the LLM provide missing parameters
+- **Progressive temperature increase** (0.7 vs 0.5) for retry attempts to encourage more creative parameter generation
+
+#### **Retry Trigger Conditions**
+The system automatically retries when tool responses contain:
+- `"question:"` - Interactive prompts from MCP servers
+- `"what"` - Questions about missing information  
+- `"please provide"` - Requests for additional parameters
+- `"missing"` - Indications of missing required data
+
+#### **Technical Implementation**
+```typescript
+// Enhanced retry logic in TextMessageHandler
+while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
+  retryAttempts++;
+  
+  // Add system guidance for retry
+  msgs.push({
+    role: 'system',
+    content: `The previous tool call(s) need additional information. Please retry with the missing parameters based on the error messages. For document creation, include a 'text' or 'content' parameter with the document body.`
+  });
+  
+  // Retry with higher temperature for creativity
+  const retryCompletion = await router.chat(agentId, msgs, { 
+    tools: availableTools,
+    temperature: 0.7,  // Higher than normal 0.5
+    maxTokens: 1200 
+  });
+}
+```
+
+#### **Benefits**
+- **Improved Success Rate**: Tools that initially fail due to missing parameters often succeed on retry
+- **Better User Experience**: Reduces need for manual intervention when tools need clarification
+- **Intelligent Parameter Discovery**: LLM learns from error messages to provide correct parameters
+- **Graceful Degradation**: System continues to function even when some tools require multiple attempts
+
     *   Executed comprehensive knowledge transfer protocol following premium standards
     *   Created complete handoff documentation suite in `docs/handoff/20250729_161128_*`
     *   Synchronized project documentation, database schema, and policies

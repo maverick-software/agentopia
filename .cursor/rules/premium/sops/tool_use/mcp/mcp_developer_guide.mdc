@@ -587,7 +587,196 @@ Leverage the Protocol layer’s JSON-RPC messages to define clear interfaces.
 Don’t skip the Session handshake – it’s there to future-proof and negotiate features.
 Build out the Application layer (tools/resources) to actually do the job your server is meant for.
 If external auth is needed, follow the OAuth patterns to keep it secure and user-consented.
-With MCP, an AI assistant could one moment read files from a local drive, the next call an API to get live data, all through a unified protocol. This guide should equip you to create both servers and clients to take advantage of that power. Happy building! Sources:
+With MCP, an AI assistant could one moment read files from a local drive, the next call an API to get live data, all through a unified protocol. This guide should equip you to create both servers and clients to take advantage of that power.
+
+## Advanced Tool Execution: Intelligent Retry Systems
+
+Modern MCP implementations benefit from intelligent retry mechanisms to handle interactive tool calls and incomplete parameter scenarios. This is particularly important when integrating with third-party services that may have dynamic or incomplete schemas.
+
+### Interactive Tool Pattern
+
+Many MCP tools, especially those from services like Zapier, implement an interactive pattern where they return clarifying questions instead of hard failures:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 42,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Question: What content would you like in the body of the document?"
+      }
+    ],
+    "isError": true
+  }
+}
+```
+
+This response indicates the tool needs additional information rather than representing a true failure.
+
+### Implementing Retry Logic
+
+#### Client-Side Retry Implementation
+
+```typescript
+class MCPClient {
+  private async executeToolWithRetry(
+    toolName: string, 
+    parameters: any, 
+    maxAttempts: number = 3
+  ): Promise<any> {
+    let attempts = 0;
+    let lastError: string | null = null;
+    
+    while (attempts < maxAttempts) {
+      attempts++;
+      
+      try {
+        const result = await this.callTool(toolName, parameters);
+        
+        // Check if this is an interactive error requiring retry
+        if (result.isError && this.isInteractiveError(result)) {
+          lastError = this.extractErrorMessage(result);
+          
+          // Enhance parameters based on error feedback
+          parameters = await this.enhanceParameters(
+            parameters, 
+            lastError, 
+            attempts
+          );
+          
+          continue; // Retry with enhanced parameters
+        }
+        
+        return result; // Success or non-retryable error
+        
+      } catch (error) {
+        if (attempts === maxAttempts) throw error;
+        // Wait before retry
+        await this.delay(1000 * attempts);
+      }
+    }
+    
+    throw new Error(`Tool execution failed after ${maxAttempts} attempts. Last error: ${lastError}`);
+  }
+  
+  private isInteractiveError(result: any): boolean {
+    const errorText = result.content?.[0]?.text?.toLowerCase() || '';
+    return errorText.includes('question:') || 
+           errorText.includes('what') || 
+           errorText.includes('please provide') || 
+           errorText.includes('missing');
+  }
+  
+  private async enhanceParameters(
+    originalParams: any, 
+    errorMessage: string, 
+    attempt: number
+  ): Promise<any> {
+    // Use LLM to interpret error and enhance parameters
+    const systemPrompt = `
+      The previous tool call failed with this message: "${errorMessage}"
+      Please provide the missing parameters based on this feedback.
+      Original parameters: ${JSON.stringify(originalParams)}
+    `;
+    
+    // Call LLM with higher temperature for creativity
+    const enhancedParams = await this.llm.complete({
+      messages: [{ role: 'system', content: systemPrompt }],
+      temperature: 0.5 + (attempt * 0.1), // Increase creativity with attempts
+      maxTokens: 500
+    });
+    
+    return this.parseEnhancedParameters(enhancedParams, originalParams);
+  }
+}
+```
+
+#### Server-Side Considerations
+
+When implementing MCP servers, consider providing helpful interactive responses:
+
+```typescript
+// Good: Provide specific guidance
+{
+  "content": [{
+    "type": "text", 
+    "text": "Question: What content would you like in the body of the document? Please provide the 'text' parameter with the document content."
+  }],
+  "isError": true
+}
+
+// Better: Include schema hints
+{
+  "content": [{
+    "type": "text",
+    "text": "Missing required parameter 'text' for document body. Expected: string containing the document content to create."
+  }],
+  "isError": true
+}
+```
+
+### Best Practices for Retry Systems
+
+#### 1. **Exponential Backoff**
+```typescript
+const delay = (attempt: number) => 
+  Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+```
+
+#### 2. **Context Preservation**
+Maintain conversation context across retry attempts to help the LLM understand the full interaction history.
+
+#### 3. **Retry Budgets**
+Implement per-session retry budgets to prevent abuse:
+
+```typescript
+class RetryManager {
+  private retryBudget = new Map<string, number>();
+  
+  canRetry(sessionId: string): boolean {
+    const used = this.retryBudget.get(sessionId) || 0;
+    return used < 10; // Max 10 retries per session
+  }
+  
+  consumeRetry(sessionId: string): void {
+    const used = this.retryBudget.get(sessionId) || 0;
+    this.retryBudget.set(sessionId, used + 1);
+  }
+}
+```
+
+#### 4. **Error Classification**
+Distinguish between retryable and non-retryable errors:
+
+```typescript
+enum ErrorType {
+  INTERACTIVE,    // Retry with enhanced parameters
+  TRANSIENT,      // Retry with same parameters
+  PERMANENT       // Don't retry
+}
+
+function classifyError(error: any): ErrorType {
+  if (error.code === -32601) return ErrorType.PERMANENT; // Method not found
+  if (error.message?.includes('rate limit')) return ErrorType.TRANSIENT;
+  if (error.message?.includes('question:')) return ErrorType.INTERACTIVE;
+  return ErrorType.PERMANENT;
+}
+```
+
+### Integration with AI Systems
+
+When integrating retry logic with AI systems, consider:
+
+1. **Temperature Scaling**: Increase temperature on retries to encourage more creative parameter generation
+2. **Context Injection**: Add system messages explaining the retry context
+3. **Parameter Learning**: Track successful parameter patterns for similar tools
+4. **User Feedback**: Allow users to intervene in retry loops when needed
+
+This intelligent retry system transforms MCP from a simple request-response protocol into a collaborative problem-solving interface between AI systems and external tools.
+
+Happy building! Sources:
 MCP Official Specification and Guides
 modelcontextprotocol.io
 github.com

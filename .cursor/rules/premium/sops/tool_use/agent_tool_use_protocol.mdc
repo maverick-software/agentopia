@@ -744,6 +744,91 @@ async function executeAPIKeyTool(tool: string, parameters: any, apiKeyId: string
 3. **Graceful Degradation**: Tool unavailability doesn't break the chat
 4. **User Notification**: Clear error messages explain what went wrong
 
+### Intelligent Retry System for Interactive Tools
+
+Agentopia implements a sophisticated three-attempt retry mechanism specifically designed for handling interactive tool calls and recoverable errors, particularly useful for MCP (Model Context Protocol) integrations:
+
+#### **Automatic Retry Logic**
+
+```typescript
+// Enhanced retry system in TextMessageHandler
+const MAX_RETRY_ATTEMPTS = 3;
+let retryAttempts = 0;
+
+while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
+  retryAttempts++;
+  console.log(`[TextMessageHandler] Retrying ${toolsNeedingRetry.length} MCP tools (attempt ${retryAttempts}/${MAX_RETRY_ATTEMPTS})`);
+  
+  // Add system guidance for retry
+  msgs.push({
+    role: 'system',
+    content: `The previous tool call(s) need additional information. Please retry with the missing parameters based on the error messages. For document creation, include a 'text' or 'content' parameter with the document body.`
+  });
+  
+  // Retry with enhanced parameters
+  const retryCompletion = await router.chat(agentId, msgs, { 
+    tools: availableTools,
+    tool_choice: 'auto',
+    temperature: 0.7,  // Higher temperature for creativity
+    maxTokens: 1200 
+  });
+}
+```
+
+#### **Interactive Error Detection**
+
+The system automatically identifies interactive errors that warrant retry attempts:
+
+```typescript
+// Check if this is an MCP tool that returned a clarifying question
+const isMCPQuestion = !result.success && 
+  result.error && 
+  (result.error.toLowerCase().includes('question:') || 
+   result.error.toLowerCase().includes('what') ||
+   result.error.toLowerCase().includes('please provide') ||
+   result.error.toLowerCase().includes('missing'));
+
+if (isMCPQuestion) {
+  toolDetails.push({
+    name: tc.function.name,
+    execution_time_ms: Date.now() - started,
+    success: false,
+    input_params: args,
+    output_result: null,
+    error: result.error,
+    requires_retry: true
+  });
+}
+```
+
+#### **Progressive Enhancement Features**
+
+Each retry attempt includes progressive enhancements:
+
+1. **System Context**: Adds guidance about missing parameters
+2. **Temperature Increase**: From 0.5 to 0.7 for more creative parameter generation  
+3. **Tool Context**: Maintains awareness of previous attempts
+4. **Error Learning**: Uses error messages to guide parameter completion
+
+#### **Retry Benefits**
+
+- **Improved Success Rate**: Tools that initially fail due to missing parameters often succeed on retry
+- **Better User Experience**: Reduces need for manual intervention when tools need clarification
+- **Intelligent Parameter Discovery**: LLM learns from error messages to provide correct parameters
+- **Graceful Degradation**: System continues to function even when some tools require multiple attempts
+- **MCP Compatibility**: Handles interactive tool patterns common in MCP servers like Zapier
+
+#### **Implementation Location**
+
+The retry system is implemented in `supabase/functions/chat/processor/handlers.ts` within the `TextMessageHandler.handle()` method. It operates after the initial tool execution phase and before the final response generation.
+
+Key technical features:
+- **Maximum 3 attempts** to prevent infinite loops
+- **Smart error detection** using keyword matching
+- **Context preservation** across retry attempts
+- **Detailed logging** for debugging and monitoring
+- **Graceful fallback** when retries are exhausted
+
 ## Security Considerations
 
 ### 1. **Token Security**

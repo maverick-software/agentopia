@@ -386,6 +386,62 @@ Tools use two error reporting mechanisms:
    * Invalid input data
    * Business logic errors
 
+### Interactive Error Handling & Retry System
+
+MCP supports interactive tool execution where tools can request additional information from the user through error responses. Modern MCP implementations should include intelligent retry mechanisms to handle these scenarios:
+
+#### **Interactive Tool Responses**
+Tools may return error responses that are actually requests for clarification:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Question: What content would you like in the body of the document?"
+      }
+    ],
+    "isError": true
+  }
+}
+```
+
+#### **Automatic Retry Logic**
+Clients **SHOULD** implement automatic retry mechanisms for interactive errors:
+
+- **Retry Triggers**: Detect interactive prompts containing keywords like "question:", "what", "please provide", "missing"
+- **Maximum Attempts**: Limit retries to prevent infinite loops (recommended: 3 attempts)
+- **Context Enhancement**: Add system guidance to help the LLM understand missing parameters
+- **Progressive Parameters**: Increase creativity (temperature) in retry attempts
+
+#### **Implementation Example**
+```typescript
+const MAX_RETRY_ATTEMPTS = 3;
+let retryAttempts = 0;
+
+while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
+  retryAttempts++;
+  
+  // Add system guidance for retry
+  messages.push({
+    role: 'system',
+    content: 'The previous tool call needs additional information. Please retry with the missing parameters based on the error message.'
+  });
+  
+  // Retry with enhanced parameters
+  const retryResult = await callTool(toolName, enhancedParameters);
+}
+```
+
+#### **Benefits of Retry Systems**
+- **Improved Success Rate**: Handle incomplete tool schemas gracefully
+- **Better User Experience**: Reduce manual intervention for missing parameters
+- **Schema Evolution**: Support tools with dynamic or incomplete parameter definitions
+- **Robust Integration**: Handle third-party tool inconsistencies
+
 Example protocol error:
 
 ```json
