@@ -10,6 +10,7 @@ export interface UnifiedConnection {
   credential_type: 'oauth' | 'api_key'
   connection_status: 'active' | 'expired' | 'revoked' | 'error' | 'disconnected'
   token_expires_at: string | null
+  scopes_granted: string[]
   created_at: string
   updated_at: string
 }
@@ -34,7 +35,7 @@ export async function fetchUserConnections(
   if (error) throw new Error(error.message)
 
   const results: UnifiedConnection[] = (data || []).map((row: any) => ({
-    connection_id: row.connection_id,
+    connection_id: row.connection_id || row.credential_id,
     user_id: row.user_id,
     provider_name: row.provider_name || row.oauth_providers?.name,
     provider_display_name: row.provider_display_name || row.oauth_providers?.display_name,
@@ -43,6 +44,7 @@ export async function fetchUserConnections(
     credential_type: row.credential_type,
     connection_status: row.connection_status,
     token_expires_at: row.token_expires_at ?? null,
+    scopes_granted: row.scopes_granted || [],
     created_at: row.created_at,
     updated_at: row.updated_at,
   }))

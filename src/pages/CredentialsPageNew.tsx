@@ -186,68 +186,74 @@ export function CredentialsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl">
-      {/* Compact Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-semibold">Credentials</h1>
+    <div className="container mx-auto p-8 max-w-6xl">
+      {/* Clean Header */}
+      <div className="mb-12">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-4xl font-bold tracking-tight">Credentials</h1>
           <Button onClick={refetch} variant="outline" size="sm" disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Manage your OAuth connections and API credentials stored securely in the vault
+        <p className="text-xl text-muted-foreground">
+          Your integrations
         </p>
       </div>
 
       {connections.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Shield className="h-8 w-8 text-muted-foreground mb-3" />
-            <h3 className="text-lg font-medium mb-2">No credentials found</h3>
-            <p className="text-sm text-muted-foreground text-center mb-4 max-w-sm">
-              Connect services from the Integrations page
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="p-4 bg-muted/50 rounded-full mb-6">
+              <Shield className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <h3 className="text-2xl font-semibold mb-2">No credentials yet</h3>
+            <p className="text-lg text-muted-foreground text-center mb-8 max-w-md">
+              Connect your first service to get started with integrations
             </p>
-            <Button asChild size="sm">
+            <Button asChild size="lg" className="px-8">
               <a href="/integrations">
                 <ExternalLink className="h-4 w-4 mr-2" />
-                Go to Integrations
+                Connect Services
               </a>
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {connections.map((connection) => (
-            <Card key={connection.connection_id} className="border hover:bg-muted/20 transition-colors">
-              <CardContent className="px-4 py-3">
+            <Card key={connection.connection_id} className="border border-border/60 hover:border-border hover:shadow-sm transition-all duration-200">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-muted rounded-md flex items-center justify-center flex-shrink-0">
-                      <Shield className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center">
+                        <Shield className="h-5 w-5 text-blue-600" />
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="text-sm font-medium text-foreground">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="text-lg font-semibold text-foreground">
                           {connection.provider_display_name || connection.provider_name}
                         </h3>
-                        <Badge variant="secondary" className="text-xs h-5 px-2">
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs font-medium"
+                        >
                           {connection.credential_type === 'oauth' ? 'OAuth' : 'API Key'}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         {connection.external_username || connection.connection_name || 'Connected Account'}
                       </p>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
                     <Badge 
-                      variant="secondary" 
-                      className={`text-xs h-6 px-2 ${getStatusColor(connection.connection_status)}`}
+                      className={`${getStatusColor(connection.connection_status)} font-medium`}
                     >
-                      {connection.connection_status === 'active' ? 'Active' : 
+                      {connection.connection_status === 'active' ? 'Connected' : 
                        connection.connection_status === 'expired' ? 'Expired' :
                        connection.connection_status === 'revoked' ? 'Revoked' :
                        connection.connection_status}
@@ -257,10 +263,10 @@ export function CredentialsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleViewDetails(connection)}
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      className="text-muted-foreground hover:text-foreground"
                     >
-                      <Eye className="h-3 w-3 mr-1" />
-                      Details
+                      <Eye className="h-4 w-4 mr-1" />
+                      View details
                     </Button>
                   </div>
                 </div>
@@ -270,75 +276,80 @@ export function CredentialsPage() {
         </div>
       )}
 
-      {/* Details Modal */}
+      {/* Details Modal - Clean & Organized */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg flex items-center gap-2">
-              <Shield className="h-4 w-4" />
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader className="space-y-3">
+            <DialogTitle className="text-2xl flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center">
+                <Shield className="h-4 w-4 text-blue-600" />
+              </div>
               {selectedConnection?.provider_display_name || selectedConnection?.provider_name}
             </DialogTitle>
           </DialogHeader>
           
           {selectedConnection && (
-            <div className="space-y-4 py-2">
-              {/* Basic Info */}
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Account:</span>
-                    <p className="font-medium">{selectedConnection.external_username || selectedConnection.connection_name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Status:</span>
-                    <Badge variant="secondary" className={`text-xs h-5 px-2 mt-1 ${getStatusColor(selectedConnection.connection_status)}`}>
-                      {selectedConnection.connection_status}
-                    </Badge>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Type:</span>
-                    <p className="font-medium">{selectedConnection.credential_type === 'oauth' ? 'OAuth' : 'API Key'}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Connected:</span>
-                    <p className="font-medium">{format(new Date(selectedConnection.created_at), 'MMM dd, yyyy')}</p>
+            <div className="space-y-8 py-4">
+              {/* Overview */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground">Account</h4>
+                  <p className="text-muted-foreground">
+                    {selectedConnection.external_username || selectedConnection.connection_name || 'N/A'}
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground">Status</h4>
+                  <Badge className={getStatusColor(selectedConnection.connection_status)}>
+                    {selectedConnection.connection_status}
+                  </Badge>
+                </div>
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground">Type</h4>
+                  <Badge variant="outline" className="w-fit">
+                    {selectedConnection.credential_type === 'oauth' ? 'OAuth Connection' : 'API Key'}
+                  </Badge>
+                </div>
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-foreground">Connected</h4>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    {format(new Date(selectedConnection.created_at), 'MMM dd, yyyy')}
                   </div>
                 </div>
               </div>
 
               {/* Permissions */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium flex items-center gap-1">
-                    <Key className="h-3 w-3" />
-                    Permissions
-                  </span>
-                  <Badge variant="secondary" className="text-xs h-5 px-2">
-                    {selectedConnection.scopes_granted.length}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Key className="h-5 w-5 text-muted-foreground" />
+                  <h4 className="font-semibold text-foreground">Permissions</h4>
+                  <Badge variant="secondary" className="ml-auto">
+                    {selectedConnection.scopes_granted.length} granted
                   </Badge>
                 </div>
                 {selectedConnection.scopes_granted.length > 0 ? (
-                  <div className="bg-muted rounded-md p-2">
-                    <div className="flex flex-wrap gap-1">
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex flex-wrap gap-2">
                       {selectedConnection.scopes_granted.map((scope) => (
-                        <Badge key={scope} variant="outline" className="text-xs h-5 px-2">
+                        <Badge key={scope} variant="outline" className="text-xs font-medium">
                           {scope}
                         </Badge>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No permissions granted</p>
+                  <p className="text-muted-foreground text-sm">No permissions granted</p>
                 )}
               </div>
 
-              {/* Token Info */}
+              {/* Token/API Key Info */}
               {selectedConnection.credential_type === 'oauth' && selectedConnection.token_expires_at && (
-                <div>
-                  <span className="text-sm font-medium">Token Status</span>
-                  <div className="bg-muted rounded-md p-2 mt-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Expires:</span>
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-foreground">Token Information</h4>
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Status:</span>
                       <span className={getTokenExpiryColor(selectedConnection.token_expires_at, refreshStatus[selectedConnection.connection_id])}>
                         {formatExpiryDate(selectedConnection.token_expires_at, refreshStatus[selectedConnection.connection_id])}
                       </span>
@@ -348,52 +359,51 @@ export function CredentialsPage() {
               )}
 
               {selectedConnection.credential_type === 'api_key' && (
-                <div>
-                  <span className="text-sm font-medium">API Key Status</span>
-                  <div className="bg-muted rounded-md p-2 mt-1">
-                    <div className="flex justify-between text-xs">
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-foreground">API Key Information</h4>
+                  <div className="bg-muted/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Expiry:</span>
-                      <span>Never expires</span>
+                      <span className="text-foreground">Never expires</span>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex justify-between pt-3 border-t">
-                {selectedConnection.credential_type === 'oauth' && selectedConnection.connection_status !== 'expired' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRefreshToken(selectedConnection.connection_id)}
-                    disabled={refreshStatus[selectedConnection.connection_id]?.isRefreshing}
-                  >
-                    {refreshStatus[selectedConnection.connection_id]?.isRefreshing ? (
-                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                    ) : refreshStatus[selectedConnection.connection_id]?.success ? (
-                      <CheckCircle className="h-3 w-3 mr-1 text-green-500" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                    )}
-                    {refreshStatus[selectedConnection.connection_id]?.isRefreshing 
-                      ? 'Refreshing...' 
-                      : refreshStatus[selectedConnection.connection_id]?.success
-                      ? 'Refreshed!'
-                      : 'Refresh'
-                    }
-                  </Button>
-                )}
+              <div className="flex justify-between pt-6 border-t">
+                <div className="flex gap-3">
+                  {selectedConnection.credential_type === 'oauth' && selectedConnection.connection_status !== 'expired' && (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRefreshToken(selectedConnection.connection_id)}
+                      disabled={refreshStatus[selectedConnection.connection_id]?.isRefreshing}
+                    >
+                      {refreshStatus[selectedConnection.connection_id]?.isRefreshing ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : refreshStatus[selectedConnection.connection_id]?.success ? (
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                      )}
+                      {refreshStatus[selectedConnection.connection_id]?.isRefreshing 
+                        ? 'Refreshing...' 
+                        : refreshStatus[selectedConnection.connection_id]?.success
+                        ? 'Refreshed!'
+                        : 'Refresh Token'
+                      }
+                    </Button>
+                  )}
+                </div>
                 <Button
                   variant="destructive"
-                  size="sm"
                   onClick={() => {
                     handleRevokeConnection(selectedConnection.connection_id);
                     setShowDetailsModal(false);
                   }}
-                  className="ml-auto"
                 >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  Revoke
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Revoke Connection
                 </Button>
               </div>
             </div>
