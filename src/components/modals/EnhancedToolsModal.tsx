@@ -348,36 +348,32 @@ export function EnhancedToolsModal({
 
       if (providerError) throw providerError;
 
-      // Skip vault entirely - store as plain text for reliability
-      let storedValue = apiKey;
-      console.log('Storing API key as plain text for reliability');
-      
-      // Commented out vault encryption to avoid issues
-      // try {
-      //   const { data: encryptedKey, error: encryptError } = await supabase
-      //     .rpc('vault_encrypt', { 
-      //       data: apiKey,
-      //       key_name: `${selectedProvider}_api_key_${user.id}_${Date.now()}`
-      //     });
-      //   
-      //   if (encryptError) throw encryptError;
-      //   storedValue = encryptedKey;
-      //   console.log('API key encrypted successfully in vault');
-      // } catch (vaultError) {
-      //   console.log('Vault encryption failed, storing as plain text:', vaultError);
-      // }
+      // ✅ SECURE: Create vault secret for API key
+      const secretName = `${selectedProvider}_api_key_${user.id}_${Date.now()}`;
+      const { data: vaultSecretId, error: vaultError } = await supabase.rpc('create_vault_secret', {
+        p_secret: apiKey,
+        p_name: secretName,
+        p_description: `${selectedProvider} API key for user ${user.id} - Created: ${new Date().toISOString()}`
+      });
+
+      if (vaultError || !vaultSecretId) {
+        throw new Error(`Failed to secure API key in vault: ${vaultError?.message}`);
+      }
+
+      console.log(`✅ API key securely stored in vault: ${vaultSecretId}`);
+      const storedValue = vaultSecretId; // ✅ Store vault UUID only
 
       // Store connection with encrypted or plain text API key
       const { error: insertError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: providerData.id,
           external_user_id: user.id, // Required field
           external_username: connectionName || `${selectedProvider} Connection`,
           connection_name: connectionName || `${selectedProvider} Connection`,
-          encrypted_access_token: storedValue, // Store either vault ID or plain text
-          vault_access_token_id: storedValue, // Store in both for compatibility
+          encrypted_access_token: null, // ✅ DO NOT store plain text
+          vault_access_token_id: storedValue, // ✅ Store vault UUID only
           scopes_granted: ['web_search', 'news_search', 'image_search'],
           connection_status: 'active',
           credential_type: 'api_key'

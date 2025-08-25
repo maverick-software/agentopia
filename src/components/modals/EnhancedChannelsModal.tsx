@@ -228,7 +228,7 @@ export function EnhancedChannelsModal({
       if (providerError || !mgProvider) throw providerError || new Error('Mailgun provider missing');
 
       const { data: conn, error: connError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: mgProvider.id,
@@ -381,7 +381,7 @@ export function EnhancedChannelsModal({
       if (providerError || !sgProvider) throw providerError || new Error('SendGrid provider missing');
 
       const { error: connError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: sgProvider.id,

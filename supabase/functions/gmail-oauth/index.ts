@@ -136,7 +136,7 @@ serve(async (req) => {
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
     
     const { data: connection, error: upsertError } = await supabase
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .upsert({
         user_id: user.id,
         oauth_provider_id: oauthProvider.id,

@@ -347,19 +347,41 @@ async function getSMTPConfiguration(
   configId: string,
   userId: string
 ): Promise<SMTPConfiguration> {
-  const { data: config, error } = await supabase
-    .from('smtp_configurations')
-    .select('*')
-    .eq('id', configId)
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .single();
+  // Use the new helper function to get credentials and configuration
+  const { data: credentials, error } = await supabase
+    .rpc('get_smtp_credentials', {
+      p_config_id: configId,
+      p_user_id: userId
+    });
 
-  if (error || !config) {
+  if (error || !credentials || credentials.length === 0) {
     throw new Error('SMTP configuration not found or access denied');
   }
 
-  return config;
+  const cred = credentials[0];
+  
+  // Convert to SMTPConfiguration format
+  return {
+    id: configId,
+    user_id: userId,
+    connection_name: cred.connection_name || 'SMTP Connection',
+    host: cred.host,
+    port: cred.port,
+    secure: cred.secure,
+    username: cred.username,
+    from_email: cred.from_email,
+    from_name: cred.from_name,
+    reply_to_email: cred.reply_to_email,
+    // These will need to be fetched separately or have defaults
+    connection_timeout: 60000,
+    socket_timeout: 60000,
+    greeting_timeout: 30000,
+    max_emails_per_day: 100,
+    max_recipients_per_email: 50,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
 }
 
 async function getDecryptedPassword(
@@ -471,8 +493,37 @@ async function handleSendEmail(
     const mailOptions = validateSendEmailParams(params);
     const configId = params.smtp_config_id;
 
-    // Get SMTP configuration
-    const config = await getSMTPConfiguration(supabase, configId, userId);
+    // Get SMTP configuration with credentials
+    const { data: credentials, error: credError } = await supabase
+      .rpc('get_smtp_credentials', {
+        p_config_id: configId,
+        p_user_id: userId
+      });
+
+    if (credError || !credentials || credentials.length === 0) {
+      throw new Error('SMTP configuration not found or access denied');
+    }
+
+    const cred = credentials[0];
+    const config = {
+      id: configId,
+      user_id: userId,
+      connection_name: cred.connection_name || 'SMTP Connection',
+      host: cred.host,
+      port: cred.port,
+      secure: cred.secure,
+      username: cred.username,
+      from_email: cred.from_email,
+      from_name: cred.from_name,
+      reply_to_email: cred.reply_to_email,
+      connection_timeout: 60000,
+      socket_timeout: 60000,
+      greeting_timeout: 30000,
+      max_emails_per_day: 100,
+      max_recipients_per_email: 50,
+      is_active: true
+    };
+    const password = cred.password;
 
     // Validate agent permissions
     const hasPermission = await validateAgentPermissions(
@@ -485,9 +536,6 @@ async function handleSendEmail(
 
     // Check rate limits
     await checkRateLimit(supabase, userId, agentId, configId);
-
-    // Get decrypted password
-    const password = await getDecryptedPassword(supabase, userId, config.vault_password_id);
 
     // Set from address
     mailOptions.from = config.from_name 
@@ -573,11 +621,37 @@ async function handleTestConnection(
       throw new Error('smtp_config_id is required');
     }
 
-    // Get SMTP configuration
-    const config = await getSMTPConfiguration(supabase, configId, userId);
+    // Get SMTP configuration with credentials
+    const { data: credentials, error: credError } = await supabase
+      .rpc('get_smtp_credentials', {
+        p_config_id: configId,
+        p_user_id: userId
+      });
 
-    // Get decrypted password
-    const password = await getDecryptedPassword(supabase, userId, config.vault_password_id);
+    if (credError || !credentials || credentials.length === 0) {
+      throw new Error('SMTP configuration not found or access denied');
+    }
+
+    const cred = credentials[0];
+    const config = {
+      id: configId,
+      user_id: userId,
+      connection_name: cred.connection_name || 'SMTP Connection',
+      host: cred.host,
+      port: cred.port,
+      secure: cred.secure,
+      username: cred.username,
+      from_email: cred.from_email,
+      from_name: cred.from_name,
+      reply_to_email: cred.reply_to_email,
+      connection_timeout: 60000,
+      socket_timeout: 60000,
+      greeting_timeout: 30000,
+      max_emails_per_day: 100,
+      max_recipients_per_email: 50,
+      is_active: true
+    };
+    const password = cred.password;
 
     // Test connection
     const result = await smtpManager.testConnection(config, password);

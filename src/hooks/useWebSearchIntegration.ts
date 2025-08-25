@@ -45,7 +45,7 @@ export function useWebSearchConnection() {
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select(`
           *,
           oauth_providers(
@@ -122,20 +122,20 @@ export function useAgentWebSearchPermissions(agentId?: string) {
         .from('agent_oauth_permissions')
         .select(`
           *,
-          user_oauth_connections(
+          user_integration_credentials(
             external_username,
             oauth_provider_id,
             oauth_providers(name, display_name)
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', user.id);
+        .eq('user_integration_credentials.user_id', user.id);
 
       // Filter on client-side for web search providers
       const filteredData = (data || []).filter((permission: any) => 
-        permission.user_oauth_connections && 
-        permission.user_oauth_connections.oauth_providers && 
-        ['serper_api', 'serpapi', 'brave_search'].includes(permission.user_oauth_connections.oauth_providers.name)
+        permission.user_integration_credentials && 
+        permission.user_integration_credentials.oauth_providers && 
+        ['serper_api', 'serpapi', 'brave_search'].includes(permission.user_integration_credentials.oauth_providers.name)
       );
 
       if (fetchError) {

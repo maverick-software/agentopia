@@ -42,7 +42,7 @@ export function GraphSettingsPage() {
         // Auto-initialize account graph if user has an active GetZep connection
         if (!g && user?.id) {
           const { data: conns } = await supabase
-            .from('user_oauth_connections')
+            .from('user_integration_credentials')
             .select('id, connection_metadata, connection_status, oauth_providers:oauth_provider_id ( name )')
             .eq('user_id', user.id);
           const getzep = (conns || []).find((c: any) => (c?.oauth_providers?.name || '').toLowerCase() === 'getzep' && c.connection_status === 'active');

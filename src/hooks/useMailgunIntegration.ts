@@ -146,7 +146,7 @@ export function useMailgunIntegration() {
 
       // Create or update user OAuth connection
       const { data: existingConnection } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select('id')
         .eq('user_id', user.id)
         .eq('oauth_provider_id', provider.id)
@@ -157,7 +157,7 @@ export function useMailgunIntegration() {
       if (existingConnection) {
         // Update existing connection
         const { data: updatedConnection, error: updateError } = await supabase
-          .from('user_oauth_connections')
+          .from('user_integration_credentials')
           .update({
             vault_access_token_id: apiKeyId,
             connection_status: 'connected',
@@ -172,7 +172,7 @@ export function useMailgunIntegration() {
       } else {
         // Create new connection
         const { data: newConnection, error: connectionError } = await supabase
-          .from('user_oauth_connections')
+          .from('user_integration_credentials')
           .insert({
             user_id: user.id,
             oauth_provider_id: provider.id,

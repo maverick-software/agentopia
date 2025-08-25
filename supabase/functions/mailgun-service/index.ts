@@ -132,7 +132,7 @@ async function getMailgunConfig(supabase: any, userId: string): Promise<MailgunC
 
     // Get the OAuth connection to find the API key
     const { data: connection, error: connError } = await supabase
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .select(`
         vault_access_token_id,
         connection_status,

@@ -64,7 +64,7 @@ export async function revokeConnection(
   if (!deleted) {
     // If we can't delete due to foreign key constraints, mark as revoked temporarily
     const { error } = await supabase
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .update({ connection_status: 'revoked', updated_at: new Date().toISOString() })
       .eq('id', connectionId)
 
@@ -80,7 +80,7 @@ export async function deleteConnectionHard(
   connectionId: string
 ): Promise<boolean> {
   // Attempt a hard delete; return false on FK violations so caller can fall back to revoke
-  const { error } = await supabase.from('user_oauth_connections').delete().eq('id', connectionId)
+  const { error } = await supabase.from('user_integration_credentials').delete().eq('id', connectionId)
   if (error) {
     // Best effort: do not throw on foreign key errors, signal caller we could not delete
     return false

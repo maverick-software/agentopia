@@ -104,7 +104,7 @@ export class GetZepSemanticManager {
 
       // Get connection details
       const { data: connection } = await this.supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select('vault_access_token_id, connection_metadata')
         .eq('id', accountGraph.connection_id)
         .maybeSingle();

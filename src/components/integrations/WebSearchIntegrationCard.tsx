@@ -110,7 +110,7 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select(`
           id,
           is_active,
@@ -169,7 +169,7 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
 
       // Store connection
       const { error: insertError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: providerData.id,
@@ -210,7 +210,7 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
 
     try {
       const { error } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .delete()
         .eq('id', connectionId)
         .eq('user_id', user?.id);

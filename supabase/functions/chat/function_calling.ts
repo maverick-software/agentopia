@@ -497,16 +497,16 @@ export class FunctionCallingManager {
         .select(`
           allowed_scopes,
           is_active,
-          user_oauth_connections!inner(
+          user_integration_credentials!inner(
             oauth_provider_id,
             credential_type,
             oauth_providers!inner(name)
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'gmail')
-        .eq('user_oauth_connections.credential_type', 'oauth')
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'gmail')
+        .eq('user_integration_credentials.credential_type', 'oauth')
         .eq('is_active', true)
         .limit(5);
 
@@ -574,7 +574,7 @@ export class FunctionCallingManager {
       // Simplified approach: Just check if user has any active web search credentials
       // No need for complex permission grants - if they have credentials and toggle is on, provide tools
       const { data: connections } = await this.supabaseClient
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select(`
           id,
           oauth_providers!inner(name, display_name),
@@ -620,15 +620,15 @@ export class FunctionCallingManager {
         .select(`
           allowed_scopes,
           is_active,
-          user_oauth_connections!inner(
+          user_integration_credentials!inner(
             oauth_providers!inner(name),
             credential_type
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'sendgrid')
-        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'sendgrid')
+        .eq('user_integration_credentials.credential_type', 'api_key')
         .eq('is_active', true)
         .single();
 
@@ -662,15 +662,15 @@ export class FunctionCallingManager {
         .select(`
           allowed_scopes,
           is_active,
-          user_oauth_connections!inner(
+          user_integration_credentials!inner(
             oauth_providers!inner(name),
             credential_type
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'mailgun')
-        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'mailgun')
+        .eq('user_integration_credentials.credential_type', 'api_key')
         .eq('is_active', true)
         .single();
 
@@ -980,15 +980,15 @@ export class FunctionCallingManager {
         .from('agent_oauth_permissions')
         .select(`
           *,
-          user_oauth_connections!inner(
+          user_integration_credentials!inner(
             oauth_providers!inner(name),
             credential_type
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'sendgrid')
-        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'sendgrid')
+        .eq('user_integration_credentials.credential_type', 'api_key')
         .eq('is_active', true)
         .single();
 
@@ -1027,15 +1027,15 @@ export class FunctionCallingManager {
         .from('agent_oauth_permissions')
         .select(`
           *,
-          user_oauth_connections!inner(
+          user_integration_credentials!inner(
             oauth_providers!inner(name),
             credential_type
           )
         `)
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'mailgun')
-        .eq('user_oauth_connections.credential_type', 'api_key')
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'mailgun')
+        .eq('user_integration_credentials.credential_type', 'api_key')
         .eq('is_active', true)
         .single();
 
@@ -1206,7 +1206,7 @@ export class FunctionCallingManager {
       
       // Also check if user has any web search credentials
       const { data: connections } = await this.supabaseClient
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select('id')
         .eq('user_id', userId)
         .in('oauth_providers.name', ['serper_api', 'serpapi', 'brave_search'])

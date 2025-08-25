@@ -309,7 +309,7 @@ serve(async (req) => {
 
     // Get available API keys (filtering by credential_type)
     const { data: connections, error: connectionsError } = await supabase
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .select(`
         *,
         oauth_providers!inner(name, display_name)

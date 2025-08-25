@@ -46,7 +46,7 @@ export async function searchGetZepKnowledgeGraph(
     }
 
     const { data: connection } = await supabase
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .select('id, vault_access_token_id, connection_metadata')
       .eq('oauth_provider_id', provider.id)
       .eq('user_id', userId)

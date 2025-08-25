@@ -315,7 +315,7 @@ export function WhatIKnowModal({
         return false;
       }
       const { data: conn } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select('id')
         .eq('oauth_provider_id', provider.id)
         .eq('user_id', user?.id)

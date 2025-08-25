@@ -97,7 +97,7 @@ serve(async (req) => {
     }
 
     const { data: connection, error: connectionError } = await supabaseServiceRole
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .select('vault_access_token_id, vault_refresh_token_id, token_expires_at')
       .eq('user_id', user.id)
       .eq('oauth_provider_id', gmailProvider.id)

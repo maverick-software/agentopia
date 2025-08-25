@@ -764,7 +764,7 @@ export class MemoryManager {
         try {
           if (ds?.config?.connectionId && connection?.datastores?.user_id) {
             const { data: connRow } = await this.supabase
-              .from('user_oauth_connections')
+              .from('user_integration_credentials')
               .select('vault_access_token_id')
               .eq('id', ds.config.connectionId)
               .eq('user_id', (connection as any).datastores.user_id)

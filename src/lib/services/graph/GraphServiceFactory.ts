@@ -5,7 +5,7 @@ export class GraphServiceFactory {
   /**
    * Resolve a Graph service instance for the given account_graphs.id
    * - Reads `account_graphs` to obtain `connection_id` and `user_id`
-   * - Decrypts API key from `user_oauth_connections.vault_access_token_id` via `vault_decrypt`
+   * - Decrypts API key from `user_integration_credentials.vault_access_token_id` via `vault_decrypt`
    */
   static async createGetZepService(
     accountGraphId: string,
@@ -20,7 +20,7 @@ export class GraphServiceFactory {
 
     if (!ag.connection_id) return null;
     const { data: conn, error: connErr } = await (supabase as any)
-      .from('user_oauth_connections')
+      .from('user_integration_credentials')
       .select('vault_access_token_id, connection_metadata')
       .eq('id', ag.connection_id)
       .eq('user_id', ag.user_id)

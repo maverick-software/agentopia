@@ -53,7 +53,7 @@ serve(async (req) => {
         if (agErr || !ag?.connection_id) throw agErr || new Error('Missing connection for account graph');
 
         const { data: conn, error: connErr } = await supabase
-          .from('user_oauth_connections')
+          .from('user_integration_credentials')
           .select('vault_access_token_id, connection_metadata')
           .eq('id', ag.connection_id)
           .eq('user_id', ag.user_id)

@@ -1,8 +1,27 @@
 ---
-description: Protocol for implementing comprehensive security compliance framework supporting HIPAA, SOC 2, and ISO 27001/27002 standards with automated monitoring and audit trails
+description: Protocol for implementing comprehensive security compliance framework supporting HIPAA, SOC 2, and ISO 27001/27002 standards with automated monitoring, audit trails, and mandatory Supabase Vault encryption
 globs: 
 alwaysApply: false
 ---
+
+# Security Compliance Protocol (Enhanced with Vault Integration)
+
+Protocol for implementing comprehensive security compliance framework supporting HIPAA, SOC 2, and ISO 27001/27002 standards with automated monitoring and audit trails
+
+## ⚡ MANDATORY VAULT INTEGRATION REQUIREMENT
+
+**CRITICAL**: All implementations following this protocol **MUST** implement the Supabase Vault Encryption Protocol (`supabase_vault_encryption_protocol.mdc`) as a foundational requirement. No exceptions.
+
+### Vault Integration Prerequisites
+
+Before proceeding with compliance implementation:
+
+1. ✅ **Implement Supabase Vault Protocol**: Follow `@supabase_vault_encryption_protocol.mdc` completely
+2. ✅ **Zero Plain-Text Policy**: Ensure no sensitive data stored in plain text
+3. ✅ **VaultService Integration**: Centralized secrets management through VaultService class
+4. ✅ **Security Functions**: `create_vault_secret()` and `vault_decrypt()` implemented
+5. ✅ **UI Component Security**: All credential inputs use vault encryption
+6. ✅ **Server-Side Only Access**: Vault operations restricted to service role
 
 When this protocol is tagged, you are to:
 
@@ -18,12 +37,13 @@ When this protocol is tagged, you are to:
 **STEP 2** Research the topic, create a plan for implementation.
 
    a) Research existing security measures, authentication systems, data handling, and audit logging in codebase
-   b) Analyze current SQL schema for sensitive data identification, access controls, and audit trail capabilities
-   c) Research HIPAA requirements for PHI (Protected Health Information) handling, access controls, and breach notification
-   d) Research SOC 2 Type II requirements across all five trust service categories (Security, Availability, Processing Integrity, Confidentiality, Privacy)
-   e) Research ISO 27001/27002 requirements for information security management systems (ISMS)
-   f) Study compliance monitoring tools, automated security scanning, and continuous compliance frameworks
-   g) Create proposed modular file structure including:
+   b) **VAULT REQUIREMENT**: Verify Supabase Vault encryption protocol is implemented for all sensitive data
+   c) Analyze current SQL schema for sensitive data identification, access controls, and audit trail capabilities
+   d) Research HIPAA requirements for PHI (Protected Health Information) handling, access controls, and breach notification
+   e) Research SOC 2 Type II requirements across all five trust service categories (Security, Availability, Processing Integrity, Confidentiality, Privacy)
+   f) Research ISO 27001/27002 requirements for information security management systems (ISMS)
+   g) Study compliance monitoring tools, automated security scanning, and continuous compliance frameworks
+   h) Create proposed modular file structure including:
       - Compliance management dashboard and monitoring system
       - Data classification and handling system
       - Access control and identity management enhancements
@@ -33,22 +53,25 @@ When this protocol is tagged, you are to:
       - Compliance training and awareness modules
       - Admin compliance management interface
       - User privacy controls and consent management
-   h) Document findings in `\docs\plans\security_compliance\plan.md`
+      - **VAULT MONITORING**: Vault operation monitoring and audit systems
+   i) Document findings in `\docs\plans\security_compliance\plan.md`
 
 **STEP 3** Create a Work Breakdown Structure (WBS) checklist following standard project phases: Research, Planning, Design, Development, Testing, and Refinement.
 
 **STEP 4** Research each WBS task individually, documenting compliance requirements and creating mini-plans:
 
    a) Reference README, SQL Database Dump, existing authentication and security code
-   b) Create research files in `\docs\plans\security_compliance\research\[compliance_area]_requirements.md`
-   c) Include compliance checklists, security control mappings, and implementation examples
-   d) Research integration requirements with existing systems and third-party compliance tools
-   e) Document comprehensive implementation notes with specific compliance citations
+   b) **VAULT INTEGRATION**: Reference Supabase Vault Encryption Protocol documentation
+   c) Create research files in `\docs\plans\security_compliance\research\[compliance_area]_requirements.md`
+   d) Include compliance checklists, security control mappings, and implementation examples
+   e) Research integration requirements with existing systems and third-party compliance tools
+   f) Document comprehensive implementation notes with specific compliance citations
 
 **PHASE 4** Update WBS checklist items with detailed compliance implementation notes:
 
    a) Structure bullet points as: **Plan Review & Alignment: [notes]**, **Comprehensive Research: [compliance_standards_and_requirements]**, **Findings: [gaps_and_requirements]**, **Actions: [implementation_and_controls]**, **Backups: [file_locations]**, **Update: [compliance_verification_notes]**
    b) Include backup instructions for all modified files in `\docs\plans\security_compliance\backups`
+   c) **VAULT COMPLIANCE**: Include vault security verification in each checklist item
 
 **PHASE 5** Add comprehensive compliance implementation details to each checklist item:
 
@@ -58,16 +81,18 @@ When this protocol is tagged, you are to:
    d) Design admin interface for compliance management and reporting
    e) Plan user-facing privacy controls and consent management
    f) Include continuous compliance monitoring and automated remediation
-   g) End each item with: "a. refer to compliance research document, b. implement controls, c. verify compliance requirements met, d. update checklist with compliance verification"
+   g) **VAULT INTEGRATION**: Ensure all compliance controls include vault encryption verification
+   h) End each item with: "a. refer to compliance research document, b. implement controls, c. verify compliance requirements met, d. verify vault encryption compliance, e. update checklist with compliance verification"
 
-**PHASE 6** HIPAA Implementation Requirements:
+**PHASE 6** HIPAA Implementation Requirements (Enhanced with Vault):
 
    a) **PHI Data Handling:**
       - Data classification system for PHI identification
-      - Encryption at rest and in transit for all PHI
+      - **MANDATORY**: Encryption at rest and in transit for all PHI using Supabase Vault
       - Secure data backup and recovery procedures
       - Data retention and secure disposal policies
       - Minimum necessary access controls
+      - **VAULT REQUIREMENT**: All PHI must use `create_vault_secret()` for storage
    
    b) **Access Controls (164.312):**
       - Unique user identification and authentication
@@ -75,6 +100,7 @@ When this protocol is tagged, you are to:
       - Multi-factor authentication for PHI access
       - Automatic session timeouts and lockout procedures
       - Access review and recertification processes
+      - **VAULT INTEGRATION**: Service role restrictions for vault operations
    
    c) **Audit Controls (164.312):**
       - Comprehensive audit logging for all PHI access
@@ -82,6 +108,7 @@ When this protocol is tagged, you are to:
       - Regular audit log review and analysis
       - Automated anomaly detection and alerting
       - Audit trail retention for required periods
+      - **VAULT AUDITING**: Complete logging of all vault operations and secret access
    
    d) **Administrative Safeguards:**
       - Security officer designation and responsibilities
@@ -89,15 +116,17 @@ When this protocol is tagged, you are to:
       - Incident response procedures
       - Business associate agreements (BAA) management
       - Risk assessment and management processes
+      - **VAULT GOVERNANCE**: Vault access policies and secret rotation procedures
 
-**PHASE 7** SOC 2 Implementation Requirements:
+**PHASE 7** SOC 2 Implementation Requirements (Enhanced with Vault):
 
    a) **Security (CC6.0):**
       - Logical and physical access controls
       - Network security and boundary protection
       - Vulnerability management and patch procedures
       - Security incident monitoring and response
-      - Encryption and key management
+      - **MANDATORY**: Encryption and key management using Supabase Vault
+      - **VAULT COMPLIANCE**: Zero plain-text storage verification
    
    b) **Availability (CC7.0):**
       - System monitoring and performance management
@@ -105,6 +134,7 @@ When this protocol is tagged, you are to:
       - Backup and recovery procedures
       - Business continuity and disaster recovery
       - Change management and deployment procedures
+      - **VAULT AVAILABILITY**: Vault service health monitoring and failover procedures
    
    c) **Processing Integrity (CC8.0):**
       - Data validation and input controls
@@ -112,6 +142,7 @@ When this protocol is tagged, you are to:
       - System processing completeness and accuracy
       - Data quality monitoring and reporting
       - Automated processing controls
+      - **VAULT INTEGRITY**: Secret validation and integrity checks
    
    d) **Confidentiality (CC9.0):**
       - Information classification and handling
@@ -119,6 +150,7 @@ When this protocol is tagged, you are to:
       - Confidentiality agreements and policies
       - Secure data sharing and transmission
       - Data retention and disposal procedures
+      - **VAULT CONFIDENTIALITY**: AES encryption and secure vault storage
    
    e) **Privacy (CC10.0):**
       - Privacy policy implementation and communication
@@ -126,8 +158,9 @@ When this protocol is tagged, you are to:
       - Consent management and preferences
       - Data breach notification procedures
       - Third-party privacy compliance
+      - **VAULT PRIVACY**: Personal data encryption and access controls
 
-**PHASE 8** ISO 27001/27002 Implementation Requirements:
+**PHASE 8** ISO 27001/27002 Implementation Requirements (Enhanced with Vault):
 
    a) **Information Security Management System (ISMS):**
       - Security policy framework and governance
@@ -135,6 +168,7 @@ When this protocol is tagged, you are to:
       - Security control implementation matrix
       - Continuous improvement and monitoring
       - Management review and audit processes
+      - **VAULT ISMS**: Vault security policies and governance framework
    
    b) **Asset Management (A.8):**
       - Asset inventory and classification
@@ -142,6 +176,7 @@ When this protocol is tagged, you are to:
       - Media disposal and sanitization
       - Equipment maintenance and disposal
       - Remote working security guidelines
+      - **VAULT ASSETS**: Secret inventory and classification system
    
    c) **Human Resource Security (A.7):**
       - Background verification procedures
@@ -149,6 +184,7 @@ When this protocol is tagged, you are to:
       - Security awareness and training
       - Disciplinary process for security violations
       - Access rights removal procedures
+      - **VAULT HR**: Training on vault security procedures
    
    d) **Physical and Environmental Security (A.11):**
       - Secure areas and physical access controls
@@ -156,8 +192,16 @@ When this protocol is tagged, you are to:
       - Clear desk and clear screen policies
       - Secure disposal and reuse of equipment
       - Environmental monitoring and protection
+      - **VAULT PHYSICAL**: Cloud infrastructure security assessment
+   
+   e) **Cryptography (A.10):**
+      - **MANDATORY**: Cryptographic policy using Supabase Vault
+      - **VAULT IMPLEMENTATION**: AES encryption for all sensitive data
+      - Key management lifecycle procedures
+      - Secure key generation and storage
+      - Regular cryptographic reviews and updates
 
-**PHASE 9** Technical Implementation Components:
+**PHASE 9** Technical Implementation Components (Vault-Enhanced):
 
    a) **Compliance Management Dashboard:**
       - Real-time compliance status monitoring
@@ -165,13 +209,15 @@ When this protocol is tagged, you are to:
       - Risk assessment and mitigation tracking
       - Audit findings and remediation management
       - Compliance reporting and analytics
+      - **VAULT MONITORING**: Dashboard for vault operations and security status
    
    b) **Data Classification and Protection:**
       - Automated data discovery and classification
       - Dynamic data masking and tokenization
       - Data loss prevention (DLP) implementation
-      - Encryption key management system
+      - **MANDATORY**: Supabase Vault encryption key management system
       - Secure data sharing and collaboration tools
+      - **VAULT INTEGRATION**: Automatic vault encryption for classified data
    
    c) **Access Control Enhancements:**
       - Identity and access management (IAM) system
@@ -179,6 +225,7 @@ When this protocol is tagged, you are to:
       - Just-in-time (JIT) access provisioning
       - Access certification and recertification
       - Segregation of duties (SoD) controls
+      - **VAULT ACCESS**: Service role restrictions and vault permission management
    
    d) **Audit and Monitoring Systems:**
       - Security information and event management (SIEM)
@@ -186,6 +233,7 @@ When this protocol is tagged, you are to:
       - File integrity monitoring (FIM)
       - Database activity monitoring (DAM)
       - Network traffic analysis and monitoring
+      - **VAULT AUDITING**: Complete vault operation logging and anomaly detection
    
    e) **Incident Response System:**
       - Automated incident detection and alerting
@@ -193,14 +241,16 @@ When this protocol is tagged, you are to:
       - Breach notification workflow automation
       - Forensic evidence collection and preservation
       - Incident response dashboard and reporting
+      - **VAULT INCIDENTS**: Vault breach detection and secret rotation procedures
 
-**PHASE 10** Database Schema Compliance Enhancements:
+**PHASE 10** Database Schema Compliance Enhancements (Vault-Integrated):
 
    a) **Data Classification Tables:**
       - Data sensitivity levels and handling requirements
       - Data subject rights and consent tracking
       - Data lineage and processing purpose tracking
       - Retention schedule and disposal tracking
+      - **VAULT CLASSIFICATION**: Secret sensitivity classification system
    
    b) **Audit and Compliance Tables:**
       - Comprehensive audit log tables with tamper protection
@@ -208,14 +258,16 @@ When this protocol is tagged, you are to:
       - Security control effectiveness measurements
       - Compliance assessment results and evidence
       - Risk assessment and treatment tracking
+      - **VAULT AUDIT TABLES**: Complete vault operation audit trail
    
    c) **User and Access Management:**
       - Enhanced user profiles with security attributes
       - Role and permission matrix with approval workflows
       - Access review and certification tracking
       - Security training completion and awareness tracking
+      - **VAULT USER MANAGEMENT**: Vault access permissions and role assignments
 
-**PHASE 11** User Interface Components:
+**PHASE 11** User Interface Components (Vault-Secured):
 
    a) **Admin Compliance Interface:**
       - Compliance dashboard with real-time status
@@ -224,6 +276,7 @@ When this protocol is tagged, you are to:
       - Policy management and distribution
       - Training management and tracking
       - Incident response coordination tools
+      - **VAULT ADMIN UI**: Vault management and monitoring interface
    
    b) **User Privacy Controls:**
       - Personal data management dashboard
@@ -231,8 +284,9 @@ When this protocol is tagged, you are to:
       - Data subject rights request portal
       - Privacy settings and controls
       - Data usage transparency and reporting
+      - **VAULT PRIVACY UI**: Personal vault secret management interface
 
-**PHASE 12** Automated Compliance Monitoring:
+**PHASE 12** Automated Compliance Monitoring (Vault-Enhanced):
 
    a) **Continuous Monitoring:**
       - Real-time security control assessment
@@ -240,6 +294,7 @@ When this protocol is tagged, you are to:
       - Configuration compliance monitoring
       - Policy violation detection and alerting
       - Performance metrics and SLA monitoring
+      - **VAULT MONITORING**: Continuous vault security assessment
    
    b) **Compliance Reporting:**
       - Automated compliance report generation
@@ -247,8 +302,9 @@ When this protocol is tagged, you are to:
       - Management dashboard and executive reporting
       - Third-party audit preparation and coordination
       - Compliance gap analysis and remediation planning
+      - **VAULT REPORTING**: Vault security compliance reports
 
-**PHASE 13** Testing and Validation:
+**PHASE 13** Testing and Validation (Vault Security Included):
 
    a) Test all compliance controls across HIPAA, SOC 2, and ISO requirements
    b) Validate audit logging and monitoring systems
@@ -258,21 +314,29 @@ When this protocol is tagged, you are to:
    f) Validate compliance reporting and dashboard functionality
    g) Perform penetration testing and vulnerability assessments
    h) Test business continuity and disaster recovery procedures
+   i) **VAULT TESTING**: Comprehensive vault security testing including:
+      - Plain text storage detection tests
+      - Vault encryption/decryption functionality
+      - Service role access control verification
+      - Vault audit trail validation
+      - Secret rotation procedure testing
 
-**PHASE 14** Cleanup Phase:
+**PHASE 14** Cleanup Phase (Vault Documentation Included):
 
    a) Prompt user to test compliance monitoring dashboard and alert systems
    b) Verify all security controls are functioning and properly documented
    c) Confirm audit logging captures all required compliance events
    d) Test incident response procedures and breach notification workflows
    e) Validate user privacy controls and consent management
-   f) Move backups to `/archive/security_compliance_[timestamp]`
-   g) Update root README.md with security compliance documentation
-   h) Create cleanup log in `/docs/logs/cleanup/security_compliance_implementation.md`
-   i) Update `/docs/logs/README.md` cleanup table
-   j) Generate compliance assessment report and control matrix
+   f) **VAULT VERIFICATION**: Confirm all secrets are vault-encrypted with zero plain-text storage
+   g) Move backups to `/archive/security_compliance_[timestamp]`
+   h) Update root README.md with security compliance documentation
+   i) Create cleanup log in `/docs/logs/cleanup/security_compliance_implementation.md`
+   j) Update `/docs/logs/README.md` cleanup table
+   k) Generate compliance assessment report and control matrix
+   l) **VAULT DOCUMENTATION**: Create vault security compliance report
 
-**CONSTRAINTS:**
+## ENHANCED CONSTRAINTS (Vault Integration Required):
 
 1) All compliance controls must be implemented without degrading system performance
 2) Maintain backward compatibility while adding compliance enhancements
@@ -292,3 +356,64 @@ When this protocol is tagged, you are to:
 16) Ensure all compliance controls are properly documented and evidenced
 17) Include management oversight and accountability measures
 18) Support compliance reporting for multiple stakeholders and regulators
+19) **VAULT MANDATORY**: All sensitive data MUST use Supabase Vault encryption with zero exceptions
+20) **VAULT VERIFICATION**: Include vault security verification in all compliance checks
+21) **VAULT GOVERNANCE**: Establish vault access policies and secret rotation procedures
+22) **VAULT AUDITING**: Complete audit trails for all vault operations and secret access
+23) **VAULT MONITORING**: Real-time monitoring of vault security status and anomalies
+24) **VAULT TRAINING**: Staff training on vault security procedures and incident response
+
+## Vault Security Compliance Checklist
+
+### Foundation Requirements ✅
+- [ ] Supabase Vault Encryption Protocol implemented
+- [ ] `create_vault_secret()` function deployed
+- [ ] `vault_decrypt()` function deployed (no plain-text fallback)
+- [ ] `user_integration_credentials` table with vault UUID storage only
+- [ ] Security triggers preventing plain-text storage
+- [ ] VaultService class implemented and deployed
+
+### Data Protection ✅
+- [ ] All API keys stored as vault UUIDs only
+- [ ] All OAuth tokens stored as vault UUIDs only
+- [ ] All sensitive credentials vault-encrypted
+- [ ] Zero plain-text storage verified
+- [ ] Legacy plain-text columns deprecated (set to NULL)
+
+### Access Controls ✅
+- [ ] Vault operations restricted to service role only
+- [ ] Client-side vault access completely blocked
+- [ ] Role-based access control (RBAC) implemented
+- [ ] Principle of least privilege enforced
+- [ ] Vault permission matrix documented
+
+### Audit & Monitoring ✅
+- [ ] Complete audit logging for all vault operations
+- [ ] Vault access anomaly detection implemented
+- [ ] Real-time vault security monitoring
+- [ ] Tamper-evident vault audit trails
+- [ ] Regular vault security assessments
+
+### Compliance Integration ✅
+- [ ] HIPAA vault encryption requirements met
+- [ ] SOC 2 confidentiality controls implemented
+- [ ] ISO 27001 cryptographic controls satisfied
+- [ ] Compliance reporting includes vault security status
+- [ ] Third-party audit preparation includes vault documentation
+
+### Testing & Validation ✅
+- [ ] Automated vault security testing implemented
+- [ ] Plain-text detection tests deployed
+- [ ] Vault encryption/decryption functionality verified
+- [ ] Service role access control tested
+- [ ] Vault audit trail validation completed
+- [ ] Secret rotation procedures tested
+
+### Documentation & Training ✅
+- [ ] Vault security procedures documented
+- [ ] Staff training on vault operations completed
+- [ ] Incident response procedures include vault security
+- [ ] Vault governance policies established
+- [ ] Secret rotation schedules documented
+
+This enhanced security compliance protocol ensures that all implementations meet the highest standards for data protection while maintaining full compliance with enterprise security requirements through mandatory Supabase Vault integration.

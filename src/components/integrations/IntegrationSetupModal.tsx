@@ -216,35 +216,34 @@ export function IntegrationSetupModal({
 
       if (providerError) throw providerError;
 
-      // Skip vault entirely - store as plain text for reliability
-      let storedValue = formData.api_key;
-      console.log('Storing API key as plain text for reliability');
-      
-      // Commented out vault encryption to avoid issues
-      // try {
-      //   const vault_secret_id = await vaultService.createSecret(
-      //     `${providerName}_api_key_${user.id}_${Date.now()}`,
-      //     formData.api_key,
-      //     `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id}`
-      //   );
-      //   storedValue = vault_secret_id;
-      //   console.log('API key encrypted successfully in vault');
-      // } catch (vaultError) {
-      //   console.log('Vault encryption failed, storing as plain text:', vaultError);
-      // }
+      // ✅ SECURE: Create vault secret for API key
+      console.log('Securing API key with vault encryption');
+      const secretName = `${providerName}_api_key_${user.id}_${Date.now()}`;
+      const { data: vaultSecretId, error: vaultError } = await supabase.rpc('create_vault_secret', {
+        p_secret: formData.api_key,
+        p_name: secretName,
+        p_description: `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id} - Created: ${new Date().toISOString()}`
+      });
+
+      if (vaultError || !vaultSecretId) {
+        throw new Error(`Failed to secure API key in vault: ${vaultError?.message}`);
+      }
+
+      console.log(`✅ API key securely stored in vault: ${vaultSecretId}`);
+      const storedValue = vaultSecretId; // ✅ Store vault UUID only
 
       // Create user OAuth connection record (unified system for API keys)
       const { error: keyError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: providerData.id,
           external_user_id: user.id, // Required field
           external_username: formData.connection_name || `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} Connection`,
           connection_name: formData.connection_name || `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} Connection`,
-          // Store either vault ID (if encrypted) or plain text API key (if not)
-          encrypted_access_token: storedValue,
-          vault_access_token_id: storedValue, // Store in both for compatibility
+          // ✅ SECURE: Store vault UUID only, no plain text
+          encrypted_access_token: null,
+          vault_access_token_id: storedValue, // ✅ Store vault UUID only
           scopes_granted: ['web_search', 'news_search', 'scrape_and_summarize'],
           connection_status: 'active',
           credential_type: 'api_key' // Specify this is an API key connection
@@ -327,7 +326,7 @@ export function IntegrationSetupModal({
 
       // Look for an existing connection for this user+provider (any connection_name)
       const { data: existingConn, error: findErr } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .select('id, connection_name')
         .eq('user_id', user.id)
         .eq('oauth_provider_id', providerData.id)
@@ -342,7 +341,7 @@ export function IntegrationSetupModal({
 
       if (existingConn?.id) {
         const { error: updErr } = await supabase
-          .from('user_oauth_connections')
+          .from('user_integration_credentials')
           .update({
             external_user_id: user.id,
             external_username: desiredName,
@@ -362,7 +361,7 @@ export function IntegrationSetupModal({
         if (updErr) throw updErr;
       } else {
         const { error: insErr } = await supabase
-          .from('user_oauth_connections')
+          .from('user_integration_credentials')
           .insert({
             user_id: user.id,
             oauth_provider_id: providerData.id,
@@ -457,7 +456,7 @@ export function IntegrationSetupModal({
       
       // Create connection record
       const { error: connError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           provider_name: 'sendgrid',
@@ -591,7 +590,7 @@ export function IntegrationSetupModal({
 
       // Create or update Mailgun configuration
       const { error: connError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: mailgunProvider.id,
