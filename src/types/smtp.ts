@@ -383,7 +383,7 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     secure: false,
     description: 'Google Gmail SMTP',
     authType: 'app_password',
-    setupInstructions: 'Use your Gmail address and an App Password (not your regular password)'
+    setupInstructions: 'Use your Gmail address and an App Password (not your regular password). Enable 2FA and generate an App Password in Google Account settings.'
   },
   {
     name: 'outlook',
@@ -392,7 +392,8 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     port: 587,
     secure: false,
     description: 'Microsoft Outlook/Hotmail SMTP',
-    authType: 'password'
+    authType: 'password',
+    setupInstructions: 'Use your full email address and password. Modern authentication may be required.'
   },
   {
     name: 'yahoo',
@@ -402,7 +403,67 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     secure: false,
     description: 'Yahoo Mail SMTP',
     authType: 'app_password',
-    setupInstructions: 'Use your Yahoo email and an App Password'
+    setupInstructions: 'Use your Yahoo email and an App Password. Generate App Password in Yahoo Account Security settings.'
+  },
+  {
+    name: 'icloud',
+    displayName: 'Apple iCloud',
+    host: 'smtp.mail.me.com',
+    port: 587,
+    secure: false,
+    description: 'Apple iCloud Mail SMTP',
+    authType: 'app_password',
+    setupInstructions: 'Use your Apple ID email and an app-specific password. Enable 2FA and generate app password in Apple ID settings.'
+  },
+  {
+    name: 'zoho',
+    displayName: 'Zoho Mail',
+    host: 'smtp.zoho.com',
+    port: 587,
+    secure: false,
+    description: 'Zoho Mail SMTP',
+    authType: 'password',
+    setupInstructions: 'Use your Zoho email and password. For free accounts, SMTP may need to be enabled in settings.'
+  },
+  {
+    name: 'protonmail',
+    displayName: 'ProtonMail',
+    host: '127.0.0.1',
+    port: 1025,
+    secure: false,
+    description: 'ProtonMail SMTP (via Bridge)',
+    authType: 'password',
+    setupInstructions: 'Requires ProtonMail Bridge app running locally. Use Bridge credentials, not ProtonMail password.'
+  },
+  {
+    name: 'amazonses',
+    displayName: 'Amazon SES',
+    host: 'email-smtp.us-east-1.amazonaws.com',
+    port: 587,
+    secure: false,
+    description: 'Amazon Simple Email Service',
+    authType: 'password',
+    setupInstructions: 'Use your SES SMTP username and password. Verify your domain/email in AWS SES console first.'
+  },
+  {
+    name: 'sendgrid',
+    displayName: 'SendGrid SMTP',
+    host: 'smtp.sendgrid.net',
+    port: 587,
+    secure: false,
+    description: 'SendGrid SMTP API',
+    authType: 'password',
+    setupInstructions: 'Username is "apikey", password is your SendGrid API key.'
+  },
+  {
+    name: 'mailjet',
+    displayName: 'Mailjet',
+    host: 'in-v3.mailjet.com',
+    port: 587,
+    secure: false,
+    description: 'Mailjet SMTP Service',
+    authType: 'password',
+    setupInstructions: 'Use your Mailjet API Key as username and Secret Key as password.'
   },
   {
     name: 'smtpcom',
@@ -421,7 +482,8 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     port: 587,
     secure: false,
     description: 'Custom SMTP server configuration',
-    authType: 'password'
+    authType: 'password',
+    setupInstructions: 'Enter your custom SMTP server details manually.'
   }
 ];
 

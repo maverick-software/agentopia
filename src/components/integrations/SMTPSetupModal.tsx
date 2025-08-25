@@ -38,6 +38,7 @@ import {
   SMTP_PROVIDER_PRESETS,
   SMTPProviderPreset
 } from '@/types/smtp';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface SMTPSetupModalProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export const SMTPSetupModal: React.FC<SMTPSetupModalProps> = ({
   onSave,
   editingConfig
 }) => {
+  const { theme } = useTheme();
   const [loading, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<SMTPProviderPreset | null>(null);
@@ -238,7 +240,7 @@ export const SMTPSetupModal: React.FC<SMTPSetupModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
@@ -266,18 +268,76 @@ export const SMTPSetupModal: React.FC<SMTPSetupModalProps> = ({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-2">
-                    {SMTP_PROVIDER_PRESETS.map((preset) => (
-                      <Button
-                        key={preset.name}
-                        variant={selectedPreset?.name === preset.name ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePresetSelect(preset)}
-                        className="justify-start"
-                      >
-                        {preset.displayName}
-                      </Button>
-                    ))}
+                  <div className="space-y-3">
+                    {/* Popular Personal Email Providers */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Popular Email Providers</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {SMTP_PROVIDER_PRESETS.filter(preset => 
+                          ['gmail', 'outlook', 'yahoo', 'icloud'].includes(preset.name)
+                        ).map((preset) => (
+                          <Button
+                            key={preset.name}
+                            variant={selectedPreset?.name === preset.name ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePresetSelect(preset)}
+                            className="justify-start text-xs"
+                          >
+                            {preset.displayName}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Business Email Services */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Business Email Services</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {SMTP_PROVIDER_PRESETS.filter(preset => 
+                          ['zoho', 'amazonses', 'sendgrid', 'mailjet', 'smtpcom'].includes(preset.name)
+                        ).map((preset) => (
+                          <Button
+                            key={preset.name}
+                            variant={selectedPreset?.name === preset.name ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePresetSelect(preset)}
+                            className="justify-start text-xs"
+                          >
+                            {preset.displayName}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Secure Email Providers */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Secure Email Providers</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {SMTP_PROVIDER_PRESETS.filter(preset => 
+                          ['protonmail'].includes(preset.name)
+                        ).map((preset) => (
+                          <Button
+                            key={preset.name}
+                            variant={selectedPreset?.name === preset.name ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePresetSelect(preset)}
+                            className="justify-start text-xs"
+                          >
+                            {preset.displayName}
+                          </Button>
+                        ))}
+                        
+                        {/* Custom option */}
+                        <Button
+                          variant={selectedPreset?.name === 'custom' ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePresetSelect(SMTP_PROVIDER_PRESETS.find(p => p.name === 'custom')!)}
+                          className="justify-start text-xs"
+                        >
+                          Custom Server
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                   {selectedPreset?.setupInstructions && (
                     <Alert className="mt-3">

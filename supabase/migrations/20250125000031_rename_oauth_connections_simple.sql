@@ -106,7 +106,7 @@ BEGIN
 END $$;
 
 -- Step 5: Update RPC functions
-DO $$
+DO $func$
 BEGIN
     -- Create new function if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_user_integration_credentials') THEN
@@ -127,7 +127,7 @@ BEGIN
         LANGUAGE plpgsql
         SECURITY DEFINER
         SET search_path = public
-        AS $$
+        AS $body$
         BEGIN
             RETURN QUERY
             SELECT 
@@ -147,7 +147,7 @@ BEGIN
             WHERE c.user_id = p_user_id
             ORDER BY c.created_at DESC;
         END;
-        $$;
+        $body$;
     END IF;
     
     -- Create/update wrapper function with old name for backward compatibility
@@ -167,17 +167,17 @@ BEGIN
     )
     LANGUAGE plpgsql
     SECURITY DEFINER
-    AS $$
+    AS $body2$
     BEGIN
         -- Delegate to the new function
         RETURN QUERY
         SELECT * FROM get_user_integration_credentials(p_user_id);
     END;
-    $$;
+    $body2$;
 
     COMMENT ON FUNCTION get_user_oauth_connections IS 
     'DEPRECATED: Use get_user_integration_credentials instead';
-END $$;
+END $func$;
 
 -- Step 6: Verify migration
 DO $$

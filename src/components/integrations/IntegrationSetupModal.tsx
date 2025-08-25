@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useGmailConnection } from '@/hooks/useGmailIntegration';
 import { useConnections } from '@/hooks/useConnections';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react';
 import { VaultService } from '@/services/VaultService';
 import { SMTPSetupModal } from './SMTPSetupModal';
+import { useTheme } from '@/contexts/ThemeContext';
+import { SMTP_PROVIDER_PRESETS, SMTPProviderPreset } from '@/types/smtp';
 
 interface IntegrationSetupModalProps {
   integration: any;
@@ -41,6 +44,7 @@ export function IntegrationSetupModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [selectedSMTPPreset, setSelectedSMTPPreset] = useState<SMTPProviderPreset | null>(null);
   
   // Hooks
   const supabase = useSupabaseClient();
@@ -119,7 +123,7 @@ export function IntegrationSetupModal({
       const raw = sessionStorage.getItem(key);
       if (raw) {
         const draft = JSON.parse(raw);
-        // Only hydrate missing fields to avoid clobbering
+        // Only hydrate missing fields to avoid clobbering - ensure ALL fields are included
         setFormData(prev => ({
           connection_name: draft.connection_name ?? prev.connection_name,
           api_key: draft.api_key ?? prev.api_key,
@@ -133,6 +137,13 @@ export function IntegrationSetupModal({
           from_email: draft.from_email ?? prev.from_email,
           from_name: draft.from_name ?? prev.from_name,
           selected_provider: draft.selected_provider ?? prev.selected_provider,
+          // SMTP fields - ensure they're always defined
+          host: draft.host ?? prev.host,
+          port: draft.port ?? prev.port,
+          secure: draft.secure ?? prev.secure,
+          username: draft.username ?? prev.username,
+          password: draft.password ?? prev.password,
+          reply_to_email: draft.reply_to_email ?? prev.reply_to_email,
         }));
       }
     } catch (_) {
@@ -219,15 +230,11 @@ export function IntegrationSetupModal({
       // ✅ SECURE: Create vault secret for API key
       console.log('Securing API key with vault encryption');
       const secretName = `${providerName}_api_key_${user.id}_${Date.now()}`;
-      const { data: vaultSecretId, error: vaultError } = await supabase.rpc('create_vault_secret', {
-        p_secret: formData.api_key,
-        p_name: secretName,
-        p_description: `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id} - Created: ${new Date().toISOString()}`
-      });
-
-      if (vaultError || !vaultSecretId) {
-        throw new Error(`Failed to secure API key in vault: ${vaultError?.message}`);
-      }
+      const vaultSecretId = await vaultService.createSecret(
+        secretName,
+        formData.api_key,
+        `${isUnifiedWebSearch ? SEARCH_PROVIDERS.find(p => p.id === providerName)?.name : integration.name} API key for user ${user.id} - Created: ${new Date().toISOString()}`
+      );
 
       console.log(`✅ API key securely stored in vault: ${vaultSecretId}`);
       const storedValue = vaultSecretId; // ✅ Store vault UUID only
@@ -489,6 +496,17 @@ export function IntegrationSetupModal({
     }
   };
 
+  const handleSMTPPresetSelect = (preset: SMTPProviderPreset) => {
+    setSelectedSMTPPreset(preset);
+    setFormData(prev => ({
+      ...prev,
+      host: preset.host,
+      port: preset.port.toString(),
+      secure: preset.secure,
+      connection_name: prev.connection_name || preset.displayName
+    }));
+  };
+
   const handleSMTPSetup = async () => {
     if (!user) return;
     
@@ -518,22 +536,52 @@ export function IntegrationSetupModal({
         return;
       }
       
-      // Create SMTP connection using the new standardized function
-      const { error: smtpError } = await supabase
-        .rpc('create_smtp_connection', {
-          p_user_id: user.id,
-          p_connection_name: formData.connection_name || 'SMTP Connection',
-          p_username: formData.username,
-          p_password: formData.password,
-          p_host: formData.host,
-          p_port: parseInt(formData.port) || 587,
-          p_secure: formData.secure,
-          p_from_email: formData.from_email,
-          p_from_name: formData.from_name || null,
-          p_reply_to_email: formData.reply_to_email || null
-        });
+      // ✅ SECURE: Store SMTP password in vault first
+      console.log('Securing SMTP password in vault...');
+      const secretName = `smtp_password_${user.id}_${Date.now()}`;
+      const vaultSecretId = await vaultService.createSecret(
+        secretName,
+        formData.password,
+        `SMTP password for ${formData.username} - Created: ${new Date().toISOString()}`
+      );
       
-      if (smtpError) throw smtpError;
+      console.log(`✅ SMTP password securely stored in vault: ${vaultSecretId}`);
+      
+      // Get SMTP provider ID
+      const { data: smtpProvider, error: providerError } = await supabase
+        .from('oauth_providers')
+        .select('id')
+        .eq('name', 'smtp')
+        .single();
+      
+      if (providerError) throw providerError;
+      
+      // Create SMTP connection record in user_integration_credentials
+      const { data: connectionData, error: connectionError } = await supabase
+        .from('user_integration_credentials')
+        .insert({
+          user_id: user.id,
+          oauth_provider_id: smtpProvider.id,
+          connection_name: formData.connection_name || 'SMTP Connection',
+          credential_type: 'api_key',
+          connection_status: 'active',
+          vault_access_token_id: vaultSecretId,
+          external_username: formData.username,
+          external_user_id: user.id,
+          scopes_granted: ['send_email'], // ✅ Grant send_email permission for agents
+          connection_metadata: {
+            host: formData.host,
+            port: parseInt(formData.port) || 587,
+            secure: formData.secure,
+            from_email: formData.from_email,
+            from_name: formData.from_name || null,
+            reply_to_email: formData.reply_to_email || null
+          }
+        })
+        .select('id')
+        .single();
+      
+      if (connectionError) throw connectionError;
       
       // Refresh connections
       await refetchConnections();
@@ -741,15 +789,15 @@ export function IntegrationSetupModal({
       // Only reset/close when the dialog is actually being closed
       if (!open) handleClose();
     }}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] bg-gray-900 border-gray-800 overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] bg-background border-border overflow-hidden flex flex-col">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="text-white flex items-center gap-2">
-            <div className="p-2 bg-gray-800 rounded-lg">
+          <DialogTitle className="text-foreground flex items-center gap-2">
+            <div className="p-2 bg-muted rounded-lg">
               {getIntegrationIcon()}
             </div>
             Setup {integration.name}
           </DialogTitle>
-          <DialogDescription className="text-gray-400">
+          <DialogDescription className="text-muted-foreground">
             {isWebSearchIntegration 
               ? `Connect your ${integration.name} account to enable web search capabilities for your agents.`
               : `Connect your ${integration.name} account to enable email management capabilities for your agents.`
@@ -762,10 +810,10 @@ export function IntegrationSetupModal({
             {success ? (
               <div className="text-center py-8">
                 <CheckCircle className="h-16 w-16 text-green-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">
+                <h3 className="text-lg font-semibold text-foreground mb-2">
                   Integration Connected Successfully!
                 </h3>
-                <p className="text-gray-400">
+                <p className="text-muted-foreground">
                   {successMessage || `Your ${integration.name} integration is now ready to use.`}
                 </p>
               </div>
@@ -773,13 +821,13 @@ export function IntegrationSetupModal({
               <div className="space-y-6">
                 {isSendGridIntegration ? (
                   // SendGrid API Key Setup
-                  <Card className="bg-gray-800 border-gray-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
+                      <CardTitle className="text-foreground flex items-center gap-2">
                         <Key className="h-5 w-5 text-blue-400" />
                         SendGrid Configuration
                       </CardTitle>
-                      <CardDescription className="text-gray-400">
+                      <CardDescription className="text-muted-foreground">
                         Configure your SendGrid API key and email settings
                       </CardDescription>
                     </CardHeader>
@@ -794,7 +842,7 @@ export function IntegrationSetupModal({
                       )}
 
                       <div>
-                        <Label htmlFor="connection_name" className="text-white">
+                        <Label htmlFor="connection_name" className="text-foreground">
                           Connection Name (Optional)
                         </Label>
                         <Input
@@ -802,12 +850,12 @@ export function IntegrationSetupModal({
                           value={formData.connection_name}
                           onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
                           placeholder="My SendGrid Connection"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="api_key" className="text-white">
+                        <Label htmlFor="api_key" className="text-foreground">
                           SendGrid API Key *
                         </Label>
                         <Input
@@ -816,15 +864,15 @@ export function IntegrationSetupModal({
                           value={formData.api_key}
                           onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))}
                           placeholder="SG.xxxxxxxxxxxxxxxxxxxxxx"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Your API key with mail.send permissions
                         </p>
                       </div>
 
                       <div>
-                        <Label htmlFor="from_email" className="text-white">
+                        <Label htmlFor="from_email" className="text-foreground">
                           From Email Address *
                         </Label>
                         <Input
@@ -833,15 +881,15 @@ export function IntegrationSetupModal({
                           value={formData.from_email}
                           onChange={(e) => setFormData(prev => ({ ...prev, from_email: e.target.value }))}
                           placeholder="noreply@yourdomain.com"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           The email address that will appear as the sender
                         </p>
                       </div>
 
                       <div>
-                        <Label htmlFor="from_name" className="text-white">
+                        <Label htmlFor="from_name" className="text-foreground">
                           From Name (Optional)
                         </Label>
                         <Input
@@ -849,17 +897,17 @@ export function IntegrationSetupModal({
                           value={formData.from_name}
                           onChange={(e) => setFormData(prev => ({ ...prev, from_name: e.target.value }))}
                           placeholder="Your Company Name"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
-                      <div className="flex items-center space-x-2 text-sm text-gray-400">
+                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                         <ExternalLink className="h-4 w-4" />
                         <a 
                           href="https://app.sendgrid.com/settings/api_keys" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="hover:text-white underline"
+                          className="hover:text-foreground underline"
                         >
                           Get your SendGrid API key
                         </a>
@@ -892,13 +940,13 @@ export function IntegrationSetupModal({
                   </Card>
                 ) : isMailgunIntegration ? (
                   // Mailgun API Key Setup
-                  <Card className="bg-gray-800 border-gray-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
+                      <CardTitle className="text-foreground flex items-center gap-2">
                         <Key className="h-5 w-5 text-blue-400" />
                         Mailgun Configuration
                       </CardTitle>
-                      <CardDescription className="text-gray-400">
+                      <CardDescription className="text-muted-foreground">
                         Configure your Mailgun domain and API key for high-deliverability email
                       </CardDescription>
                     </CardHeader>
@@ -913,7 +961,7 @@ export function IntegrationSetupModal({
                       )}
 
                       <div>
-                        <Label htmlFor="connection_name" className="text-white">
+                        <Label htmlFor="connection_name" className="text-foreground">
                           Connection Name (Optional)
                         </Label>
                         <Input
@@ -921,12 +969,12 @@ export function IntegrationSetupModal({
                           value={formData.connection_name}
                           onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
                           placeholder="My Mailgun Connection"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="from_email" className="text-white">
+                        <Label htmlFor="from_email" className="text-foreground">
                           Mailgun Domain *
                         </Label>
                         <Input
@@ -934,15 +982,15 @@ export function IntegrationSetupModal({
                           value={formData.from_email}
                           onChange={(e) => setFormData(prev => ({ ...prev, from_email: e.target.value }))}
                           placeholder="mail.yourdomain.com"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Your verified Mailgun sending domain
                         </p>
                       </div>
 
                       <div>
-                        <Label htmlFor="api_key" className="text-white">
+                        <Label htmlFor="api_key" className="text-foreground">
                           Mailgun API Key *
                         </Label>
                         <Input
@@ -951,19 +999,19 @@ export function IntegrationSetupModal({
                           value={formData.api_key}
                           onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))}
                           placeholder="key-xxxxxxxxxxxxxxxxxxxxxx"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Your Mailgun API key (starts with "key-")
                         </p>
                       </div>
 
-                      <div className="text-sm text-gray-400 mt-4">
+                      <div className="text-sm text-muted-foreground mt-4">
                         <a 
                           href="https://app.mailgun.com/app/account/security/api_keys" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="hover:text-white underline"
+                          className="hover:text-foreground underline"
                         >
                           Get your Mailgun API key
                         </a>
@@ -996,13 +1044,13 @@ export function IntegrationSetupModal({
                   </Card>
                 ) : isSMTPIntegration ? (
                   // SMTP Server Configuration
-                  <Card className="bg-gray-800 border-gray-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
+                      <CardTitle className="text-foreground flex items-center gap-2">
                         <Mail className="h-5 w-5 text-blue-400" />
                         SMTP Server Configuration
                       </CardTitle>
-                      <CardDescription className="text-gray-400">
+                      <CardDescription className="text-muted-foreground">
                         Configure your SMTP server settings for email delivery
                       </CardDescription>
                     </CardHeader>
@@ -1016,8 +1064,44 @@ export function IntegrationSetupModal({
                         </Alert>
                       )}
 
+                      {/* SMTP Provider Preset Dropdown */}
                       <div>
-                        <Label htmlFor="connection_name" className="text-white">
+                        <Label htmlFor="smtp_preset" className="text-foreground">
+                          Email Provider Preset (Optional)
+                        </Label>
+                        <Select 
+                          onValueChange={(value) => {
+                            const preset = SMTP_PROVIDER_PRESETS.find(p => p.name === value);
+                            if (preset) {
+                              handleSMTPPresetSelect(preset);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Choose a preset to auto-fill settings" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="custom">Custom Configuration</SelectItem>
+                            {SMTP_PROVIDER_PRESETS.filter(preset => preset.name !== 'custom').map((preset) => (
+                              <SelectItem key={preset.name} value={preset.name}>
+                                {preset.displayName} - {preset.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        {selectedSMTPPreset?.setupInstructions && (
+                          <Alert className="mt-2">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription className="text-xs">
+                              <strong>{selectedSMTPPreset.displayName} Setup:</strong> {selectedSMTPPreset.setupInstructions}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="connection_name" className="text-foreground">
                           Connection Name (Optional)
                         </Label>
                         <Input
@@ -1025,13 +1109,13 @@ export function IntegrationSetupModal({
                           value={formData.connection_name}
                           onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
                           placeholder="My SMTP Server"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="host" className="text-white">
+                          <Label htmlFor="host" className="text-foreground">
                             SMTP Host *
                           </Label>
                           <Input
@@ -1039,11 +1123,11 @@ export function IntegrationSetupModal({
                             value={formData.host}
                             onChange={(e) => setFormData(prev => ({ ...prev, host: e.target.value }))}
                             placeholder="smtp.gmail.com"
-                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                            className="bg-card border-border text-foreground mt-1"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="port" className="text-white">
+                          <Label htmlFor="port" className="text-foreground">
                             Port *
                           </Label>
                           <Input
@@ -1051,14 +1135,14 @@ export function IntegrationSetupModal({
                             value={formData.port}
                             onChange={(e) => setFormData(prev => ({ ...prev, port: e.target.value }))}
                             placeholder="587"
-                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                            className="bg-card border-border text-foreground mt-1"
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="username" className="text-white">
+                          <Label htmlFor="username" className="text-foreground">
                             Username *
                           </Label>
                           <Input
@@ -1066,11 +1150,11 @@ export function IntegrationSetupModal({
                             value={formData.username}
                             onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
                             placeholder="your-email@domain.com"
-                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                            className="bg-card border-border text-foreground mt-1"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="password" className="text-white">
+                          <Label htmlFor="password" className="text-foreground">
                             Password *
                           </Label>
                           <Input
@@ -1079,14 +1163,14 @@ export function IntegrationSetupModal({
                             value={formData.password}
                             onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                             placeholder="Your SMTP password"
-                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                            className="bg-card border-border text-foreground mt-1"
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="from_email" className="text-white">
+                          <Label htmlFor="from_email" className="text-foreground">
                             From Email *
                           </Label>
                           <Input
@@ -1095,11 +1179,11 @@ export function IntegrationSetupModal({
                             value={formData.from_email}
                             onChange={(e) => setFormData(prev => ({ ...prev, from_email: e.target.value }))}
                             placeholder="noreply@yourdomain.com"
-                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                            className="bg-card border-border text-foreground mt-1"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="from_name" className="text-white">
+                          <Label htmlFor="from_name" className="text-foreground">
                             From Name (Optional)
                           </Label>
                           <Input
@@ -1107,13 +1191,13 @@ export function IntegrationSetupModal({
                             value={formData.from_name}
                             onChange={(e) => setFormData(prev => ({ ...prev, from_name: e.target.value }))}
                             placeholder="Your App Name"
-                            className="bg-gray-800 border-gray-700 text-white mt-1"
+                            className="bg-card border-border text-foreground mt-1"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <Label htmlFor="reply_to_email" className="text-white">
+                        <Label htmlFor="reply_to_email" className="text-foreground">
                           Reply-To Email (Optional)
                         </Label>
                         <Input
@@ -1122,15 +1206,27 @@ export function IntegrationSetupModal({
                           value={formData.reply_to_email}
                           onChange={(e) => setFormData(prev => ({ ...prev, reply_to_email: e.target.value }))}
                           placeholder="support@yourdomain.com"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
                       <Button
                         type="button"
                         onClick={handleSMTPSetup}
-                        disabled={loading || success || !formData.host || !formData.username || !formData.password || !formData.from_email}
+                        disabled={loading || success || !formData.host?.trim() || !formData.username?.trim() || !formData.password?.trim() || !formData.from_email?.trim()}
                         className={`w-full mt-4 ${success ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        onMouseEnter={() => {
+                          // Debug log to help identify which field is causing the issue
+                          console.log('SMTP Button Debug:', {
+                            loading,
+                            success,
+                            host: `"${formData.host || ''}"`,
+                            username: `"${formData.username || ''}"`,
+                            password: formData.password ? '[FILLED]' : '[EMPTY]',
+                            from_email: `"${formData.from_email || ''}"`,
+                            disabled: loading || success || !formData.host?.trim() || !formData.username?.trim() || !formData.password?.trim() || !formData.from_email?.trim()
+                          });
+                        }}
                       >
                         {success ? (
                           <>
@@ -1153,13 +1249,13 @@ export function IntegrationSetupModal({
                   </Card>
                 ) : isWebSearchIntegration ? (
                   // Web Search API Key Setup
-                  <Card className="bg-gray-800 border-gray-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
+                      <CardTitle className="text-foreground flex items-center gap-2">
                         <Key className="h-5 w-5 text-blue-400" />
                         API Key Configuration
                       </CardTitle>
-                      <CardDescription className="text-gray-400">
+                      <CardDescription className="text-muted-foreground">
                         {isUnifiedWebSearch 
                           ? 'Choose a search provider and enter your API key to enable web search functionality'
                           : `Enter your ${integration.name} API key to enable web search functionality`
@@ -1179,14 +1275,14 @@ export function IntegrationSetupModal({
                       {/* Provider Selection for Unified Web Search */}
                       {isUnifiedWebSearch && (
                         <div>
-                          <Label htmlFor="provider_select" className="text-white">
+                          <Label htmlFor="provider_select" className="text-foreground">
                             Search Provider *
                           </Label>
                           <select
                             id="provider_select"
                             value={formData.selected_provider}
                             onChange={(e) => setFormData(prev => ({ ...prev, selected_provider: e.target.value }))}
-                            className="w-full p-2 mt-1 bg-gray-800 border border-gray-700 rounded-md text-white"
+                            className="w-full p-2 mt-1 bg-card border border-border rounded-md text-foreground"
                           >
                             {SEARCH_PROVIDERS.map((provider) => (
                               <option key={provider.id} value={provider.id}>
@@ -1194,14 +1290,14 @@ export function IntegrationSetupModal({
                               </option>
                             ))}
                           </select>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-muted-foreground mt-1">
                             {SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider)?.description}
                           </p>
                         </div>
                       )}
 
                       <div>
-                        <Label htmlFor="connection_name" className="text-white">
+                        <Label htmlFor="connection_name" className="text-foreground">
                           Connection Name (Optional)
                         </Label>
                         <Input
@@ -1213,12 +1309,12 @@ export function IntegrationSetupModal({
                               ? `My ${SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider)?.name} Connection`
                               : `My ${integration.name} Connection`
                           }
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="api_key" className="text-white">
+                        <Label htmlFor="api_key" className="text-foreground">
                           API Key *
                         </Label>
                         <Input
@@ -1227,9 +1323,9 @@ export function IntegrationSetupModal({
                           value={formData.api_key}
                           onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))}
                           placeholder="Enter your API key"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Your API key will be securely encrypted and stored
                         </p>
                         {/* Dynamic API key link for unified Web Search */}
@@ -1251,14 +1347,14 @@ export function IntegrationSetupModal({
                       {/* Provider-specific configuration */}
                       {integration.name === 'SerpAPI' && (
                         <div>
-                          <Label htmlFor="default_engine" className="text-white">
+                          <Label htmlFor="default_engine" className="text-foreground">
                             Default Search Engine
                           </Label>
                           <select
                             id="default_engine"
                             value={formData.default_engine}
                             onChange={(e) => setFormData(prev => ({ ...prev, default_engine: e.target.value }))}
-                            className="w-full p-2 mt-1 bg-gray-800 border border-gray-700 rounded-md text-white"
+                            className="w-full p-2 mt-1 bg-card border border-border rounded-md text-foreground"
                           >
                             <option value="google">Google</option>
                             <option value="bing">Bing</option>
@@ -1270,14 +1366,14 @@ export function IntegrationSetupModal({
 
                       {integration.name === 'Brave Search API' && (
                         <div>
-                          <Label htmlFor="safesearch" className="text-white">
+                          <Label htmlFor="safesearch" className="text-foreground">
                             Safe Search
                           </Label>
                           <select
                             id="safesearch"
                             value={formData.safesearch}
                             onChange={(e) => setFormData(prev => ({ ...prev, safesearch: e.target.value }))}
-                            className="w-full p-2 mt-1 bg-gray-800 border border-gray-700 rounded-md text-white"
+                            className="w-full p-2 mt-1 bg-card border border-border rounded-md text-foreground"
                           >
                             <option value="strict">Strict</option>
                             <option value="moderate">Moderate</option>
@@ -1287,7 +1383,7 @@ export function IntegrationSetupModal({
                       )}
 
                       <div>
-                        <Label htmlFor="default_location" className="text-white">
+                        <Label htmlFor="default_location" className="text-foreground">
                           Default Location (Optional)
                         </Label>
                         <Input
@@ -1295,7 +1391,7 @@ export function IntegrationSetupModal({
                           value={formData.default_location}
                           onChange={(e) => setFormData(prev => ({ ...prev, default_location: e.target.value }))}
                           placeholder="e.g., New York, NY"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
                       </div>
 
@@ -1325,13 +1421,13 @@ export function IntegrationSetupModal({
                     </CardContent>
                   </Card>
                 ) : (isPineconeIntegration || isGetZepIntegration) ? (
-                  <Card className="bg-gray-800 border-gray-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
+                      <CardTitle className="text-foreground flex items-center gap-2">
                         <Key className="h-5 w-5 text-blue-400" />
                         {integration.name} {isGetZepIntegration ? 'Configuration' : 'API Key'}
                       </CardTitle>
-                      <CardDescription className="text-gray-400">
+                      <CardDescription className="text-muted-foreground">
                         {isGetZepIntegration 
                           ? 'Configure your GetZep account for knowledge graph storage'
                           : 'Store your API key securely in Vault. You\'ll provide index and other non-secret settings when creating a datastore.'}
@@ -1345,13 +1441,13 @@ export function IntegrationSetupModal({
                         </Alert>
                       )}
                       <div>
-                        <Label htmlFor="connection_name" className="text-white">Connection Name (Optional)</Label>
-                        <Input id="connection_name" value={formData.connection_name} onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))} placeholder={`My ${integration.name} Connection`} className="bg-gray-800 border-gray-700 text-white mt-1" />
+                        <Label htmlFor="connection_name" className="text-foreground">Connection Name (Optional)</Label>
+                        <Input id="connection_name" value={formData.connection_name} onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))} placeholder={`My ${integration.name} Connection`} className="bg-card border-border text-foreground mt-1" />
                       </div>
                       <div>
-                        <Label htmlFor="api_key" className="text-white">API Key *</Label>
-                        <Input id="api_key" type="password" value={formData.api_key} onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))} placeholder={isGetZepIntegration ? "z_..." : "Enter your API key"} className="bg-gray-800 border-gray-700 text-white mt-1" />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <Label htmlFor="api_key" className="text-foreground">API Key *</Label>
+                        <Input id="api_key" type="password" value={formData.api_key} onChange={(e) => setFormData(prev => ({ ...prev, api_key: e.target.value }))} placeholder={isGetZepIntegration ? "z_..." : "Enter your API key"} className="bg-card border-border text-foreground mt-1" />
+                        <p className="text-xs text-muted-foreground mt-1">
                           {isGetZepIntegration 
                             ? 'Your GetZep API key from app.getzep.com'
                             : 'Saved to Vault. No global keys are used.'}
@@ -1360,45 +1456,45 @@ export function IntegrationSetupModal({
                       {isGetZepIntegration && (
                         <>
                           <div>
-                            <Label htmlFor="zep_account_id" className="text-white">Account ID *</Label>
+                            <Label htmlFor="zep_account_id" className="text-foreground">Account ID *</Label>
                             <Input 
                               id="zep_account_id" 
                               value={formData.zep_account_id || ''} 
                               onChange={(e) => setFormData(prev => ({ ...prev, zep_account_id: e.target.value }))} 
                               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" 
-                              className="bg-gray-800 border-gray-700 text-white mt-1" 
+                              className="bg-card border-border text-foreground mt-1" 
                             />
-                            <p className="text-xs text-gray-500 mt-1">Your GetZep account ID (UUID format)</p>
+                            <p className="text-xs text-muted-foreground mt-1">Your GetZep account ID (UUID format)</p>
                           </div>
                           <div>
-                            <Label htmlFor="zep_project_name" className="text-white">Project Name *</Label>
+                            <Label htmlFor="zep_project_name" className="text-foreground">Project Name *</Label>
                             <Input 
                               id="zep_project_name" 
                               value={formData.zep_project_name || ''} 
                               onChange={(e) => setFormData(prev => ({ ...prev, zep_project_name: e.target.value }))} 
                               placeholder="e.g., agentopia" 
-                              className="bg-gray-800 border-gray-700 text-white mt-1" 
+                              className="bg-card border-border text-foreground mt-1" 
                             />
-                            <p className="text-xs text-gray-500 mt-1">Exact project name from your GetZep Project Settings</p>
+                            <p className="text-xs text-muted-foreground mt-1">Exact project name from your GetZep Project Settings</p>
                           </div>
                           <div>
-                            <Label htmlFor="zep_project_id" className="text-white">Project ID (Optional)</Label>
+                            <Label htmlFor="zep_project_id" className="text-foreground">Project ID (Optional)</Label>
                             <Input 
                               id="zep_project_id" 
                               value={formData.zep_project_id || ''} 
                               onChange={(e) => setFormData(prev => ({ ...prev, zep_project_id: e.target.value }))} 
                               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" 
-                              className="bg-gray-800 border-gray-700 text-white mt-1" 
+                              className="bg-card border-border text-foreground mt-1" 
                             />
-                            <p className="text-xs text-gray-500 mt-1">Optional: Your GetZep project ID</p>
+                            <p className="text-xs text-muted-foreground mt-1">Optional: Your GetZep project ID</p>
                           </div>
-                          <div className="flex items-center space-x-2 text-sm text-gray-400">
+                          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                             <ExternalLink className="h-4 w-4" />
                             <a 
                               href="https://app.getzep.com" 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="hover:text-white underline"
+                              className="hover:text-foreground underline"
                             >
                               Get your GetZep credentials
                             </a>
@@ -1417,13 +1513,13 @@ export function IntegrationSetupModal({
                   </Card>
                 ) : (
                   // OAuth Setup (for Gmail, etc.)
-                  <Card className="bg-gray-800 border-gray-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
+                      <CardTitle className="text-foreground flex items-center gap-2">
                         <Shield className="h-5 w-5 text-blue-400" />
                         OAuth 2.0 Authentication
                       </CardTitle>
-                      <CardDescription className="text-gray-400">
+                      <CardDescription className="text-muted-foreground">
                         Secure authentication flow to connect your Gmail account
                       </CardDescription>
                     </CardHeader>
@@ -1438,7 +1534,7 @@ export function IntegrationSetupModal({
                       )}
 
                       <div>
-                        <Label htmlFor="connection_name" className="text-white">
+                        <Label htmlFor="connection_name" className="text-foreground">
                           Connection Name (Optional)
                         </Label>
                         <Input
@@ -1446,9 +1542,9 @@ export function IntegrationSetupModal({
                           value={formData.connection_name}
                           onChange={(e) => setFormData(prev => ({ ...prev, connection_name: e.target.value }))}
                           placeholder="My Gmail Connection"
-                          className="bg-gray-800 border-gray-700 text-white mt-1"
+                          className="bg-card border-border text-foreground mt-1"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Give this connection a name to identify it later
                         </p>
                       </div>
@@ -1481,18 +1577,18 @@ export function IntegrationSetupModal({
                 )}
 
                 {/* Agent Tools & Capabilities */}
-                <Card className="bg-gray-800 border-gray-700">
+                <Card className="bg-card border-border">
                   <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2">
+                    <CardTitle className="text-foreground flex items-center gap-2">
                       <Search className="h-5 w-5 text-green-400" />
                       Agent Tools & Capabilities
                     </CardTitle>
-                    <CardDescription className="text-gray-400">
+                    <CardDescription className="text-muted-foreground">
                       What your agents will be able to do with this integration
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ul className="text-sm text-gray-300 space-y-2">
+                    <ul className="text-sm text-foreground space-y-2">
                       {getIntegrationCapabilities().map((capability, index) => (
                         <li key={index} className="flex items-start gap-2">
                           <CheckCircle className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
