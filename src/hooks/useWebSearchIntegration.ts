@@ -119,7 +119,7 @@ export function useAgentWebSearchPermissions(agentId?: string) {
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           *,
           user_integration_credentials(

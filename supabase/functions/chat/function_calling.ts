@@ -493,7 +493,7 @@ export class FunctionCallingManager {
     try {
       // Check if agent has Gmail permissions
       const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           allowed_scopes,
           is_active,
@@ -616,7 +616,7 @@ export class FunctionCallingManager {
   private async getSendgridTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
     try {
       const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           allowed_scopes,
           is_active,
@@ -658,7 +658,7 @@ export class FunctionCallingManager {
     try {
       // Check if user has Mailgun API key configured
       const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           allowed_scopes,
           is_active,
@@ -977,7 +977,7 @@ export class FunctionCallingManager {
     try {
       // Validate permissions similarly to web search (API key present)
       const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           *,
           user_integration_credentials!inner(
@@ -1024,7 +1024,7 @@ export class FunctionCallingManager {
       
       // Validate permissions (API key present)
       const { data: permissions } = await this.supabaseClient
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           *,
           user_integration_credentials!inner(

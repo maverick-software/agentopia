@@ -272,129 +272,148 @@ export function CredentialsPage() {
 
       {/* Details Modal */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              {selectedConnection?.provider_display_name || selectedConnection?.provider_name}
-            </DialogTitle>
-          </DialogHeader>
-          
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-0">
           {selectedConnection && (
-            <div className="space-y-4 py-2">
-              {/* Basic Info */}
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Account:</span>
-                    <p className="font-medium">{selectedConnection.external_username || selectedConnection.connection_name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Status:</span>
-                    <Badge variant="secondary" className={`text-xs h-5 px-2 mt-1 ${getStatusColor(selectedConnection.connection_status)}`}>
-                      {selectedConnection.connection_status}
+            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/30 dark:via-indigo-950/30 dark:to-purple-950/30 border border-blue-200 dark:border-blue-800">
+              {/* Header with gradient */}
+              <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                <h4 className="font-semibold text-lg flex items-center">
+                  <Shield className="h-5 w-5 mr-2 text-blue-200" />
+                  {selectedConnection.provider_display_name || selectedConnection.provider_name}
+                </h4>
+                <p className="text-blue-100 text-sm mt-1">
+                  {selectedConnection.external_username || selectedConnection.connection_name || 'Connection Details'}
+                </p>
+              </div>
+
+              {/* Connection Status Bar */}
+              <div className="px-6 py-3 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm border-b border-white/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      variant="secondary" 
+                      className={`text-xs h-6 px-3 ${
+                        selectedConnection.connection_status === 'active' 
+                          ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' 
+                          : selectedConnection.connection_status === 'expired'
+                          ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700'
+                          : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700'
+                      }`}
+                    >
+                      {selectedConnection.connection_status === 'active' ? '✅ Active' : 
+                       selectedConnection.connection_status === 'expired' ? '⚠️ Expired' :
+                       selectedConnection.connection_status === 'revoked' ? '❌ Revoked' :
+                       selectedConnection.connection_status}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs h-6 px-3">
+                      {selectedConnection.credential_type === 'oauth' ? 'OAuth' : 'API Key'}
                     </Badge>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Type:</span>
-                    <p className="font-medium">{selectedConnection.credential_type === 'oauth' ? 'OAuth' : 'API Key'}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Connected:</span>
-                    <p className="font-medium">{format(new Date(selectedConnection.created_at), 'MMM dd, yyyy')}</p>
+                  <div className="text-xs text-muted-foreground">
+                    Connected {format(new Date(selectedConnection.created_at), 'MMM dd, yyyy')}
                   </div>
                 </div>
               </div>
 
-              {/* Permissions */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium flex items-center gap-1">
-                    <Key className="h-3 w-3" />
-                    Permissions
-                  </span>
-                  <Badge variant="secondary" className="text-xs h-5 px-2">
-                    {selectedConnection.scopes_granted.length}
-                  </Badge>
+              {/* Content */}
+              <div className="p-6 space-y-6">
+                {/* Permissions Section */}
+                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg border border-blue-200/50 dark:border-blue-800/50 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h5 className="font-medium flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                      <Key className="h-4 w-4 text-blue-600" />
+                      Permissions
+                    </h5>
+                    <Badge variant="secondary" className="text-xs h-5 px-2 bg-blue-100 text-blue-700 border-blue-200">
+                      {selectedConnection.scopes_granted.length} granted
+                    </Badge>
+                  </div>
+                  {selectedConnection.scopes_granted.length > 0 ? (
+                    <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-md p-3 border border-blue-200/30">
+                      <div className="flex flex-wrap gap-2">
+                        {selectedConnection.scopes_granted.map((scope) => (
+                          <Badge key={scope} variant="outline" className="text-xs h-6 px-3 bg-white/60 border-blue-300 text-blue-700 dark:bg-gray-800/60 dark:text-blue-300 dark:border-blue-700">
+                            {scope}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No permissions granted</p>
+                  )}
                 </div>
-                {selectedConnection.scopes_granted.length > 0 ? (
-                  <div className="bg-muted rounded-md p-2">
-                    <div className="flex flex-wrap gap-1">
-                      {selectedConnection.scopes_granted.map((scope) => (
-                        <Badge key={scope} variant="outline" className="text-xs h-5 px-2">
-                          {scope}
-                        </Badge>
-                      ))}
+
+                {/* Token/API Key Info */}
+                {selectedConnection.credential_type === 'oauth' && selectedConnection.token_expires_at && (
+                  <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg border border-amber-200/50 dark:border-amber-800/50 p-4">
+                    <h5 className="font-medium flex items-center gap-2 text-amber-900 dark:text-amber-100 mb-3">
+                      <Calendar className="h-4 w-4 text-amber-600" />
+                      Token Status
+                    </h5>
+                    <div className="bg-amber-50/50 dark:bg-amber-950/20 rounded-md p-3 border border-amber-200/30">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-amber-700 dark:text-amber-300">Expires:</span>
+                        <span className={`font-medium ${getTokenExpiryColor(selectedConnection.token_expires_at, refreshStatus[selectedConnection.connection_id])}`}>
+                          {formatExpiryDate(selectedConnection.token_expires_at, refreshStatus[selectedConnection.connection_id])}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No permissions granted</p>
                 )}
-              </div>
 
-              {/* Token Info */}
-              {selectedConnection.credential_type === 'oauth' && selectedConnection.token_expires_at && (
-                <div>
-                  <span className="text-sm font-medium">Token Status</span>
-                  <div className="bg-muted rounded-md p-2 mt-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Expires:</span>
-                      <span className={getTokenExpiryColor(selectedConnection.token_expires_at, refreshStatus[selectedConnection.connection_id])}>
-                        {formatExpiryDate(selectedConnection.token_expires_at, refreshStatus[selectedConnection.connection_id])}
-                      </span>
+                {selectedConnection.credential_type === 'api_key' && (
+                  <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg border border-green-200/50 dark:border-green-800/50 p-4">
+                    <h5 className="font-medium flex items-center gap-2 text-green-900 dark:text-green-100 mb-3">
+                      <Key className="h-4 w-4 text-green-600" />
+                      API Key Status
+                    </h5>
+                    <div className="bg-green-50/50 dark:bg-green-950/20 rounded-md p-3 border border-green-200/30">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-700 dark:text-green-300">Expiry:</span>
+                        <span className="font-medium text-green-600">Never expires</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {selectedConnection.credential_type === 'api_key' && (
-                <div>
-                  <span className="text-sm font-medium">API Key Status</span>
-                  <div className="bg-muted rounded-md p-2 mt-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Expiry:</span>
-                      <span>Never expires</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-between pt-3 border-t">
-                {selectedConnection.credential_type === 'oauth' && selectedConnection.connection_status !== 'expired' && (
+                {/* Actions */}
+                <div className="flex justify-between pt-4 border-t border-white/30">
+                  {selectedConnection.credential_type === 'oauth' && selectedConnection.connection_status !== 'expired' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRefreshToken(selectedConnection.connection_id)}
+                      disabled={refreshStatus[selectedConnection.connection_id]?.isRefreshing}
+                      className="bg-white/60 backdrop-blur-sm border-blue-300 text-blue-700 hover:bg-blue-50 dark:bg-gray-800/60 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                    >
+                      {refreshStatus[selectedConnection.connection_id]?.isRefreshing ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                      ) : refreshStatus[selectedConnection.connection_id]?.success ? (
+                        <CheckCircle className="h-3 w-3 mr-2 text-green-500" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3 mr-2" />
+                      )}
+                      {refreshStatus[selectedConnection.connection_id]?.isRefreshing 
+                        ? 'Refreshing...' 
+                        : refreshStatus[selectedConnection.connection_id]?.success
+                        ? 'Refreshed!'
+                        : 'Refresh Token'
+                      }
+                    </Button>
+                  )}
                   <Button
-                    variant="outline"
+                    variant="destructive"
                     size="sm"
-                    onClick={() => handleRefreshToken(selectedConnection.connection_id)}
-                    disabled={refreshStatus[selectedConnection.connection_id]?.isRefreshing}
+                    onClick={() => {
+                      handleRevokeConnection(selectedConnection.connection_id);
+                      setShowDetailsModal(false);
+                    }}
+                    className="ml-auto bg-red-600 hover:bg-red-700 text-white"
                   >
-                    {refreshStatus[selectedConnection.connection_id]?.isRefreshing ? (
-                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                    ) : refreshStatus[selectedConnection.connection_id]?.success ? (
-                      <CheckCircle className="h-3 w-3 mr-1 text-green-500" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                    )}
-                    {refreshStatus[selectedConnection.connection_id]?.isRefreshing 
-                      ? 'Refreshing...' 
-                      : refreshStatus[selectedConnection.connection_id]?.success
-                      ? 'Refreshed!'
-                      : 'Refresh'
-                    }
+                    <Trash2 className="h-3 w-3 mr-2" />
+                    Revoke Connection
                   </Button>
-                )}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    handleRevokeConnection(selectedConnection.connection_id);
-                    setShowDetailsModal(false);
-                  }}
-                  className="ml-auto"
-                >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  Revoke
-                </Button>
+                </div>
               </div>
             </div>
           )}

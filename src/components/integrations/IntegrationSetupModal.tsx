@@ -116,6 +116,7 @@ export function IntegrationSetupModal({
     return `integration_draft_${provider}_${user?.id || 'anon'}`;
   };
 
+  // SECURITY FIX: Only persist non-sensitive configuration fields, never credentials
   useEffect(() => {
     if (!isOpen) return;
     const key = getDraftKey();
@@ -123,13 +124,12 @@ export function IntegrationSetupModal({
       const raw = sessionStorage.getItem(key);
       if (raw) {
         const draft = JSON.parse(raw);
-        // Only hydrate missing fields to avoid clobbering - ensure ALL fields are included
+        // Only hydrate NON-SENSITIVE fields - NEVER load credentials from browser storage
         setFormData(prev => ({
+          ...prev,
           connection_name: draft.connection_name ?? prev.connection_name,
-          api_key: draft.api_key ?? prev.api_key,
-          zep_project_id: draft.zep_project_id ?? prev.zep_project_id,
+          // GetZep config (non-sensitive)
           zep_project_name: draft.zep_project_name ?? prev.zep_project_name,
-          zep_account_id: draft.zep_account_id ?? prev.zep_account_id,
           default_location: draft.default_location ?? prev.default_location,
           default_language: draft.default_language ?? prev.default_language,
           default_engine: draft.default_engine ?? prev.default_engine,
@@ -137,13 +137,13 @@ export function IntegrationSetupModal({
           from_email: draft.from_email ?? prev.from_email,
           from_name: draft.from_name ?? prev.from_name,
           selected_provider: draft.selected_provider ?? prev.selected_provider,
-          // SMTP fields - ensure they're always defined
+          // SMTP server settings (non-sensitive configuration)
           host: draft.host ?? prev.host,
           port: draft.port ?? prev.port,
           secure: draft.secure ?? prev.secure,
           username: draft.username ?? prev.username,
-          password: draft.password ?? prev.password,
           reply_to_email: draft.reply_to_email ?? prev.reply_to_email,
+          // CREDENTIALS (api_key, password, etc.) are NEVER persisted for security
         }));
       }
     } catch (_) {
@@ -155,7 +155,27 @@ export function IntegrationSetupModal({
   useEffect(() => {
     if (!isOpen) return;
     try {
-      sessionStorage.setItem(getDraftKey(), JSON.stringify(formData));
+      // Only persist NON-SENSITIVE fields to browser storage
+      const safeDraft = {
+        connection_name: formData.connection_name,
+        // GetZep config (non-sensitive)
+        zep_project_name: formData.zep_project_name,
+        default_location: formData.default_location,
+        default_language: formData.default_language,
+        default_engine: formData.default_engine,
+        safesearch: formData.safesearch,
+        from_email: formData.from_email,
+        from_name: formData.from_name,
+        selected_provider: formData.selected_provider,
+        // SMTP server settings (non-sensitive configuration)
+        host: formData.host,
+        port: formData.port,
+        secure: formData.secure,
+        username: formData.username,
+        reply_to_email: formData.reply_to_email,
+        // NEVER persist: api_key, password, zep_project_id, zep_account_id
+      };
+      sessionStorage.setItem(getDraftKey(), JSON.stringify(safeDraft));
     } catch (_) {
       // best-effort persistence
     }
@@ -168,6 +188,7 @@ export function IntegrationSetupModal({
     setError(null);
     setSuccess(false);
     setSuccessMessage('');
+    setSelectedSMTPPreset(null);
     setFormData({
       connection_name: '',
       api_key: '',
@@ -179,8 +200,23 @@ export function IntegrationSetupModal({
       default_engine: 'google',
       safesearch: 'moderate',
       from_email: '',
-      from_name: ''
+      from_name: '',
+      selected_provider: 'serper_api',
+      // SMTP fields
+      host: '',
+      port: '587',
+      secure: false,
+      username: '',
+      password: '',
+      reply_to_email: ''
     });
+    
+    // SECURITY: Clear browser storage when modal is closed to remove any lingering data
+    try {
+      sessionStorage.removeItem(getDraftKey());
+    } catch (_) {
+      // best-effort cleanup
+    }
   };
 
   // Handle modal close with state reset
@@ -622,8 +658,16 @@ export function IntegrationSetupModal({
         return;
       }
       
-      // Store API key in vault (for now, storing raw key)
-      const vaultKeyId = formData.api_key;
+      // ✅ SECURE: Store API key in vault properly
+      console.log('Securing Mailgun API key with vault encryption');
+      const secretName = `mailgun_api_key_${user.id}_${Date.now()}`;
+      const vaultKeyId = await vaultService.createSecret(
+        secretName,
+        formData.api_key,
+        `Mailgun API key for ${formData.from_email} - Created: ${new Date().toISOString()}`
+      );
+      
+      console.log(`✅ Mailgun API key securely stored in vault: ${vaultKeyId}`);
       
       // Get Mailgun OAuth provider ID
       const { data: mailgunProvider, error: providerError } = await supabase
@@ -645,10 +689,10 @@ export function IntegrationSetupModal({
           connection_name: formData.connection_name || 'Mailgun Connection',
           credential_type: 'api_key',
           connection_status: 'active',
-          vault_access_token_id: vaultKeyId,
+          vault_access_token_id: vaultKeyId, // ✅ Now stores vault UUID, not plain text
           external_username: formData.from_email, // Store domain
           external_user_id: 'mailgun_user',
-          scopes_granted: []
+          scopes_granted: ['send_email'] // ✅ Grant email sending permissions
         });
       
       if (connError) throw connError;

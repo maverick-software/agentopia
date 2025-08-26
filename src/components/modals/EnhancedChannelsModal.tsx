@@ -227,6 +227,18 @@ export function EnhancedChannelsModal({
         .single();
       if (providerError || !mgProvider) throw providerError || new Error('Mailgun provider missing');
 
+      // ✅ SECURE: Store API key in vault properly
+      console.log('Securing Mailgun API key with vault encryption');
+      const vaultService = new VaultService(supabase);
+      const secretName = `mailgun_api_key_${user.id}_${Date.now()}`;
+      const vaultKeyId = await vaultService.createSecret(
+        secretName,
+        apiKey,
+        `Mailgun API key for ${mailgunDomain} - Created: ${new Date().toISOString()}`
+      );
+      
+      console.log(`✅ Mailgun API key securely stored in vault: ${vaultKeyId}`);
+
       const { data: conn, error: connError } = await supabase
         .from('user_integration_credentials')
         .insert({
@@ -235,8 +247,9 @@ export function EnhancedChannelsModal({
           connection_name: connectionName || 'Mailgun Connection',
           credential_type: 'api_key',
           connection_status: 'active',
-          vault_access_token_id: apiKey, // TODO: replace with Vault ID
+          vault_access_token_id: vaultKeyId, // ✅ Now stores vault UUID, not plain text
           external_username: mailgunDomain,
+          scopes_granted: ['send_email'], // ✅ Grant email sending permissions
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
