@@ -323,7 +323,7 @@ export function useAgentGmailPermissions(agentId?: string) {
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           *,
           user_integration_credentials(
@@ -368,7 +368,7 @@ export function useAgentGmailPermissions(agentId?: string) {
     try {
       // Use the correct column names as per the latest schema
       const { error } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .upsert({
           agent_id: agentId,
           user_oauth_connection_id: connectionId,
@@ -401,7 +401,7 @@ export function useAgentGmailPermissions(agentId?: string) {
 
     try {
       const { error } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .update({
           is_active: false,
           updated_at: new Date().toISOString()

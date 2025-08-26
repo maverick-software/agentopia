@@ -58,10 +58,10 @@ async function testAgentPermissions(agentId) {
     }
     
     // 3. Check raw permissions table
-    console.log('\n=== Raw Permissions from agent_oauth_permissions ===\n');
+    console.log('\n=== Raw Permissions from agent_integration_permissions ===\n');
     
     const { data: rawPerms, error: rawError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select(`
         *,
         user_oauth_connections!inner(

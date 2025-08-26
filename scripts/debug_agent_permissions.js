@@ -82,7 +82,7 @@ async function debugAgentPermissions(agentId, userId) {
     // 4. Check agent permissions - Direct query
     console.log('\n=== Agent OAuth Permissions (Direct Query) ===');
     const { data: permissions, error: permError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select('*')
       .eq('agent_id', agentId);
     
@@ -103,7 +103,7 @@ async function debugAgentPermissions(agentId, userId) {
     // 5. Test the exact query used by the chat function
     console.log('\n=== Testing Chat Function Query ===');
     const { data: chatQueryResult, error: chatQueryError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select(`
         allowed_scopes,
         is_active,

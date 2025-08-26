@@ -166,7 +166,7 @@ export function AgentIntegrationAssignment({ agentId }: AgentIntegrationAssignme
       if (isActive) {
         // If enabling, we don't need to do anything special since the permission already exists
         const { error } = await supabase
-          .from('agent_oauth_permissions')
+          .from('agent_integration_permissions')
           .update({ 
             is_active: true,
             updated_at: new Date().toISOString()

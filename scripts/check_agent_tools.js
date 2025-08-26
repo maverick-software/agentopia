@@ -49,7 +49,7 @@ async function checkAgentTools() {
     // Also check agent permissions
     console.log('\nChecking agent permissions...');
     const { data: permissions, error: permError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select(`
         allowed_scopes,
         is_active,

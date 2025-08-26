@@ -162,7 +162,7 @@ export function useAgentWebSearchPermissions(agentId?: string) {
 
     try {
       const { error } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .upsert({
           agent_id: agentId,
           user_oauth_connection_id: connectionId,
@@ -195,7 +195,7 @@ export function useAgentWebSearchPermissions(agentId?: string) {
 
     try {
       const { error } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .update({
           is_active: false,
           updated_at: new Date().toISOString()

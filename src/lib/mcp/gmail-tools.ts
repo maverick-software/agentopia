@@ -244,7 +244,7 @@ export class GmailMCPToolsService {
     try {
       // Get agent's Gmail permissions
       const { data: permissions } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select(`
           allowed_scopes,
           is_active,

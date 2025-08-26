@@ -19,7 +19,7 @@ async function grantGmailPermissions(agentId, connectionId) {
   try {
     // Check if permission already exists
     const { data: existing, error: checkError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select('id, allowed_scopes, is_active')
       .eq('agent_id', agentId)
       .eq('user_oauth_connection_id', connectionId)
@@ -38,7 +38,7 @@ async function grantGmailPermissions(agentId, connectionId) {
       
       // Update existing permission
       const { error: updateError } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .update({
           allowed_scopes: fullScopes,
           permission_level: 'custom',
@@ -56,7 +56,7 @@ async function grantGmailPermissions(agentId, connectionId) {
     } else {
       // Create new permission
       const { error: insertError } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .insert({
           agent_id: agentId,
           user_oauth_connection_id: connectionId,
