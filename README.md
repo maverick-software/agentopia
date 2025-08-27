@@ -1337,8 +1337,10 @@ Located in `services/`. These are designed for persistent execution on a server 
         *   ⚡ **Better Performance**: Local container communication eliminates network latency
     *   **Status:** ✅ **ARCHITECTURE COMPLETE** - Ready for production deployment
     *   **Documentation:** `docs/plans/docker_container_deployment_fix/implementation/enhanced_deployment_architecture.md`
-*   **Large Files:** 
-    *   Some frontend page components may exceed recommended size limits and could benefit from refactoring (e.g., `src/pages/agents/[agentId]/edit.tsx`, `src/pages/DatastoresPage.tsx` - line counts need re-verification).
+*   **✅ MAJOR PROGRESS - Large Files Refactoring:** 
+    *   **EnhancedChannelsModal.tsx**: ✅ **COMPLETE** - Successfully refactored 1,140-line monolith into 14 modular components (384-line main orchestrator + 13 focused components 50-180 lines each). All components Philosophy #1 compliant (≤500 lines), lint-free, and follow modern React patterns.
+    *   **EnhancedToolsModal.tsx**: 🔄 **PENDING** - 1,525-line file requires refactoring using established modular patterns.
+    *   Some frontend page components may still exceed recommended size limits and could benefit from refactoring (e.g., `src/pages/agents/[agentId]/edit.tsx`, `src/pages/DatastoresPage.tsx` - line counts need re-verification).
     *   The core `supabase/functions/chat/index.ts` function is ~695 lines and should be reviewed for refactoring.
 *   **Suboptimal Tokenizer:** The `ContextBuilder` in `supabase/functions/chat/context_builder.ts` uses a basic character count for token estimation; consider replacing with `tiktoken` for accuracy.
 *   **Team Membership Access:** The `fetchWorkspaces` hook doesn't currently grant workspace access based on Team membership; this might need enhancement.
