@@ -1,7 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, AuthError } from '@supabase/supabase-js';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Profile } from '../types';
+
+// Define Profile type locally since it's not imported
+interface Profile {
+  id: string;
+  full_name?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any; // Allow additional fields
+}
 
 interface AuthContextType {
   user: User | null;
@@ -75,10 +83,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user?.id, fetchUserRoles]); // Depend on user.id instead of the whole user object
 
+  // Track the current user ID to prevent unnecessary re-renders on token refresh
+  const currentUserIdRef = useRef<string | undefined>(undefined);
+  
   useEffect(() => {
     setLoading(true); 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log(`[AuthContext] onAuthStateChange event: ${_event}, session: ${session ? 'exists' : 'null'}`);
+      console.log(`[AuthContext] onAuthStateChange event: ${_event}, session: ${session ? 'exists' : 'null'}`, {
+        timestamp: new Date().toISOString(),
+        event: _event
+      });
+      
+      // CRITICAL: Check if this is just a token refresh vs an actual auth change
+      const prevUserId = currentUserIdRef.current;
+      const newUserId = session?.user?.id;
+      
+      // Update the ref for next comparison
+      currentUserIdRef.current = newUserId;
+      
+      // Skip state updates if it's the same user and just a token refresh
+      if (prevUserId && newUserId && prevUserId === newUserId && _event === 'TOKEN_REFRESHED') {
+        console.log('[AuthContext] Token refreshed but same user - SKIPPING state update to prevent re-renders');
+        return; // Don't update state if it's just a token refresh for the same user
+      }
+      
+      // Also skip if event is SIGNED_IN but user hasn't changed
+      if (prevUserId && newUserId && prevUserId === newUserId && _event === 'SIGNED_IN') {
+        console.log('[AuthContext] SIGNED_IN event but same user - SKIPPING state update');
+        return;
+      }
+      
+      console.log('[AuthContext] Auth state actually changed, updating user state');
       setUser(session?.user ?? null); 
       // Set loading false *only* here, after auth state is confirmed by the listener
       if (loading) { // Optional: Check to avoid redundant sets if listener fires multiple times quickly
@@ -104,22 +139,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const handleAuthError = useCallback((error: AuthError) => {
-    switch (error.message) {
-      case 'Invalid login credentials':
-        setError('Invalid email or password. Please check your credentials and try again.');
-        break;
-      case 'User already registered':
-        setError('An account with this email already exists. Please sign in instead.');
-        break;
-      case 'Email rate limit exceeded':
-        setError('Too many attempts. Please try again later.');
-        break;
-      default:
-        setError(error.message);
-    }
-  }, []);
-
+  // Removed unused handleAuthError function
+  // Error messages are set directly in signIn/signUp methods
+  
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -232,7 +254,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAdmin = useMemo(() => userRoles.includes('admin'), [userRoles]);
 
-  const value = {
+  // CRITICAL: Memoize the context value to prevent unnecessary re-renders
+  const value = useMemo(() => ({
     user,
     userRoles,
     isAdmin,
@@ -244,7 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     error,
     clearError,
     updateProfile
-  };
+  }), [user, userRoles, isAdmin, rolesLoading, signIn, signUp, signOut, loading, error, clearError, updateProfile]);
 
   // Logging for debugging
   console.log('[AuthContext Render Check]', {
