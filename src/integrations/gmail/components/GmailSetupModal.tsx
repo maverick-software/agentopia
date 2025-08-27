@@ -51,15 +51,29 @@ export function GmailSetupModal({
   
   const { connection: gmailConnection, initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
 
-  // Debug effect to track modal reloads
+  // Debug effect to track modal reloads and lifecycle
   useEffect(() => {
-    if (isOpen) {
-      console.log('[GmailSetupModal] Modal opened or reloaded', {
-        hasFormData: Object.keys(formData).length > 0,
+    console.log('[GmailSetupModal] Component mounted', {
+      isOpen,
+      hasFormData: Object.keys(formData).length > 0,
+      formData: formData,
+      timestamp: new Date().toISOString()
+    });
+    return () => {
+      console.log('[GmailSetupModal] Component unmounting!!!', {
         formData: formData,
         timestamp: new Date().toISOString()
       });
-    }
+    };
+  }, []);
+  
+  useEffect(() => {
+    console.log('[GmailSetupModal] isOpen changed', {
+      isOpen,
+      hasFormData: Object.keys(formData).length > 0,
+      formData: formData,
+      timestamp: new Date().toISOString()
+    });
   }, [isOpen]);
 
   const handleOAuthSetup = async () => {
