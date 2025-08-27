@@ -42,8 +42,8 @@ export class FunctionCallingManagerLegacy {
   /**
    * Format tool execution result
    */
-  async formatResult(functionName: string, result: any): Promise<string> {
-    return await this.manager.formatResult(functionName, result);
+  formatResult(functionName: string, result: any): string {
+    return this.manager.formatResult(functionName, result);
   }
 
   /**
@@ -61,11 +61,8 @@ export class FunctionCallingManagerLegacy {
   }
 }
 
-// Export the new manager directly
+// Export the new manager as the default for new code
 export { FunctionCallingManager };
 
-// Export the legacy wrapper for backwards compatibility  
-export { FunctionCallingManagerLegacy };
-
-// Default export for backwards compatibility
-export default FunctionCallingManagerLegacy;
+// Export the legacy wrapper as the old name for backwards compatibility
+export { FunctionCallingManagerLegacy as FunctionCallingManager as default };

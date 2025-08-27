@@ -654,9 +654,35 @@ export function EnhancedToolsModal({
                     {renderCapabilitiesBadges(webSearchIntegration?.id)}
                   </div>
                 </div>
-                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                  Connected
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                    Connected
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500"
+                    onClick={async () => {
+                      if (!confirm('Remove all Web Search providers from this agent?')) return;
+                      try {
+                        // Remove all web search provider permissions
+                        for (const connection of webSearchConnections) {
+                          const { error } = await supabase.rpc('revoke_agent_integration_permission', { 
+                            p_permission_id: connection.id 
+                          });
+                          if (error) throw error;
+                        }
+                        await refetchIntegrationPermissions();
+                        toast.success('Web Search tools removed from agent');
+                      } catch (e: any) {
+                        console.error('Remove web search error', e);
+                        toast.error('Failed to remove Web Search tools');
+                      }
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
             );
           }
@@ -690,9 +716,35 @@ export function EnhancedToolsModal({
                     {renderCapabilitiesBadges(emailRelayIntegration?.id)}
                   </div>
                 </div>
-                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                  Connected
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                    Connected
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500"
+                    onClick={async () => {
+                      if (!confirm('Remove all Email Relay providers from this agent?')) return;
+                      try {
+                        // Remove all email relay provider permissions
+                        for (const connection of emailRelayConnections) {
+                          const { error } = await supabase.rpc('revoke_agent_integration_permission', { 
+                            p_permission_id: connection.id 
+                          });
+                          if (error) throw error;
+                        }
+                        await refetchIntegrationPermissions();
+                        toast.success('Email Relay tools removed from agent');
+                      } catch (e: any) {
+                        console.error('Remove email relay error', e);
+                        toast.error('Failed to remove Email Relay tools');
+                      }
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
             );
           }
@@ -717,9 +769,32 @@ export function EnhancedToolsModal({
                     {renderCapabilitiesBadges(matched?.id)}
                   </div>
                 </div>
-                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                  Connected
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                    Connected
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500"
+                    onClick={async () => {
+                      if (!confirm(`Remove ${matched?.name || connection.provider_name} from this agent?`)) return;
+                      try {
+                        const { error } = await supabase.rpc('revoke_agent_integration_permission', { 
+                          p_permission_id: connection.id 
+                        });
+                        if (error) throw error;
+                        await refetchIntegrationPermissions();
+                        toast.success(`${matched?.name || connection.provider_name} removed from agent`);
+                      } catch (e: any) {
+                        console.error('Remove tool error', e);
+                        toast.error(`Failed to remove ${matched?.name || connection.provider_name}`);
+                      }
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
             );
           });
