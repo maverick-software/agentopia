@@ -116,7 +116,7 @@ serve(async (req) => {
         permission_level,
         granted_at,
         granted_by_user_id,
-        user_oauth_connections!inner (
+        user_integration_credentials!inner (
           id,
           connection_name,
           external_username,
@@ -131,7 +131,7 @@ serve(async (req) => {
       `)
       .eq('agent_id', agent_id)
       .eq('is_active', true)
-      .eq('user_oauth_connections.connection_status', 'active')
+      .eq('user_integration_credentials.connection_status', 'active')
       .order('granted_at', { ascending: false })
 
     if (permissionsError) {
@@ -151,13 +151,13 @@ serve(async (req) => {
     const formattedPermissions = (permissions || []).map((item: any) => ({
       permission_id: item.id,
       agent_id: item.agent_id,
-      connection_id: item.user_oauth_connections.id,
-      connection_name: item.user_oauth_connections.connection_name || 
-                      `${item.user_oauth_connections.oauth_providers.display_name} Connection`,
-      external_username: item.user_oauth_connections.external_username,
-      provider_name: item.user_oauth_connections.oauth_providers.name,
-      provider_display_name: item.user_oauth_connections.oauth_providers.display_name,
-      integration_name: item.user_oauth_connections.oauth_providers.display_name,
+      connection_id: item.user_integration_credentials.id,
+      connection_name: item.user_integration_credentials.connection_name || 
+                      `${item.user_integration_credentials.oauth_providers.display_name} Connection`,
+      external_username: item.user_integration_credentials.external_username,
+      provider_name: item.user_integration_credentials.oauth_providers.name,
+      provider_display_name: item.user_integration_credentials.oauth_providers.display_name,
+      integration_name: item.user_integration_credentials.oauth_providers.display_name,
       allowed_scopes: item.allowed_scopes || [],
       is_active: item.is_active,
       permission_level: item.permission_level || 'custom',

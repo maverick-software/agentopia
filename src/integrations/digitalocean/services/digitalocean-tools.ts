@@ -275,8 +275,8 @@ export class DigitalOceanMCPToolsService {
         .from('agent_integration_permissions')
         .select('allowed_scopes, is_active')
         .eq('agent_id', agentId)
-        .eq('user_oauth_connections.user_id', userId)
-        .eq('user_oauth_connections.oauth_providers.name', 'digitalocean')
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'digitalocean')
         .eq('is_active', true)
         .single();
 

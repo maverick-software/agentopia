@@ -84,7 +84,7 @@ serve(async (req) => {
       throw new Error('Agent does not have required permissions for this Gmail operation')
     }
 
-    // Get user's Gmail access token from OAuth connections
+    // Get user's Gmail access token from integration credentials
     // First get the Gmail provider ID
     const { data: gmailProvider, error: providerError } = await supabaseServiceRole
       .from('oauth_providers')
@@ -643,7 +643,7 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
 
   // Update the connection with new token
   await supabase
-    .from('user_oauth_connections')
+    .from('user_integration_credentials')
     .update({
       vault_access_token_id: encryptedAccessToken,
       token_expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),

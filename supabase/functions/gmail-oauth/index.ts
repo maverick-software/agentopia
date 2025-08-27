@@ -31,7 +31,7 @@ async function storeOAuthTokens(
   try {
     console.log('Storing OAuth tokens for user:', userId);
     
-    // Simply return the tokens to be stored directly in the user_oauth_connections table
+    // Simply return the tokens to be stored directly in the user_integration_credentials table
     // The encryption will be handled by your existing table structure
     return {
       accessToken: tokens.access_token,

@@ -1,8 +1,8 @@
 ## Cleanup agent_oauth_permissions table calls ##
 
-There is an old table 'agent_oauth_permissions' that was renamed to 'agent_integration_permissions.' Grep the entire codebase and create a checklist of all the places in the codebase agent_oauth_permissions exists. Then, go through each instance and replace it with the correct table name.
+There is an old table 'agent_oauth_permissions' and another named 'user_oauth_connections' that were consolidated into to 'agent_integration_permissions.' Grep the entire codebase and create a checklist of all the places in the codebase these calls exists. Then, go through each instance and replace it with the correct table name with the correct schema. Make sure the systems work after. Use the @plan_and_execute.mdc protocol.
 
-## Soft Refresh Fix ##
+## Soft Refresh Fix ## (Completed)
 
 There is an issue with the site, where when I leave the page and come back for any reason, it soft refreshes. The problem is I lose data in the modals and other places if I need to tab away for any reason. This needs to be investigated and fixed.
 

@@ -119,7 +119,7 @@ export function useAgentDigitalOceanPermissions(agentId?: string) {
         .from('agent_integration_permissions')
         .select(`
           *,
-          user_oauth_connections!inner (
+          user_integration_credentials!inner (
             id,
             connection_name,
             external_username,
@@ -131,7 +131,7 @@ export function useAgentDigitalOceanPermissions(agentId?: string) {
         `)
         .eq('agent_id', agentId)
         .eq('is_active', true)
-        .eq('user_oauth_connections.oauth_providers.name', 'digitalocean')
+        .eq('user_integration_credentials.oauth_providers.name', 'digitalocean')
         .order('granted_at', { ascending: false });
 
       if (fetchError) throw fetchError;

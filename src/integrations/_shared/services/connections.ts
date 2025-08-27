@@ -28,7 +28,7 @@ export async function fetchUserConnections(
   const { includeRevoked = false, includeExpired = true } = options
 
   // Prefer RPC if available for consistency across UI surfaces
-  const { data, error } = await supabase.rpc('get_user_oauth_connections', {
+  const { data, error } = await supabase.rpc('get_user_integration_credentials', {
     p_user_id: userId,
   })
 
