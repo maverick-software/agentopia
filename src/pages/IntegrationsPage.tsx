@@ -296,12 +296,12 @@ export function IntegrationsPage() {
                 return (
                   <Card 
                     key={integration.id} 
-                    className={`bg-card border-border transition-colors w-full h-[260px] flex flex-col ${
+                    className={`bg-card border-border transition-colors w-full h-[240px] flex flex-col ${
                       isComingSoon ? 'opacity-60' : 'hover:border-muted-foreground'
                     }`}
                   >
-                    {/* Header - Fixed Height: 80px */}
-                    <div className="p-6 pb-3 h-20 flex-shrink-0">
+                    {/* Header - Fixed Height: 72px (reduced from 80px since no Popular badge) */}
+                    <div className="p-6 pb-3 h-[72px] flex-shrink-0">
                       <div className="flex items-start justify-between h-full">
                         <div className="flex items-start space-x-3 min-w-0 flex-1">
                           <div className={`p-2 rounded-lg flex-shrink-0 ${
@@ -317,13 +317,6 @@ export function IntegrationsPage() {
                             }`}>
                               {integration.name}
                             </h3>
-                            <div className="h-5 flex items-center mt-1">
-                              {integration.is_popular && !isComingSoon && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Popular
-                                </Badge>
-                              )}
-                            </div>
                           </div>
                         </div>
                         <div className="flex-shrink-0 ml-2">
@@ -352,19 +345,9 @@ export function IntegrationsPage() {
                       </p>
                     </div>
                     
-                    {/* Connection Status - Fixed Height: 28px */}
+                    {/* Spacer for consistent layout */}
                     <div className="px-6 h-7 flex items-center flex-shrink-0">
-                      {isConnected && !isComingSoon && (
-                        <div className="flex items-center space-x-2 text-sm text-green-600 dark:text-green-400">
-                          <Check className="h-4 w-4" />
-                          <span className="truncate">
-                            Connected
-                            {integration.name === 'Gmail' && gmailConnections.length > 1 && 
-                              ` (${gmailConnections.length} accounts)`
-                            }
-                          </span>
-                        </div>
-                      )}
+                      {/* Connection status removed - state is shown through buttons instead */}
                     </div>
                     
                     {/* Flexible spacer to push buttons to bottom */}
