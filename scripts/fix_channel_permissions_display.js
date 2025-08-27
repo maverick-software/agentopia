@@ -58,7 +58,7 @@ async function fixChannelPermissionsDisplay() {
                 aop.permission_level,
                 aop.granted_at,
                 aop.granted_by_user_id
-            FROM agent_oauth_permissions aop
+            FROM agent_integration_permissions aop
             INNER JOIN user_oauth_connections uoc ON uoc.id = aop.user_oauth_connection_id
             INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
             WHERE aop.agent_id = p_agent_id

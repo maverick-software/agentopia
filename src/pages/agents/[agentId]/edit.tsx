@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
-import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
+import { AgentIntegrationsManager } from '@/integrations/agent-management';
 
 import { AgentTasksManager } from '@/components/agent-edit/AgentTasksManager';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

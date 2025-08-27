@@ -9,7 +9,7 @@
  * - Integration with existing Gmail tools
  */
 
-import { gmailMCPTools, MCPTool, MCPToolResult, MCPToolExecutionContext } from './gmail-tools';
+import { gmailMCPTools, MCPTool, MCPToolResult, MCPToolExecutionContext } from '@/integrations/gmail/services/gmail-tools';
 import { supabase } from '../supabase';
 
 export interface RegisteredTool extends MCPTool {
@@ -347,7 +347,7 @@ export class MCPToolRegistry {
 
       // For Gmail tools, get from static registry
       if (provider === 'gmail') {
-        const gmailTools = await import('./gmail-tools');
+        const gmailTools = await import('@/integrations/gmail/services/gmail-tools');
         return gmailTools.GMAIL_MCP_TOOLS[toolName]?.parameters || null;
       }
 

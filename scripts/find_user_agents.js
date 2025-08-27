@@ -105,7 +105,7 @@ async function checkUserAgents(userId) {
 async function checkAgentGmailPermissions(agentId, userId) {
   // Check permissions
   const { data: permissions, error: permError } = await supabase
-    .from('agent_oauth_permissions')
+    .from('agent_integration_permissions')
     .select(`
       *,
       user_oauth_connections!inner(

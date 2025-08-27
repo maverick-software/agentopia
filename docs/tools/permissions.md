@@ -24,10 +24,10 @@ interface AgentPermission {
 
 ### Database Schema
 
-#### `agent_oauth_permissions`
+#### `agent_integration_permissions`
 
 ```sql
-CREATE TABLE agent_oauth_permissions (
+CREATE TABLE agent_integration_permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
   connection_id UUID NOT NULL REFERENCES user_oauth_connections(id) ON DELETE CASCADE,
@@ -43,7 +43,7 @@ CREATE TABLE agent_oauth_permissions (
 ```sql
 -- Users can only manage permissions for their own agents
 CREATE POLICY "Users can manage their agent permissions"
-ON agent_oauth_permissions
+ON agent_integration_permissions
 FOR ALL
 USING (
   agent_id IN (
@@ -107,7 +107,7 @@ graph TD
     A[User Selects Credential] --> B[AgentIntegrationsManager]
     B --> C[Choose Permissions]
     C --> D[Create Permission Record]
-    D --> E[agent_oauth_permissions table]
+    D --> E[agent_integration_permissions table]
     E --> F[Agent Can Use Tool]
 ```
 
@@ -210,7 +210,7 @@ async function checkAgentPermissions(
   requiredPermission: string
 ): Promise<boolean> {
   const { data: permission } = await supabase
-    .from('agent_oauth_permissions')
+    .from('agent_integration_permissions')
     .select('permissions')
     .eq('agent_id', agentId)
     .eq('connection_id', connectionId)
@@ -238,7 +238,7 @@ async function searchEmails(
   
   // Get permission limits
   const { data: permission } = await supabase
-    .from('agent_oauth_permissions')
+    .from('agent_integration_permissions')
     .select('permissions')
     .eq('agent_id', agentId)
     .eq('connection_id', connectionId)

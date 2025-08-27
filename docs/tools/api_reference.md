@@ -225,12 +225,12 @@ const { error } = await supabase
 
 ---
 
-### agent_oauth_permissions
+### agent_integration_permissions
 
 #### Create Permission
 ```typescript
 const { data, error } = await supabase
-  .from('agent_oauth_permissions')
+  .from('agent_integration_permissions')
   .insert({
     agent_id: agentId,
     connection_id: connectionId,
@@ -245,7 +245,7 @@ const { data, error } = await supabase
 #### Get Agent Permissions
 ```typescript
 const { data, error } = await supabase
-  .from('agent_oauth_permissions')
+  .from('agent_integration_permissions')
   .select(`
     *,
     connection:user_oauth_connections(
@@ -259,7 +259,7 @@ const { data, error } = await supabase
 #### Update Permissions
 ```typescript
 const { error } = await supabase
-  .from('agent_oauth_permissions')
+  .from('agent_integration_permissions')
   .update({ 
     permissions: newPermissions,
     updated_at: new Date().toISOString()
@@ -270,7 +270,7 @@ const { error } = await supabase
 #### Delete Permission
 ```typescript
 const { error } = await supabase
-  .from('agent_oauth_permissions')
+  .from('agent_integration_permissions')
   .delete()
   .eq('id', permissionId);
 ```

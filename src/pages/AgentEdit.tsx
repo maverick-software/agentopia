@@ -5,7 +5,7 @@ import MonacoEditor from 'react-monaco-editor';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { Agent, Datastore } from '../types';
-import { DiscordConnect } from '../components/DiscordConnect';
+import { DiscordConnect } from '@/integrations/discord';
 
 interface Agent {
   id: string;

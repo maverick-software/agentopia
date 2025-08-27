@@ -96,7 +96,7 @@ async function findGmailAgents() {
       
       // Quick check for permissions
       const { data: perms, error: permError } = await supabase
-        .from('agent_oauth_permissions')
+        .from('agent_integration_permissions')
         .select('id')
         .eq('agent_id', agent.id);
       

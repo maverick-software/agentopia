@@ -701,7 +701,7 @@ Full Gmail integration allows agents to send emails on behalf of users through s
 
 *   **`oauth_providers`**: OAuth provider configurations
 *   **`user_oauth_connections`**: User OAuth connections with encrypted tokens
-*   **`agent_oauth_permissions`**: Agent-specific OAuth scope permissions
+*   **`agent_integration_permissions`**: Agent-specific OAuth scope permissions
 
 ### Security Model
 
@@ -727,7 +727,7 @@ Key tables involved in the tool use infrastructure:
 
 * **`oauth_providers`**: Stores OAuth provider configurations (e.g., Gmail, Slack)
 * **`user_oauth_connections`**: Links users to their OAuth connections with encrypted tokens
-* **`agent_oauth_permissions`**: Controls which agents have access to which OAuth scopes
+* **`agent_integration_permissions`**: Controls which agents have access to which OAuth scopes
   * `agent_id`: The agent granted permissions
   * `user_oauth_connection_id`: The OAuth connection to use
   * `allowed_scopes`: JSONB array of granted OAuth scopes (e.g., `["https://www.googleapis.com/auth/gmail.send"]`)
@@ -745,7 +745,7 @@ The system uses PostgreSQL functions to manage tool availability:
 1. **User grants OAuth permissions**: User connects their Gmail/other accounts via OAuth flow
 2. **User assigns permissions to agent**: Through the AgentEdit UI, users grant specific OAuth scopes to agents
 3. **Agent receives user message**: When a user asks an agent to perform an action (e.g., "send an email")
-4. **Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()` (normalizes Gmail scope URIs and consults `agent_oauth_permissions`)
+4. **Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()` (normalizes Gmail scope URIs and consults `agent_integration_permissions`)
 5. **Tools are passed to OpenAI**: Available tools are included in the OpenAI API call as function definitions
 6. **Agent requests tool use**: OpenAI returns tool calls in its response
 7. **System validates and executes**: The system validates permissions and executes the requested tools. The chat function injects the caller JWT into `options.auth.token`; `FunctionCallingManager` forwards it in the `Authorization` header to provider edge functions (e.g., `gmail-api`).
@@ -815,7 +815,7 @@ Agentopia provides comprehensive visibility into tool executions:
 1. **"I don't have the required Gmail permissions" error**:
    - Usually indicates the `get_gmail_tools` RPC function is returning empty
    - Check that `allowed_scopes` column exists (not `granted_scopes`)
-   - Verify the agent_oauth_permissions record exists and is active
+   - Verify the agent_integration_permissions record exists and is active
    - Run `scripts/diagnose_gmail_tools.js <agent_id>` for detailed diagnostics
 
 2. **Tools not appearing in chat**:
@@ -2356,6 +2356,38 @@ This process remains largely the same:
 - The DTMA (Droplet Tool Management Agent) on the shared account droplet communicates directly with **Supabase Edge Functions**.
 - Configure `AGENTOPIA_API_URL` (or a similar variable used by the DTMA, as per WBS 3.1.1.5 and 3.2.2.2) to point directly to your Supabase Edge Functions URL.
 - Ensure robust firewall configurations (e.g., DigitalOcean Cloud Firewalls) and security measures are in place for the account-level DigitalOcean droplets, managed as per the designs in WBS Phase 1.3.
+
+## August 2025 New Chat Protocol Analysis
+
+**Date:** August 26, 2025  
+**Analysis Type:** Comprehensive New Chat Protocol Execution  
+**System Status:** Production-Ready with Critical Fix Pending
+
+### Key Findings:
+- **40+ Supabase Edge Functions** providing comprehensive API coverage
+- **Advanced Container Orchestration** via DTMA with multi-MCP server support
+- **Enterprise-Grade Security** with Supabase Vault and zero plain-text storage
+- **Comprehensive Integration Ecosystem** including email, web research, task automation
+- **Critical Deployment Ready:** Droplet name synchronization bug fix prepared
+
+### Architecture Highlights:
+- React 18/TypeScript frontend with WCAG AA compliant theming
+- Sophisticated PostgreSQL schema with advanced enum systems
+- Revolutionary containerized tool deployment system
+- Multi-provider OAuth integration across Gmail, SendGrid, Mailgun, SMTP
+- Advanced reasoning capability development (15-20% complete)
+
+### Immediate Action Required:
+🚨 **Deploy droplet name synchronization fix** - Complete solution ready for `supabase db push`
+
+### Active Development:
+- Advanced Reasoning Capability (MCP server framework)
+- Account-Wide Knowledge Graph (design phase complete) 
+- Agent Integrations Credentials System (planning phase)
+
+*Full analysis available in `docs/context/ai_context_08262025_081209.md`*
+
+---
 
 ## August 2025 Stabilization Notes
 

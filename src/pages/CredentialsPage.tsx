@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useConnections } from '@/hooks/useConnections';
+import { useConnections } from '@/integrations/_shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, RefreshCw, Trash2, CheckCircle, Shield, Key, ExternalLink, Eye, Calendar } from 'lucide-react';
 import { format } from 'date-fns';

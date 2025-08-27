@@ -19,8 +19,9 @@ import {
     FileText,
     Image
 } from 'lucide-react';
-import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
+import { useIntegrationsByClassification, getAgentIntegrationPermissions } from '@/integrations/_shared';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ToolSelectorProps {
     agentId: string;
@@ -69,6 +70,7 @@ export const ToolSelector: React.FC<ToolSelectorProps> = ({
     const [availableTools, setAvailableTools] = useState<AgentTool[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { user } = useAuth();
     
     const { integrations: toolIntegrations, loading: integrationsLoading } = useIntegrationsByClassification('tool');
 
@@ -82,14 +84,7 @@ export const ToolSelector: React.FC<ToolSelectorProps> = ({
             setError(null);
 
             // Get agent permissions to see which tools are connected
-            const { data: permissions, error: permissionsError } = await supabase.rpc(
-                'get_agent_integration_permissions',
-                { p_agent_id: agentId }
-            );
-
-            if (permissionsError) {
-                console.error('Error fetching agent permissions:', permissionsError);
-            }
+            const permissions = user?.id ? await getAgentIntegrationPermissions(agentId, user.id) : [];
 
             // Combine integrations with permission status
             const tools: AgentTool[] = toolIntegrations.map(integration => {

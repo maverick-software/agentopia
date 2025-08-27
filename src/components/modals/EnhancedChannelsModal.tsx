@@ -31,12 +31,10 @@ import {
   Key
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useGmailConnection } from '@/hooks/useGmailIntegration';
-import { useConnections } from '@/hooks/useConnections';
-import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
+import { useGmailConnection } from '@/integrations/gmail';
+import { useConnections, VaultService, useIntegrationsByClassification, useAgentIntegrationPermissions } from '@/integrations/_shared';
 import { toast } from 'react-hot-toast';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
-import { VaultService } from '@/services/VaultService';
 
 interface EnhancedChannelsModalProps {
   isOpen: boolean;
@@ -136,26 +134,21 @@ export function EnhancedChannelsModal({
     })();
   }, [integrations, supabase]);
 
-  const fetchAgentPermissions = useCallback(async () => {
-    if (!agentId) return;
-    try {
-      const { data, error: rpcError } = await supabase.rpc('get_agent_integration_permissions', { p_agent_id: agentId });
-      if (rpcError) throw rpcError;
-      const rows = (data || []).map((r: any) => ({
-        id: r.permission_id,
-        connection_id: r.connection_id,
-        provider_name: r.provider_name,
-        external_username: r.external_username,
-        is_active: r.is_active,
-        allowed_scopes: r.allowed_scopes || []
-      }));
-      setAgentPermissions(rows);
-    } catch (e) {
-      console.error('Failed fetching agent permissions', e);
-    }
-  }, [agentId, supabase]);
+  // Use the new hook to fetch agent permissions
+  const { permissions: integrationPermissions, refetch: refetchIntegrationPermissions } = useAgentIntegrationPermissions(agentId);
 
-  useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
+  useEffect(() => {
+    // Map integration permissions to the format expected by this component
+    const mappedPermissions = integrationPermissions.map(perm => ({
+      id: perm.permission_id,
+      connection_id: perm.connection_id,
+      provider_name: perm.provider_name,
+      external_username: perm.external_username,
+      is_active: perm.is_active,
+      allowed_scopes: perm.allowed_scopes || []
+    }));
+    setAgentPermissions(mappedPermissions);
+  }, [integrationPermissions]);
 
   // Map DB integrations -> modal service definitions
   const mapIntegrationToService = (integration: { name: string; description?: string }) => {
@@ -180,7 +173,7 @@ export function EnhancedChannelsModal({
     } else if (lower.includes('discord')) {
       id = 'discord';
       gradient = 'from-indigo-500 to-purple-500';
-      type = 'coming_soon';
+      type = 'oauth';
     } else if (lower.includes('slack')) {
       id = 'slack';
       gradient = 'from-green-500 to-teal-500';
@@ -312,35 +305,39 @@ export function EnhancedChannelsModal({
   }, [saved]);
 
   const handleOAuthSetup = async (serviceId: string) => {
-    if (serviceId !== 'gmail') {
+    if (serviceId === 'gmail') {
+      setConnectingService(serviceId);
+      try {
+        console.log('Initiating Gmail OAuth flow');
+        await gmailInitiateOAuth();
+        
+        // Refresh connections to get the latest data and force UI update from authoritative RPC
+        await refetchConnections();
+        // Also refresh agent permissions list so connected badge updates immediately
+        await fetchAgentPermissions();
+        
+        toast.success('Gmail connected successfully! 🎉');
+        setSaved(true);
+        setSetupService(null);
+        
+        // Switch to connected tab to show the new connection
+        setActiveTab('connected');
+        
+      } catch (error: any) {
+        console.error('OAuth flow error:', error);
+        if (!error.message?.includes('cancelled')) {
+          toast.error('Failed to connect Gmail');
+        }
+      } finally {
+        setConnectingService(null);
+      }
+    } else if (serviceId === 'discord') {
+      // For Discord, show setup instructions
+      setSetupService('discord');
+      toast.info('Discord setup requires additional configuration. Please follow the setup form below.');
+    } else {
       toast.info(`${serviceId} integration coming soon! 🚀`);
       return;
-    }
-
-    setConnectingService(serviceId);
-    try {
-      console.log('Initiating Gmail OAuth flow');
-      await gmailInitiateOAuth();
-      
-      // Refresh connections to get the latest data and force UI update from authoritative RPC
-      await refetchConnections();
-      // Also refresh agent permissions list so connected badge updates immediately
-      await fetchAgentPermissions();
-      
-      toast.success('Gmail connected successfully! 🎉');
-      setSaved(true);
-      setSetupService(null);
-      
-      // Switch to connected tab to show the new connection
-      setActiveTab('connected');
-      
-    } catch (error: any) {
-      console.error('OAuth flow error:', error);
-      if (!error.message?.includes('cancelled')) {
-        toast.error('Failed to connect Gmail');
-      }
-    } finally {
-      setConnectingService(null);
     }
   };
 
@@ -546,6 +543,55 @@ export function EnhancedChannelsModal({
   };
 
   const renderSetupFlow = (service: any) => {
+    if (service.id === 'discord') {
+      return (
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <MessageSquare className="h-5 w-5 text-indigo-500" />
+              <span>Discord Bot Setup</span>
+            </CardTitle>
+            <CardDescription>
+              Discord integration requires creating a Discord application and bot
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p><strong>Discord integration is available but requires manual setup:</strong></p>
+                  <p>1. Create a Discord Application at <Button variant="link" className="p-0 h-auto" asChild>
+                    <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">
+                      Discord Developer Portal <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </Button></p>
+                  <p>2. Create a bot and get your bot token</p>
+                  <p>3. Configure the bot in your agent settings</p>
+                </div>
+              </AlertDescription>
+            </Alert>
+
+            <div className="text-sm text-muted-foreground">
+              For now, Discord integration is available through the main agent settings page. 
+              We're working on streamlining this setup process.
+            </div>
+
+            <Button
+              onClick={() => {
+                toast.info('Please configure Discord through the agent edit page for now.');
+                setSetupService(null);
+              }}
+              variant="outline"
+              className="w-full"
+            >
+              Configure in Agent Settings
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
     if (service.type === 'oauth') {
       return (
         <Card className="border-border">
@@ -815,7 +861,8 @@ export function EnhancedChannelsModal({
                       p_agent_id: agentId,
                       p_connection_id: c.connection_id,
                       p_allowed_scopes: defaultScopesForService(service.id),
-                      p_permission_level: 'custom'
+                      p_permission_level: 'custom',
+                      p_user_id: user?.id
                     });
                     if (grantError) throw grantError;
                     await fetchAgentPermissions();
@@ -1073,7 +1120,8 @@ export function EnhancedChannelsModal({
                   p_agent_id: agentId,
                   p_connection_id: editingPermission.connection_id,
                   p_allowed_scopes: selectedScopes,
-                  p_permission_level: 'custom'
+                  p_permission_level: 'custom',
+                  p_user_id: user?.id
                 });
                 if (error) throw error;
                 await fetchAgentPermissions();

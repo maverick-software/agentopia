@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, ChevronDown, BarChart3, Plus, Paperclip, Clock, Pencil, Archive, Share2, Globe } from 'lucide-react';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
-import { useConnections } from '../hooks/useConnections';
+import { useConnections } from '@/integrations/_shared';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1103,9 +1103,7 @@ export function AgentChatPage() {
 	              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
 	            </button>
 	            <div className="flex items-center space-x-3">
-	              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="group flex items-center space-x-3 rounded-md focus:outline-none hover:bg-accent/50 p-1 cursor-pointer">
+                  <div className="flex items-center space-x-3">
 	                    {agent?.avatar_url ? (
 	                      <img 
 	                        src={agent.avatar_url} 
@@ -1119,62 +1117,52 @@ export function AgentChatPage() {
 	                        </span>
 	                      </div>
 	                    )}
-                    <div className="flex items-center">
-                      <div className="text-left">
-                        <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
-                        <DiscreetAIStatusIndicator 
-                          aiState={aiState}
-                          currentTool={currentTool}
-                          agentName={agent?.name || 'Agent'}
-                          isExecuting={aiState === 'executing_tool'}
-                        />
-                      </div>
-                      <ChevronDown className="ml-2 w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
+                    <div className="text-left">
+                      <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
+                      <DiscreetAIStatusIndicator 
+                        aiState={aiState}
+                        currentTool={currentTool}
+                        agentName={agent?.name || 'Agent'}
+                        isExecuting={aiState === 'executing_tool'}
+                      />
                     </div>
-	                  </button>
-	                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48">
-	                  <DropdownMenuItem onClick={() => setShowAboutMeModal(true)} className="cursor-pointer">
-	                    <User className="h-4 w-4 mr-2 text-blue-500" />
-	                    Personality
-	                  </DropdownMenuItem>
-	                  <DropdownMenuItem onClick={() => setShowHowIThinkModal(true)} className="cursor-pointer">
-	                    <Brain className="h-4 w-4 mr-2 text-purple-500" />
-	                    Behavior
-	                  </DropdownMenuItem>
-	                  <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
-	                    <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
-	                    Memory
-	                  </DropdownMenuItem>
-	                  <DropdownMenuSeparator />
-	                  <DropdownMenuItem onClick={() => setShowTeamAssignmentModal(true)} className="cursor-pointer">
-	                    <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
-	                    Add to Team
-	                  </DropdownMenuItem>
-	                </DropdownMenuContent>
-	              </DropdownMenu>
+	                  </div>
 	            </div>
 	          </div>
 	          <div className="flex items-center space-x-2">
-	            {/* Schedule action removed from header */}
+	            {/* Share button */}
+	            <button 
+	              onClick={handleShareConversation} 
+	              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
+	              title="Share conversation"
+	            >
+	              <Share2 className="h-4 w-4 text-muted-foreground" />
+	            </button>
+	            
+	            {/* Agent menu */}
 	            <DropdownMenu>
 	              <DropdownMenuTrigger asChild>
 	                <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
 	                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
 	                </button>
 	              </DropdownMenuTrigger>
-	              <DropdownMenuContent align="end" className="w-44">
-	                <DropdownMenuItem onClick={handleRenameConversation} className="cursor-pointer">
-	                  <Pencil className="h-4 w-4 mr-2" />
-	                  Rename
+	              <DropdownMenuContent align="end" className="w-48">
+	                <DropdownMenuItem onClick={() => setShowAboutMeModal(true)} className="cursor-pointer">
+	                  <User className="h-4 w-4 mr-2 text-blue-500" />
+	                  Personality
 	                </DropdownMenuItem>
-	                <DropdownMenuItem onClick={handleArchiveConversation} className="cursor-pointer">
-	                  <Archive className="h-4 w-4 mr-2" />
-	                  Archive
+	                <DropdownMenuItem onClick={() => setShowHowIThinkModal(true)} className="cursor-pointer">
+	                  <Brain className="h-4 w-4 mr-2 text-purple-500" />
+	                  Behavior
 	                </DropdownMenuItem>
-	                <DropdownMenuItem onClick={handleShareConversation} className="cursor-pointer">
-	                  <Share2 className="h-4 w-4 mr-2" />
-	                  Share link
+	                <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
+	                  <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
+	                  Memory
+	                </DropdownMenuItem>
+	                <DropdownMenuSeparator />
+	                <DropdownMenuItem onClick={() => setShowTeamAssignmentModal(true)} className="cursor-pointer">
+	                  <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
+	                  Add to Team
 	                </DropdownMenuItem>
 	              </DropdownMenuContent>
 	            </DropdownMenu>

@@ -10,13 +10,13 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
 );
 
-console.log('Checking agent_oauth_permissions table schema...\n');
+console.log('Checking agent_integration_permissions table schema...\n');
 
 async function checkSchema() {
   try {
     // Get table information
     const { data, error } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select('*')
       .limit(1);
 
@@ -28,7 +28,7 @@ async function checkSchema() {
     console.log('✅ Table exists!');
     
     if (data && data.length > 0) {
-      console.log('\nColumn names in agent_oauth_permissions:');
+      console.log('\nColumn names in agent_integration_permissions:');
       Object.keys(data[0]).forEach(col => {
         console.log(`  - ${col}: ${typeof data[0][col]}`);
       });
@@ -37,7 +37,7 @@ async function checkSchema() {
       
       // Try to get column info directly
       const { data: columns, error: colError } = await supabase.rpc('get_table_columns', {
-        table_name: 'agent_oauth_permissions'
+        table_name: 'agent_integration_permissions'
       }).catch(() => ({ data: null, error: 'RPC not available' }));
       
       if (columns) {
@@ -48,7 +48,7 @@ async function checkSchema() {
     // Check if we can query allowed_scopes
     console.log('\n\nChecking if allowed_scopes column exists...');
     const { data: allowedData, error: allowedError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select('allowed_scopes')
       .limit(1);
       
@@ -61,7 +61,7 @@ async function checkSchema() {
     // Check if we can query granted_scopes
     console.log('\nChecking if granted_scopes column exists...');
     const { data: grantedData, error: grantedError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select('granted_scopes')
       .limit(1);
       

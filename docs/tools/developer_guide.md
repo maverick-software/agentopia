@@ -440,7 +440,7 @@ SELECT
   a.name as agent_name,
   p.display_name as provider,
   ap.permissions
-FROM agent_oauth_permissions ap
+FROM agent_integration_permissions ap
 JOIN agents a ON ap.agent_id = a.id
 JOIN user_oauth_connections c ON ap.connection_id = c.id
 JOIN oauth_providers p ON c.provider_id = p.id;

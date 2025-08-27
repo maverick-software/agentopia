@@ -58,8 +58,8 @@ import {
 import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
-import { GmailCallbackPage } from '../pages/integrations/GmailCallbackPage';
-import { SMTPIntegrationsPage } from '../pages/integrations/SMTPIntegrationsPage';
+import { GmailCallbackPage } from '@/integrations/gmail';
+import { SMTPIntegrationsPage } from '@/integrations/smtp';
 import GraphSettingsPage from '../pages/GraphSettingsPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version

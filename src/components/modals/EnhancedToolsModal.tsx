@@ -36,9 +36,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
-import { useWebSearchConnection } from '@/hooks/useWebSearchIntegration';
-import { useConnections } from '@/hooks/useConnections';
-import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
+import { useWebSearchConnection } from '@/integrations/web-search';
+import { useConnections, useIntegrationsByClassification, useAgentIntegrationPermissions, VaultService } from '@/integrations/_shared';
 import { ZapierMCPModal } from './ZapierMCPModal';
 import { toast } from 'react-hot-toast';
 
@@ -217,27 +216,21 @@ export function EnhancedToolsModal({
     })();
   }, [integrations, supabase]);
 
-  // Fetch agent permissions (tools)
-  const fetchAgentPermissions = useCallback(async () => {
-    if (!agentId) return;
-    try {
-      const { data, error: rpcError } = await supabase.rpc('get_agent_integration_permissions', { p_agent_id: agentId });
-      if (rpcError) throw rpcError;
-      const rows = (data || []).map((r: any) => ({
-        id: r.permission_id,
-        connection_id: r.connection_id,
-        provider_name: r.provider_name,
-        external_username: r.external_username,
-        is_active: r.is_active,
-        allowed_scopes: r.allowed_scopes || []
-      }));
-      setAgentPermissions(rows);
-    } catch (e) {
-      console.error('Failed fetching agent tool permissions', e);
-    }
-  }, [agentId, supabase]);
+  // Use the new hook to fetch agent permissions
+  const { permissions: integrationPermissions, refetch: refetchIntegrationPermissions } = useAgentIntegrationPermissions(agentId);
 
-  useEffect(() => { fetchAgentPermissions(); }, [fetchAgentPermissions]);
+  useEffect(() => {
+    // Map integration permissions to the format expected by this component
+    const mappedPermissions = integrationPermissions.map(perm => ({
+      id: perm.permission_id,
+      connection_id: perm.connection_id,
+      provider_name: perm.provider_name,
+      external_username: perm.external_username,
+      is_active: perm.is_active,
+      allowed_scopes: perm.allowed_scopes || []
+    }));
+    setAgentPermissions(mappedPermissions);
+  }, [integrationPermissions]);
 
   // Check for existing Zapier MCP connection
   useEffect(() => {
@@ -451,7 +444,14 @@ export function EnhancedToolsModal({
   };
 
   const renderCredentialSelector = (provider: string, integrationId?: string) => {
-    const creds = connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    // For web search, check all web search provider types
+    const isWebSearch = provider === 'web search' || provider === 'web_search' || provider.toLowerCase().includes('web search');
+    const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
+    
+    const creds = isWebSearch 
+      ? connections.filter(c => webSearchProviders.includes(c.provider_name) && c.connection_status === 'active')
+      : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    
     return (
       <Card className="border-border">
         <CardHeader>
@@ -483,11 +483,12 @@ export function EnhancedToolsModal({
                     const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
                       p_agent_id: agentId,
                       p_connection_id: c.connection_id,
-                      p_allowed_scopes: defaultScopesForProvider(provider),
-                      p_permission_level: 'custom'
+                      p_allowed_scopes: defaultScopesForProvider(c.provider_name), // Use actual provider name from connection
+                      p_permission_level: 'custom',
+                      p_user_id: user?.id // Add user_id to disambiguate function overload
                     });
                     if (grantError) throw grantError;
-                    await fetchAgentPermissions();
+                    await refetchIntegrationPermissions();
                     setSelectingCredentialFor(null);
                     setActiveTab('connected');
                   } catch (e) {
@@ -502,6 +503,25 @@ export function EnhancedToolsModal({
               </Button>
             </div>
           ))}
+          
+          {/* Add new connection button */}
+          <div className="flex items-center justify-between p-3 border border-dashed border-muted-foreground/30 rounded">
+            <div className="text-sm">
+              <div className="font-medium text-muted-foreground">Add new connection</div>
+              <div className="text-muted-foreground text-xs">Create a new {isWebSearch ? 'web search' : provider} connection</div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelectingCredentialFor(null);
+                setSetupService(provider);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add New
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -854,6 +874,163 @@ export function EnhancedToolsModal({
     );
   };
 
+  const renderDigitalOceanSetup = (tool: any) => {
+    const handleDigitalOceanSetup = async () => {
+      if (!user || !apiKey.trim()) {
+        setError('API token is required');
+        return;
+      }
+
+      setConnectingService('digitalocean');
+      setError(null);
+
+      try {
+        // Get DigitalOcean OAuth provider
+        const { data: providerData, error: providerError } = await supabase
+          .from('oauth_providers')
+          .select('id')
+          .eq('name', 'digitalocean')
+          .single();
+
+        if (providerError) throw providerError;
+
+        // Store API key securely in vault
+        const vaultService = new VaultService(supabase);
+        const secretName = `digitalocean_api_key_${user.id}_${Date.now()}`;
+        const vaultKeyId = await vaultService.createSecret(
+          secretName,
+          apiKey,
+          `DigitalOcean API key - Created: ${new Date().toISOString()}`
+        );
+
+        console.log(`✅ DigitalOcean API key securely stored in vault: ${vaultKeyId}`);
+
+        // Create connection record
+        const { error: insertError } = await supabase
+          .from('user_integration_credentials')
+          .insert({
+            user_id: user.id,
+            oauth_provider_id: providerData.id,
+            external_user_id: user.id,
+            external_username: connectionName || 'DigitalOcean Connection',
+            connection_name: connectionName || 'DigitalOcean Connection',
+            encrypted_access_token: null,
+            vault_access_token_id: vaultKeyId,
+            scopes_granted: ['droplet:read', 'image:read', 'region:read', 'size:read'],
+            connection_status: 'active',
+            credential_type: 'api_key'
+          });
+
+        if (insertError) throw insertError;
+
+        toast.success('DigitalOcean API key connected successfully! 🎉');
+        
+        // Reset form and refresh connections
+        setApiKey('');
+        setConnectionName('');
+        setSetupService(null);
+        await refetchConnections();
+        
+        // Switch to connected tab
+        setActiveTab('connected');
+
+      } catch (err: any) {
+        console.error('Error connecting DigitalOcean API key:', err);
+        setError(err.message || 'Failed to connect DigitalOcean API key');
+        toast.error('Failed to connect DigitalOcean API key');
+      } finally {
+        setConnectingService(null);
+      }
+    };
+
+    return (
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Wrench className="h-5 w-5 text-blue-500" />
+            <span>DigitalOcean Setup</span>
+          </CardTitle>
+          <CardDescription>
+            Connect your DigitalOcean account to manage droplets and infrastructure.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="do_connection_name">
+              Connection Name (Optional)
+            </Label>
+            <Input
+              id="do_connection_name"
+              value={connectionName}
+              onChange={(e) => setConnectionName(e.target.value)}
+              placeholder="My DigitalOcean Connection"
+              className="mt-1"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="do_api_key">
+              DigitalOcean API Token
+            </Label>
+            <Input
+              id="do_api_key"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter your DigitalOcean API token"
+              className="mt-1"
+            />
+          </div>
+
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <p><strong>Required scopes:</strong> Read access to droplets, images, regions, and sizes</p>
+                <p>
+                  <Button variant="link" className="p-0 h-auto" asChild>
+                    <a 
+                      href="https://cloud.digitalocean.com/account/api/tokens" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      Get API Token <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </Button>
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <Button
+            onClick={handleDigitalOceanSetup}
+            disabled={!apiKey || connectingService === 'digitalocean'}
+            className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 text-white"
+          >
+            {connectingService === 'digitalocean' ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                <Key className="h-4 w-4 mr-2" />
+                Connect DigitalOcean
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderAvailableTools = () => {
     return (
       <div className="space-y-6">
@@ -881,6 +1058,25 @@ export function EnhancedToolsModal({
                     <Button variant="ghost" size="sm" onClick={() => { setSetupService(null); resetForm(); }}>Cancel</Button>
                   </div>
                   {renderApiKeySetup({ id: 'web_search', name: display } as any)}
+                </div>
+              );
+            }
+
+            if (isSetupMode && (provider === 'digitalocean' || integration.name.toLowerCase() === 'digitalocean')) {
+              // Show API key setup for DigitalOcean integration
+              const display = integration.name;
+              return (
+                <div key={integration.id} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-medium">{display}</h4>
+                        <Badge variant="outline" className="text-xs">Setting up...</Badge>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => { setSetupService(null); resetForm(); }}>Cancel</Button>
+                  </div>
+                  {renderDigitalOceanSetup({ id: 'digitalocean', name: display } as any)}
                 </div>
               );
             }
@@ -919,9 +1115,34 @@ export function EnhancedToolsModal({
                   ) : (
                     <Button
                       onClick={() => {
-                        // For Web Search integration, show API key setup with provider selection
+                        // For Web Search integration, check existing connections first
                         if (provider === 'web search' || provider === 'web_search' || integration.name.toLowerCase() === 'web search') {
-                          setSetupService(provider);
+                          // Check if there are existing web search connections
+                          const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
+                          const existingWebSearchConnections = connections.filter(c => 
+                            webSearchProviders.includes(c.provider_name) && c.connection_status === 'active'
+                          );
+                          
+                          if (existingWebSearchConnections.length > 0) {
+                            // Show credential selector if existing connections found
+                            setSelectingCredentialFor(provider);
+                          } else {
+                            // Show setup form if no existing connections
+                            setSetupService(provider);
+                          }
+                        } else if (provider === 'digitalocean' || integration.name.toLowerCase() === 'digitalocean') {
+                          // For DigitalOcean, check existing connections first
+                          const existingDigitalOceanConnections = connections.filter(c => 
+                            c.provider_name === 'digitalocean' && c.connection_status === 'active'
+                          );
+                          
+                          if (existingDigitalOceanConnections.length > 0) {
+                            // Show credential selector if existing connections found
+                            setSelectingCredentialFor(provider);
+                          } else {
+                            // Show API key setup form for DigitalOcean
+                            setSetupService(provider);
+                          }
                         } else {
                           // For other integrations, use credential selection
                           setSelectingCredentialFor(provider);

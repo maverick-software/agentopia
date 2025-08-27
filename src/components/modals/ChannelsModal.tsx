@@ -8,7 +8,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { AgentIntegrationsManager } from '@/components/agent-edit/AgentIntegrationsManager';
+import { AgentIntegrationsManager } from '@/integrations/agent-management';
 import { 
   Loader2, 
   Check

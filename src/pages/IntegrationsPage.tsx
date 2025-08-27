@@ -21,14 +21,13 @@ import {
   Clock,
   AlertCircle,
   ChevronRight,
-  Mail
+  Mail,
+  Server
 } from 'lucide-react';
-import { useIntegrationCategories, useIntegrationsByCategory } from '@/hooks/useIntegrations';
+import { useIntegrationCategories, useIntegrationsByCategory, useConnections } from '@/integrations/_shared';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useConnections } from '@/hooks/useConnections';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
-import { useGmailConnection } from '@/hooks/useGmailIntegration';
-import { useSMTPConfigurations } from '@/hooks/useSMTPConfigurations';
+import { useGmailConnection } from '@/integrations/gmail';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -87,46 +86,10 @@ export function IntegrationsPage() {
   );
   const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
-  const { configurations: smtpConfigurations } = useSMTPConfigurations();
 
-  // Override integration status - Gmail, SendGrid, Mailgun, SMTP and Web Search providers are available
+  // Use the actual status from the database - no hardcoded overrides
   const getEffectiveStatus = (integration: any) => {
-    // Gmail is available
-    if (integration.name === 'Gmail') {
-      return 'available';
-    }
-    
-    // SendGrid is available
-    if (integration.name === 'SendGrid') {
-      return 'available';
-    }
-    
-    // Mailgun is available
-    if (integration.name === 'Mailgun') {
-      return 'available';
-    }
-    
-    // SMTP is available
-    if (integration.name === 'SMTP') {
-      return 'available';
-    }
-    
-    // Unified Web Search integration is available
-    if (integration.name === 'Web Search') {
-      return 'available';
-    }
-    
-    // Legacy web search providers are deprecated (but keep them available for existing connections)
-    if (['Serper API', 'SerpAPI', 'Brave Search API'].includes(integration.name)) {
-      return 'deprecated';
-    }
-    // Pinecone & GetZep API key integrations are available
-    if (['Pinecone', 'GetZep'].includes(integration.name)) {
-      return 'available';
-    }
-    
-    // Everything else is coming soon
-    return 'coming_soon';
+    return integration.status || 'coming_soon';
   };
 
   const getIconComponent = (iconName: string) => {
@@ -147,6 +110,8 @@ export function IntegrationsPage() {
         return Zap;
       case 'Search':
         return Search;
+      case 'Server':
+        return Server;
       default:
         return Settings;
     }
@@ -166,12 +131,8 @@ export function IntegrationsPage() {
     switch (name) {
       case 'Gmail':
         return 'gmail';
-      case 'SendGrid':
-        return 'sendgrid';
-      case 'Mailgun':
-        return 'mailgun';
-      case 'SMTP':
-        return 'smtp';
+      case 'Email Relay':
+        return 'email_relay'; // Unified email service
       case 'Web Search':
         return 'web_search'; // Unified web search - will check all providers
       case 'Serper API':
@@ -184,17 +145,16 @@ export function IntegrationsPage() {
         return 'pinecone';
       case 'GetZep':
         return 'getzep';
+      case 'DigitalOcean':
+        return 'digitalocean';
+      case 'Discord':
+        return 'discord';
       default:
         return null;
     }
   };
 
   const isIntegrationConnected = (integrationName: string) => {
-    // Handle SMTP specially - check if any active SMTP configurations exist
-    if (integrationName === 'SMTP') {
-      return smtpConfigurations.some(config => config.is_active);
-    }
-    
     const provider = providerNameForIntegration(integrationName);
     if (!provider) return false;
     
@@ -203,6 +163,14 @@ export function IntegrationsPage() {
       const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
       return unifiedConnections.some(c => 
         webSearchProviders.includes(c.provider_name) && c.connection_status === 'active'
+      );
+    }
+    
+    // For unified Email Relay, check if any email provider is connected
+    if (provider === 'email_relay') {
+      const emailProviders = ['smtp', 'sendgrid', 'mailgun'];
+      return unifiedConnections.some(c => 
+        emailProviders.includes(c.provider_name) && c.connection_status === 'active'
       );
     }
     
@@ -219,11 +187,6 @@ export function IntegrationsPage() {
     setSelectedIntegration(null);
     // Refresh unified connections for live status
     refetchConnections();
-    // Refresh SMTP configurations if needed
-    if (selectedIntegration?.name === 'SMTP') {
-      // The SMTP configurations will be refreshed automatically by the hook
-      window.location.reload(); // Simple refresh to update the UI
-    }
   };
 
   // Ensure modal does not persist when navigating between routes
@@ -319,144 +282,139 @@ export function IntegrationsPage() {
                 return (
                   <Card 
                     key={integration.id} 
-                    className={`bg-card border-border transition-colors ${
+                    className={`bg-card border-border transition-colors w-full h-[260px] flex flex-col ${
                       isComingSoon ? 'opacity-60' : 'hover:border-muted-foreground'
                     }`}
                   >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className={`p-2 rounded-lg ${
+                    {/* Header - Fixed Height: 80px */}
+                    <div className="p-6 pb-3 h-20 flex-shrink-0">
+                      <div className="flex items-start justify-between h-full">
+                        <div className="flex items-start space-x-3 min-w-0 flex-1">
+                          <div className={`p-2 rounded-lg flex-shrink-0 ${
                             isComingSoon ? 'bg-muted/50' : 'bg-muted'
                           }`}>
                             <IconComponent className={`h-5 w-5 ${
                               isComingSoon ? 'text-muted-foreground' : 'text-primary'
                             }`} />
                           </div>
-                          <div>
-                            <CardTitle className={`text-lg font-semibold ${
+                          <div className="min-w-0 flex-1">
+                            <h3 className={`text-lg font-semibold leading-tight truncate ${
                               isComingSoon ? 'text-muted-foreground' : 'text-card-foreground'
                             }`}>
                               {integration.name}
-                            </CardTitle>
-                            {integration.is_popular && !isComingSoon && (
-                              <Badge variant="secondary" className="mt-1 text-xs">
-                                Popular
-                              </Badge>
-                            )}
+                            </h3>
+                            <div className="h-5 flex items-center mt-1">
+                              {integration.is_popular && !isComingSoon && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Popular
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          {!isComingSoon && statusIcon}
+                        <div className="flex-shrink-0 ml-2">
                           <Badge className={getStatusColor(effectiveStatus)}>
                             {getStatusText(effectiveStatus)}
                           </Badge>
                         </div>
                       </div>
-                    </CardHeader>
+                    </div>
                     
-                    <CardContent className="space-y-4">
-                      <p className={`text-sm line-clamp-3 ${
-                        isComingSoon ? 'text-muted-foreground/50' : 'text-muted-foreground'
-                      }`}>
-                        {integration.description}
+                    {/* Description - Fixed Height: 54px for up to 3 lines */}
+                    <div className="px-6 h-[54px] flex-shrink-0">
+                      <p 
+                        className={`text-sm leading-[18px] overflow-hidden ${
+                          isComingSoon ? 'text-muted-foreground/50' : 'text-muted-foreground'
+                        }`} 
+                        style={{ 
+                          height: '54px',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          lineHeight: '18px'
+                        }}
+                      >
+                        {integration.description || 'Integration description not yet available.'}
                       </p>
-                      
+                    </div>
+                    
+                    {/* Connection Status - Fixed Height: 28px */}
+                    <div className="px-6 h-7 flex items-center flex-shrink-0">
                       {isConnected && !isComingSoon && (
                         <div className="flex items-center space-x-2 text-sm text-green-600 dark:text-green-400">
                           <Check className="h-4 w-4" />
-                          <span>
+                          <span className="truncate">
                             Connected
                             {integration.name === 'Gmail' && gmailConnections.length > 1 && 
                               ` (${gmailConnections.length} accounts)`
                             }
-                            {integration.name === 'SMTP' && smtpConfigurations.length > 0 && 
-                              ` (${smtpConfigurations.filter(c => c.is_active).length} configurations)`
-                            }
                           </span>
                         </div>
                       )}
-                      
-                      <div className="flex items-center space-x-2">
-                        {isConnected && !isComingSoon ? (
-                          <div className="flex w-full gap-2">
-                            {/* Add Another Account when already connected (Gmail only) */}
-                            {integration.name === 'Gmail' ? (
-                              <Button
-                                onClick={() => handleAddCredentials(integration)}
-                                size="sm"
-                                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Another Account
-                              </Button>
-                            ) : integration.name === 'SMTP' ? (
-                              <Button
-                                onClick={() => handleAddCredentials(integration)}
-                                size="sm"
-                                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Configuration
-                              </Button>
-                            ) : (
-                              <span className="flex-1" />
-                            )}
-                            {/* Manage should navigate to appropriate page */}
-                            {integration.name === 'SMTP' ? (
-                              <Link to="/integrations/smtp" className="flex-1">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="w-full border-border text-foreground hover:bg-accent"
-                                >
-                                  <Settings className="h-4 w-4 mr-2" />
-                                  Manage
-                                </Button>
-                              </Link>
-                            ) : (
-                              <Link to="/credentials" className="flex-1">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="w-full border-border text-foreground hover:bg-accent"
-                                >
-                                  <Settings className="h-4 w-4 mr-2" />
-                                  Manage
-                                </Button>
-                              </Link>
-                            )}
-                          </div>
-                        ) : (
-                          <Button 
-                            onClick={() => handleAddCredentials(integration)}
-                            className={`w-full ${
-                              isComingSoon 
-                                ? 'bg-muted hover:bg-muted text-muted-foreground cursor-not-allowed' 
-                                : 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                            }`}
-                            disabled={isComingSoon}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            {isComingSoon ? 'Coming Soon' : 'Add Credentials'}
-                          </Button>
-                        )}
-                      </div>
-                      
-                      {integration.documentation_url && !isComingSoon && (
-                        <div className="pt-2 border-t border-border">
-                          <a 
-                            href={integration.documentation_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:text-primary/80 flex items-center"
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            View Documentation
-                          </a>
+                    </div>
+                    
+                    {/* Flexible spacer to push buttons to bottom */}
+                    <div className="flex-1"></div>
+                    
+                    {/* Button Section - Fixed Height: 40px */}
+                    <div className="px-6 h-10 flex items-center flex-shrink-0 mb-2">
+                      {isConnected && !isComingSoon ? (
+                        <div className="flex w-full gap-2">
+                          {integration.name === 'Gmail' ? (
+                            <Button
+                              onClick={() => handleAddCredentials(integration)}
+                              size="sm"
+                              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Another Account
+                            </Button>
+                          ) : (
+                            <span className="flex-1" />
+                          )}
+                          <Link to="/credentials" className="flex-1">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full border-border text-foreground hover:bg-accent"
+                            >
+                              <Settings className="h-4 w-4 mr-2" />
+                              Manage
+                            </Button>
+                          </Link>
                         </div>
+                      ) : (
+                        <Button 
+                          onClick={() => handleAddCredentials(integration)}
+                          className={`w-full ${
+                            isComingSoon 
+                              ? 'bg-muted hover:bg-muted text-muted-foreground cursor-not-allowed' 
+                              : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                          }`}
+                          disabled={isComingSoon}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          {isComingSoon ? 'Coming Soon' : 'Add Credentials'}
+                        </Button>
                       )}
-                    </CardContent>
+                    </div>
+                    
+                    {/* Documentation Link - Reduced spacing */}
+                    <div className="px-6 border-t border-border h-9 flex items-center flex-shrink-0">
+                      {integration.documentation_url && !isComingSoon ? (
+                        <a 
+                          href={integration.documentation_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:text-primary/80 flex items-center"
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          View Documentation
+                        </a>
+                      ) : (
+                        <div className="h-4"></div>
+                      )}
+                    </div>
                   </Card>
                 );
               })}

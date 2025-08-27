@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit2, Database, RefreshCw, X, Brain, Loader2 } from 'luc
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import type { Datastore as DatastoreType } from '../types';
-import { CredentialSelector } from '@/components/integrations/CredentialSelector';
+import { CredentialSelector } from '@/integrations/_shared';
 
 type ExtendedDatastore = DatastoreType & {
   agent_datastores?: Array<{ agent_id: string }>;

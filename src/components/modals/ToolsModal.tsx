@@ -31,7 +31,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useIntegrationsByClassification } from '@/hooks/useIntegrations';
+import { useIntegrationsByClassification } from '@/integrations/_shared';
 import { toast } from 'react-hot-toast';
 
 interface ToolsModalProps {

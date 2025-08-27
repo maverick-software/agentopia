@@ -49,7 +49,7 @@ async function checkRecentAgents() {
         
         // Check permissions for Gmail agents
         const { data: permissions, error: permError } = await supabase
-          .from('agent_oauth_permissions')
+          .from('agent_integration_permissions')
           .select(`
             *,
             user_oauth_connections!inner(

@@ -43,7 +43,7 @@ async function diagnoseGmailTools(agentId, userId) {
     
     // First, check if permissions exist at all
     const { data: allPermissions, error: allPermError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select('*')
       .eq('agent_id', agentId);
     
@@ -58,7 +58,7 @@ async function diagnoseGmailTools(agentId, userId) {
     
     // Now run the exact query used in getGmailTools
     const { data: gmailPerms, error: gmailError } = await supabase
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select(`
         allowed_scopes,
         is_active,
