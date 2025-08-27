@@ -12,11 +12,12 @@ import {
   ExternalLink,
   Key
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { IntegrationSetupProps } from '../../_shared/types/IntegrationSetup';
 import { VaultService } from '../../_shared';
 import { SMTP_PROVIDER_PRESETS } from '../../smtp/types/smtp';
+import { useFormModalState } from '../../../hooks/useModalState';
 
 // Email providers for Email Relay integration
 const EMAIL_PROVIDERS = [
@@ -60,44 +61,68 @@ export function EmailRelaySetupModal({
   supabase
 }: IntegrationSetupProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedSMTPPreset, setSelectedSMTPPreset] = useState<any>(null);
   
-  // Form state
-  const [formData, setFormData] = useState({
-    connection_name: '',
-    selected_provider: 'sendgrid',
-    // SendGrid fields
-    api_key: '',
-    from_email: '',
-    from_name: '',
-    // Mailgun fields
-    domain: '',
-    region: 'US',
-    // SMTP fields
-    host: '',
-    port: '587',
-    secure: false,
-    username: '',
-    password: '',
-    reply_to_email: '',
-    smtp_preset: ''
-  });
+  // Use protected form state that persists across tab switches
+  const {
+    formData,
+    errors,
+    updateFormField,
+    setFieldError,
+    clearErrors
+  } = useFormModalState(
+    {
+      connection_name: '',
+      selected_provider: 'sendgrid',
+      // SendGrid fields
+      api_key: '',
+      from_email: '',
+      from_name: '',
+      // Mailgun fields
+      domain: '',
+      region: 'US',
+      // SMTP fields
+      host: '',
+      port: '587',
+      secure: false,
+      username: '',
+      password: '',
+      reply_to_email: '',
+      smtp_preset: ''
+    },
+    {
+      preserveOnHidden: true,
+      preserveOnBlur: true,
+      onCleanup: () => {
+        console.log('[EmailRelaySetupModal] Form state cleaned up');
+        setSelectedSMTPPreset(null);
+      }
+    }
+  );
+
+  // Debug effect to track modal reloads
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[EmailRelaySetupModal] Modal opened or reloaded', {
+        hasFormData: Object.keys(formData).length > 0,
+        formData: formData,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [isOpen]);
 
   const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
+    updateFormField(field, value);
   };
 
   const handleSMTPPresetSelect = (preset: any) => {
     setSelectedSMTPPreset(preset);
-    setFormData(prev => ({
-      ...prev,
-      host: preset.host,
-      port: preset.port.toString(),
-      secure: preset.secure,
-      connection_name: prev.connection_name || preset.displayName
-    }));
+    updateFormField('host', preset.host);
+    updateFormField('port', preset.port.toString());
+    updateFormField('secure', preset.secure);
+    if (!formData.connection_name) {
+      updateFormField('connection_name', preset.displayName);
+    }
   };
 
   // Memoized form validation to prevent infinite re-renders
@@ -248,7 +273,7 @@ export function EmailRelaySetupModal({
           scopes_granted: getProviderScopes(formData.selected_provider),
           connection_status: 'active',
           credential_type: selectedProvider.credentialType,
-          metadata: metadata
+          connection_metadata: metadata
         })
         .select('*')
         .single();
@@ -313,7 +338,8 @@ export function EmailRelaySetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   const selectedProvider = EMAIL_PROVIDERS.find(p => p.id === formData.selected_provider);
 

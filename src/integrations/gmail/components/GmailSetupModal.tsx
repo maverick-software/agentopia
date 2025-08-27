@@ -10,10 +10,11 @@ import {
   AlertCircle,
   Mail
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { IntegrationSetupProps } from '../../_shared/types/IntegrationSetup';
 import { useGmailConnection } from '../hooks/useGmailIntegration';
+import { useFormModalState } from '../../../hooks/useModalState';
 
 /**
  * Gmail Integration Setup Modal
@@ -28,10 +29,38 @@ export function GmailSetupModal({
   user
 }: IntegrationSetupProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [connectionName, setConnectionName] = useState('');
+  
+  // Use protected form state that persists across tab switches
+  const {
+    formData,
+    errors,
+    updateFormField,
+    setFieldError
+  } = useFormModalState(
+    {
+      connectionName: ''
+    },
+    {
+      preserveOnHidden: true,
+      preserveOnBlur: true,
+      onCleanup: () => {
+        console.log('[GmailSetupModal] Form state cleaned up');
+      }
+    }
+  );
   
   const { connection: gmailConnection, initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
+
+  // Debug effect to track modal reloads
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[GmailSetupModal] Modal opened or reloaded', {
+        hasFormData: Object.keys(formData).length > 0,
+        formData: formData,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [isOpen]);
 
   const handleOAuthSetup = async () => {
     if (!user) return;
@@ -46,7 +75,7 @@ export function GmailSetupModal({
       // Success! The Gmail connection should now be established
       onSuccess({
         connection_id: gmailConnection?.id || 'gmail-connection',
-        connection_name: connectionName || 'Gmail Connection',
+        connection_name: formData.connectionName || 'Gmail Connection',
         provider_name: 'gmail',
         external_username: gmailConnection?.external_username,
         scopes_granted: [
@@ -62,7 +91,7 @@ export function GmailSetupModal({
     } catch (err: any) {
       console.error('Gmail OAuth error:', err);
       const errorMessage = err.message || 'Failed to connect Gmail';
-      setError(errorMessage);
+      setFieldError('connectionName', errorMessage);
       onError(errorMessage);
       if (!err.message?.includes('cancelled')) {
         toast.error('Failed to connect Gmail');
@@ -72,7 +101,8 @@ export function GmailSetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   return (
     <div className="space-y-6">
@@ -99,10 +129,10 @@ export function GmailSetupModal({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error && (
+          {errors.connectionName && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{errors.connectionName}</AlertDescription>
             </Alert>
           )}
 
@@ -112,8 +142,8 @@ export function GmailSetupModal({
             </Label>
             <Input
               id="connection_name"
-              value={connectionName}
-              onChange={(e) => setConnectionName(e.target.value)}
+              value={formData.connectionName}
+              onChange={(e) => updateFormField('connectionName', e.target.value)}
               placeholder="My Gmail Connection"
               className="mt-1"
             />

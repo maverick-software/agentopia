@@ -101,7 +101,7 @@ export function SendGridSetupModal({
           connection_status: 'active',
           credential_type: 'api_key',
           // Store SendGrid-specific configuration
-          metadata: {
+          connection_metadata: {
             from_email: formData.from_email,
             from_name: formData.from_name,
             provider: 'sendgrid'
@@ -146,7 +146,8 @@ export function SendGridSetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   return (
     <div className="space-y-6">

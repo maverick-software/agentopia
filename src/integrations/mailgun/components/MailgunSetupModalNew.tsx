@@ -101,7 +101,7 @@ export function MailgunSetupModal({
           connection_status: 'active',
           credential_type: 'api_key',
           // Store Mailgun-specific configuration
-          metadata: {
+          connection_metadata: {
             domain: formData.domain,
             region: formData.region,
             provider: 'mailgun'
@@ -146,7 +146,8 @@ export function MailgunSetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   return (
     <div className="space-y-6">

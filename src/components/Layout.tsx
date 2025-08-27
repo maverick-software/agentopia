@@ -12,11 +12,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  useEffect(() => {
-    setIsTransitioning(true);
-    const timer = setTimeout(() => setIsTransitioning(false), 300);
-    return () => clearTimeout(timer);
-  }, [location.pathname]);
+  // Temporarily disable transition effect that causes modal state resets when tabbing
+  // TODO: Implement a smarter transition that doesn't interfere with modal state
+  // useEffect(() => {
+  //   setIsTransitioning(true);
+  //   const timer = setTimeout(() => setIsTransitioning(false), 300);
+  //   return () => clearTimeout(timer);
+  // }, [location.pathname]);
 
   // Match any route starting with /workspaces/ except /workspaces/new
   const isWorkspaceSpecificView = matchPath(

@@ -131,7 +131,7 @@ export function SMTPSetupModal({
           connection_status: 'active',
           credential_type: 'smtp_config',
           // Store SMTP-specific configuration
-          metadata: {
+          connection_metadata: {
             host: formData.host,
             port: parseInt(formData.port),
             secure: formData.secure,
@@ -186,7 +186,8 @@ export function SMTPSetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   return (
     <div className="space-y-6">

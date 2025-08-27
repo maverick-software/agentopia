@@ -175,7 +175,8 @@ export function WebSearchSetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   const selectedProvider = SEARCH_PROVIDERS.find(p => p.id === formData.selected_provider);
 

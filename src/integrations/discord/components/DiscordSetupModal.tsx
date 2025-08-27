@@ -153,7 +153,8 @@ export function DiscordSetupModal({
     }
   };
 
-  if (!isOpen) return null;
+  // Note: Don't return null here - let the parent Dialog handle visibility
+  // if (!isOpen) return null; // ❌ This destroys component state!
 
   return (
     <div className="space-y-6">

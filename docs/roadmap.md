@@ -1,21 +1,12 @@
-
-## Uniform Design Integration Page ##
-
-Please make sure each integration card is the same height and width, with the same lines for body text, the button is same distance down, etc. We want uniformity in our design.
-
-## Email Inboxes ##
-
-I want you to make a significant change. There is an integration called 'Email.' Similar to 'Web Search' how we have different providers, I want you to move 'Mailgun' and 'SendGrid' under this integration. We're not changing the Mailgun or Sendgrid integrations, we're just making the UX a little better by making it more understandable what these integrations are for.
-
 ## Cleanup agent_oauth_permissions table calls ##
 
 There is an old table 'agent_oauth_permissions' that was renamed to 'agent_integration_permissions.' Grep the entire codebase and create a checklist of all the places in the codebase agent_oauth_permissions exists. Then, go through each instance and replace it with the correct table name.
 
-## SMTP Tool ##
+## Soft Refresh Fix ##
 
-I want you to add SMTP as an integration. This will be a general SMTP feature not associated with a third party, but that we can create 'credentials' and assign those credentials to an agent for sending emails. It should have all the standard SMTP fields, with port, server, reply-to, cc, bcc, etc. This way the agent can autonomously determine to send an email and send it through a configured SMTP credential using its tool calls.
+There is an issue with the site, where when I leave the page and come back for any reason, it soft refreshes. The problem is I lose data in the modals and other places if I need to tab away for any reason. This needs to be investigated and fixed.
 
-## Memory Storage ##
+## Memory Storage System Upgrade ##
 
 As of now, every conversation is being processed and implemented for our knowledge graph and pinecone index. This is not efficient and will result in large databases with mostly useless information. Instead, let's separate memory storage from the chat functionality, and build it as background process for determining what should qualify as 'memorable' and what shouldn't. 
 

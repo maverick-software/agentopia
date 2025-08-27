@@ -28,6 +28,8 @@ import { useIntegrationCategories, useIntegrationsByCategory, useConnections } f
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useGmailConnection } from '@/integrations/gmail';
+import { useModalSoftRefreshProtection } from '../hooks/useSoftRefreshProtection';
+import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -189,12 +191,33 @@ export function IntegrationsPage() {
     refetchConnections();
   };
 
-  // Ensure modal does not persist when navigating between routes
-  useEffect(() => {
+  // Protect against soft refresh issues when tabbing away
+  const closeModal = () => {
     setShowSetupModal(false);
     setSelectedIntegration(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.search, location.hash]);
+  };
+  
+  // Track document visibility to debug modal issues
+  const { isVisible } = useDocumentVisibility({ debug: true });
+  
+  useModalSoftRefreshProtection(
+    showSetupModal,
+    closeModal,
+    {
+      allowedPaths: ['/integrations'],
+      debug: true // Enable debugging
+    }
+  );
+
+  // Debug modal state changes
+  React.useEffect(() => {
+    console.log('[IntegrationsPage] Modal state changed:', {
+      showSetupModal,
+      selectedIntegration: selectedIntegration?.name,
+      isVisible,
+      timestamp: new Date().toISOString()
+    });
+  }, [showSetupModal, selectedIntegration, isVisible]);
 
   if (categoriesLoading || integrationsLoading || unifiedLoading) {
     return (
