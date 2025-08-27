@@ -29,6 +29,7 @@ export function GmailSetupModal({
   user
 }: IntegrationSetupProps) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Use protected form state that persists across tab switches
   const {
@@ -90,6 +91,7 @@ export function GmailSetupModal({
     } catch (err: any) {
       console.error('Gmail OAuth error:', err);
       const errorMessage = err.message || 'Failed to connect Gmail';
+      setError(errorMessage);
       setFieldError('connectionName', errorMessage);
       onError(errorMessage);
       if (!err.message?.includes('cancelled')) {

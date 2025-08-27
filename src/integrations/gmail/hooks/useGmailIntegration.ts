@@ -112,6 +112,9 @@ export function useGmailConnection() {
 
     const redirectUri = `${window.location.origin}/integrations/gmail/callback`;
     
+    console.log('🔐 [Gmail OAuth] Starting OAuth flow...');
+    console.log('🔐 [Gmail OAuth] Redirect URI:', redirectUri);
+    
     // Call the edge function to get the OAuth URL
     const response = await supabase.functions.invoke('gmail-oauth-initiate', {
       body: {
@@ -128,7 +131,10 @@ export function useGmailConnection() {
       }
     });
 
+    console.log('🔐 [Gmail OAuth] Edge function response:', response);
+
     if (response.error) {
+      console.error('🔐 [Gmail OAuth] Edge function error:', response.error);
       // Check if this is a configuration error with detailed instructions
       if (response.data?.details) {
         console.error('Gmail OAuth Configuration Required:\n', response.data.details);
@@ -138,9 +144,20 @@ export function useGmailConnection() {
     }
 
     const { auth_url, state } = response.data;
+    
+    if (!auth_url) {
+      console.error('🔐 [Gmail OAuth] No auth URL received from edge function');
+      throw new Error('No authorization URL received from server');
+    }
+
+    console.log('🔐 [Gmail OAuth] Auth URL received:', auth_url);
+    console.log('🔐 [Gmail OAuth] State:', state);
 
     // Store state for later use in callback
     sessionStorage.setItem('gmail_oauth_state', state);
+    
+    // Check if popups are blocked before attempting to open
+    console.log('🔐 [Gmail OAuth] Attempting to open popup window...');
     
     // Open OAuth flow in popup
     const popup = window.open(
@@ -148,6 +165,14 @@ export function useGmailConnection() {
       'gmail-oauth',
       'width=600,height=700,scrollbars=yes,resizable=yes'
     );
+
+    // Check if popup was blocked
+    if (!popup || popup.closed || typeof popup.closed == 'undefined') {
+      console.error('🔐 [Gmail OAuth] Popup was blocked by browser!');
+      throw new Error('Popup blocked! Please allow popups for this site and try again. You can also try opening this page in a new tab instead of using a popup.');
+    }
+
+    console.log('🔐 [Gmail OAuth] Popup opened successfully:', popup);
 
     // Listen for popup completion using postMessage and polling as fallback
     return new Promise((resolve, reject) => {
@@ -224,7 +249,7 @@ export function useGmailConnection() {
 
       // Timeout after 5 minutes
       const timeout = setTimeout(() => {
-        console.log('Gmail OAuth timeout reached');
+        console.log('🔐 [Gmail OAuth] Timeout reached (5 minutes)');
         clearInterval(checkClosed);
         window.removeEventListener('message', handleMessage);
         popup?.close();
