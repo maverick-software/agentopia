@@ -29,18 +29,88 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 
 ## Recent Security Updates
 
-### 🔒 Critical Security Fix: Tool Authorization System (January 2025)
+### 🔒 Critical Security Fix: Integration Permissions System (January 2025)
 
-Fixed a critical security vulnerability where agents could access tools they weren't authorized to use. The system now properly implements MCP (Model Context Protocol) with:
+Fixed a **critical security vulnerability** where agents could access tools and credentials they weren't explicitly authorized to use. This was caused by parallel permission systems creating security bypasses.
 
-- **Namespaced Tools**: All tools have unique names (e.g., `gmail_send_email` vs `smtp_send_email`)
-- **Database-Driven Permissions**: Agents only see tools they're authorized for in `agent_integration_permissions`
-- **Double Verification**: Permissions checked at both discovery and execution time
-- **Vault Security**: All credentials securely stored in Supabase Vault
+#### **🚨 The Problem: Rogue Tool Access**
+- Agents could access Gmail tools without proper authorization
+- Old MCP (Model Context Protocol) cache was bypassing the unified permission system
+- Tool name collisions (multiple `send_email` tools) caused incorrect routing
+- Critical example: Agent Angela was accessing Gmail without permission while having legitimate SMTP access
+
+#### **✅ The Solution: Unified Permission Architecture**
+
+**1. Namespaced Tool System:**
+- `gmail_send_email` (Gmail-specific email sending)
+- `smtp_send_email` (SMTP server email sending)  
+- `sendgrid_send_email` (SendGrid API email sending)
+- `mailgun_send_email` (Mailgun API email sending)
+
+**2. Database-Driven Authorization:**
+- Agents only see tools they're explicitly authorized for in `agent_integration_permissions`
+- Permissions checked at both tool discovery and execution time
+- Zero bypass mechanisms - no parallel systems
+
+**3. Secure Credential Management:**
+- All credentials encrypted in Supabase Vault (no plain-text storage)
+- Vault-based token retrieval for OAuth systems
+- Service role authentication required for all decryption
+
+#### **🗑️ What Was Removed & Why**
+
+**Removed Components:**
+- **Old MCP Tools Cache**: Entries in `mcp_tools_cache` that bypassed authorization
+- **Deprecated SMTP Tables**: `agent_smtp_permissions` and `smtp_configurations` (replaced by unified `agent_integration_permissions`)
+- **Gmail MCP Connections**: Old `agent_mcp_connections` entries that allowed unauthorized Gmail access
+- **Plain-Text Fallbacks**: Eliminated all plain-text credential storage mechanisms
+
+**Why Removed:**
+- **Security Bypass**: Old systems allowed agents to see and use tools without proper authorization
+- **Data Inconsistency**: Multiple permission systems created conflicting authorization states  
+- **Maintenance Burden**: Parallel systems made security validation impossible to guarantee
+- **Compliance Risk**: Plain-text storage violated enterprise security standards
+
+#### **🎯 Gmail Integration Resolution**
+
+**The Issue:**
+Agent Angela was successfully sending Gmail emails despite:
+- No Gmail OAuth connection in the database
+- No Gmail permissions granted via UI
+- No valid Gmail credentials in Supabase Vault
+
+**Root Cause Analysis:**
+1. **Parallel Permission Systems**: Old MCP cache contained Gmail tools accessible to all agents
+2. **Credential Bypass**: Gmail API function was using insecure token retrieval methods
+3. **Permission Validation Gaps**: Tool discovery didn't validate agent-specific permissions
+
+**The Fix:**
+1. **Eliminated MCP Bypass**: Removed all Gmail tools from `mcp_tools_cache` 
+2. **Secured Token Retrieval**: Updated `gmail-api` Edge Function to use `vault_decrypt` RPC
+3. **Unified Permission Checks**: All tool access now goes through `agent_integration_permissions`
+4. **Namespaced Tool Routing**: Gmail tools now have unique names preventing collision with SMTP tools
+
+#### **🛡️ Result: True Zero-Trust Architecture**
+
+**Before Fix:**
+```
+Agent → Sees all tools → Can execute any tool (security bypass)
+```
+
+**After Fix:**
+```  
+Agent → Database Permission Check → Authorized Tools Only → Vault-Secured Execution
+```
+
+**Security Validation:**
+- ✅ Angela with SMTP permission: Sees only `smtp_send_email` 
+- ✅ Angela without Gmail permission: Cannot see `gmail_send_email`
+- ✅ No tool name collisions: Each provider has unique tool names
+- ✅ No credential bypass: All secrets require vault decryption
 
 **Example**: Angela with SMTP permission can no longer access Gmail tools - she literally doesn't know they exist!
 
-See `docs/fixes/TOOL_SYSTEM_FINAL_SUMMARY.md` for full details.
+See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_system_fixed.md` for complete technical details.
 
 ## Project Overview
 

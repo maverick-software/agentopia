@@ -710,52 +710,63 @@ export class FunctionCallingManager {
    */
   private async getSMTPTools(agentId: string, userId: string): Promise<OpenAIFunction[]> {
     try {
-      // Check if agent has SMTP permissions
+      // Check if agent has SMTP permissions using UNIFIED permission system
       const { data: permissions } = await this.supabaseClient
-        .from('agent_smtp_permissions')
+        .from('agent_integration_permissions')
         .select(`
-          *,
-          smtp_configurations!inner(
+          allowed_scopes,
+          is_active,
+          user_integration_credentials!inner(
             id,
             connection_name,
-            from_email,
-            is_active
+            oauth_provider_id,
+            credential_type,
+            oauth_providers!inner(name)
           )
         `)
         .eq('agent_id', agentId)
-        .eq('smtp_configurations.user_id', userId)
-        .eq('smtp_configurations.is_active', true)
-        .eq('is_active', true);
+        .eq('user_integration_credentials.user_id', userId)
+        .eq('user_integration_credentials.oauth_providers.name', 'smtp')
+        .eq('user_integration_credentials.credential_type', 'api_key')
+        .eq('is_active', true)
+        .limit(5);
 
       if (!permissions || permissions.length === 0) {
         console.log(`[FunctionCalling] No SMTP permissions found for agent ${agentId}`);
+        console.log(`[FunctionCalling] SECURITY: SMTP tools BLOCKED for agent ${agentId}`);
         return [];
       }
+
+      const grantedScopes = (permissions[0]?.allowed_scopes || []) as string[];
+      console.log(`[FunctionCalling] Agent ${agentId} has SMTP scopes:`, grantedScopes);
+      console.log(`[FunctionCalling] Available SMTP tool definitions:`, Object.keys(SMTP_MCP_TOOLS));
 
       const availableTools: OpenAIFunction[] = [];
 
       // Add available SMTP tools based on permissions
       for (const permission of permissions) {
-        const configName = permission.smtp_configurations.connection_name;
-        const fromEmail = permission.smtp_configurations.from_email;
+        const connectionName = permission.user_integration_credentials?.connection_name;
+        const allowedScopes = permission.allowed_scopes || [];
         
-        // Add send_email tool if permitted
-        if (permission.can_send_email) {
-          const sendEmailTool = SMTP_MCP_TOOLS.send_email;
+        // Add smtp_send_email tool if permitted
+        if (allowedScopes.includes('send_email')) {
+          const sendEmailTool = SMTP_MCP_TOOLS.smtp_send_email;
           availableTools.push({
             name: sendEmailTool.name,
-            description: `${sendEmailTool.description} via ${configName} (${fromEmail})`,
+            description: `${sendEmailTool.description} via ${connectionName}`,
             parameters: sendEmailTool.inputSchema
           });
         }
         
         // Add test_connection tool (always available for agents with SMTP access)
-        const testConnectionTool = SMTP_MCP_TOOLS.test_connection;
-        availableTools.push({
-          name: testConnectionTool.name,
-          description: `${testConnectionTool.description} for ${configName}`,
-          parameters: testConnectionTool.inputSchema
-        });
+        const testConnectionTool = SMTP_MCP_TOOLS.smtp_test_connection;
+        if (testConnectionTool) {
+          availableTools.push({
+            name: testConnectionTool.name,
+            description: `${testConnectionTool.description} for ${connectionName}`,
+            parameters: testConnectionTool.inputSchema
+          });
+        }
       }
 
       console.log(`[FunctionCalling] Found ${availableTools.length} SMTP tools for agent ${agentId}`);
@@ -1376,8 +1387,33 @@ export class FunctionCallingManager {
         return [];
       }
 
-      // Convert MCP tools to OpenAI function format
-      const mcpTools: OpenAIFunction[] = mcpToolsData.map((row: any) => {
+      // SECURITY FIX: Filter out tools that bypass unified permission system
+      const filteredMcpTools = [];
+      
+      for (const row of mcpToolsData) {
+        const openaiSchema = row.openai_schema;
+        const toolName = openaiSchema.name;
+        
+        // CRITICAL: Block Gmail tools from old MCP system
+        if (toolName && toolName.includes('gmail')) {
+          console.log(`[FunctionCalling] SECURITY: Blocking Gmail MCP tool ${toolName} - must use unified permission system`);
+          continue;
+        }
+        
+        // CRITICAL: Block SMTP tools from old MCP system  
+        if (toolName && toolName.includes('smtp')) {
+          console.log(`[FunctionCalling] SECURITY: Blocking SMTP MCP tool ${toolName} - must use unified permission system`);
+          continue;
+        }
+        
+        // Allow other MCP tools (Zapier, Google Docs, etc.)
+        filteredMcpTools.push(row);
+      }
+
+      console.log(`[FunctionCalling] Filtered MCP tools: ${mcpToolsData.length} -> ${filteredMcpTools.length} (removed email tools for security)`);
+
+      // Convert remaining MCP tools to OpenAI function format
+      const mcpTools: OpenAIFunction[] = filteredMcpTools.map((row: any) => {
         const openaiSchema = row.openai_schema;
         
         // Store MCP metadata in a separate map for routing

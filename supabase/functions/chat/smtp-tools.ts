@@ -69,8 +69,8 @@ export const SMTP_MCP_TOOLS: Record<string, MCPTool> = {
     required_scopes: ['send_email']
   },
 
-  test_connection: {
-    name: 'test_connection',
+  smtp_test_connection: {
+    name: 'smtp_test_connection',
     description: 'Test SMTP server connection and authentication',
     inputSchema: {
       type: 'object',

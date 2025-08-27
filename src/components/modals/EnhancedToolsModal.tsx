@@ -458,13 +458,17 @@ export function EnhancedToolsModal({
   };
 
   const defaultScopesForProvider = (provider: string): string[] => {
+    // For Gmail OAuth provider
+    if (provider === 'gmail') {
+      return ['gmail_send_email','gmail_read_emails','gmail_search_emails','gmail_email_actions'];
+    }
     // For unified web search or individual search providers
     if (['serper_api','serpapi','brave_search','web_search'].includes(provider)) {
       return ['web_search','news_search','image_search','local_search'];
     }
     // For email relay providers
     if (['smtp','sendgrid','mailgun','email_relay'].includes(provider)) {
-      return ['send_email','email_templates','email_stats'];
+      return ['smtp_send_email','smtp_test_connection'];
     }
     return [];
   };
