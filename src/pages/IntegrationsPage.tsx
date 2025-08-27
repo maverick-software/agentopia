@@ -27,10 +27,7 @@ import {
 import { useIntegrationCategories, useIntegrationsByCategory, useConnections } from '@/integrations/_shared';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
-import { TestPersistentModal } from '@/components/integrations/TestPersistentModal';
 import { useGmailConnection } from '@/integrations/gmail';
-import { useModalSoftRefreshProtection } from '../hooks/useSoftRefreshProtection';
-import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -80,22 +77,15 @@ export function IntegrationsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedIntegration, setSelectedIntegration] = useState<any>(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
-  const [showTestModal, setShowTestModal] = useState(false); // Test modal state
   const modalClosedByUserRef = React.useRef(false); // Track if modal was closed by user action
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Debug component lifecycle
-  React.useEffect(() => {
-    console.log('[IntegrationsPage] Component mounted', {
-      timestamp: new Date().toISOString()
-    });
-    return () => {
-      console.log('[IntegrationsPage] Component unmounting!!!', {
-        timestamp: new Date().toISOString()
-      });
-    };
-  }, []);
+  // Component lifecycle tracking (can be removed in production)
+  // React.useEffect(() => {
+  //   console.log('[IntegrationsPage] Component mounted');
+  //   return () => console.log('[IntegrationsPage] Component unmounting');
+  // }, []);
   
   const { categories, loading: categoriesLoading } = useIntegrationCategories();
   const { integrations, loading: integrationsLoading } = useIntegrationsByCategory(
@@ -212,39 +202,13 @@ export function IntegrationsPage() {
     setSelectedIntegration(null);
   };
   
-  // Track document visibility to debug modal issues
-  const { isVisible } = useDocumentVisibility({ debug: true });
-  
-  // DISABLED: Soft refresh protection might be causing unwanted modal closes
-  // useModalSoftRefreshProtection(
-  //   showSetupModal,
-  //   closeModal,
-  //   {
-  //     allowedPaths: ['/integrations'],
-  //     debug: true // Enable debugging
-  //   }
-  // );
+  // Modal state protection (no longer needed after AuthContext fix)
+  // useModalSoftRefreshProtection(...);
 
-  // Debug modal state changes with stack trace
-  React.useEffect(() => {
-    console.log('[IntegrationsPage] Modal state changed:', {
-      showSetupModal,
-      selectedIntegration: selectedIntegration?.name,
-      isVisible,
-      timestamp: new Date().toISOString(),
-      stackTrace: new Error().stack
-    });
-  }, [showSetupModal, selectedIntegration, isVisible]);
-  
-  // Debug visibility changes without closing modal
-  React.useEffect(() => {
-    console.log('[IntegrationsPage] Visibility changed:', {
-      isVisible,
-      showSetupModal,
-      timestamp: new Date().toISOString()
-    });
-    // DO NOT close modal on visibility change!
-  }, [isVisible]);
+  // Debug modal state changes (can be removed in production)
+  // React.useEffect(() => {
+  //   console.log('[IntegrationsPage] Modal state:', { showSetupModal, selectedIntegration: selectedIntegration?.name });
+  // }, [showSetupModal, selectedIntegration]);
 
   if (categoriesLoading || integrationsLoading || unifiedLoading) {
     return (
@@ -280,14 +244,6 @@ export function IntegrationsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
           <div className="flex items-center space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowTestModal(true)}
-              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800"
-            >
-              Test Modal Persistence
-            </Button>
             <span className="text-sm text-muted-foreground">
               {unifiedConnections.length} connected
             </span>
@@ -499,15 +455,6 @@ export function IntegrationsPage() {
           setSelectedIntegration(null);
         }}
         onComplete={handleSetupComplete}
-      />
-      
-      {/* Test Modal for debugging persistence issue */}
-      <TestPersistentModal
-        isOpen={showTestModal}
-        onClose={() => {
-          console.log('[IntegrationsPage] Test modal onClose called');
-          setShowTestModal(false);
-        }}
       />
     </div>
   );

@@ -46,7 +46,7 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
   // Email Relay - Unified email provider integration
   'Email Relay': {
     component: EmailRelaySetupModal,
-    credentialType: 'api_key', // Can be api_key or smtp_config depending on provider
+    credentialType: 'api_key', // All email providers use api_key credential type
     defaultScopes: ['send_email', 'email_templates', 'email_stats'],
     capabilities: [
       { key: 'send_email', label: 'Send transactional and marketing emails' },
@@ -84,7 +84,7 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
   // Discord - Custom bot setup
   'Discord': {
     component: DiscordSetupModal,
-    credentialType: 'custom',
+    credentialType: 'oauth',
     defaultScopes: ['bot', 'messages.read', 'messages.write', 'guilds'],
     capabilities: [
       { key: 'bot', label: 'Discord bot functionality' },
@@ -112,7 +112,7 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
   // SMTP - SMTP server configuration
   'SMTP': {
     component: SMTPSetupModal,
-    credentialType: 'smtp_config',
+    credentialType: 'api_key',
     defaultScopes: ['send_email'],
     capabilities: [
       { key: 'send_email', label: 'Send emails through SMTP server' },

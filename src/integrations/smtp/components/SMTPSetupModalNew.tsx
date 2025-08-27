@@ -129,7 +129,7 @@ export function SMTPSetupModal({
           vault_access_token_id: vaultKeyId,
           scopes_granted: ['send_email'],
           connection_status: 'active',
-          credential_type: 'smtp_config',
+          credential_type: 'api_key',
           // Store SMTP-specific configuration
           connection_metadata: {
             host: formData.host,

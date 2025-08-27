@@ -10,6 +10,7 @@
  */
 
 import { gmailMCPTools, MCPTool, MCPToolResult, MCPToolExecutionContext } from '@/integrations/gmail/services/gmail-tools';
+import { smtpMCPTools } from '@/integrations/smtp/services/smtp-tools';
 import { supabase } from '../supabase';
 
 export interface RegisteredTool extends MCPTool {
@@ -51,7 +52,10 @@ export class MCPToolRegistry {
   private toolProviders: Map<string, any> = new Map();
 
   constructor() {
+    // Register tool providers - they will check permissions internally
+    // DO NOT auto-add tools without permission checks
     this.registerToolProvider('gmail', gmailMCPTools);
+    this.registerToolProvider('smtp', smtpMCPTools);
   }
 
   /**
@@ -69,24 +73,63 @@ export class MCPToolRegistry {
   async getAvailableTools(agentId: string, userId: string): Promise<RegisteredTool[]> {
     const availableTools: RegisteredTool[] = [];
 
-    // Get Gmail tools
-    const gmailTools = await gmailMCPTools.listTools(agentId, userId);
-    for (const tool of gmailTools) {
-      availableTools.push({
-        ...tool,
-        provider: 'gmail',
-        category: 'email',
-        version: '1.0.0',
-        enabled: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+    // Check what email tools the agent has permissions for
+    const { data: emailPermissions } = await supabase
+      .from('agent_integration_permissions')
+      .select(`
+        allowed_scopes,
+        is_active,
+        user_integration_credentials!inner(
+          oauth_provider_id,
+          oauth_providers!inner(name)
+        )
+      `)
+      .eq('agent_id', agentId)
+      .eq('user_integration_credentials.user_id', userId)
+      .eq('is_active', true)
+      .in('user_integration_credentials.oauth_providers.name', ['gmail', 'smtp', 'sendgrid', 'mailgun']);
+
+    // Process email permissions
+    for (const permission of emailPermissions || []) {
+      const providerName = permission.user_integration_credentials?.oauth_providers?.name;
+      
+      if (providerName === 'gmail') {
+        // Only add Gmail tools if agent has Gmail permissions
+        const gmailTools = await gmailMCPTools.listTools(agentId, userId);
+        for (const tool of gmailTools) {
+          availableTools.push({
+            ...tool,
+            provider: 'gmail',
+            category: 'email',
+            version: '1.0.0',
+            enabled: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } else if (['smtp', 'sendgrid', 'mailgun'].includes(providerName)) {
+        // Add SMTP-based email tools for these providers
+        // Import SMTP tools when they're created
+        if (this.toolProviders.has('smtp')) {
+          const smtpProvider = this.toolProviders.get('smtp');
+          const smtpTools = await smtpProvider.listTools(agentId, userId);
+          for (const tool of smtpTools) {
+            availableTools.push({
+              ...tool,
+              provider: providerName,
+              category: 'email',
+              version: '1.0.0',
+              enabled: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
+      }
     }
 
-    // Future: Add other tool providers here
-    // const slackTools = await slackMCPTools.listTools(agentId, userId);
-    // const githubTools = await githubMCPTools.listTools(agentId, userId);
-
+    // Future: Add other tool providers here (Slack, GitHub, etc.)
+    
     return availableTools;
   }
 

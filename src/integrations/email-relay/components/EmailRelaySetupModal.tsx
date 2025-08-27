@@ -27,7 +27,7 @@ const EMAIL_PROVIDERS = [
     setupUrl: '',
     description: 'Connect to any SMTP server (Gmail, Outlook, Yahoo, etc.)',
     fields: ['host', 'port', 'username', 'password', 'from_email', 'from_name', 'reply_to_email', 'smtp_preset'],
-    credentialType: 'smtp_config'
+    credentialType: 'api_key'
   },
   {
     id: 'sendgrid',
@@ -100,16 +100,10 @@ export function EmailRelaySetupModal({
     }
   );
 
-  // Debug effect to track modal reloads
-  useEffect(() => {
-    if (isOpen) {
-      console.log('[EmailRelaySetupModal] Modal opened or reloaded', {
-        hasFormData: Object.keys(formData).length > 0,
-        formData: formData,
-        timestamp: new Date().toISOString()
-      });
-    }
-  }, [isOpen]);
+  // Component lifecycle debugging (commented out for production)
+  // useEffect(() => {
+  //   if (isOpen) console.log('[EmailRelaySetupModal] Modal opened');
+  // }, [isOpen]);
 
   const handleInputChange = (field: string, value: string | boolean) => {
     updateFormField(field, value);
@@ -149,19 +143,19 @@ export function EmailRelaySetupModal({
     switch (formData.selected_provider) {
       case 'smtp':
         if (!formData.host.trim() || !formData.username.trim() || !formData.password.trim() || !formData.from_email.trim()) {
-          setError('SMTP Host, Username, Password, and From Email are required');
+          setFieldError('connection_name', 'SMTP Host, Username, Password, and From Email are required');
           return false;
         }
         break;
       case 'sendgrid':
         if (!formData.api_key.trim() || !formData.from_email.trim()) {
-          setError('SendGrid API Key and From Email are required');
+          setFieldError('connection_name', 'SendGrid API Key and From Email are required');
           return false;
         }
         break;
       case 'mailgun':
         if (!formData.domain.trim() || !formData.api_key.trim()) {
-          setError('Mailgun Domain and API Key are required');
+          setFieldError('connection_name', 'Mailgun Domain and API Key are required');
           return false;
         }
         break;
@@ -175,7 +169,7 @@ export function EmailRelaySetupModal({
     if (!user || !validateForm()) return;
 
     setLoading(true);
-    setError(null);
+    clearErrors();
 
     try {
       const selectedProvider = EMAIL_PROVIDERS.find(p => p.id === formData.selected_provider);
@@ -293,31 +287,30 @@ export function EmailRelaySetupModal({
 
       toast.success(`${selectedProvider.name} connected successfully! 🎉`);
       
-      // Reset form
-      setFormData({
-        connection_name: '',
-        selected_provider: 'sendgrid',
-        api_key: '',
-        from_email: '',
-        from_name: '',
-        domain: '',
-        region: 'US',
-        host: '',
-        port: '587',
-        secure: false,
-        username: '',
-        password: '',
-        reply_to_email: '',
-        smtp_preset: ''
-      });
+      // Reset form fields individually
+      updateFormField('connection_name', '');
+      updateFormField('selected_provider', 'sendgrid');
+      updateFormField('api_key', '');
+      updateFormField('from_email', '');
+      updateFormField('from_name', '');
+      updateFormField('domain', '');
+      updateFormField('region', 'US');
+      updateFormField('host', '');
+      updateFormField('port', '587');
+      updateFormField('username', '');
+      updateFormField('password', '');
+      updateFormField('secure', false);
+      updateFormField('reply_to_email', '');
+      updateFormField('smtp_preset', '');
       setSelectedSMTPPreset(null);
+      clearErrors();
       
       onClose();
 
     } catch (err: any) {
       console.error('Error setting up Email Relay integration:', err);
       const errorMessage = err.message || 'Failed to setup Email Relay integration';
-      setError(errorMessage);
+      setFieldError('connection_name', errorMessage);
       onError(errorMessage);
       toast.error('Failed to setup Email Relay');
     } finally {
@@ -373,10 +366,10 @@ export function EmailRelaySetupModal({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error && (
+          {errors.connection_name && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{errors.connection_name}</AlertDescription>
             </Alert>
           )}
 

@@ -16,3 +16,6 @@ export { SMTPIntegrationsPage } from './pages/SMTPIntegrationsPage';
 
 // Types
 export * from './types/smtp';
+
+// Services
+export { smtpMCPTools, SMTPMCPToolsService } from './services/smtp-tools';

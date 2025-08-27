@@ -32,28 +32,15 @@ export function IntegrationSetupModal({
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   
-  // Debug component lifecycle
-  React.useEffect(() => {
-    console.log('[IntegrationSetupModal] Component mounted/updated', {
-      isOpen,
-      integrationName: integration?.name,
-      timestamp: new Date().toISOString()
-    });
-    return () => {
-      console.log('[IntegrationSetupModal] Component will unmount', {
-        integrationName: integration?.name,
-        timestamp: new Date().toISOString()
-      });
-    };
-  }, []);
+  // Component lifecycle debugging (commented out for production)
+  // React.useEffect(() => {
+  //   console.log('[IntegrationSetupModal] Component mounted');
+  //   return () => console.log('[IntegrationSetupModal] Component will unmount');
+  // }, []);
   
-  React.useEffect(() => {
-    console.log('[IntegrationSetupModal] isOpen changed:', {
-      isOpen,
-      integrationName: integration?.name,
-      timestamp: new Date().toISOString()
-    });
-  }, [isOpen]);
+  // React.useEffect(() => {
+  //   console.log('[IntegrationSetupModal] isOpen changed:', { isOpen, integrationName: integration?.name });
+  // }, [isOpen]);
 
   // Handle setup success
   const handleSetupSuccess = (connection: {

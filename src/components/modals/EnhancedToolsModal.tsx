@@ -32,7 +32,8 @@ import {
   BarChart3,
   RefreshCw,
   Trash2,
-  Wrench
+  Wrench,
+  Mail
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
@@ -357,7 +358,7 @@ export function EnhancedToolsModal({
       const storedValue = vaultSecretId; // ✅ Store vault UUID only
 
       // Store connection with encrypted or plain text API key
-      const { error: insertError } = await supabase
+      const { data: connectionData, error: insertError } = await supabase
         .from('user_integration_credentials')
         .insert({
           user_id: user.id,
@@ -370,9 +371,28 @@ export function EnhancedToolsModal({
           scopes_granted: ['web_search', 'news_search', 'image_search'],
           connection_status: 'active',
           credential_type: 'api_key'
-        });
+        })
+        .select('id')
+        .single();
 
-      if (insertError) throw insertError;
+      if (insertError || !connectionData) throw insertError || new Error('Failed to create connection');
+
+      // ✅ IMPORTANT: Associate the connection with this agent
+      const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
+        p_agent_id: agentId,
+        p_connection_id: connectionData.id,
+        p_allowed_scopes: defaultScopesForProvider(selectedProvider),
+        p_permission_level: 'custom',
+        p_user_id: user.id
+      });
+
+      if (grantError) {
+        console.error('Failed to grant agent permission:', grantError);
+        throw new Error(`Connected but failed to associate with agent: ${grantError.message}`);
+      }
+
+      // Refresh agent permissions to show the new connection
+      await refetchIntegrationPermissions();
 
       // Get the tool name - for web search, show provider name; for others use the tool name
       const providerInfo = SEARCH_PROVIDERS.find(p => p.id === selectedProvider);
@@ -416,6 +436,20 @@ export function EnhancedToolsModal({
       return hasWebSearchCredential ? 'available' : 'available';
     }
     
+    // For unified Email Relay, check if any email provider is connected
+    if (providerName === 'email relay' || providerName === 'email_relay') {
+      const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
+      const hasEmailPermission = agentPermissions.some(p => 
+        emailRelayProviders.includes(p.provider_name) && p.is_active
+      );
+      if (hasEmailPermission) return 'connected';
+      
+      const hasEmailCredential = connections.some(c => 
+        emailRelayProviders.includes(c.provider_name) && c.connection_status === 'active'
+      );
+      return hasEmailCredential ? 'available' : 'available';
+    }
+    
     // For other providers, check normally
     const exists = agentPermissions.some(p => p.provider_name === providerName && p.is_active);
     if (exists) return 'connected';
@@ -427,6 +461,10 @@ export function EnhancedToolsModal({
     // For unified web search or individual search providers
     if (['serper_api','serpapi','brave_search','web_search'].includes(provider)) {
       return ['web_search','news_search','image_search','local_search'];
+    }
+    // For email relay providers
+    if (['smtp','sendgrid','mailgun','email_relay'].includes(provider)) {
+      return ['send_email','email_templates','email_stats'];
     }
     return [];
   };
@@ -448,8 +486,14 @@ export function EnhancedToolsModal({
     const isWebSearch = provider === 'web search' || provider === 'web_search' || provider.toLowerCase().includes('web search');
     const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
     
+    // For email relay, check all email provider types
+    const isEmailRelay = provider === 'email relay' || provider === 'email_relay' || provider.toLowerCase().includes('email relay');
+    const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
+    
     const creds = isWebSearch 
       ? connections.filter(c => webSearchProviders.includes(c.provider_name) && c.connection_status === 'active')
+      : isEmailRelay
+      ? connections.filter(c => emailRelayProviders.includes(c.provider_name) && c.connection_status === 'active')
       : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
     
     return (
@@ -568,8 +612,15 @@ export function EnhancedToolsModal({
           const webSearchConnections = toolConnections.filter(c => 
             webSearchProviders.includes(c.provider_name)
           );
+          
+          // Group email relay providers under unified "Email Relay" entry
+          const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
+          const emailRelayConnections = toolConnections.filter(c => 
+            emailRelayProviders.includes(c.provider_name)
+          );
+          
           const otherConnections = toolConnections.filter(c => 
-            !webSearchProviders.includes(c.provider_name)
+            !webSearchProviders.includes(c.provider_name) && !emailRelayProviders.includes(c.provider_name)
           );
 
           const items = [];
@@ -606,7 +657,43 @@ export function EnhancedToolsModal({
             );
           }
 
-          // Add other (non-web search) connections
+          // Add unified Email Relay entry if any email providers are connected
+          if (emailRelayConnections.length > 0) {
+            const emailRelayIntegration = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase() === 'email relay');
+            const EMAIL_PROVIDER_NAMES = {
+              'smtp': 'SMTP Server',
+              'sendgrid': 'SendGrid',
+              'mailgun': 'Mailgun'
+            };
+            const providerNames = emailRelayConnections.map(c => {
+              return EMAIL_PROVIDER_NAMES[c.provider_name as keyof typeof EMAIL_PROVIDER_NAMES] || c.provider_name;
+            }).join(', ');
+
+            items.push(
+              <div
+                key="email_relay_unified"
+                className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <Mail className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Email Relay</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Using: {providerNames}
+                    </p>
+                    {renderCapabilitiesBadges(emailRelayIntegration?.id)}
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                  Connected
+                </Badge>
+              </div>
+            );
+          }
+
+          // Add other (non-web search, non-email relay) connections
           otherConnections.forEach((connection) => {
             const matched = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase().includes((connection as any).provider_name?.toLowerCase() || ''));
             items.push(
@@ -906,7 +993,7 @@ export function EnhancedToolsModal({
         console.log(`✅ DigitalOcean API key securely stored in vault: ${vaultKeyId}`);
 
         // Create connection record
-        const { error: insertError } = await supabase
+        const { data: connectionData, error: insertError } = await supabase
           .from('user_integration_credentials')
           .insert({
             user_id: user.id,
@@ -919,9 +1006,28 @@ export function EnhancedToolsModal({
             scopes_granted: ['droplet:read', 'image:read', 'region:read', 'size:read'],
             connection_status: 'active',
             credential_type: 'api_key'
-          });
+          })
+          .select('id')
+          .single();
 
-        if (insertError) throw insertError;
+        if (insertError || !connectionData) throw insertError || new Error('Failed to create DigitalOcean connection');
+
+        // ✅ IMPORTANT: Associate the DigitalOcean connection with this agent
+        const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
+          p_agent_id: agentId,
+          p_connection_id: connectionData.id,
+          p_allowed_scopes: ['droplet:read', 'droplet:create', 'droplet:delete', 'image:read', 'region:read', 'size:read'],
+          p_permission_level: 'custom',
+          p_user_id: user.id
+        });
+
+        if (grantError) {
+          console.error('Failed to grant agent permission for DigitalOcean:', grantError);
+          throw new Error(`Connected but failed to associate DigitalOcean with agent: ${grantError.message}`);
+        }
+
+        // Refresh agent permissions to show the new DigitalOcean connection
+        await refetchIntegrationPermissions();
 
         toast.success('DigitalOcean API key connected successfully! 🎉');
         
