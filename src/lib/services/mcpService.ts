@@ -3,7 +3,7 @@
 
 import { supabase } from '../supabase';
 import { MCPServer, MCPServerTemplate, MCPDeploymentConfig, MCPDeploymentStatus } from '../mcp/ui-types';
-import { ToolInstanceService } from '../../services/tool_instance_service/manager';
+import { ToolInstanceService } from '../../integrations/_shared/services/ToolInstanceService';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Enhanced type definitions for better DTMA integration
