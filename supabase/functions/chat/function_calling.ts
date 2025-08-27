@@ -49,9 +49,9 @@ export interface MCPToolResult {
  * Gmail MCP Tools Registry (imported from frontend)
  */
 export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
-  send_email: {
-    name: 'send_email',
-    description: 'Send an email through Gmail. THIS TOOL IS CALLED "send_email" - USE EXACTLY "send_email" AS THE FUNCTION NAME. DO NOT USE "gmail_send_message" OR ANY OTHER NAME. The function name must be exactly "send_email" with no prefix or suffix.',
+  gmail_send_email: {
+    name: 'gmail_send_email',
+    description: 'Send an email through Gmail using your connected Gmail account. Use this when you need to send from your Gmail inbox.',
     parameters: {
       type: 'object',
       properties: {
@@ -89,8 +89,8 @@ export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
     required_scopes: ['https://www.googleapis.com/auth/gmail.send'],
   },
 
-  read_emails: {
-    name: 'read_emails',
+  gmail_read_emails: {
+    name: 'gmail_read_emails',
     description: 'When a user asks to read their emails, use this tool. You can read their emails from their Gmail inbox.',
     parameters: {
       type: 'object',
@@ -117,8 +117,8 @@ export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
     required_scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
   },
 
-  search_emails: {
-    name: 'search_emails',
+  gmail_search_emails: {
+    name: 'gmail_search_emails',
     description: 'When a user asks to search their emails, use this tool. You can search for specific emails in their Gmail account.',
     parameters: {
       type: 'object',
@@ -148,8 +148,8 @@ export const GMAIL_MCP_TOOLS: Record<string, MCPTool> = {
     required_scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
   },
 
-  email_actions: {
-    name: 'email_actions',
+  gmail_email_actions: {
+    name: 'gmail_email_actions',
     description: 'When a user wants to perform actions on their emails (like marking as read, archiving, or deleting), use this tool.',
     parameters: {
       type: 'object',
@@ -275,9 +275,9 @@ export const WEB_SEARCH_MCP_TOOLS: Record<string, MCPTool> = {
  * SendGrid MCP Tools Registry
  */
 export const SENDGRID_MCP_TOOLS: Record<string, MCPTool> = {
-  send_email: {
-    name: 'send_email',
-    description: 'Send a transactional email via SendGrid. Use when asked to email without OAuth inbox context.',
+  sendgrid_send_email: {
+    name: 'sendgrid_send_email',
+    description: 'Send a transactional email via SendGrid. Use when you need reliable email delivery with tracking.',
     parameters: {
       type: 'object',
       properties: {
@@ -512,6 +512,7 @@ export class FunctionCallingManager {
 
       if (!permissions || permissions.length === 0) {
         console.log(`[FunctionCalling] No Gmail permissions found for agent ${agentId}`);
+        console.log(`[FunctionCalling] SECURITY: Gmail tools BLOCKED for agent ${agentId}`);
         return [];
       }
 
@@ -780,24 +781,55 @@ export class FunctionCallingManager {
     try {
       console.log(`[FunctionCalling] Executing function ${functionName} for agent ${agentId}`);
       
-      // Route to appropriate tool provider
-      if (Object.keys(GMAIL_MCP_TOOLS).includes(functionName)) {
+      // MCP COMPLIANT: With proper namespacing, we can route directly based on tool prefixes
+      // Each provider has unique tool names, so no collision possible
+      
+      // Route based on tool name prefix
+      if (functionName.startsWith('gmail_')) {
+        // Verify agent has Gmail permissions
+        const gmailTools = await this.getGmailTools(agentId, userId);
+        if (!gmailTools.find(t => t.name === functionName)) {
+          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
+          return { success: false, error: `Tool ${functionName} is not available for this agent` };
+        }
         return await this.executeGmailTool(agentId, userId, functionName, parameters);
       }
       
-      if (Object.keys(WEB_SEARCH_MCP_TOOLS).includes(functionName)) {
-        return await this.executeWebSearchTool(agentId, userId, functionName, parameters);
+      if (functionName.startsWith('smtp_')) {
+        const smtpTools = await this.getSMTPTools(agentId, userId);
+        if (!smtpTools.find(t => t.name === functionName)) {
+          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
+          return { success: false, error: `Tool ${functionName} is not available for this agent` };
+        }
+        return await this.executeSMTPTool(agentId, userId, functionName, parameters);
       }
-      if (Object.keys(SENDGRID_MCP_TOOLS).includes(functionName)) {
+      
+      if (functionName.startsWith('sendgrid_')) {
+        const sendgridTools = await this.getSendgridTools(agentId, userId);
+        if (!sendgridTools.find(t => t.name === functionName)) {
+          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
+          return { success: false, error: `Tool ${functionName} is not available for this agent` };
+        }
         return await this.executeSendgridTool(agentId, userId, functionName, parameters);
       }
       
-      if (Object.keys(MAILGUN_MCP_TOOLS).includes(functionName)) {
+      if (functionName.startsWith('mailgun_')) {
+        const mailgunTools = await this.getMailgunTools(agentId, userId);
+        if (!mailgunTools.find(t => t.name === functionName)) {
+          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
+          return { success: false, error: `Tool ${functionName} is not available for this agent` };
+        }
         return await this.executeMailgunTool(agentId, userId, functionName, parameters);
       }
       
-      if (Object.keys(SMTP_MCP_TOOLS).includes(functionName)) {
-        return await this.executeSMTPTool(agentId, userId, functionName, parameters);
+      // Web search tools (web_search, scrape_and_summarize, news_search)
+      if (functionName.startsWith('web_search') || functionName === 'scrape_and_summarize' || functionName === 'news_search') {
+        const webSearchTools = await this.getWebSearchTools(agentId, userId);
+        if (!webSearchTools.find(t => t.name === functionName)) {
+          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
+          return { success: false, error: `Tool ${functionName} is not available for this agent` };
+        }
+        return await this.executeWebSearchTool(agentId, userId, functionName, parameters);
       }
       
       // Check if this is an MCP tool using the metadata map

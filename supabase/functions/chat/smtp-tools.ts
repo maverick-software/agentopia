@@ -20,9 +20,9 @@ export interface MCPTool {
  * Available tools for SMTP email operations
  */
 export const SMTP_MCP_TOOLS: Record<string, MCPTool> = {
-  send_email: {
-    name: 'send_email',
-    description: 'Send an email via SMTP server',
+  smtp_send_email: {
+    name: 'smtp_send_email',
+    description: 'Send an email via SMTP server. Use when Gmail OAuth is not available.',
     inputSchema: {
       type: 'object',
       properties: {

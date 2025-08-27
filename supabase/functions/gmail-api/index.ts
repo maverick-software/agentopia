@@ -113,11 +113,18 @@ serve(async (req) => {
       throw new Error('Gmail token has expired. Please reconnect your Gmail account.');
     }
 
-    // Get access token directly from the connection record
-    // In your system, vault_access_token_id stores the actual token as text
-    const accessToken = connection.vault_access_token_id;
-    if (!accessToken) {
-      throw new Error('Access token is empty or not found.');
+    // SECURITY: Get access token from Supabase Vault (not directly from connection)
+    const vaultTokenId = connection.vault_access_token_id;
+    if (!vaultTokenId) {
+      throw new Error('Vault token ID is empty or not found.');
+    }
+
+    // Retrieve actual token from vault using service role client
+    const { data: accessToken, error: vaultError } = await supabaseServiceRole
+      .rpc('vault_decrypt', { vault_id: vaultTokenId });
+
+    if (vaultError || !accessToken) {
+      throw new Error(`Failed to retrieve Gmail access token from vault: ${vaultError?.message || 'Token not found'}`);
     }
 
     // Execute the requested Gmail API action

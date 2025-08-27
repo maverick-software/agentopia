@@ -87,7 +87,7 @@ export function IntegrationSetupModal({
           hasIntegration: !!integration,
           timestamp: new Date().toISOString() 
         });
-        if (!open) handleClose();
+      if (!open) handleClose();
       }}
       modal={true}
     >
@@ -132,11 +132,11 @@ export function IntegrationSetupModal({
 
           {error && (
             <Alert variant="destructive" className="mt-4">
-              <AlertCircle className="h-4 w-4" />
+                            <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-        </div>
+                          </Alert>
+                        )}
+                      </div>
       </DialogContent>
     </Dialog>
   );
@@ -181,8 +181,8 @@ function RegisteredIntegrationSetup({
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Failed to load setup component for {integration.name}: {err.message}
-        </AlertDescription>
-      </Alert>
+                          </AlertDescription>
+                        </Alert>
     );
   }
 }
@@ -206,9 +206,9 @@ function FallbackIntegrationSetup({
             <p><strong>{integration.name} integration is not yet fully configured.</strong></p>
             <p>This integration is available but requires additional setup that hasn't been implemented yet.</p>
             <p>Please check back later or contact support if you need this integration urgently.</p>
-          </div>
-        </AlertDescription>
-      </Alert>
+                          </div>
+                          </AlertDescription>
+                        </Alert>
 
       <div className="flex justify-end">
         <button
@@ -217,7 +217,7 @@ function FallbackIntegrationSetup({
         >
           Close
         </button>
-      </div>
-    </div>
+                  </div>
+              </div>
   );
-}
+} 

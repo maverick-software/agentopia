@@ -27,6 +27,21 @@ Agentopia allows users to create, configure, and manage AI agents via a web UI. 
 - [Integrations & Capabilities](#integrations--capabilities)
  - [August 2025 Stabilization Notes](#august-2025-stabilization-notes)
 
+## Recent Security Updates
+
+### 🔒 Critical Security Fix: Tool Authorization System (January 2025)
+
+Fixed a critical security vulnerability where agents could access tools they weren't authorized to use. The system now properly implements MCP (Model Context Protocol) with:
+
+- **Namespaced Tools**: All tools have unique names (e.g., `gmail_send_email` vs `smtp_send_email`)
+- **Database-Driven Permissions**: Agents only see tools they're authorized for in `agent_integration_permissions`
+- **Double Verification**: Permissions checked at both discovery and execution time
+- **Vault Security**: All credentials securely stored in Supabase Vault
+
+**Example**: Angela with SMTP permission can no longer access Gmail tools - she literally doesn't know they exist!
+
+See `docs/fixes/TOOL_SYSTEM_FINAL_SUMMARY.md` for full details.
+
 ## Project Overview
 
 *   **Goal:** Provide a platform for creating AI agents that can operate within Discord, collaborate within **Workspaces**, and leverage external tools (MCP) and knowledge (RAG).

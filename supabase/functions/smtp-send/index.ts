@@ -112,7 +112,7 @@ serve(async (req) => {
 
       // Retrieve password from vault
       const { data: vaultData, error: vaultError } = await supabaseServiceRole
-        .rpc('read_vault_secret', { p_secret_id: passwordVaultId })
+        .rpc('vault_decrypt', { vault_id: passwordVaultId })
 
       if (vaultError || !vaultData) {
         throw new Error('Failed to retrieve SMTP password from vault')

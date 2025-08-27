@@ -280,7 +280,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
     // Nudge awareness: briefly declare available tools and guidelines in a system message
     if (availableTools.length > 0) {
       const toolNames = availableTools.map(t => t.name).join(', ');
-      const guidance = `Available tools for this agent: ${toolNames}.\nGuidelines: If the user asks to send an email, call send_email. If asked to read or search emails, call read_emails or search_emails. If asked to perform email actions (archive, mark read), call email_actions. Use tools only when needed; otherwise answer directly.`;
+      const guidance = `Available tools for this agent: ${toolNames}.\nGuidelines: Use the appropriate tool based on the user's request. Each tool has a specific prefix (gmail_, smtp_, sendgrid_, mailgun_, web_search) indicating its provider. Use tools only when needed; otherwise answer directly.`;
       msgs.push({ role: 'system', content: guidance });
     }
 

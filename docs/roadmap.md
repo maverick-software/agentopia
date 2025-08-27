@@ -41,6 +41,10 @@ We will modify the 'Workspaces' feature to work for 'Teams.' Teams will have the
 
 Add 'Steps' to tasks, allowing users to add multi-step instructions for the agent to follow. Do this, then do this upon completion, etc. The tasks happen sequentially, and the user can choose to have the output of the previous step(s) included in the context of the next task or not.
 
+## AI-Generated Forms ##
+
+Create a tool that allows Agents to generate forms with custom fields, that can be sent out to external users via temporary links--limited by time or usage/access. These forms can be one-time use, or users can choose to save the forms and even edit them using AI. They would save those results in a table or tables in JSON or YAML so they can be universally generated and pulled in and retrieved and used for a universally-generated display to users.  
+
 ## Agentic Task Generation ##
 
 Add a step in our conversational process where, after the agent reasons through the request with integrated and determines tool use, instead of just executing, it should first generate a mini-project plan. The mini-project plan can be one of a select few options, depending on the complexity of the context and the request:
