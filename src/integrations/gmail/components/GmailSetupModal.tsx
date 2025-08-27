@@ -130,6 +130,14 @@ export function GmailSetupModal({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* General error display */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
           {errors.connectionName && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
