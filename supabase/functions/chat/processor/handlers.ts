@@ -368,7 +368,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
           // Append tool observation
           msgs.push({
             role: 'tool',
-            content: fcm.formatFunctionResult(result, tc.function.name),
+            content: await fcm.formatResult(tc.function.name, result),
             tool_call_id: tc.id,
           } as any);
         } catch (err: any) {
@@ -475,7 +475,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
               
               msgs.push({
                 role: 'tool',
-                content: fcm.formatFunctionResult(result, tc.function.name),
+                content: await fcm.formatResult(tc.function.name, result),
                 tool_call_id: tc.id,
               } as any);
             } catch (err: any) {

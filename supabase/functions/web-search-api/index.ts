@@ -288,7 +288,26 @@ serve(async (req) => {
       throw new Error('Invalid authentication token');
     }
 
-    const body: WebSearchRequest = await req.json();
+    // Debug logging for incoming request
+    console.log(`[web-search-api] Raw request method: ${req.method}`);
+    console.log(`[web-search-api] Raw request headers:`, Object.fromEntries(req.headers.entries()));
+    
+    let body: WebSearchRequest;
+    try {
+      const rawText = await req.text();
+      console.log(`[web-search-api] Raw request body:`, rawText);
+      
+      if (!rawText || rawText.trim() === '') {
+        throw new Error('Request body is empty');
+      }
+      
+      body = JSON.parse(rawText);
+      console.log(`[web-search-api] Parsed request body:`, JSON.stringify(body, null, 2));
+    } catch (parseError) {
+      console.error(`[web-search-api] JSON parse error:`, parseError);
+      throw new Error(`Failed to parse request body: ${parseError.message}`);
+    }
+    
     const { agent_id, action, parameters } = body;
 
     console.log(`[web-search-api] Processing ${action} request for agent ${agent_id}`);

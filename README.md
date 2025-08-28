@@ -443,10 +443,81 @@ Uses PostgreSQL managed by Supabase. Key tables include `users`, `agents`, `team
 *   **Relationships:** Workspaces link members (users, agents, teams). Channels belong to workspaces. Messages belong to channels. Agents can be linked to datastores and MCP configurations.
 *   **RLS:** Row Level Security is enforced on most tables to control data access based on user roles and workspace membership.
 *   **Migrations:** Located in `supabase/migrations/`.
-*   **New:** `integration_capabilities` — catalog of feature badges per integration
-    - Columns: `integration_id`, `capability_key`, `display_label`, `display_order`, timestamps
-    - Purpose: drives dynamic capability badges in UI for both tools and channels
-    - RLS: readable by everyone; managed per integration
+*   **🔄 Database-Driven Integration Capabilities:** `integration_capabilities` table provides dynamic capability management
+    - **Columns:** `integration_id`, `capability_key`, `display_label`, `display_order`, timestamps
+    - **Purpose:** Drives all capability badges in UI for both tools and channels (NO hardcoding)
+    - **Tool Naming:** Uses specific tool names (e.g., `smtp_send_email`, `gmail_send_email`) for proper routing
+    - **UI Integration:** Frontend components fetch capabilities via database queries, fallback to hardcoded only on error
+    - **RLS:** Readable by everyone; managed per integration
+
+## 🔧 Integration Capabilities System (Database-Driven)
+
+Agentopia implements a **database-first integration capabilities system** that eliminates hardcoded tool definitions in favor of dynamic, data-driven capability management.
+
+### 🎯 **Core Principles**
+- **Zero Hardcoding**: All integration capabilities stored in `integration_capabilities` database table
+- **Dynamic Loading**: UI components fetch capabilities via database queries at runtime
+- **Specific Tool Names**: Each tool has unique identifiers (e.g., `smtp_send_email`, `gmail_send_email`) for proper routing
+- **Graceful Fallback**: Hardcoded definitions only used as emergency fallback if database query fails
+
+### 🏗️ **Architecture**
+
+#### **Database Table: `integration_capabilities`**
+```sql
+integration_capabilities: {
+  integration_id: uuid,           -- Links to integrations table
+  capability_key: text,           -- Specific tool name (e.g., 'smtp_send_email')
+  display_label: text,            -- Human-readable label (e.g., 'Send Email')
+  display_order: integer,         -- Sort order for UI display
+  created_at: timestamptz,
+  updated_at: timestamptz
+}
+```
+
+#### **Frontend Implementation**
+```typescript
+// ✅ Database-first approach
+useEffect(() => {
+  const loadCapabilities = async () => {
+    const { data } = await supabase
+      .from('integration_capabilities')
+      .select('integration_id, capability_key, display_label, display_order')
+      .in('integration_id', integrationIds)
+      .order('display_order');
+    
+    setCapabilitiesByIntegrationId(mapCapabiliesToIntegrations(data));
+  };
+}, [integrations, supabase]);
+
+// ❌ Old hardcoded approach (removed)
+// const CAPABILITIES = {
+//   smtp: [{ id: 'send_email', label: 'Send Email' }]  // NO LONGER USED
+// };
+```
+
+### 🔄 **Tool Naming Convention**
+All tools follow a **provider-specific naming pattern** to prevent collisions:
+
+| Provider | Tool Name | Display Label | Purpose |
+|----------|-----------|---------------|---------|
+| **SMTP** | `smtp_send_email` | Send Email | Send via SMTP server |
+| **Gmail** | `gmail_send_email` | Send Email | Send via Gmail API |
+| **SendGrid** | `sendgrid_send_email` | Send Email | Send via SendGrid API |
+| **Mailgun** | `mailgun_send_email` | Send Email | Send via Mailgun API |
+
+### 📊 **Benefits**
+- **Maintainability**: Add new capabilities via database inserts, no code changes required
+- **Consistency**: Single source of truth for all integration capabilities
+- **Scalability**: Support unlimited integrations without frontend code modifications  
+- **Flexibility**: Capability labels and ordering configurable per deployment
+- **Performance**: Database queries cached and optimized for fast UI rendering
+
+### 🛠️ **Developer Guidelines**
+1. **Never hardcode capabilities** in frontend components
+2. **Always query database first** for capability information
+3. **Use specific tool names** that include provider prefix
+4. **Provide fallback only** for emergency scenarios (database unavailable)
+5. **Update database** when adding new integration capabilities
 
 ## Supabase Functions
 
@@ -825,15 +896,18 @@ The system uses PostgreSQL functions to manage tool availability:
 * **`get_gmail_tools(p_agent_id, p_user_id)`**: Returns available Gmail tools based on granted permissions
 * **`validate_agent_gmail_permissions(p_agent_id, p_user_id, p_required_scopes[])`**: Validates if an agent has required scopes
 
-### Tool Execution Flow
+### Tool Execution Flow (Database-Driven)
 
 1. **User grants OAuth permissions**: User connects their Gmail/other accounts via OAuth flow
 2. **User assigns permissions to agent**: Through the AgentEdit UI, users grant specific OAuth scopes to agents
 3. **Agent receives user message**: When a user asks an agent to perform an action (e.g., "send an email")
-4. **Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()` (normalizes Gmail scope URIs and consults `agent_integration_permissions`)
-5. **Tools are passed to OpenAI**: Available tools are included in the OpenAI API call as function definitions
-6. **Agent requests tool use**: OpenAI returns tool calls in its response
-7. **System validates and executes**: The system validates permissions and executes the requested tools. The chat function injects the caller JWT into `options.auth.token`; `FunctionCallingManager` forwards it in the `Authorization` header to provider edge functions (e.g., `gmail-api`).
+4. **🔄 Chat function retrieves available tools**: The `chat` function calls `FunctionCallingManager.getAvailableTools()` which:
+   - Queries `integration_capabilities` table for tool definitions (NO hardcoding)
+   - Normalizes OAuth scope URIs and consults `agent_integration_permissions`
+   - Uses specific tool names (e.g., `smtp_send_email`, `gmail_send_email`) for proper routing
+5. **Tools are passed to OpenAI**: Database-driven tool definitions included in OpenAI API call
+6. **Agent requests tool use**: OpenAI returns tool calls with specific tool names (e.g., `smtp_send_email`)
+7. **System validates and executes**: The system validates permissions and routes execution based on tool name prefix. The chat function injects the caller JWT into `options.auth.token`; routing logic forwards to appropriate edge functions.
 8. **Results returned to agent**: Tool execution results are sent back to OpenAI for final response
 
 ### Gmail Integration Example

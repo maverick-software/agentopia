@@ -458,7 +458,8 @@ export class FunctionCallingManager {
         userId,
         toolName: functionName,
         parameters,
-        supabase: this.supabase
+        supabase: this.supabase,
+        authToken: this.authToken  // Pass auth token for edge function calls
       });
       
       // Add execution time to metadata

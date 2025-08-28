@@ -7,12 +7,13 @@
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { MCPToolResult } from './base.ts';
 
-export interface UniversalExecutionContext {
+export interface MCPToolExecutionContext {
   agentId: string;
   userId: string;
   toolName: string;
   parameters: Record<string, any>;
   supabase: SupabaseClient;
+  authToken?: string;  // Add auth token for edge function calls
 }
 
 // Tool routing configuration - easily extensible for new integrations
@@ -48,29 +49,38 @@ const TOOL_ROUTING_MAP: Record<string, {
     }
   },
   
-  // Web search tools (using Serper API)
+  // Web search tools (using web-search-api)
   'web_search': {
-    edgeFunction: 'serper-search',
+    edgeFunction: 'web-search-api',
     actionMapping: (toolName: string) => {
       const actionMap: Record<string, string> = {
-        'web_search': 'search',
-        'scrape_url': 'scrape',
-        'news_search': 'news'
+        'web_search': 'web_search',
+        'scrape_url': 'scrape_and_summarize',
+        'news_search': 'news_search'
       };
-      return actionMap[toolName] || 'search';
-    }
+      return actionMap[toolName] || 'web_search';
+    },
+    parameterMapping: (params: Record<string, any>) => ({
+      parameters: params  // Nest parameters object as expected by web-search-api
+    })
   },
   
   // News search tools
   'news_': {
-    edgeFunction: 'serper-search',
-    actionMapping: () => 'news'
+    edgeFunction: 'web-search-api',
+    actionMapping: () => 'news_search',
+    parameterMapping: (params: Record<string, any>) => ({
+      parameters: params
+    })
   },
   
   // Scrape tools
   'scrape_': {
-    edgeFunction: 'serper-search',
-    actionMapping: () => 'scrape'
+    edgeFunction: 'web-search-api',
+    actionMapping: () => 'scrape_and_summarize',
+    parameterMapping: (params: Record<string, any>) => ({
+      parameters: params
+    })
   },
   
   // MCP/Zapier tools - route to MCP handler
@@ -86,7 +96,7 @@ export class UniversalToolExecutor {
    * Execute any tool by routing to the appropriate edge function
    * This is the universal solution that scales to any integration
    */
-  static async executeTool(context: UniversalExecutionContext): Promise<MCPToolResult> {
+  static async executeTool(context: MCPToolExecutionContext): Promise<MCPToolResult> {
     const { toolName, parameters, supabase, agentId, userId } = context;
     
     try {
@@ -108,20 +118,35 @@ export class UniversalToolExecutor {
       const action = routingConfig.actionMapping(toolName);
       
       // Prepare parameters for the edge function
-      const edgeFunctionParams = {
+      const baseParams = {
         action,
-        userId,
-        agentId,
-        toolName,
-        ...(routingConfig.parameterMapping ? routingConfig.parameterMapping(parameters) : parameters)
+        agent_id: agentId,  // Use agent_id as expected by edge functions
+        user_id: userId,
+        tool_name: toolName
       };
       
+      // Apply parameter mapping if provided, otherwise merge parameters directly
+      const edgeFunctionParams = routingConfig.parameterMapping 
+        ? { ...baseParams, ...routingConfig.parameterMapping(parameters) }
+        : { ...baseParams, ...parameters };
+      
       console.log(`[UniversalToolExecutor] Routing ${toolName} -> ${routingConfig.edgeFunction} (action: ${action})`);
+      console.log(`[UniversalToolExecutor] Edge function params:`, JSON.stringify(edgeFunctionParams, null, 2));
+      
+      // Prepare headers for edge function call (only authorization)
+      const invokeOptions: any = {
+        body: edgeFunctionParams
+      };
+      
+      // Include authorization header if auth token is provided
+      if (context.authToken) {
+        invokeOptions.headers = {
+          'Authorization': `Bearer ${context.authToken}`
+        };
+      }
       
       // Call the appropriate edge function
-      const { data, error } = await supabase.functions.invoke(routingConfig.edgeFunction, {
-        body: edgeFunctionParams
-      });
+      const { data, error } = await supabase.functions.invoke(routingConfig.edgeFunction, invokeOptions);
       
       if (error) {
         console.error(`[UniversalToolExecutor] Edge function error for ${toolName}:`, error);
