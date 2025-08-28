@@ -303,9 +303,15 @@ Remember: ALWAYS use blank lines between elements for readability!`
       if (!router) {
         // Fallback to OpenAI if router unavailable
         effectiveModel = 'gpt-4';
+        
+        // Debug: Log tools array before sending to OpenAI
+        console.log('[DEBUG] Router fallback - Available tools before OpenAI:', JSON.stringify(availableTools, null, 2));
+        const formattedTools = availableTools.map((fn) => ({ type: 'function', function: fn }));
+        console.log('[DEBUG] Router fallback - Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
+        
         completion = await this.openai.chat.completions.create({
           model: 'gpt-4', messages: msgs, temperature: 0.7, max_tokens: 1200,
-          tools: availableTools.map((fn) => ({ type: 'function', function: fn })), tool_choice: 'auto'
+          tools: formattedTools, tool_choice: 'auto'
         });
       } else {
         const resolved = await router.resolveAgent(context.agent_id).catch(() => null);
@@ -319,12 +325,18 @@ Remember: ALWAYS use blank lines between elements for readability!`
       }
     } else {
       effectiveModel = 'gpt-4';
+      
+      // Debug: Log tools array before sending to OpenAI
+      console.log('[DEBUG] Available tools before OpenAI:', JSON.stringify(availableTools, null, 2));
+      const formattedTools = availableTools.map((fn) => ({ type: 'function', function: fn }));
+      console.log('[DEBUG] Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
+      
       completion = await this.openai.chat.completions.create({
         model: 'gpt-4',
         messages: msgs,
         temperature: 0.7,
         max_tokens: 1200,
-        tools: availableTools.map((fn) => ({ type: 'function', function: fn })),
+        tools: formattedTools,
         tool_choice: 'auto',
       });
     }

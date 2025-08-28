@@ -41,6 +41,14 @@ export function ConnectedChannelsList({
     
     // Check if this permission is for a channel-classified integration
     const providerName = p.provider_name;
+    
+    // DEBUG: Log the matching process
+    console.log('[ConnectedChannelsList] Checking permission:', {
+      provider_name: providerName,
+      external_username: p.external_username,
+      available_integrations: integrations.map(i => ({ name: i.name, id: i.id }))
+    });
+    
     const matchedIntegration = integrations.find(i => 
       i.name.toLowerCase().includes(providerName?.toLowerCase() || '') ||
       providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
@@ -48,6 +56,12 @@ export function ConnectedChannelsList({
       providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
       providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
     );
+    
+    console.log('[ConnectedChannelsList] Match result:', {
+      provider_name: providerName,
+      matched_integration: matchedIntegration ? { name: matchedIntegration.name, id: matchedIntegration.id } : null,
+      will_show: !!matchedIntegration
+    });
     
     return !!matchedIntegration;
   });

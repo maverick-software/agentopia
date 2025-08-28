@@ -29,6 +29,8 @@ export function useChannelPermissions(agentId: string): ChannelPermissionsHook {
 
   // Map integration permissions to our format
   useEffect(() => {
+    console.log('[useChannelPermissions] Raw integrationPermissions:', integrationPermissions);
+    
     const mappedPermissions = integrationPermissions.map(perm => ({
       id: perm.permission_id,
       connection_id: perm.connection_id,
@@ -37,6 +39,8 @@ export function useChannelPermissions(agentId: string): ChannelPermissionsHook {
       is_active: perm.is_active,
       allowed_scopes: perm.allowed_scopes || []
     }));
+    
+    console.log('[useChannelPermissions] Mapped permissions:', mappedPermissions);
     setAgentPermissions(mappedPermissions);
     setIsLoading(false);
   }, [integrationPermissions]);

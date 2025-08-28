@@ -35,14 +35,46 @@ serve(async (req) => {
   }
 
   try {
-    const { action, params, agent_id } = await req.json()
+    // Debug logging for incoming request
+    console.log(`[gmail-api] Raw request method: ${req.method}`);
+    console.log(`[gmail-api] Raw request headers:`, Object.fromEntries(req.headers.entries()));
+    
+    let requestBody;
+    try {
+      const rawText = await req.text();
+      console.log(`[gmail-api] Raw request body:`, rawText);
+      
+      if (!rawText || rawText.trim() === '') {
+        throw new Error('Request body is empty');
+      }
+      
+      requestBody = JSON.parse(rawText);
+      console.log(`[gmail-api] Parsed request body:`, JSON.stringify(requestBody, null, 2));
+    } catch (parseError) {
+      console.error(`[gmail-api] JSON parse error:`, parseError);
+      throw new Error(`Failed to parse request body: ${parseError.message}`);
+    }
+    
+    const { action, params, agent_id } = requestBody;
     console.log('Gmail API request:', { action, agent_id })
     console.log('Params received:', JSON.stringify(params, null, 2))
 
-    // Validate required parameters
+    // Validate required parameters with LLM-friendly error messages
     if (!action || !params || !agent_id) {
       console.error('Missing parameters:', { action: !!action, params: !!params, agent_id: !!agent_id })
-      throw new Error('Missing required parameters: action, params, and agent_id are required')
+      
+      // Return interactive error messages that trigger retry mechanism
+      if (!action) {
+        throw new Error('Question: What email action would you like me to perform? Please specify send_email, read_emails, or search_emails.')
+      }
+      if (!agent_id) {
+        throw new Error('Missing agent context. Please retry with proper agent identification.')
+      }
+      if (!params) {
+        throw new Error('Question: What email details would you like me to use? For sending emails, please provide recipient (to), subject, and message body.')
+      }
+      
+      throw new Error('Please provide the required email parameters: action, recipient details, and message content.')
     }
 
     // Create a Supabase client with the auth context
@@ -108,23 +140,34 @@ serve(async (req) => {
       throw new Error(`No active Gmail connection found: ${connectionError?.message || 'Not found'}`);
     }
 
-    // Check if token is expired
+    let accessToken: string;
+    
+    // Check if token is expired and refresh if needed
     if (connection.token_expires_at && new Date(connection.token_expires_at) <= new Date()) {
-      throw new Error('Gmail token has expired. Please reconnect your Gmail account.');
-    }
+      console.log('[gmail-api] Token expired, attempting refresh...');
+      try {
+        accessToken = await refreshGmailToken(supabaseServiceRole, connection, agent_id);
+        console.log('[gmail-api] Token refreshed successfully');
+      } catch (refreshError) {
+        console.error('[gmail-api] Token refresh failed:', refreshError);
+        throw new Error('Question: Your Gmail authentication has expired and could not be renewed automatically. Please reconnect your Gmail account in the integration settings.');
+      }
+    } else {
+      // SECURITY: Get access token from Supabase Vault (not directly from connection)
+      const vaultTokenId = connection.vault_access_token_id;
+      if (!vaultTokenId) {
+        throw new Error('Vault token ID is empty or not found.');
+      }
 
-    // SECURITY: Get access token from Supabase Vault (not directly from connection)
-    const vaultTokenId = connection.vault_access_token_id;
-    if (!vaultTokenId) {
-      throw new Error('Vault token ID is empty or not found.');
-    }
+      // Retrieve actual token from vault using service role client
+      const { data: decryptedToken, error: vaultError } = await supabaseServiceRole
+        .rpc('vault_decrypt', { vault_id: vaultTokenId });
 
-    // Retrieve actual token from vault using service role client
-    const { data: accessToken, error: vaultError } = await supabaseServiceRole
-      .rpc('vault_decrypt', { vault_id: vaultTokenId });
-
-    if (vaultError || !accessToken) {
-      throw new Error(`Failed to retrieve Gmail access token from vault: ${vaultError?.message || 'Token not found'}`);
+      if (vaultError || !decryptedToken) {
+        throw new Error(`Failed to retrieve Gmail access token from vault: ${vaultError?.message || 'Token not found'}`);
+      }
+      
+      accessToken = decryptedToken;
     }
 
     // Execute the requested Gmail API action

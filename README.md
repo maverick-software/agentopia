@@ -908,7 +908,111 @@ The system uses PostgreSQL functions to manage tool availability:
 5. **Tools are passed to OpenAI**: Database-driven tool definitions included in OpenAI API call
 6. **Agent requests tool use**: OpenAI returns tool calls with specific tool names (e.g., `smtp_send_email`)
 7. **System validates and executes**: The system validates permissions and routes execution based on tool name prefix. The chat function injects the caller JWT into `options.auth.token`; routing logic forwards to appropriate edge functions.
-8. **Results returned to agent**: Tool execution results are sent back to OpenAI for final response
+8. **🔄 Intelligent Retry System**: If tools return **LLM-friendly error messages**, the system automatically triggers up to **3 retry attempts**:
+   - **Error Pattern Detection**: Messages containing "Question:", "What", "Please provide", "Missing" trigger retries
+   - **System Guidance**: Adds contextual instructions to help the LLM provide correct parameters  
+   - **Progressive Enhancement**: Increases creativity (temperature 0.7 vs 0.5) to improve parameter generation
+   - **Seamless User Experience**: Multiple attempts happen transparently, user sees final success or failure
+9. **Results returned to agent**: Tool execution results are sent back to OpenAI for final response
+
+### ⚡ LLM-Friendly Error Response System
+
+Agentopia implements a **sophisticated error response system** designed to create seamless user experiences by converting technical errors into intelligent questions that guide the LLM to provide correct parameters.
+
+#### **🎯 Core Philosophy: Interactive Errors, Not Technical Failures**
+
+Instead of returning technical error messages that break the user experience, our system returns **interactive questions** that allow the LLM to gather missing information and retry automatically.
+
+**❌ Old Technical Errors (Poor UX):**
+```typescript
+// These break the user experience
+{ success: false, error: "Missing required parameters: to, subject, body" }
+{ success: false, error: "HTTP 400: Bad Request" }  
+{ success: false, error: "No API key found for provider" }
+```
+
+**✅ New LLM-Friendly Errors (Seamless UX):**
+```typescript
+// These enable intelligent retry with user guidance
+{ success: false, error: "Question: Who should I send this email to? Please provide the recipient email address." }
+{ success: false, error: "Question: What would you like me to search for? Please provide a search query or topic." }
+{ success: false, error: "Question: Your Gmail API key appears to be corrupted. Please re-add your Gmail credentials in the integration settings." }
+```
+
+#### **🔄 Automatic Retry Mechanism**
+
+The system detects interactive error patterns and automatically triggers **intelligent retries**:
+
+1. **Pattern Detection**: Identifies errors containing "Question:", "What", "Please provide", "Missing"
+2. **System Guidance**: Injects contextual instructions to help the LLM understand what's needed
+3. **Progressive Enhancement**: Increases creativity (temperature 0.7 vs 0.5) for better parameter generation
+4. **Multiple Attempts**: Up to 3 retry attempts with learning from previous failures
+5. **Transparent Operation**: User sees final success or failure, retries happen seamlessly
+
+#### **📋 Error Response Design Guidelines**
+
+**For Integration Developers:**
+
+1. **Use Interactive Questions**: Start errors with "Question:" when seeking missing information
+2. **Be Specific**: Tell the LLM exactly what parameter or information is needed
+3. **Provide Context**: Explain why the information is needed and how to provide it
+4. **Guide Action**: Include actionable steps when possible (e.g., "Please re-add your credentials")
+5. **Avoid Technical Jargon**: Use natural language that LLMs understand well
+
+**Examples by Integration Type:**
+
+**Email Tools (Gmail/SMTP):**
+```typescript
+// Missing recipient
+"Question: Who should I send this email to? Please provide the recipient email address."
+
+// Missing subject  
+"Question: What should be the subject line of this email?"
+
+// Auth issues
+"Question: Your email service needs to be set up. Please ensure your email integration is properly configured with valid credentials."
+```
+
+**Search Tools (Web Search):**
+```typescript
+// Missing query
+"Question: What would you like me to search for? Please provide a search query or topic."
+
+// Missing URLs for scraping
+"Question: Which websites would you like me to scrape and summarize? Please provide one or more URLs."
+
+// API key issues
+"Question: The search service needs to be configured. Please add your web search API key in the integration settings."
+```
+
+#### **🛠️ Implementation Locations**
+
+**1. Edge Functions (Primary):**
+- Direct error message generation in `gmail-api`, `web-search-api`, etc.
+- Context-aware error messages based on missing parameters
+- Provider-specific guidance and troubleshooting
+
+**2. UniversalToolExecutor (Fallback Enhancement):**
+- Automatically enhances technical errors that weren't made LLM-friendly
+- Pattern-based error conversion for tool categories
+- Ensures all errors become retry-capable
+
+#### **📊 Technical Benefits**
+
+- **Higher Success Rate**: Tools succeed more often with proper retry guidance
+- **Better User Experience**: Seamless interaction without manual intervention
+- **Reduced Support Burden**: Self-resolving issues reduce support requests
+- **Consistent Behavior**: All integrations behave like native MCP tools
+- **Scalable Architecture**: New integrations inherit retry capabilities automatically
+
+#### **🎯 Success Metrics**
+
+- **3x Retry Attempts**: Optimal balance between success rate and performance
+- **Progressive Temperature**: 0.5 → 0.7 increase enhances parameter creativity
+- **Universal Coverage**: All edge functions support LLM-friendly errors
+- **Transparent Operation**: Users unaware of retry attempts unless they fail
+
+This system ensures that Agentopia tools provide the same seamless, intelligent experience as high-quality MCP servers, making tool failures feel like natural conversation flow rather than technical breakdowns.
 
 ### Gmail Integration Example
 

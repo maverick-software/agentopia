@@ -408,9 +408,9 @@ serve(async (req) => {
         if (!apiKey) {
           const wasUuid = storedValue && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
           if (wasUuid) {
-            throw new Error(`Failed to decrypt API key from vault for ${providerName}. The API key may be corrupted. Please delete and re-add your ${providerName} credentials.`);
+            throw new Error(`Question: Your ${providerName} API key appears to be corrupted. Please delete and re-add your ${providerName} credentials in the integration settings.`);
           } else {
-            throw new Error(`No API key found for ${providerName}`);
+            throw new Error(`Question: No API key found for ${providerName}. Please add your ${providerName} API key in the integration settings before I can perform web searches.`);
           }
         }
 
@@ -418,6 +418,11 @@ serve(async (req) => {
         let tokensUsed = 0;
 
         if (action === 'web_search' || action === 'news_search') {
+          // Validate search query parameter
+          if (!parameters.query || parameters.query.trim() === '') {
+            throw new Error('Question: What would you like me to search for? Please provide a search query or topic.');
+          }
+          
           data = await provider.execute(parameters.query, parameters, apiKey);
           
           // Normalize response format across providers
@@ -425,6 +430,12 @@ serve(async (req) => {
           
         } else if (action === 'scrape_and_summarize') {
           const urls = parameters.urls || [];
+          
+          // Validate URLs parameter
+          if (!urls || !Array.isArray(urls) || urls.length === 0) {
+            throw new Error('Question: Which websites would you like me to scrape and summarize? Please provide one or more URLs.');
+          }
+          
           const summaryLength = parameters.summary_length || 'medium';
           const focusKeywords = parameters.focus_keywords || [];
 

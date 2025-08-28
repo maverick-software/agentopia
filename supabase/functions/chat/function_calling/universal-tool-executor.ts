@@ -2,6 +2,8 @@
  * Universal Tool Execution Router
  * Routes tool execution to appropriate integration edge functions
  * This scales to any number of integrations without code changes
+ * 
+ * Features intelligent error enhancement for LLM-friendly retry mechanism
  */
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
@@ -33,7 +35,10 @@ const TOOL_ROUTING_MAP: Record<string, {
         'gmail_email_actions': 'modify_message'
       };
       return actionMap[toolName] || 'unknown_action';
-    }
+    },
+    parameterMapping: (params: Record<string, any>) => ({
+      params: params  // Gmail API expects "params" not "parameters"
+    })
   },
   
   // SMTP tools
@@ -46,7 +51,10 @@ const TOOL_ROUTING_MAP: Record<string, {
         'smtp_validate_config': 'validate'
       };
       return actionMap[toolName] || 'send';
-    }
+    },
+    parameterMapping: (params: Record<string, any>) => ({
+      params: params  // Keep consistent parameter structure
+    })
   },
   
   // Web search tools (using web-search-api)
@@ -89,6 +97,61 @@ const TOOL_ROUTING_MAP: Record<string, {
     actionMapping: (toolName: string) => toolName // Pass through tool name
   }
 };
+
+/**
+ * Enhance error messages to be more LLM-friendly for retry mechanism
+ * Converts technical errors into interactive questions when appropriate
+ */
+function enhanceErrorForRetry(toolName: string, error: string): string {
+  // If error already contains interactive patterns, return as-is
+  const hasInteractivePattern = error.toLowerCase().includes('question:') || 
+    error.toLowerCase().includes('what ') ||
+    error.toLowerCase().includes('please provide') ||
+    error.toLowerCase().includes('which ') ||
+    error.toLowerCase().includes('how ');
+    
+  if (hasInteractivePattern) {
+    return error;
+  }
+  
+  // Convert common technical errors to interactive questions based on tool type
+  const lowerError = error.toLowerCase();
+  const isEmailTool = toolName.startsWith('gmail_') || toolName.startsWith('smtp_');
+  const isSearchTool = toolName.startsWith('web_search') || toolName.startsWith('news_') || toolName.startsWith('scrape_');
+  
+  // Missing parameters errors
+  if (lowerError.includes('missing') && lowerError.includes('parameter')) {
+    if (isEmailTool) {
+      return 'Question: What email details are missing? Please provide the recipient email address, subject line, and message content.';
+    }
+    if (isSearchTool) {
+      return 'Question: What would you like me to search for? Please provide a search query or topic.';
+    }
+  }
+  
+  // Authentication/API key errors
+  if (lowerError.includes('api key') || lowerError.includes('authentication') || lowerError.includes('unauthorized')) {
+    if (isEmailTool) {
+      return 'Question: It looks like the email service needs to be set up. Please ensure your email integration is properly configured with valid credentials.';
+    }
+    if (isSearchTool) {
+      return 'Question: The search service needs to be configured. Please add your web search API key in the integration settings.';
+    }
+  }
+  
+  // Invalid parameter errors  
+  if (lowerError.includes('invalid') || lowerError.includes('malformed')) {
+    if (isEmailTool) {
+      return 'Question: There seems to be an issue with the email parameters. Please check that the recipient email address is valid and all required fields are provided.';
+    }
+    if (isSearchTool) {
+      return 'Question: There seems to be an issue with the search parameters. Please provide a clear search query or valid URLs to scrape.';
+    }
+  }
+  
+  // Generic enhancement for any error
+  return `Please provide the correct parameters for ${toolName}. ${error}`;
+}
 
 export class UniversalToolExecutor {
   
@@ -150,14 +213,18 @@ export class UniversalToolExecutor {
       
       if (error) {
         console.error(`[UniversalToolExecutor] Edge function error for ${toolName}:`, error);
+        const originalError = error.message || 'Unknown error';
+        const enhancedError = enhanceErrorForRetry(toolName, originalError);
+        
         return {
           success: false,
-          error: `Integration error: ${error.message || 'Unknown error'}`,
+          error: enhancedError,  // Use enhanced error for retry mechanism
           metadata: { 
             toolName, 
             edgeFunction: routingConfig.edgeFunction, 
             action,
-            originalError: error.code || error.name
+            originalError: error.code || error.name,
+            enhanced: enhancedError !== originalError  // Flag if error was enhanced
           }
         };
       }
@@ -166,6 +233,24 @@ export class UniversalToolExecutor {
       if (data && typeof data === 'object') {
         // If the response already has a success field, use it as-is
         if ('success' in data) {
+          // If it's an error response, enhance the error message for retry
+          if (!data.success && data.error) {
+            const enhancedError = enhanceErrorForRetry(toolName, data.error);
+            return {
+              ...data,
+              error: enhancedError,  // Use enhanced error for retry mechanism
+              metadata: { 
+                ...data.metadata, 
+                toolName, 
+                edgeFunction: routingConfig.edgeFunction,
+                action,
+                originalError: data.error,
+                enhanced: enhancedError !== data.error  // Flag if error was enhanced
+              }
+            };
+          }
+          
+          // Success response - return as-is with metadata
           return {
             ...data,
             metadata: { 

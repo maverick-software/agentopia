@@ -50,6 +50,11 @@ export function EnhancedChannelsModalRefactored({
   const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('channel');
   
+  // DEBUG: Log loaded integrations
+  useEffect(() => {
+    console.log('[EnhancedChannelsModal] Loaded channel integrations:', integrations.map(i => ({ name: i.name, id: i.id, agent_classification: i.agent_classification })));
+  }, [integrations]);
+  
   // Capabilities state - fetch from database instead of hardcoding
   const [capabilitiesByIntegrationId, setCapabilitiesByIntegrationId] = useState<Record<string, any[]>>({});
   
