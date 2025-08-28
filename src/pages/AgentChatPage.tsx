@@ -16,7 +16,7 @@ import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
 import { AboutMeModal } from '../components/modals/AboutMeModal';
 import { HowIThinkModal } from '../components/modals/HowIThinkModal';
 import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
-import { EnhancedChannelsModal } from '../components/modals/EnhancedChannelsModal';
+import { EnhancedChannelsModalRefactored as EnhancedChannelsModal } from '../components/modals/channels/EnhancedChannelsModalRefactored';
 import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
 import { TaskManagerModal } from '../components/modals/TaskManagerModal';
 import { HistoryModal } from '../components/modals/HistoryModal';

@@ -44,6 +44,10 @@ const CAPABILITIES: Record<string, { id: string; label: string }[]> = {
     { id: 'validate', label: 'Validate Email' },
     { id: 'stats', label: 'Stats' },
     { id: 'suppressions', label: 'Suppressions' }
+  ],
+  smtp: [
+    { id: 'smtp_send_email', label: 'Send Email' },
+    { id: 'smtp_configuration', label: 'SMTP Configuration' }
   ]
 };
 

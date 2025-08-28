@@ -29,6 +29,13 @@ interface ChannelFormState {
   fromEmail: string;
   fromName: string;
   mailgunDomain: string;
+  
+  // SMTP form fields
+  smtpHost: string;
+  smtpPort: string;
+  smtpSecure: string;
+  smtpUsername: string;
+  smtpPassword: string;
 }
 
 const initialState: ChannelFormState = {
@@ -45,7 +52,12 @@ const initialState: ChannelFormState = {
   apiKey: '',
   fromEmail: '',
   fromName: '',
-  mailgunDomain: ''
+  mailgunDomain: '',
+  smtpHost: '',
+  smtpPort: '587',
+  smtpSecure: 'tls',
+  smtpUsername: '',
+  smtpPassword: ''
 };
 
 export function useChannelsModalState() {
@@ -85,6 +97,13 @@ export function useChannelsModalState() {
   const setFromEmail = (email: string) => updateState({ fromEmail: email });
   const setFromName = (name: string) => updateState({ fromName: name });
   const setMailgunDomain = (domain: string) => updateState({ mailgunDomain: domain });
+  
+  // SMTP form fields
+  const setSMTPHost = (host: string) => updateState({ smtpHost: host });
+  const setSMTPPort = (port: string) => updateState({ smtpPort: port });
+  const setSMTPSecure = (secure: string) => updateState({ smtpSecure: secure });
+  const setSMTPUsername = (username: string) => updateState({ smtpUsername: username });
+  const setSMTPPassword = (password: string) => updateState({ smtpPassword: password });
 
   // Reset form helper
   const resetForm = () => {
@@ -94,6 +113,11 @@ export function useChannelsModalState() {
       fromEmail: '',
       fromName: '',
       mailgunDomain: '',
+      smtpHost: '',
+      smtpPort: '587',
+      smtpSecure: 'tls',
+      smtpUsername: '',
+      smtpPassword: '',
       error: null
     });
   };
@@ -117,6 +141,11 @@ export function useChannelsModalState() {
     setFromEmail,
     setFromName,
     setMailgunDomain,
+    setSMTPHost,
+    setSMTPPort,
+    setSMTPSecure,
+    setSMTPUsername,
+    setSMTPPassword,
     
     // Helpers
     updateState,

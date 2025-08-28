@@ -45,6 +45,10 @@ const CAPABILITIES: Record<string, { id: string; label: string }[]> = {
     { id: 'validate', label: 'Validate Email' },
     { id: 'stats', label: 'Stats' },
     { id: 'suppressions', label: 'Suppressions' }
+  ],
+  smtp: [
+    { id: 'smtp_send_email', label: 'Send Email' },
+    { id: 'smtp_configuration', label: 'SMTP Configuration' }
   ]
 };
 
@@ -79,17 +83,36 @@ export function ChannelConnectionItem({
   onRemoveSuccess 
 }: ChannelConnectionItemProps) {
   const providerName = (connection as any).provider_name;
-  const isSendGrid = providerName === 'sendgrid';
-  const isMailgun = providerName === 'mailgun';
   
-  const gradient = isSendGrid
-    ? 'from-blue-500 to-indigo-500'
-    : isMailgun
-    ? 'from-rose-500 to-pink-500'
-    : 'from-red-500 to-orange-500';
-    
-  const name = isSendGrid ? 'SendGrid' : isMailgun ? 'Mailgun' : 'Gmail';
-  const matched = integrations.find(i => i.name.toLowerCase().includes((providerName || '').toLowerCase()));
+  // Find the matching channel integration for proper display info
+  const matchedIntegration = integrations.find(i => 
+    i.name.toLowerCase().includes(providerName?.toLowerCase() || '') ||
+    providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
+    providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
+    providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
+    providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
+  );
+  
+  // Determine display properties based on the matched integration or fallback to provider
+  let name = matchedIntegration?.name || providerName;
+  let gradient = 'from-zinc-500 to-zinc-600'; // default
+  
+  if (providerName === 'gmail') {
+    name = 'Gmail';
+    gradient = 'from-red-500 to-orange-500';
+  } else if (providerName === 'sendgrid') {
+    name = 'SendGrid';
+    gradient = 'from-blue-500 to-indigo-500';
+  } else if (providerName === 'mailgun') {
+    name = 'Mailgun';
+    gradient = 'from-rose-500 to-pink-500';
+  } else if (providerName === 'smtp') {
+    name = 'Email Relay';
+    gradient = 'from-purple-500 to-pink-500';
+  } else if (matchedIntegration) {
+    // Use integration name for other channel types
+    name = matchedIntegration.name;
+  }
 
   return (
     <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
@@ -102,7 +125,7 @@ export function ChannelConnectionItem({
           <p className="text-sm text-muted-foreground">
             {(connection as any).external_username || 'Authorized'}
           </p>
-          {renderCapabilitiesBadges(providerName, matched?.id, capabilitiesByIntegrationId)}
+          {renderCapabilitiesBadges(providerName, matchedIntegration?.id, capabilitiesByIntegrationId)}
         </div>
       </div>
       <div className="flex items-center gap-2">

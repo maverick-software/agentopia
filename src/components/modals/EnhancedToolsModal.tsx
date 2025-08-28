@@ -436,19 +436,7 @@ export function EnhancedToolsModal({
       return hasWebSearchCredential ? 'available' : 'available';
     }
     
-    // For unified Email Relay, check if any email provider is connected
-    if (providerName === 'email relay' || providerName === 'email_relay') {
-      const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
-      const hasEmailPermission = agentPermissions.some(p => 
-        emailRelayProviders.includes(p.provider_name) && p.is_active
-      );
-      if (hasEmailPermission) return 'connected';
-      
-      const hasEmailCredential = connections.some(c => 
-        emailRelayProviders.includes(c.provider_name) && c.connection_status === 'active'
-      );
-      return hasEmailCredential ? 'available' : 'available';
-    }
+    // Email Relay is now classified as a 'channel' - removed from tools logic
     
     // For other providers, check normally
     const exists = agentPermissions.some(p => p.provider_name === providerName && p.is_active);
@@ -466,10 +454,7 @@ export function EnhancedToolsModal({
     if (['serper_api','serpapi','brave_search','web_search'].includes(provider)) {
       return ['web_search','news_search','image_search','local_search'];
     }
-    // For email relay providers
-    if (['smtp','sendgrid','mailgun','email_relay'].includes(provider)) {
-      return ['smtp_send_email','smtp_test_connection'];
-    }
+    // Email relay providers are now channels - removed from tools logic
     return [];
   };
 
@@ -490,14 +475,8 @@ export function EnhancedToolsModal({
     const isWebSearch = provider === 'web search' || provider === 'web_search' || provider.toLowerCase().includes('web search');
     const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
     
-    // For email relay, check all email provider types
-    const isEmailRelay = provider === 'email relay' || provider === 'email_relay' || provider.toLowerCase().includes('email relay');
-    const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
-    
     const creds = isWebSearch 
       ? connections.filter(c => webSearchProviders.includes(c.provider_name) && c.connection_status === 'active')
-      : isEmailRelay
-      ? connections.filter(c => emailRelayProviders.includes(c.provider_name) && c.connection_status === 'active')
       : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
     
     return (
@@ -623,9 +602,23 @@ export function EnhancedToolsModal({
             emailRelayProviders.includes(c.provider_name)
           );
           
-          const otherConnections = toolConnections.filter(c => 
-            !webSearchProviders.includes(c.provider_name) && !emailRelayProviders.includes(c.provider_name)
-          );
+          // Only show connections for integrations that are actually classified as 'tool'
+          const otherConnections = toolConnections.filter(c => {
+            const isWebSearch = webSearchProviders.includes(c.provider_name);
+            const isEmailRelay = emailRelayProviders.includes(c.provider_name);
+            
+            // Skip web search and email relay (handled separately)
+            if (isWebSearch || isEmailRelay) {
+              return false;
+            }
+            
+            // Only include if there's a matching integration classified as 'tool'
+            const matchedIntegration = TOOL_INTEGRATIONS.find(i => 
+              i.name.toLowerCase().includes(c.provider_name?.toLowerCase() || '')
+            );
+            
+            return !!matchedIntegration;
+          });
 
           const items = [];
 
@@ -687,67 +680,8 @@ export function EnhancedToolsModal({
             );
           }
 
-          // Add unified Email Relay entry if any email providers are connected
-          if (emailRelayConnections.length > 0) {
-            const emailRelayIntegration = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase() === 'email relay');
-            const EMAIL_PROVIDER_NAMES = {
-              'smtp': 'SMTP Server',
-              'sendgrid': 'SendGrid',
-              'mailgun': 'Mailgun'
-            };
-            const providerNames = emailRelayConnections.map(c => {
-              return EMAIL_PROVIDER_NAMES[c.provider_name as keyof typeof EMAIL_PROVIDER_NAMES] || c.provider_name;
-            }).join(', ');
-
-            items.push(
-              <div
-                key="email_relay_unified"
-                className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Mail className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">Email Relay</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Using: {providerNames}
-                    </p>
-                    {renderCapabilitiesBadges(emailRelayIntegration?.id)}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                    Connected
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500"
-                    onClick={async () => {
-                      if (!confirm('Remove all Email Relay providers from this agent?')) return;
-                      try {
-                        // Remove all email relay provider permissions
-                        for (const connection of emailRelayConnections) {
-                          const { error } = await supabase.rpc('revoke_agent_integration_permission', { 
-                            p_permission_id: connection.id 
-                          });
-                          if (error) throw error;
-                        }
-                        await refetchIntegrationPermissions();
-                        toast.success('Email Relay tools removed from agent');
-                      } catch (e: any) {
-                        console.error('Remove email relay error', e);
-                        toast.error('Failed to remove Email Relay tools');
-                      }
-                    }}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-            );
-          }
+          // Email Relay is now classified as a 'channel' and should only appear in the Channels modal
+          // Removed hardcoded Email Relay display logic from Tools modal
 
           // Add other (non-web search, non-email relay) connections
           otherConnections.forEach((connection) => {

@@ -35,7 +35,22 @@ export function ConnectedChannelsList({
   onRemoveSuccess,
   onAddChannel 
 }: ConnectedChannelsListProps) {
-  const channelConnections = agentPermissions.filter(p => p.is_active);
+  // Only show permissions for integrations that are classified as 'channel'
+  const channelConnections = agentPermissions.filter(p => {
+    if (!p.is_active) return false;
+    
+    // Check if this permission is for a channel-classified integration
+    const providerName = p.provider_name;
+    const matchedIntegration = integrations.find(i => 
+      i.name.toLowerCase().includes(providerName?.toLowerCase() || '') ||
+      providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
+      providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
+      providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
+      providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
+    );
+    
+    return !!matchedIntegration;
+  });
 
   if (channelConnections.length === 0) {
     return (

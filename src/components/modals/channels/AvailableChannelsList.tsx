@@ -70,6 +70,10 @@ function mapIntegrationToService(integration: Integration): ChannelService {
     id = 'mailgun';
     gradient = 'from-rose-500 to-pink-500';
     type = 'api_key';
+  } else if (lower.includes('email relay') || lower.includes('email_relay')) {
+    id = 'email_relay';
+    gradient = 'from-purple-500 to-pink-500';
+    type = 'api_key';
   }
 
   return {

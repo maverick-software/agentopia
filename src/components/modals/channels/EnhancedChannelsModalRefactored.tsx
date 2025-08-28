@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGmailConnection } from '@/integrations/gmail';
 import { useConnections, VaultService, useIntegrationsByClassification } from '@/integrations/_shared';
@@ -49,9 +50,46 @@ export function EnhancedChannelsModalRefactored({
   const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('channel');
   
+  // Capabilities state - fetch from database instead of hardcoding
+  const [capabilitiesByIntegrationId, setCapabilitiesByIntegrationId] = useState<Record<string, any[]>>({});
+  
   // Custom hooks for state and permissions
   const modalState = useChannelsModalState();
   const { agentPermissions, fetchAgentPermissions } = useChannelPermissions(agentId);
+
+  // Fetch capabilities from database
+  useEffect(() => {
+    const loadCapabilities = async () => {
+      try {
+        if (!integrations || integrations.length === 0) return;
+        
+        const ids = integrations.map(i => i.id);
+        const { data } = await supabase
+          .from('integration_capabilities')
+          .select('integration_id, capability_key, display_label, display_order')
+          .in('integration_id', ids)
+          .order('display_order');
+          
+        const capabilitiesMap: Record<string, any[]> = {};
+        (data || []).forEach((row: any) => {
+          if (!capabilitiesMap[row.integration_id]) {
+            capabilitiesMap[row.integration_id] = [];
+          }
+          capabilitiesMap[row.integration_id].push({
+            capability_key: row.capability_key,
+            display_label: row.display_label,
+            display_order: row.display_order
+          });
+        });
+        
+        setCapabilitiesByIntegrationId(capabilitiesMap);
+      } catch (error) {
+        console.warn('Failed to load integration capabilities:', error);
+      }
+    };
+
+    loadCapabilities();
+  }, [integrations, supabase]);
 
   // Helper functions
   const providerNameForServiceId = (serviceId: string) => {
@@ -232,6 +270,99 @@ export function EnhancedChannelsModalRefactored({
     }
   };
 
+  const handleSMTPSetup = async () => {
+    if (!user) return;
+    
+    modalState.setConnectingService('smtp');
+    modalState.setError(null);
+    
+    try {
+      // Validate inputs
+      if (!modalState.smtpHost.trim()) {
+        modalState.setError('SMTP Host is required');
+        return;
+      }
+      if (!modalState.smtpPort.trim()) {
+        modalState.setError('SMTP Port is required');
+        return;
+      }
+      if (!modalState.smtpUsername.trim()) {
+        modalState.setError('Username is required');
+        return;
+      }
+      if (!modalState.smtpPassword.trim()) {
+        modalState.setError('Password is required');
+        return;
+      }
+      if (!modalState.fromEmail.trim()) {
+        modalState.setError('From email is required');
+        return;
+      }
+
+      // Find SMTP provider
+      const { data: smtpProvider, error: providerError } = await supabase
+        .from('oauth_providers')
+        .select('id')
+        .eq('name', 'smtp')
+        .single();
+      if (providerError || !smtpProvider) throw providerError || new Error('SMTP provider missing');
+
+      // Store SMTP configuration in vault
+      const smtpConfig = {
+        host: modalState.smtpHost,
+        port: parseInt(modalState.smtpPort),
+        secure: modalState.smtpSecure === 'ssl',
+        auth: {
+          user: modalState.smtpUsername,
+          pass: modalState.smtpPassword
+        },
+        tls: modalState.smtpSecure === 'tls' ? { rejectUnauthorized: false } : undefined,
+        from_email: modalState.fromEmail,
+        from_name: modalState.fromName || undefined
+      };
+
+      console.log('Securing SMTP configuration with vault encryption');
+      const secretName = `smtp_config_${user.id}_${Date.now()}`;
+      const vaultKeyId = await vaultService.createSecret(
+        secretName,
+        smtpConfig,
+        `SMTP server configuration for ${modalState.smtpHost}:${modalState.smtpPort} - Created: ${new Date().toISOString()}`
+      );
+
+      // Save connection record
+      const { data: credential, error: credError } = await supabase
+        .from('user_integration_credentials')
+        .insert({
+          user_id: user.id,
+          oauth_provider_id: smtpProvider.id,
+          provider_name: 'smtp',
+          vault_key_id: vaultKeyId,
+          connection_status: 'active',
+          display_name: `${modalState.smtpHost}:${modalState.smtpPort}`,
+          credential_data: { from_email: modalState.fromEmail }
+        })
+        .select()
+        .single();
+      if (credError || !credential) throw credError || new Error('Failed to save SMTP credential');
+
+      await refetchConnections();
+      await refetchIntegrationPermissions();
+      
+      toast.success('SMTP server connected successfully! 🚀');
+      modalState.setSaved(true);
+      modalState.setSetupService(null);
+      modalState.setActiveTab('connected');
+      modalState.resetForm();
+
+    } catch (error: any) {
+      console.error('SMTP setup error:', error);
+      modalState.setError(error.message || 'Failed to setup SMTP server');
+      toast.error('Failed to connect SMTP server. Please try again.');
+    } finally {
+      modalState.setConnectingService(null);
+    }
+  };
+
   const handleModifyPermissions = (connection: any) => {
     modalState.setEditingPermission(connection);
     modalState.setSelectedScopes(connection.allowed_scopes || defaultScopesForService(connection.provider_name));
@@ -240,52 +371,102 @@ export function EnhancedChannelsModalRefactored({
 
   const renderCredentialSelector = (serviceId: string) => {
     const provider = providerNameForServiceId(serviceId);
-    const creds = connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    
+    // For Email Relay, show credentials from all email providers
+    const creds = serviceId === 'email_relay' 
+      ? connections.filter(c => ['smtp', 'sendgrid', 'mailgun'].includes(c.provider_name) && c.connection_status === 'active')
+      : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
     
     if (creds.length === 0) {
       return (
-        <div className="text-sm text-muted-foreground text-center py-4">
-          No saved credentials for this service.
+        <div className="space-y-3">
+          <div className="text-sm text-muted-foreground text-center py-4">
+            No saved credentials for this service.
+          </div>
+          
+          {/* Add new credential button */}
+          <div className="pt-2 border-t">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => {
+                modalState.setSelectingCredentialFor(null);
+                modalState.setSetupService(serviceId);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> 
+              Add new credential
+            </Button>
+          </div>
         </div>
       );
     }
 
     return (
       <div className="space-y-3">
-        {creds.map((c) => (
-          <div key={c.connection_id} className="flex items-center justify-between p-3 border rounded">
-            <div className="text-sm">
-              <div className="font-medium">{c.provider_display_name}</div>
-              <div className="text-muted-foreground">{c.external_username || c.connection_name}</div>
-            </div>
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  modalState.setConnectingService(serviceId);
-                  const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
-                    p_agent_id: agentId,
-                    p_connection_id: c.connection_id,
-                    p_allowed_scopes: defaultScopesForService(serviceId),
-                    p_permission_level: 'custom',
-                    p_user_id: user?.id
-                  });
-                  if (grantError) throw grantError;
-                  await fetchAgentPermissions();
-                  modalState.setSelectingCredentialFor(null);
-                  modalState.setActiveTab('connected');
-                } catch (e) {
-                  console.error('Grant permission error', e);
-                  toast.error('Failed to authorize agent');
-                } finally {
-                  modalState.setConnectingService(null);
-                }
+        {creds.map((c) => {
+          // For Email Relay, show which email provider this credential belongs to
+          const displayName = serviceId === 'email_relay' 
+            ? `${c.provider_name === 'smtp' ? 'SMTP Server' : 
+                c.provider_name === 'sendgrid' ? 'SendGrid' : 
+                c.provider_name === 'mailgun' ? 'Mailgun' : c.provider_name}`
+            : c.provider_display_name;
+            
+          return (
+            <div key={c.connection_id} className="flex items-center justify-between p-3 border rounded">
+              <div className="text-sm">
+                <div className="font-medium">{displayName}</div>
+                <div className="text-muted-foreground">{c.external_username || c.connection_name}</div>
+              </div>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    modalState.setConnectingService(serviceId);
+                    
+                    // For Email Relay, use the actual provider's scopes instead of service scopes
+                    const actualProvider = serviceId === 'email_relay' ? c.provider_name : serviceId;
+                    const scopes = defaultScopesForService(actualProvider);
+                    
+                    const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
+                      p_agent_id: agentId,
+                      p_connection_id: c.connection_id,
+                      p_allowed_scopes: scopes,
+                      p_permission_level: 'custom',
+                      p_user_id: user?.id
+                    });
+                    if (grantError) throw grantError;
+                    await fetchAgentPermissions();
+                    modalState.setSelectingCredentialFor(null);
+                    modalState.setActiveTab('connected');
+                  } catch (e) {
+                    console.error('Grant permission error', e);
+                    toast.error('Failed to authorize agent');
+                  } finally {
+                    modalState.setConnectingService(null);
+                  }
               }}
             >
               Authorize Agent
             </Button>
           </div>
-        ))}
+          );
+        })}
+        
+        {/* Add new credential button */}
+        <div className="pt-2 border-t">
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => {
+              modalState.setSelectingCredentialFor(null);
+              modalState.setSetupService(serviceId);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> 
+            Add new credential
+          </Button>
+        </div>
       </div>
     );
   };
@@ -314,6 +495,7 @@ export function EnhancedChannelsModalRefactored({
                 <ConnectedChannelsList
                   agentPermissions={agentPermissions}
                   integrations={integrations}
+                  capabilitiesByIntegrationId={capabilitiesByIntegrationId}
                   onModifyPermissions={handleModifyPermissions}
                   onRemoveSuccess={fetchAgentPermissions}
                   onAddChannel={() => modalState.setActiveTab('available')}
@@ -330,6 +512,7 @@ export function EnhancedChannelsModalRefactored({
                   setupService={modalState.setupService}
                   selectingCredentialFor={modalState.selectingCredentialFor}
                   connectingService={modalState.connectingService}
+                  capabilitiesByIntegrationId={capabilitiesByIntegrationId}
                   onSetupClick={modalState.setSetupService}
                   onSelectCredentialClick={modalState.setSelectingCredentialFor}
                   onCancelSetup={() => {
@@ -345,15 +528,27 @@ export function EnhancedChannelsModalRefactored({
                       fromEmail={modalState.fromEmail}
                       fromName={modalState.fromName}
                       mailgunDomain={modalState.mailgunDomain}
+                      smtpHost={modalState.smtpHost}
+                      smtpPort={modalState.smtpPort}
+                      smtpSecure={modalState.smtpSecure}
+                      smtpUsername={modalState.smtpUsername}
+                      smtpPassword={modalState.smtpPassword}
                       error={modalState.error}
                       onConnectionNameChange={modalState.setConnectionName}
                       onApiKeyChange={modalState.setApiKey}
                       onFromEmailChange={modalState.setFromEmail}
                       onFromNameChange={modalState.setFromName}
                       onMailgunDomainChange={modalState.setMailgunDomain}
+                      onSMTPHostChange={modalState.setSMTPHost}
+                      onSMTPPortChange={modalState.setSMTPPort}
+                      onSMTPSecureChange={modalState.setSMTPSecure}
+                      onSMTPUsernameChange={modalState.setSMTPUsername}
+                      onSMTPPasswordChange={modalState.setSMTPPassword}
                       onOAuthSetup={handleOAuthSetup}
                       onSendGridSetup={handleSendGridSetup}
                       onMailgunSetup={handleMailgunSetup}
+                      onSMTPSetup={handleSMTPSetup}
+                      onSetupService={modalState.setSetupService}
                       onSetupCancel={() => modalState.setSetupService(null)}
                     />
                   )}
