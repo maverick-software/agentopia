@@ -314,7 +314,7 @@ export function EnhancedChannelsModal({
         // Refresh connections to get the latest data and force UI update from authoritative RPC
         await refetchConnections();
         // Also refresh agent permissions list so connected badge updates immediately
-        await fetchAgentPermissions();
+        await refetchIntegrationPermissions();
         
         toast.success('Gmail connected successfully! 🎉');
         setSaved(true);
@@ -334,9 +334,9 @@ export function EnhancedChannelsModal({
     } else if (serviceId === 'discord') {
       // For Discord, show setup instructions
       setSetupService('discord');
-      toast.info('Discord setup requires additional configuration. Please follow the setup form below.');
+      toast('Discord setup requires additional configuration. Please follow the setup form below.');
     } else {
-      toast.info(`${serviceId} integration coming soon! 🚀`);
+      toast(`${serviceId} integration coming soon! 🚀`);
       return;
     }
   };
@@ -524,7 +524,7 @@ export function EnhancedChannelsModal({
                     try {
                       const { error } = await supabase.rpc('revoke_agent_integration_permission', { p_permission_id: connection.id });
                       if (error) throw error;
-                      await fetchAgentPermissions();
+                      await refetchIntegrationPermissions();
                       toast.success('Channel removed from agent');
                     } catch (e: any) {
                       console.error('Revoke permission error', e);
@@ -579,7 +579,7 @@ export function EnhancedChannelsModal({
 
             <Button
               onClick={() => {
-                toast.info('Please configure Discord through the agent edit page for now.');
+                toast('Please configure Discord through the agent edit page for now.');
                 setSetupService(null);
               }}
               variant="outline"
@@ -865,7 +865,7 @@ export function EnhancedChannelsModal({
                       p_user_id: user?.id
                     });
                     if (grantError) throw grantError;
-                    await fetchAgentPermissions();
+                    await refetchIntegrationPermissions();
                     setSelectingCredentialFor(null);
                     setActiveTab('connected');
                   } catch (e) {
@@ -971,7 +971,7 @@ export function EnhancedChannelsModal({
                           Connected
                         </Badge>
                       )}
-                      {status === 'coming_soon' && (
+                      {service.type === 'coming_soon' && (
                         <Badge variant="outline" className="text-xs">
                           Coming Soon
                         </Badge>
@@ -984,7 +984,7 @@ export function EnhancedChannelsModal({
                 <div className="flex items-center space-x-2">
                   {isConnected ? (
                     <CheckCircle className="h-5 w-5 text-green-500" />
-                  ) : status === 'coming_soon' ? (
+                  ) : service.type === 'coming_soon' ? (
                     <AlertCircle className="h-5 w-5 text-muted-foreground" />
                   ) : (
                     <Button
@@ -1124,7 +1124,7 @@ export function EnhancedChannelsModal({
                   p_user_id: user?.id
                 });
                 if (error) throw error;
-                await fetchAgentPermissions();
+                await refetchIntegrationPermissions();
                 setShowPermissionsModal(false);
                 toast.success('Permissions updated');
               } catch(e:any) {
