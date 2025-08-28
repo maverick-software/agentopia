@@ -12,7 +12,7 @@ import { ContextEngine } from './core/context/context_engine.ts';
 import { StateManager } from './core/state/state_manager.ts';
 import { MonitoringSystem } from './core/monitoring/monitoring_system.ts';
 import { APIVersionRouter, MessageAdapter, getFeatureFlags, isFeatureEnabled, DualWriteService } from './adapters/index.ts';
-import { FunctionCallingManager } from './function_calling.ts';
+import { FunctionCallingManager } from './function_calling/manager.ts';
 import { SchemaValidator } from './validation/index.ts';
 
 // Import API handlers

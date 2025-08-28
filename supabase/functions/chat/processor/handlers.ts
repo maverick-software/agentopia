@@ -1,6 +1,6 @@
 import type { AdvancedChatMessage } from '../types/message.types.ts';
 import type { ProcessingContext, ProcessingMetrics } from './types.ts';
-import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling.ts';
+import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling/manager.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
 
 export interface MessageHandler {

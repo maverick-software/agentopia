@@ -1,6 +1,11 @@
 /**
- * Function Calling Integration for Chat System - Refactored
- * Simplified interface that delegates to modular providers
+ * ARCHIVED: Function Calling Integration for Chat System - Legacy Wrapper
+ * 
+ * This file was archived on 2025-01-27 during the unified MCP architecture refactor.
+ * It was causing duplicate export conflicts with the new function_calling/manager.ts structure.
+ * 
+ * Original purpose: Simplified interface that delegates to modular providers
+ * Replaced by: ./function_calling/manager.ts (unified MCP tool discovery)
  */
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
@@ -42,8 +47,8 @@ export class FunctionCallingManagerLegacy {
   /**
    * Format tool execution result
    */
-  formatResult(functionName: string, result: any): string {
-    return this.manager.formatResult(functionName, result);
+  async formatResult(functionName: string, result: any): Promise<string> {
+    return await this.manager.formatResult(functionName, result);
   }
 
   /**
@@ -61,8 +66,11 @@ export class FunctionCallingManagerLegacy {
   }
 }
 
-// Export the new manager as the default for new code
+// Export the new manager directly
 export { FunctionCallingManager };
 
-// Export the legacy wrapper as the old name for backwards compatibility
-export { FunctionCallingManagerLegacy as FunctionCallingManager as default };
+// Export the legacy wrapper for backwards compatibility  
+export { FunctionCallingManagerLegacy };
+
+// Default export for backwards compatibility
+export default FunctionCallingManagerLegacy;

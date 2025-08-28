@@ -79,3 +79,4 @@ export function useToolPermissions(agentId: string): ToolPermissionsHook {
     defaultScopesForProvider
   };
 }
+

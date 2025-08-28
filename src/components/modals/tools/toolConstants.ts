@@ -47,3 +47,4 @@ export const getDefaultScopesForProvider = (provider: string): string[] => {
   }
   return [];
 };
+
