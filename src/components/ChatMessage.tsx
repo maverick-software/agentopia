@@ -5,6 +5,7 @@ import { Clipboard, Check, Settings, Wrench } from 'lucide-react';
 import type { Message, ToolCall } from '../types';
 import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
 import ToolCallIndicator from './ToolCallIndicator';
+import { ToolCategorizer } from '@/lib/toolCategorization';
 
 interface ChatMessageProps {
   message: Message;
@@ -180,12 +181,58 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
                   ? message.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
                   : '--:--'}
               </p>
-              {message.toolCalls && message.toolCalls.length > 0 && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Settings className="w-3 h-3" />
-                  <span>{message.toolCalls.length} tool{message.toolCalls.length !== 1 ? 's' : ''}</span>
-                </div>
-              )}
+{/* Smart tool categorization tags */}
+              {message.toolCalls && message.toolCalls.length > 0 && (() => {
+                // Extract tool names and categorize them
+                const toolNames = message.toolCalls.map(tc => tc.function?.name || '').filter(Boolean);
+                const allCategories = toolNames.flatMap(toolName => 
+                  ToolCategorizer.categorizeByTool(toolName)
+                );
+                
+                // Remove duplicates and get primary categories
+                const uniqueCategories = Array.from(
+                  new Map(allCategories.map(cat => [cat.id, cat])).values()
+                ).slice(0, 2); // Show max 2 categories
+                
+                // Also analyze message content for additional context
+                const contentCategories = ToolCategorizer.categorizeByContent(message.content || '');
+                const allCombined = [...uniqueCategories, ...contentCategories];
+                const finalCategories = Array.from(
+                  new Map(allCombined.map(cat => [cat.id, cat])).values()
+                ).slice(0, 2);
+                
+                if (finalCategories.length > 0) {
+                  return (
+                    <div className="flex items-center gap-1">
+                      {finalCategories.map(category => (
+                        <div 
+                          key={category.id}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                            category.color === 'blue' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' :
+                            category.color === 'green' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
+                            category.color === 'purple' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300' :
+                            category.color === 'orange' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300' :
+                            category.color === 'red' ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' :
+                            category.color === 'cyan' ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'
+                          }`}
+                        >
+                          <span>{category.icon}</span>
+                          <span>{category.label.toLowerCase()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                
+                // Fallback to generic tool counter if no categories detected
+                return (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Settings className="w-3 h-3" />
+                    <span>{message.toolCalls.length} tool{message.toolCalls.length !== 1 ? 's' : ''}</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

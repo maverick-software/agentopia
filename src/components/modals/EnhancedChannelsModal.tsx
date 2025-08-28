@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,18 +16,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   Loader2, 
-  Check, 
   MessageSquare,
   Mail,
-  MessageCircle,
-  Slack,
   Shield,
   CheckCircle,
   AlertCircle,
   ExternalLink,
   Plus,
   Settings,
-  Trash2,
   Key
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,14 +45,12 @@ interface EnhancedChannelsModalProps {
 export function EnhancedChannelsModal({
   isOpen,
   onClose,
-  agentId,
-  agentData,
-  onAgentUpdated
+  agentId
 }: EnhancedChannelsModalProps) {
   const { user } = useAuth();
   const supabase = useSupabaseClient();
   const vaultService = new VaultService(supabase);
-  const { connection: gmailConnection, initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
+  const { initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
   const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('channel');
   
@@ -370,7 +364,7 @@ export function EnhancedChannelsModal({
         .from('sendgrid_configurations')
         .upsert({
           user_id: user.id,
-          api_key_vault_id: apiKey, // For now, storing the raw key
+          api_key_vault_id: vaultKeyId, // Store vault reference, not raw key
           from_email: fromEmail,
           from_name: fromName || null,
           is_active: true,

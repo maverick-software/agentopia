@@ -29,6 +29,7 @@ import { InlineThinkingIndicator } from '../components/InlineThinkingIndicator';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
 import { useConversations } from '../hooks/useConversations';
+import { ToolCategorizer } from '../lib/toolCategorization';
 
 function ConversationSelector({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
   const { items, createConversation } = useConversations(agentId, userId);
@@ -622,39 +623,53 @@ export function AgentChatPage() {
     // Phase 2: Analyzing tools
     updateAIState('analyzing_tools');
     await new Promise(resolve => setTimeout(resolve, 600));
-    // Capture tool analysis response
-    const toolAnalysis = input.toLowerCase().includes('send') || 
-                        input.toLowerCase().includes('email') ||
-                        input.toLowerCase().includes('gmail') ||
-                        input.toLowerCase().includes('read') ||
-                        input.toLowerCase().includes('check');
+    // Capture tool analysis response using smart categorization
+    const detectedCategories = ToolCategorizer.categorizeByContent(input);
+    const toolAnalysis = detectedCategories.length > 0;
+    const categoryLabels = detectedCategories.map(cat => cat.label).join(', ');
     
-    addStepResponse('analyzing_tools', `Checking available tools for this request...\nEmail-related keywords detected: ${toolAnalysis}\nAvailable tools: Gmail integration, Web search, File operations\nDecision: ${toolAnalysis ? 'Will use Gmail tool' : 'No tools needed for this request'}`);
+    addStepResponse('analyzing_tools', `Checking available tools for this request...\nTool categories detected: ${categoryLabels || 'None'}\nAvailable tools: Email integration, Web search, File operations\nDecision: ${toolAnalysis ? `Will use ${categoryLabels} tools` : 'No tools needed for this request'}`);
 
     // Phase 3: Check if we might execute a tool (simulate tool detection)
     const mightUseTool = toolAnalysis;
 
     if (mightUseTool) {
       // Phase 4: Tool execution
+      const primaryCategory = ToolCategorizer.getPrimaryCategory(detectedCategories);
+      const toolProvider = primaryCategory?.id === 'email' ? 'email_service' : primaryCategory?.id || 'tool';
+      
       updateAIState('executing_tool', {
-        toolName: 'send_email',
-        provider: 'gmail',
+        toolName: `${toolProvider}_action`,
+        provider: toolProvider,
         status: 'executing',
         startTime: new Date(),
       });
       
-      // Capture tool call
+      // Capture tool call with dynamic categorization
+      const toolAction = primaryCategory?.id === 'email' ? 'send_email' : 
+                        primaryCategory?.id === 'web' ? 'web_search' :
+                        primaryCategory?.id === 'docs' ? 'create_document' :
+                        'execute_action';
+      
       addStepToolCall('executing_tool', 
-        `gmail.send_email({
-  to: "user@example.com",
+        `${toolProvider}.${toolAction}({
+  ${primaryCategory?.id === 'email' ? 
+    `to: "user@example.com",
   subject: "Response to your inquiry",
-  body: "Thank you for your message..."
+  body: "Thank you for your message..."` :
+  primaryCategory?.id === 'web' ? 
+    `query: "search terms from user message",
+  type: "comprehensive"` :
+    `action: "process_request"`}
 })`,
         {
           success: true,
-          message_id: "msg_abc123",
-          sent_at: new Date().toISOString(),
-          recipients: ["user@example.com"]
+          [primaryCategory?.id === 'email' ? 'message_id' : 
+           primaryCategory?.id === 'web' ? 'results_count' : 
+           'operation_id']: primaryCategory?.id === 'email' ? "msg_abc123" : 
+                           primaryCategory?.id === 'web' ? 5 : "op_xyz789",
+          executed_at: new Date().toISOString(),
+          category: primaryCategory?.label || 'General'
         }
       );
       
@@ -666,14 +681,23 @@ export function AgentChatPage() {
         endTime: new Date(),
       });
       
-      addStepResponse('processing_results', `Tool execution completed successfully!\nEmail sent with ID: msg_abc123\nProcessing the result to formulate a response to the user.`);
+      const resultMessage = primaryCategory?.id === 'email' ? 'Email sent successfully!' :
+                           primaryCategory?.id === 'web' ? 'Web search completed!' :
+                           primaryCategory?.id === 'docs' ? 'Document created!' :
+                           'Operation completed successfully!';
+      
+      addStepResponse('processing_results', `Tool execution completed successfully!\n${resultMessage}\nProcessing the result to formulate a response to the user.`);
       
       await new Promise(resolve => setTimeout(resolve, 800));
     }
 
     // Phase 6: Generating response
     updateAIState('generating_response');
-    addStepResponse('generating_response', `Generating final response based on:\n- User's original request: "${input}"\n- Tool results: ${mightUseTool ? 'Email sent successfully' : 'No tools used'}\n- Context: Friendly conversation\n\nFormulating helpful and conversational response...`);
+    const toolResults = mightUseTool ? 
+      `${ToolCategorizer.getPrimaryCategory(detectedCategories)?.label || 'Tool'} operation completed successfully` : 
+      'No tools used';
+      
+    addStepResponse('generating_response', `Generating final response based on:\n- User's original request: "${input}"\n- Tool results: ${toolResults}\n- Context: Friendly conversation\n\nFormulating helpful and conversational response...`);
     
     await new Promise(resolve => setTimeout(resolve, 1000));
   }, [input, updateAIState, addStepResponse, addStepToolCall]);
