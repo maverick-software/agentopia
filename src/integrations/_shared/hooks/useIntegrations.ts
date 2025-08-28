@@ -216,6 +216,7 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
           throw queryError;
         } else {
           // Successfully got data from basic query
+          console.log(`[useIntegrationsByClassification] ${classification}:`, data?.map(i => `${i.name} (${i.status})`));
           setIntegrations(data || []);
         }
               } catch (err) {

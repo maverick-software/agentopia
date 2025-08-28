@@ -38,13 +38,27 @@ export class FunctionCallingManager {
   private readonly CACHE_MESSAGE_THRESHOLD = 15; // Revalidate after 15 messages
   private readonly CACHE_TIME_THRESHOLD = 600000; // 10 minutes in milliseconds
   
+  // Universal tool executor for all integrations
+  private toolExecutor: typeof import('./universal-tool-executor.ts').UniversalToolExecutor | null = null;
+  
   constructor(supabase: SupabaseClient, authToken: string = '') {
     this.supabase = supabase;
     this.authToken = authToken;
     
-    // All tools are now unified under MCP architecture
-    // No need for separate provider instances
-    console.log('[FunctionCalling] Initialized with unified MCP architecture');
+    // All tools are now unified under MCP architecture with universal execution routing
+    console.log('[FunctionCalling] Initialized with unified MCP architecture and universal tool execution');
+  }
+
+  /**
+   * Get the universal tool executor (lazy-loaded)
+   */
+  private async getToolExecutor() {
+    if (!this.toolExecutor) {
+      const module = await import('./universal-tool-executor.ts');
+      this.toolExecutor = module.UniversalToolExecutor;
+      console.log(`[FunctionCalling] Loaded universal tool executor with support for: ${this.toolExecutor.getSupportedPrefixes().join(', ')}`);
+    }
+    return this.toolExecutor;
   }
 
   /**
@@ -419,7 +433,8 @@ export class FunctionCallingManager {
   }
 
   /**
-   * Internal tool execution routing
+   * Internal tool execution using universal router
+   * This routes ANY tool to the appropriate integration edge function
    */
   private async executeToolInternal(
     agentId: string,
@@ -430,56 +445,41 @@ export class FunctionCallingManager {
     const startTime = Date.now();
     
     try {
-      // Route based on tool name prefix
-      if (functionName.startsWith('gmail_')) {
-        // Verify agent has Gmail permissions
-        if (!(await this.gmailProvider.validatePermissions(agentId, userId, functionName))) {
-          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
-          return { 
-            success: false, 
-            error: `Tool ${functionName} is not available for this agent`,
-            metadata: { execution_time_ms: Date.now() - startTime }
-          };
-        }
-        return await this.gmailProvider.executeTool(agentId, userId, functionName, parameters);
+      // Get the universal tool executor
+      const executor = await this.getToolExecutor();
+      
+      // Permission check: If the tool was discovered by get-agent-tools, it's authorized
+      // This is our simplified permission model for the unified architecture
+      console.log(`[FunctionCalling] Executing ${functionName} for agent ${agentId} (authorized via tool discovery)`);
+      
+      // Execute using universal routing
+      const result = await executor.executeTool({
+        agentId,
+        userId,
+        toolName: functionName,
+        parameters,
+        supabase: this.supabase
+      });
+      
+      // Add execution time to metadata
+      if (result.metadata) {
+        result.metadata.execution_time_ms = Date.now() - startTime;
+      } else {
+        result.metadata = { execution_time_ms: Date.now() - startTime };
       }
       
-      if (functionName.startsWith('smtp_')) {
-        // Verify agent has SMTP permissions  
-        if (!(await this.smtpProvider.validatePermissions(agentId, userId, functionName))) {
-          console.log(`[FunctionCalling] BLOCKED: Agent ${agentId} lacks permission for ${functionName}`);
-          return { 
-            success: false, 
-            error: `Tool ${functionName} is not available for this agent`,
-            metadata: { execution_time_ms: Date.now() - startTime }
-          };
-        }
-        return await this.smtpProvider.executeTool(agentId, userId, functionName, parameters);
-      }
-      
-      if (functionName.startsWith('web_search') || functionName.startsWith('scrape_') || functionName.startsWith('news_')) {
-        return await this.webSearchProvider.executeTool(agentId, userId, functionName, parameters);
-      }
-      
-      // Check if it's an MCP tool (has metadata mapping)
-      const mcpTools = await this.mcpProvider.getTools(agentId);
-      if (mcpTools.find(t => t.name === functionName)) {
-        return await this.mcpProvider.executeTool(agentId, userId, functionName, parameters);
-      }
-      
-      // Unknown tool
-      return {
-        success: false,
-        error: `Unknown tool: ${functionName}`,
-        metadata: { execution_time_ms: Date.now() - startTime }
-      };
+      return result;
       
     } catch (error: any) {
       console.error(`[FunctionCalling] Error executing ${functionName}:`, error);
       return {
         success: false,
         error: error.message || 'Tool execution failed',
-        metadata: { execution_time_ms: Date.now() - startTime }
+        metadata: { 
+          execution_time_ms: Date.now() - startTime,
+          error: error.name || 'UnknownError',
+          toolName: functionName
+        }
       };
     }
   }

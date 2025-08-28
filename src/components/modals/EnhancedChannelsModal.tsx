@@ -276,6 +276,9 @@ export function EnhancedChannelsModal({
     .filter(i => i.status === 'available')
     .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.name.localeCompare(b.name))
     .map(mapIntegrationToService);
+    
+  console.log('[EnhancedChannelsModal] Channel integrations:', integrations?.map(i => `${i.name} (${i.status})`));
+  console.log('[EnhancedChannelsModal] Available channel services:', CHANNEL_SERVICES?.map(s => s.name));
 
   const providerNameForServiceId = (serviceId: string) => {
     switch (serviceId) {
