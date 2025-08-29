@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Team, TeamMember, UseTeamOperationsOptions } from '../types/canvas';
+import type { Team, TeamMember } from '@/types';
+import type { UseTeamOperationsOptions } from '../types/canvas';
 import { PostgrestError } from '@supabase/supabase-js';
 
 // Define the team creation request interface

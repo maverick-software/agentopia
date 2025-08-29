@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -17,13 +17,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+// Temporarily using native select instead of Radix Select to fix infinite update loop
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from '@/components/ui/select';
 
 import type { CanvasToolbarProps, ConnectionType } from './types/canvas';
 
@@ -50,6 +51,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   className
 }) => {
   const zoomPercentage = Math.round(zoom * 100);
+  
+  // Memoize the Select's onValueChange to prevent infinite updates
+  const handleConnectionModeChange = useCallback((value: string) => {
+    onConnectionModeChange(value === 'none' ? null : value as ConnectionType);
+  }, [onConnectionModeChange]);
   
   return (
     <div className={cn(
@@ -130,23 +136,17 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       {viewMode === 'canvas' && (
         <div className="flex items-center space-x-3">
           <Label className="text-sm font-medium">Connection:</Label>
-          <Select 
+          <select 
             value={connectionMode || 'none'} 
-            onValueChange={(value) => 
-              onConnectionModeChange(value === 'none' ? null : value as ConnectionType)
-            }
+            onChange={(e) => handleConnectionModeChange(e.target.value)}
+            className="w-40 px-3 py-2 text-sm border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
           >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="None" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="reports_to">Reports To</SelectItem>
-              <SelectItem value="collaborates_with">Collaborates With</SelectItem>
-              <SelectItem value="supports">Supports</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
+            <option value="none">None</option>
+            <option value="reports_to">Reports To</option>
+            <option value="collaborates_with">Collaborates With</option>
+            <option value="supports">Supports</option>
+            <option value="custom">Custom</option>
+          </select>
           
           {/* Connection Status Indicator */}
           {isConnecting && (

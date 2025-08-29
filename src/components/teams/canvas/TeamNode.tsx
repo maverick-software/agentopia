@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, NodeProps } from 'reactflow';
 import { 
   Users, 
   MoreVertical, 
@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import type { TeamNodeProps } from './types/canvas';
+import type { TeamNodeData } from './types/canvas';
 
 // Team color mapping based on type or default gradient
 const teamColors = {
@@ -31,23 +31,20 @@ const teamColors = {
   'default': 'from-primary to-primary/80'
 };
 
-export const TeamNode = memo<TeamNodeProps>(({
-  team,
-  members,
-  data,
-  selected,
-  isConnecting,
-  connectionMode,
-  onTeamClick,
-  onTeamEdit,
-  onTeamDelete,
-  onConnectionStart,
-  className,
-  style
-}) => {
-  const memberCount = members.length;
-  const agentNames = members.map(member => `Agent ${member.agent_id.slice(0, 8)}`);
-  const teamType = data.teamType || 'default';
+export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
+  // Extract all data from the data prop
+  const { team, memberCount = 0, agentNames = [], teamType = 'default' } = data;
+  
+  // Extract callbacks from data if available
+  const {
+    onTeamClick = () => {},
+    onTeamEdit = () => {},
+    onTeamDelete = () => {},
+    onConnectionStart = () => {},
+    isConnecting = false,
+    connectionMode = null
+  } = data;
+  
   const gradientClass = teamColors[teamType as keyof typeof teamColors] || teamColors.default;
   
   const handleClick = (e: React.MouseEvent) => {
@@ -75,10 +72,8 @@ export const TeamNode = memo<TeamNodeProps>(({
         "team-node relative group bg-card border-2 rounded-xl shadow-md transition-all duration-200",
         "min-w-[200px] max-w-[280px] p-4 cursor-pointer",
         selected && "border-primary shadow-lg scale-105 bg-primary/5",
-        isConnecting && connectionMode && "ring-2 ring-primary/30",
-        className
+        isConnecting && connectionMode && "ring-2 ring-primary/30"
       )}
-      style={style}
       onClick={handleClick}
     >
       {/* Connection Handles - only visible on hover or when connecting */}

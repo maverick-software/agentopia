@@ -59,6 +59,16 @@ export interface TeamNodeData {
   color?: string;
   lastActivity?: string;
   isSelected?: boolean;
+  
+  // Canvas state
+  isConnecting?: boolean;
+  connectionMode?: ConnectionType | null;
+  
+  // Callbacks
+  onTeamClick?: (teamId: string) => void;
+  onTeamEdit?: (teamId: string) => void;
+  onTeamDelete?: (teamId: string) => void;
+  onConnectionStart?: (teamId: string, handle: 'top' | 'right' | 'bottom' | 'left') => void;
 }
 
 // React Flow Edge Data
@@ -67,6 +77,11 @@ export interface ConnectionEdgeData {
   fromTeam: Team;
   toTeam: Team;
   isSelected?: boolean;
+  
+  // Callbacks
+  onEdgeClick?: (edgeId: string) => void;
+  onEdgeDelete?: (edgeId: string) => void;
+  onEdgeEdit?: (edgeId: string) => void;
 }
 
 // Canvas State Management
@@ -139,53 +154,8 @@ export interface VisualTeamCanvasProps {
   className?: string;
 }
 
-export interface TeamNodeProps {
-  // Team data
-  team: Team;
-  members: TeamMember[];
-  
-  // React Flow node props
-  data: TeamNodeData;
-  selected: boolean;
-  
-  // Canvas state
-  isConnecting: boolean;
-  connectionMode: ConnectionType | null;
-  
-  // Callbacks
-  onTeamClick: (teamId: string) => void;
-  onTeamEdit: (teamId: string) => void;
-  onTeamDelete: (teamId: string) => void;
-  onConnectionStart: (teamId: string, handle: 'top' | 'right' | 'bottom' | 'left') => void;
-  
-  // Styling
-  className?: string;
-  style?: React.CSSProperties;
-}
-
-export interface TeamConnectionEdgeProps {
-  // React Flow edge props
-  id: string;
-  source: string;
-  target: string;
-  selected: boolean;
-  
-  // Connection data
-  data: ConnectionEdgeData;
-  
-  // Callbacks
-  onEdgeClick: (edgeId: string) => void;
-  onEdgeDelete: (edgeId: string) => void;
-  onEdgeEdit: (edgeId: string) => void;
-  
-  // React Flow positioning props
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  sourcePosition: 'top' | 'right' | 'bottom' | 'left';
-  targetPosition: 'top' | 'right' | 'bottom' | 'left';
-}
+// Note: TeamNodeProps is now NodeProps<TeamNodeData> from React Flow
+// Note: TeamConnectionEdgeProps is now EdgeProps<ConnectionEdgeData> from React Flow
 
 export interface CanvasToolbarProps {
   // Canvas state

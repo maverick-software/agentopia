@@ -87,16 +87,21 @@ function mapIntegrationToService(integration: Integration): ChannelService {
 }
 
 function providerNameForServiceId(serviceId: string): string {
-  switch (serviceId) {
-    case 'gmail':
-      return 'gmail';
-    case 'sendgrid':
-      return 'sendgrid';
-    case 'mailgun':
-      return 'mailgun';
-    default:
-      return serviceId;
-  }
+  const result = (() => {
+    switch (serviceId) {
+      case 'gmail':
+        return 'gmail';
+      case 'sendgrid':
+        return 'sendgrid';
+      case 'mailgun':
+        return 'mailgun';
+      default:
+        return serviceId;
+    }
+  })();
+  
+  console.log('[providerNameForServiceId] Input:', serviceId, 'Output:', result);
+  return result;
 }
 
 export function AvailableChannelsList({

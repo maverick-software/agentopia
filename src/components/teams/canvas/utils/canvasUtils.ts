@@ -2,9 +2,8 @@
 // Handles conversion between data structures and React Flow formats
 
 import type { Node, Edge } from 'reactflow';
+import type { Team, TeamMember } from '@/types';
 import type {
-  Team,
-  TeamMember,
   TeamPosition,
   TeamConnection,
   TeamNodeData,
@@ -63,7 +62,17 @@ export function teamsToNodes(
         agentNames,
         teamType: inferTeamType(team.name),
         lastActivity: team.updated_at,
-        isSelected: handlers.selectedTeams.has(team.id)
+        isSelected: handlers.selectedTeams.has(team.id),
+        
+        // Canvas state
+        isConnecting: handlers.isConnecting,
+        connectionMode: handlers.connectionMode,
+        
+        // Callbacks
+        onTeamClick: handlers.onTeamClick,
+        onTeamEdit: handlers.onTeamEdit,
+        onTeamDelete: handlers.onTeamDelete,
+        onConnectionStart: handlers.onConnectionStart
       },
       selected: handlers.selectedTeams.has(team.id),
       draggable: true,
@@ -106,7 +115,12 @@ export function connectionsToEdges(
         connection,
         fromTeam,
         toTeam,
-        isSelected: handlers.selectedConnections.has(edgeId)
+        isSelected: handlers.selectedConnections.has(edgeId),
+        
+        // Callbacks
+        onEdgeClick: handlers.onEdgeClick,
+        onEdgeDelete: handlers.onEdgeDelete,
+        onEdgeEdit: handlers.onEdgeEdit
       },
       selected: handlers.selectedConnections.has(edgeId),
       deletable: true,

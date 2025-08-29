@@ -175,11 +175,8 @@ export function ChannelSetupCard({
           <Button
             size="sm"
             onClick={() => {
-              if (service.type === 'oauth') {
-                onSetupClick(service.id);
-              } else {
-                onSelectCredentialClick(service.id);
-              }
+              // ✅ FIXED: Check for existing credentials FIRST, regardless of service type
+              onSelectCredentialClick(service.id);
             }}
             disabled={isConnecting}
           >

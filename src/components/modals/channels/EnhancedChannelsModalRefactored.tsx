@@ -56,13 +56,18 @@ export function EnhancedChannelsModalRefactored({
   }, [integrations]);
   
   useEffect(() => {
-    console.log('[EnhancedChannelsModal] Loaded connections:', connections.map(c => ({ 
-      id: c.id,
-      connection_name: c.connection_name,
+    console.log('[EnhancedChannelsModal] Loaded connections from useConnections hook:');
+    console.log('Raw connections data:', connections);
+    console.log('Mapped connections:', connections.map(c => ({ 
+      connection_id: c.connection_id || c.id,
       provider_name: c.provider_name,
+      provider_display_name: c.provider_display_name,
+      connection_name: c.connection_name,
+      external_username: c.external_username,
       connection_status: c.connection_status,
-      external_username: c.external_username
+      credential_type: c.credential_type
     })));
+    console.log('Gmail connection exists?', connections.some(c => c.provider_name === 'gmail'));
   }, [connections]);
   
   // Capabilities state - fetch from database instead of hardcoding
@@ -393,9 +398,11 @@ export function EnhancedChannelsModalRefactored({
       provider_name: c.provider_name, 
       connection_name: c.connection_name,
       connection_status: c.connection_status,
-      id: c.id
+      connection_id: c.connection_id || c.id,
+      external_username: c.external_username
     })));
     
+    // FIXED: Use same logic as working Credentials page
     // For Email Relay, show credentials from all email providers
     const creds = serviceId === 'email_relay' 
       ? connections.filter(c => ['smtp', 'sendgrid', 'mailgun'].includes(c.provider_name) && c.connection_status === 'active')
@@ -416,6 +423,7 @@ export function EnhancedChannelsModalRefactored({
               variant="outline" 
               className="w-full"
               onClick={() => {
+                console.log('[renderCredentialSelector] No existing credentials, redirecting to setup for', serviceId);
                 modalState.setSelectingCredentialFor(null);
                 modalState.setSetupService(serviceId);
               }}
@@ -431,15 +439,18 @@ export function EnhancedChannelsModalRefactored({
     return (
       <div className="space-y-3">
         {creds.map((c) => {
+          // Use same data structure as working Credentials page
+          const connectionId = c.connection_id || c.id;
+          
           // For Email Relay, show which email provider this credential belongs to
           const displayName = serviceId === 'email_relay' 
             ? `${c.provider_name === 'smtp' ? 'SMTP Server' : 
                 c.provider_name === 'sendgrid' ? 'SendGrid' : 
                 c.provider_name === 'mailgun' ? 'Mailgun' : c.provider_name}`
-            : c.provider_display_name;
+            : (c.provider_display_name || c.provider_name);
             
           return (
-            <div key={c.connection_id} className="flex items-center justify-between p-3 border rounded">
+            <div key={connectionId} className="flex items-center justify-between p-3 border rounded">
               <div className="text-sm">
                 <div className="font-medium">{displayName}</div>
                 <div className="text-muted-foreground">{c.external_username || c.connection_name}</div>
@@ -456,7 +467,7 @@ export function EnhancedChannelsModalRefactored({
                     
                     const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
                       p_agent_id: agentId,
-                      p_connection_id: c.connection_id,
+                      p_connection_id: connectionId,
                       p_allowed_scopes: scopes,
                       p_permission_level: 'custom',
                       p_user_id: user?.id

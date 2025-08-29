@@ -161,6 +161,20 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     connections.removeConnection(connectionId);
     toast.success('Connection removed');
   }, [connections, readonly]);
+
+  // Handle connection mode change with guard to prevent infinite loops
+  const handleConnectionModeChange = useCallback((mode: ConnectionType | null) => {
+    if (mode !== connectionMode) {
+      setConnectionMode(mode);
+    }
+  }, [connectionMode]);
+
+  // Handle view mode change with guard to prevent unnecessary updates
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    if (mode !== viewMode) {
+      setViewMode(mode);
+    }
+  }, [viewMode]);
   
   // Convert teams to React Flow nodes
   const nodes = useMemo<Node<TeamNodeData>[]>(() => {
@@ -193,7 +207,8 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     isConnecting,
     connectionMode,
     onTeamUpdate,
-    onTeamDelete
+    onTeamDelete,
+    handleConnectionStart
   ]);
   
   // Convert connections to React Flow edges
@@ -221,7 +236,8 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     canvasState.canvasState.connections,
     canvasState.canvasState.selectedConnections,
     teams,
-    viewMode
+    viewMode,
+    handleConnectionDelete
   ]);
   
   // React Flow state
@@ -353,8 +369,9 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   
   // Canvas view component  
   const CanvasView = () => (
-    <div className="h-full w-full">
+    <div className="w-full" style={{ height: 'calc(100% - 60px)' }}>
       <ReactFlow
+        style={{ height: '100%', width: '100%' }}
         nodes={flowNodes}
         edges={flowEdges}
         onNodesChange={handleNodesChange}
@@ -414,8 +431,8 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
             // TODO: Implement export functionality
             toast.info('Export functionality coming soon');
           }}
-          onViewModeChange={setViewMode}
-          onConnectionModeChange={setConnectionMode}
+          onViewModeChange={handleViewModeChange}
+          onConnectionModeChange={handleConnectionModeChange}
           onShowSettings={() => {
             // TODO: Implement settings modal
             toast.info('Settings modal coming soon');
@@ -427,7 +444,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
         />
       )}
       
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 h-full">
         {viewMode === 'grid' ? <GridView /> : <CanvasView />}
       </div>
     </div>
@@ -442,7 +459,7 @@ export const VisualTeamCanvas: React.FC<VisualTeamCanvasProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] p-0">
+      <DialogContent className="max-w-[95vw] max-h-[95vh] h-[90vh] p-0">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center space-x-2">
             <Network className="h-5 w-5" />
@@ -453,7 +470,7 @@ export const VisualTeamCanvas: React.FC<VisualTeamCanvasProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 min-h-0 px-6 pb-6">
+        <div className="flex-1 px-6 pb-6 h-[calc(90vh-120px)] overflow-hidden">
           <ReactFlowProvider>
             <CanvasContent {...props} onClose={onClose} isOpen={isOpen} />
           </ReactFlowProvider>

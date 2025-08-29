@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { debounce } from 'lodash';
 
+import type { Team } from '@/types';
 import type {
-  Team,
   CanvasState,
   TeamPosition,
   TeamConnection,

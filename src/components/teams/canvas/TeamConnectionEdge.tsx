@@ -5,7 +5,8 @@ import {
   getBezierPath,
   getSimpleBezierPath,
   getStraightPath,
-  MarkerType 
+  MarkerType,
+  EdgeProps
 } from 'reactflow';
 import { X, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-import type { TeamConnectionEdgeProps } from './types/canvas';
+import type { ConnectionEdgeData } from './types/canvas';
 
 // Connection styling based on type
 const connectionStyles = {
@@ -51,15 +52,12 @@ const connectionLabels = {
   custom: 'Custom'
 };
 
-export const TeamConnectionEdge = memo<TeamConnectionEdgeProps>(({
+export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
   id,
   source,
   target,
   selected,
   data,
-  onEdgeClick,
-  onEdgeDelete,
-  onEdgeEdit,
   sourceX,
   sourceY,
   targetX,
@@ -71,6 +69,13 @@ export const TeamConnectionEdge = memo<TeamConnectionEdgeProps>(({
   const connectionType = connection.type;
   const style = connectionStyles[connectionType];
   const label = connection.label || connectionLabels[connectionType];
+  
+  // Extract callbacks from data
+  const {
+    onEdgeClick = () => {},
+    onEdgeDelete = () => {},
+    onEdgeEdit = () => {}
+  } = data;
   
   // Use custom color if provided
   const strokeColor = connection.color || style.stroke;
