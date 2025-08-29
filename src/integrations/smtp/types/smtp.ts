@@ -473,7 +473,7 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     secure: false,
     description: 'SMTP.com Professional Email Service',
     authType: 'password',
-    setupInstructions: 'Use your SMTP.com username and password. Alternative ports: 587, 8025, 25'
+    setupInstructions: 'Use your SMTP.com username and password. Alternative ports: 25, 587, 2082. Port 2525 is recommended for best deliverability.'
   },
   {
     name: 'custom',
