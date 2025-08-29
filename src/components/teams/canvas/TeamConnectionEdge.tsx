@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useRef, useEffect } from 'react';
 import { 
   BaseEdge, 
   EdgeLabelRenderer, 
@@ -8,13 +8,13 @@ import {
   MarkerType,
   EdgeProps
 } from 'reactflow';
-import { X, Edit } from 'lucide-react';
+import { X, Edit, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-import type { ConnectionEdgeData } from './types/canvas';
+import type { ConnectionEdgeData, ConnectionType } from './types/canvas';
 
 // Connection styling based on type
 const connectionStyles = {
@@ -65,6 +65,9 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
   sourcePosition,
   targetPosition
 }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
   const connection = data.connection;
   const connectionType = connection.type;
   const style = connectionStyles[connectionType];
@@ -76,6 +79,20 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
     onEdgeDelete = () => {},
     onEdgeEdit = () => {}
   } = data;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showDropdown]);
   
   // Use custom color if provided
   const strokeColor = connection.color || style.stroke;
@@ -102,7 +119,15 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
   
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onEdgeEdit(id);
+    console.log('Edit clicked, showDropdown was:', showDropdown);
+    setShowDropdown(!showDropdown);
+  };
+
+  const handleTypeChange = (newType: ConnectionType) => {
+    console.log('Type change to:', newType);
+    // Call the edit callback with the new type
+    onEdgeEdit(id, newType);
+    setShowDropdown(false);
   };
   
   return (
@@ -136,15 +161,18 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center space-x-2">
-            {/* Connection label */}
+            {/* Connection label - click to edit */}
             <Badge 
               variant={selected ? "default" : "secondary"}
               className={cn(
                 "text-xs px-2 py-1 cursor-pointer transition-all duration-200",
-                "bg-background/90 backdrop-blur-sm border shadow-sm",
-                selected && "shadow-md scale-105"
+                "bg-white/95 dark:bg-gray-800/95 border border-gray-200 dark:border-gray-700 shadow-md",
+                selected && "shadow-lg scale-105 ring-2 ring-blue-500",
+                showDropdown && "ring-2 ring-blue-500"
               )}
-              onClick={handleClick}
+              onClick={handleEdit}
+              title="Click to change connection type"
+              style={{ zIndex: 1000 }}
             >
               {label}
             </Badge>
@@ -154,14 +182,64 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
               "flex items-center space-x-1 opacity-0 transition-opacity duration-200",
               selected && "opacity-100"
             )}>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-6 w-6 bg-background/90 backdrop-blur-sm"
-                onClick={handleEdit}
-              >
-                <Edit className="h-3 w-3" />
-              </Button>
+              {/* Edit dropdown */}
+              <div className="relative" ref={dropdownRef}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6 bg-background/90 backdrop-blur-sm"
+                  onClick={handleEdit}
+                >
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+                
+                {/* Inline dropdown */}
+                {showDropdown && (
+                  <div 
+                    className="absolute top-8 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-xl py-1 min-w-[160px] z-[9999]"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ position: 'absolute', zIndex: 9999 }}
+                  >
+                    <button
+                      className={cn(
+                        "flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left",
+                        connectionType === 'collaborates_with' && "bg-gray-100 dark:bg-gray-700"
+                      )}
+                      onClick={() => handleTypeChange('collaborates_with')}
+                    >
+                      Collaborates With
+                    </button>
+                    <button
+                      className={cn(
+                        "flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left",
+                        connectionType === 'reports_to' && "bg-gray-100 dark:bg-gray-700"
+                      )}
+                      onClick={() => handleTypeChange('reports_to')}
+                    >
+                      Reports To
+                    </button>
+                    <button
+                      className={cn(
+                        "flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left",
+                        connectionType === 'supports' && "bg-gray-100 dark:bg-gray-700"
+                      )}
+                      onClick={() => handleTypeChange('supports')}
+                    >
+                      Supports
+                    </button>
+                    <button
+                      className={cn(
+                        "flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left",
+                        connectionType === 'custom' && "bg-gray-100 dark:bg-gray-700"
+                      )}
+                      onClick={() => handleTypeChange('custom')}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                )}
+              </div>
+              
               <Button
                 variant="outline"
                 size="icon"

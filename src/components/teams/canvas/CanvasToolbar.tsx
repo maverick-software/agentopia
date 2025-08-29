@@ -1,7 +1,5 @@
 import React, { useCallback } from 'react';
 import { 
-  ZoomIn, 
-  ZoomOut, 
   Maximize, 
   RotateCcw, 
   Save, 
@@ -33,8 +31,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   canZoomIn,
   canZoomOut,
   viewMode,
-  connectionMode,
-  isConnecting,
+
   hasUnsavedChanges,
   isSaving,
   onZoomIn,
@@ -44,19 +41,17 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onSaveLayout,
   onExportLayout,
   onViewModeChange,
-  onConnectionModeChange,
+
   onShowSettings,
   showMinimap = true,
   onToggleMinimap,
   className
 }) => {
-  const zoomPercentage = Math.round(zoom * 100);
+  // Ensure zoom is valid, default to 100% if NaN
+  const validZoom = !isNaN(zoom) && zoom > 0 ? zoom : 1;
+  const zoomPercentage = Math.round(validZoom * 100);
   
-  // Memoize the Select's onValueChange to prevent infinite updates
-  const handleConnectionModeChange = useCallback((value: string) => {
-    onConnectionModeChange(value === 'none' ? null : value as ConnectionType);
-  }, [onConnectionModeChange]);
-  
+
   return (
     <div className={cn(
       "flex items-center justify-between p-4 bg-card border-b border-border",
@@ -92,32 +87,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <>
             <Separator orientation="vertical" className="h-6" />
             
-            {/* Zoom Controls */}
+            {/* Canvas Controls - No Zoom */}
             <div className="flex items-center space-x-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onZoomOut}
-                disabled={!canZoomOut}
-                title="Zoom Out"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              
-              <div className="text-sm text-muted-foreground px-2 min-w-[60px] text-center font-mono">
-                {zoomPercentage}%
-              </div>
-              
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onZoomIn}
-                disabled={!canZoomIn}
-                title="Zoom In"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              
               <Button 
                 size="sm" 
                 variant="outline" 
@@ -132,37 +103,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         )}
       </div>
       
-      {/* Center Section: Connection Tools - only show in canvas mode */}
+      {/* Center Section: Connection Help Text - only show in canvas mode */}
       {viewMode === 'canvas' && (
         <div className="flex items-center space-x-3">
-          <Label className="text-sm font-medium">Connection:</Label>
-          <select 
-            value={connectionMode || 'none'} 
-            onChange={(e) => handleConnectionModeChange(e.target.value)}
-            className="w-40 px-3 py-2 text-sm border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-          >
-            <option value="none">None</option>
-            <option value="reports_to">Reports To</option>
-            <option value="collaborates_with">Collaborates With</option>
-            <option value="supports">Supports</option>
-            <option value="custom">Custom</option>
-          </select>
-          
-          {/* Connection Status Indicator */}
-          {isConnecting && (
-            <Badge variant="secondary" className="animate-pulse">
-              Connecting teams...
-            </Badge>
-          )}
-          
-          {connectionMode && !isConnecting && (
-            <Badge variant="outline">
-              {connectionMode === 'reports_to' && 'Reports To mode'}
-              {connectionMode === 'collaborates_with' && 'Collaboration mode'}
-              {connectionMode === 'supports' && 'Support mode'}
-              {connectionMode === 'custom' && 'Custom mode'}
-            </Badge>
-          )}
+          <Badge variant="outline" className="text-xs">
+            💡 Drag between teams to connect them
+          </Badge>
         </div>
       )}
       

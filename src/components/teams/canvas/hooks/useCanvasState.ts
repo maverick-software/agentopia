@@ -62,12 +62,10 @@ function initializeCanvasState(
     connections,
     selectedTeams: new Set(),
     selectedConnections: new Set(),
-    isConnecting: false,
-    connectionMode: null,
     draggedTeam: null,
     hasUnsavedChanges: false,
     lastSavedAt: null,
-    showMinimap: true,
+    showMinimap: false,
     showGrid: true,
     snapToGrid: false
   };
@@ -149,9 +147,7 @@ export function useCanvasState(
     
     debouncedSetState({
       connections: [...canvasState.connections, newConnection],
-      hasUnsavedChanges: true,
-      isConnecting: false,
-      connectionMode: null
+      hasUnsavedChanges: true
     });
   }, [canvasState.connections, debouncedSetState]);
 

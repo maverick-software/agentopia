@@ -1,23 +1,14 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useRef, useEffect } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { 
   Users, 
   MoreVertical, 
-  Edit, 
-  ExternalLink, 
-  Trash2 
+  ExternalLink 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 import type { TeamNodeData } from './types/canvas';
 
@@ -40,12 +31,28 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
     onTeamClick = () => {},
     onTeamEdit = () => {},
     onTeamDelete = () => {},
-    onConnectionStart = () => {},
-    isConnecting = false,
-    connectionMode = null
+    onConnectionStart = () => {}
   } = data;
   
   const gradientClass = teamColors[teamType as keyof typeof teamColors] || teamColors.default;
+  
+  // Custom dropdown state
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMenu]);
   
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -71,74 +78,81 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
       className={cn(
         "team-node relative group bg-card border-2 rounded-xl shadow-md transition-all duration-200",
         "min-w-[200px] max-w-[280px] p-4 cursor-pointer",
-        selected && "border-primary shadow-lg scale-105 bg-primary/5",
-        isConnecting && connectionMode && "ring-2 ring-primary/30"
+        selected && "border-primary shadow-lg scale-105 bg-primary/5"
       )}
       onClick={handleClick}
     >
-      {/* Connection Handles - only visible on hover or when connecting */}
+      {/* Connection Handles - only visible on hover, with unique IDs */}
       <Handle 
+        id="top"
         type="source" 
         position={Position.Top} 
         className={cn(
           "react-flow__handle react-flow__handle-top",
           "!bg-primary !border-2 !border-primary-foreground",
           "!w-3 !h-3 !rounded-full transition-opacity duration-200",
-          (isConnecting || connectionMode) ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100"
+          "!opacity-0 group-hover:!opacity-100"
         )}
         onMouseDown={() => handleConnectionStart('top')}
       />
       <Handle 
+        id="right"
         type="source" 
         position={Position.Right} 
         className={cn(
           "react-flow__handle react-flow__handle-right",
           "!bg-primary !border-2 !border-primary-foreground",
           "!w-3 !h-3 !rounded-full transition-opacity duration-200",
-          (isConnecting || connectionMode) ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100"
+          "!opacity-0 group-hover:!opacity-100"
         )}
         onMouseDown={() => handleConnectionStart('right')}
       />
       <Handle 
+        id="bottom"
         type="source" 
         position={Position.Bottom} 
         className={cn(
           "react-flow__handle react-flow__handle-bottom",
           "!bg-primary !border-2 !border-primary-foreground",
           "!w-3 !h-3 !rounded-full transition-opacity duration-200",
-          (isConnecting || connectionMode) ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100"
+          "!opacity-0 group-hover:!opacity-100"
         )}
         onMouseDown={() => handleConnectionStart('bottom')}
       />
       <Handle 
+        id="left"
         type="source" 
         position={Position.Left} 
         className={cn(
           "react-flow__handle react-flow__handle-left",
           "!bg-primary !border-2 !border-primary-foreground",
           "!w-3 !h-3 !rounded-full transition-opacity duration-200",
-          (isConnecting || connectionMode) ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100"
+          "!opacity-0 group-hover:!opacity-100"
         )}
         onMouseDown={() => handleConnectionStart('left')}
       />
       
-      {/* Target handles for receiving connections */}
+      {/* Target handles for receiving connections - with unique IDs */}
       <Handle 
+        id="top-target"
         type="target" 
         position={Position.Top} 
         className="!opacity-0"
       />
       <Handle 
+        id="right-target"
         type="target" 
         position={Position.Right} 
         className="!opacity-0"
       />
       <Handle 
+        id="bottom-target"
         type="target" 
         position={Position.Bottom} 
         className="!opacity-0"
       />
       <Handle 
+        id="left-target"
         type="target" 
         position={Position.Left} 
         className="!opacity-0"
@@ -171,14 +185,6 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
       
       {/* Node Content */}
       <div className="space-y-2">
-        {/* Team Description */}
-        <p 
-          className="text-xs text-muted-foreground line-clamp-2" 
-          title={team.description || 'No description'}
-        >
-          {team.description || 'No description available'}
-        </p>
-        
         {/* Agent List */}
         {agentNames.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -198,56 +204,47 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
             )}
           </div>
         )}
+      </div>
+      
+      {/* Context Menu - Custom implementation to avoid Radix UI infinite loop */}
+      <div ref={menuRef} className="absolute top-1 right-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowMenu(!showMenu);
+          }}
+        >
+          <MoreVertical className="h-3 w-3" />
+        </Button>
         
-        {/* Last Activity */}
-        {data.lastActivity && (
-          <div className="text-xs text-muted-foreground">
-            Last active: {new Date(data.lastActivity).toLocaleDateString()}
+        {showMenu && (
+          <div 
+            className="absolute top-8 right-0 bg-popover text-popover-foreground rounded-md border shadow-md py-1 min-w-[140px] z-50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="flex items-center w-full px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+              onClick={(e) => {
+                handleClick(e);
+                setShowMenu(false);
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              View Team
+            </button>
           </div>
         )}
       </div>
-      
-      {/* Context Menu */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MoreVertical className="h-3 w-3" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onClick={handleEdit}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Team
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleClick}>
-            <ExternalLink className="h-4 w-4 mr-2" />
-            View Details
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem 
-            onClick={handleDelete}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Team
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
       
       {/* Selection indicator */}
       {selected && (
         <div className="absolute inset-0 border-2 border-primary rounded-xl pointer-events-none" />
       )}
       
-      {/* Connecting mode indicator */}
-      {isConnecting && connectionMode && (
-        <div className="absolute -top-1 -left-1 -right-1 -bottom-1 border-2 border-dashed border-primary/50 rounded-xl pointer-events-none animate-pulse" />
-      )}
+
     </div>
   );
 });

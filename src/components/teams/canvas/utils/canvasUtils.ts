@@ -33,8 +33,7 @@ export function teamsToNodes(
   teamMembers: Map<string, TeamMember[]>,
   positions: Map<string, TeamPosition>,
   handlers: {
-    isConnecting: boolean;
-    connectionMode: ConnectionType | null;
+
     selectedTeams: Set<string>;
     onTeamClick: (teamId: string) => void;
     onTeamEdit: (teamId: string) => void;
@@ -56,6 +55,7 @@ export function teamsToNodes(
       id: team.id,
       type: 'teamNode',
       position: { x: position.x, y: position.y },
+      connectable: true,
       data: {
         team,
         memberCount: members.length,
@@ -65,8 +65,7 @@ export function teamsToNodes(
         isSelected: handlers.selectedTeams.has(team.id),
         
         // Canvas state
-        isConnecting: handlers.isConnecting,
-        connectionMode: handlers.connectionMode,
+
         
         // Callbacks
         onTeamClick: handlers.onTeamClick,
@@ -110,6 +109,8 @@ export function connectionsToEdges(
       id: edgeId,
       source: connection.fromTeamId,
       target: connection.toTeamId,
+      sourceHandle: connection.sourceHandle || null,
+      targetHandle: connection.targetHandle || null,
       type: 'teamConnection',
       data: {
         connection,

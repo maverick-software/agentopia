@@ -23,6 +23,8 @@ export interface TeamConnection {
   label?: string;
   color?: string;
   style?: ConnectionStyle;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -60,10 +62,6 @@ export interface TeamNodeData {
   lastActivity?: string;
   isSelected?: boolean;
   
-  // Canvas state
-  isConnecting?: boolean;
-  connectionMode?: ConnectionType | null;
-  
   // Callbacks
   onTeamClick?: (teamId: string) => void;
   onTeamEdit?: (teamId: string) => void;
@@ -81,7 +79,7 @@ export interface ConnectionEdgeData {
   // Callbacks
   onEdgeClick?: (edgeId: string) => void;
   onEdgeDelete?: (edgeId: string) => void;
-  onEdgeEdit?: (edgeId: string) => void;
+  onEdgeEdit?: (edgeId: string, newType: ConnectionType) => void;
 }
 
 // Canvas State Management
@@ -103,8 +101,6 @@ export interface CanvasState {
   selectedConnections: Set<string>;
   
   // Interaction state
-  isConnecting: boolean;
-  connectionMode: ConnectionType | null;
   draggedTeam: string | null;
   
   // Layout state
@@ -166,9 +162,9 @@ export interface CanvasToolbarProps {
   // View mode
   viewMode: ViewMode;
   
-  // Connection state
-  connectionMode: ConnectionType | null;
-  isConnecting: boolean;
+  // Connection state (simplified - no longer using modes)
+  // connectionMode: ConnectionType | null; // Removed
+  // isConnecting: boolean; // Removed
   
   // Layout state
   hasUnsavedChanges: boolean;
@@ -183,7 +179,7 @@ export interface CanvasToolbarProps {
   onExportLayout: () => void;
   
   onViewModeChange: (mode: ViewMode) => void;
-  onConnectionModeChange: (mode: ConnectionType | null) => void;
+  onConnectionModeChange: (mode: ConnectionType | null) => void; // Legacy - not used
   
   onShowSettings: () => void;
   

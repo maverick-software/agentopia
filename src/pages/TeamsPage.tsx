@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Users, Loader2, AlertCircle, Building2, UserCheck, Target, Workflow, Network, Grid } from 'lucide-react';
 import { useTeams } from '../hooks/useTeams';
@@ -37,6 +37,9 @@ export const TeamsPage: React.FC = () => {
     // Navigate to the new team's detail page
     navigate(`/teams/${teamId}`);
   };
+  
+  // Memoize teams to prevent unnecessary re-renders
+  const memoizedTeams = useMemo(() => teams, [teams]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -188,11 +191,11 @@ export const TeamsPage: React.FC = () => {
       />
       
       {/* Visual Team Canvas Modal */}
-      {user && (
+      {user && showCanvasModal && (
         <VisualTeamCanvas
           isOpen={showCanvasModal}
           onClose={() => setShowCanvasModal(false)}
-          teams={teams}
+          teams={memoizedTeams}
           teamMembers={new Map()} // TODO: Implement team members fetching
           userId={user.id}
           workspaceId={undefined} // TODO: Implement workspace support

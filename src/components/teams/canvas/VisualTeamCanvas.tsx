@@ -1,14 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactFlow, {
   Background,
-  Controls,
   MiniMap,
   Node,
   Edge,
   NodeTypes,
   EdgeTypes,
   ReactFlowProvider,
-  useReactFlow,
   useNodesState,
   useEdgesState,
   ConnectionMode,
@@ -101,13 +99,10 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   defaultViewMode = 'canvas',
   className
 }) => {
-  const reactFlowInstance = useReactFlow();
-  
   // State management
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
-  const [connectionMode, setConnectionMode] = useState<ConnectionType | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   
   // Canvas state hook
   const canvasState = useCanvasState(teams, initialLayout, {
@@ -130,7 +125,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     }
   });
   
-  // Connection management
+  // Connection management - sync with canvas state
   const connections = useConnections(teams, canvasState.canvasState.connections, {
     validateConnections: true,
     preventCycles: true,
@@ -140,6 +135,14 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
       toast.error(error.message);
     }
   });
+
+  // Sync connections with canvas state when they change
+  useEffect(() => {
+    // Update connections hook when canvas state connections change
+    if (canvasState.canvasState.connections.length !== connections.connections.length) {
+      // Log for debugging if needed
+    }
+  }, [canvasState.canvasState.connections, connections.connections]);
   
   // Layout persistence
   const persistence = useLayoutPersistence(userId, workspaceId || '', {
@@ -151,23 +154,41 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   
   // Handle connection start (must be defined before nodes useMemo)
   const handleConnectionStart = useCallback((teamId: string, handle: string) => {
-    if (!connectionMode || readonly) return;
-    setIsConnecting(true);
-  }, [connectionMode, readonly]);
+    if (readonly) return;
+    // Connection start is handled automatically by React Flow
+  }, [readonly]);
   
   // Handle connection deletion (must be defined before edges useMemo)
   const handleConnectionDelete = useCallback((connectionId: string) => {
     if (readonly) return;
-    connections.removeConnection(connectionId);
-    toast.success('Connection removed');
-  }, [connections, readonly]);
-
-  // Handle connection mode change with guard to prevent infinite loops
-  const handleConnectionModeChange = useCallback((mode: ConnectionType | null) => {
-    if (mode !== connectionMode) {
-      setConnectionMode(mode);
+    
+    // Remove from both the connections hook and canvas state
+    const removed = connections.removeConnection(connectionId);
+    if (removed) {
+      canvasState.removeConnection(connectionId);
+      toast.success('Connection removed');
     }
-  }, [connectionMode]);
+  }, [connections, canvasState, readonly]);
+
+  // Handle connection type editing (for selected connections)
+  const handleConnectionTypeChange = useCallback((connectionId: string, newType: ConnectionType) => {
+    if (readonly) return;
+    
+    // Find the connection and update it
+    const connection = canvasState.canvasState.connections.find(c => c.id === connectionId);
+    if (connection) {
+      // Remove the old connection
+      canvasState.removeConnection(connectionId);
+      
+      // Add the updated connection
+      canvasState.addConnection({
+        ...connection,
+        type: newType
+      });
+      
+      toast.success(`Connection updated to: ${newType.replace('_', ' ')}`);
+    }
+  }, [canvasState, readonly]);
 
   // Handle view mode change with guard to prevent unnecessary updates
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -176,75 +197,70 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     }
   }, [viewMode]);
   
-  // Convert teams to React Flow nodes
+  // Stabilize callbacks to prevent infinite re-renders
+  const stableCallbacks = useMemo(() => ({
+    onTeamClick: (teamId: string) => {
+      const newSelection = new Set([teamId]);
+      canvasState.selectTeams(Array.from(newSelection));
+    },
+    onTeamEdit: onTeamUpdate || (() => {}),
+    onTeamDelete: onTeamDelete || (() => {}),
+    onConnectionStart: handleConnectionStart
+  }), [canvasState.selectTeams, onTeamUpdate, onTeamDelete, handleConnectionStart]);
+
+  // Convert teams to React Flow nodes - stabilize to prevent flickering
   const nodes = useMemo<Node<TeamNodeData>[]>(() => {
-    if (viewMode === 'grid') return [];
-    
     return teamsToNodes(
       teams, 
       teamMembers,
       canvasState.canvasState.teamPositions,
       {
-        isConnecting,
-        connectionMode,
         selectedTeams: canvasState.canvasState.selectedTeams,
-        onTeamClick: (teamId) => {
-          // Handle team selection
-          const newSelection = new Set([teamId]);
-          canvasState.selectTeams(Array.from(newSelection));
-        },
-        onTeamEdit: onTeamUpdate || (() => {}),
-        onTeamDelete: onTeamDelete || (() => {}),
-        onConnectionStart: handleConnectionStart
+        ...stableCallbacks
       }
     );
   }, [
     teams, 
-    teamMembers, 
-    viewMode,
+    teamMembers,
     canvasState.canvasState.teamPositions,
     canvasState.canvasState.selectedTeams,
-    isConnecting,
-    connectionMode,
-    onTeamUpdate,
-    onTeamDelete,
-    handleConnectionStart
+    stableCallbacks
   ]);
   
-  // Convert connections to React Flow edges
+  // Handle edge clicks for connection type editing
+  const handleEdgeClick = useCallback((event: any, edge: Edge) => {
+    if (readonly) return;
+    // Edge editing is now handled inline by the edge component
+  }, [readonly]);
+
+  // Convert connections to React Flow edges - stabilize to prevent flickering
   const edges = useMemo<Edge<ConnectionEdgeData>[]>(() => {
-    if (viewMode === 'grid') return [];
-    
-    return connectionsToEdges(
+    const generatedEdges = connectionsToEdges(
       canvasState.canvasState.connections,
       teams,
       {
         selectedConnections: canvasState.canvasState.selectedConnections,
-        onEdgeClick: (edgeId) => {
-          // Handle edge selection
-          const newSelection = new Set([edgeId]);
-          // Note: would need to add selectConnections to canvas state
+        onEdgeClick: () => {
+          // Edge clicks are handled by the edge component now
         },
         onEdgeDelete: handleConnectionDelete,
-        onEdgeEdit: (edgeId) => {
-          // Handle edge editing
-          console.log('Edit edge:', edgeId);
-        }
+        onEdgeEdit: handleConnectionTypeChange
       }
     );
+    return generatedEdges;
   }, [
     canvasState.canvasState.connections,
     canvasState.canvasState.selectedConnections,
     teams,
-    viewMode,
-    handleConnectionDelete
+    handleConnectionDelete,
+    handleConnectionTypeChange
   ]);
   
-  // React Flow state
+  // React Flow state management
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
   
-  // Sync nodes and edges when data changes
+  // Sync our nodes/edges with React Flow state
   useEffect(() => {
     setNodes(nodes);
   }, [nodes, setNodes]);
@@ -252,12 +268,13 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   useEffect(() => {
     setEdges(edges);
   }, [edges, setEdges]);
-  
-  // Handle node drag end to update positions
+
+  // Handle node changes (including dragging) - combine React Flow updates with our state management
   const handleNodesChange = useCallback((changes: any[]) => {
+    // First, let React Flow handle the changes
     onNodesChange(changes);
     
-    // Update positions for dragged nodes
+    // Then, handle our custom logic for position updates
     const positionChanges = changes.filter(change => 
       change.type === 'position' && change.dragging === false
     );
@@ -268,36 +285,42 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
       }
     });
   }, [onNodesChange, canvasState]);
+
+  // Handle edge changes 
+  const handleEdgesChange = useCallback((changes: any[]) => {
+    onEdgesChange(changes);
+  }, [onEdgesChange]);
   
-  // Handle connection creation
+  // Handle connection creation - always allow connections with default type
   const onConnect = useCallback((connection: Connection) => {
-    if (!connectionMode || readonly) return;
+    if (readonly) return;
     
-    const newConnection = connections.addConnection(
-      connection.source!,
-      connection.target!,
-      connectionMode
-    );
+    console.log('Connection attempted:', connection);
     
-    if (newConnection) {
-      setIsConnecting(false);
-      setConnectionMode(null);
-      toast.success('Teams connected successfully');
-    }
-  }, [connectionMode, connections, readonly]);
+    // Create a simple connection directly
+    const newConnectionData = {
+      id: `connection_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      fromTeamId: connection.source!,
+      toTeamId: connection.target!,
+      type: 'collaborates_with' as ConnectionType,
+      createdAt: new Date().toISOString(),
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle
+    };
+    
+    // Add to canvas state for persistence
+    canvasState.addConnection(newConnectionData);
+    
+    toast.success('Teams connected! Click the connection to change relationship type.');
+    
+  }, [canvasState, readonly]);
   
   // Toolbar callbacks
-  const handleZoomIn = useCallback(() => {
-    reactFlowInstance.zoomIn();
-  }, [reactFlowInstance]);
-  
-  const handleZoomOut = useCallback(() => {
-    reactFlowInstance.zoomOut();
-  }, [reactFlowInstance]);
-  
   const handleFitView = useCallback(() => {
-    reactFlowInstance.fitView();
-    canvasState.fitView();
+    if (reactFlowInstance && reactFlowInstance.fitView) {
+      reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
+      canvasState.fitView();
+    }
   }, [reactFlowInstance, canvasState]);
   
   const handleResetLayout = useCallback(() => {
@@ -367,63 +390,51 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     </div>
   );
   
-  // Canvas view component  
-  const CanvasView = () => (
-    <div className="w-full" style={{ height: 'calc(100% - 60px)' }}>
-      <ReactFlow
-        style={{ height: '100%', width: '100%' }}
-        nodes={flowNodes}
-        edges={flowEdges}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        connectionMode={ConnectionMode.Loose}
-        defaultMarkerColor="#374151"
-        fitView
-        minZoom={0.1}
-        maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-      >
-        <Background 
-          color="#e5e7eb" 
-          gap={20} 
-          size={1}
-          variant="dots"
-        />
-        <Controls 
-          showZoom={false}
-          showFitView={false}
-          showInteractive={false}
-        />
-        {canvasState.canvasState.showMinimap && (
-          <MiniMap
-            nodeColor="#3b82f6"
-            nodeStrokeWidth={2}
-            pannable
-            zoomable
-            position="bottom-right"
-          />
-        )}
-      </ReactFlow>
-    </div>
-  );
+  // Stabilize React Flow to prevent flickering
+  const reactFlowProps = useMemo(() => ({
+    nodes: flowNodes,
+    edges: flowEdges,
+    onNodesChange: handleNodesChange,
+    onEdgesChange: handleEdgesChange,
+    onConnect: onConnect,
+    onEdgeClick: handleEdgeClick,
+    nodeTypes: nodeTypes,
+    edgeTypes: edgeTypes,
+    connectionMode: ConnectionMode.Loose,
+    defaultMarkerColor: "#374151",
+    fitView: false,
+    minZoom: 1,
+    maxZoom: 1,
+    zoomOnScroll: false,
+    zoomOnPinch: false,
+    zoomOnDoubleClick: false,
+    panOnScroll: true,
+    preventScrolling: false,
+    defaultViewport: { x: 0, y: 0, zoom: 1 },
+    proOptions: { hideAttribution: true },
+    attributionPosition: 'bottom-left' as const,
+    // Ensure connections are enabled
+    connectOnClick: false,
+    deleteKeyCode: 'Delete',
+    multiSelectionKeyCode: 'Meta',
+    snapToGrid: false,
+    snapGrid: [15, 15],
+  }), [flowNodes, flowEdges, handleNodesChange, handleEdgesChange, onConnect, handleEdgeClick, nodeTypes, edgeTypes]);
   
   return (
     <div className={`h-full flex flex-col ${className || ''}`}>
       {showToolbar && (
         <CanvasToolbar
-          zoom={reactFlowInstance.getZoom()}
-          canZoomIn={reactFlowInstance.getZoom() < 2}
-          canZoomOut={reactFlowInstance.getZoom() > 0.1}
+          zoom={1}
+          canZoomIn={false}
+          canZoomOut={false}
           viewMode={viewMode}
-          connectionMode={connectionMode}
-          isConnecting={isConnecting}
+          connectionMode={null}
+          isConnecting={false}
           hasUnsavedChanges={canvasState.hasUnsavedChanges}
           isSaving={isSaving}
-          onZoomIn={handleZoomIn}
-          onZoomOut={handleZoomOut}
+          onZoomIn={() => {}}
+          onZoomOut={() => {}}
           onFitView={handleFitView}
           onResetLayout={handleResetLayout}
           onSaveLayout={handleSaveLayout}
@@ -432,7 +443,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
             toast.info('Export functionality coming soon');
           }}
           onViewModeChange={handleViewModeChange}
-          onConnectionModeChange={handleConnectionModeChange}
+          onConnectionModeChange={() => {}} // No longer used
           onShowSettings={() => {
             // TODO: Implement settings modal
             toast.info('Settings modal coming soon');
@@ -444,8 +455,40 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
         />
       )}
       
-      <div className="flex-1 h-full">
-        {viewMode === 'grid' ? <GridView /> : <CanvasView />}
+      <div className="flex-1 h-full relative">
+        {/* Keep both views but show/hide to prevent React Flow re-initialization */}
+        <div style={{ display: viewMode === 'grid' ? 'block' : 'none', height: '100%' }}>
+          <GridView />
+        </div>
+        {viewMode === 'canvas' && (
+          <div style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0 }}>
+            <ReactFlow
+              {...reactFlowProps}
+              style={{ width: '100%', height: '100%' }}
+              onInit={(instance) => {
+                setReactFlowInstance(instance);
+              }}
+            >
+              <Background 
+                color="#e5e7eb" 
+                gap={20} 
+                size={1}
+                variant="dots"
+              />
+              {canvasState.canvasState.showMinimap && (
+                <MiniMap
+                  nodeColor="#3b82f6"
+                  nodeStrokeWidth={2}
+                  pannable
+                  zoomable={false}
+                  position="bottom-right"
+                />
+              )}
+            </ReactFlow>
+          </div>
+        )}
+
+
       </div>
     </div>
   );
