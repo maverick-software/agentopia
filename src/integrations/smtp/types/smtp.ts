@@ -443,7 +443,7 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     secure: false,
     description: 'Amazon Simple Email Service',
     authType: 'password',
-    setupInstructions: 'Use your SES SMTP username and password. Verify your domain/email in AWS SES console first.'
+    setupInstructions: 'Use your SES SMTP username and password. Update host to your region (e.g., email-smtp.eu-west-1.amazonaws.com). Verify your domain/email in AWS SES console first.'
   },
   {
     name: 'sendgrid',
@@ -468,7 +468,7 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
   {
     name: 'smtpcom',
     displayName: 'SMTP.com',
-    host: 'smtp.smtp.com',
+    host: 'send.smtp.com',
     port: 2525,
     secure: false,
     description: 'SMTP.com Professional Email Service',
