@@ -98,14 +98,10 @@ export function ConnectedToolsList({
     webSearchProviders.includes(c.provider_name)
   );
   
-  const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
-  const emailRelayConnections = toolConnections.filter(c => 
-    emailRelayProviders.includes(c.provider_name)
-  );
+  // Email Relay removed - using individual provider entries now
   
   const otherConnections = toolConnections.filter(c => 
-    !webSearchProviders.includes(c.provider_name) && 
-    !emailRelayProviders.includes(c.provider_name)
+    !webSearchProviders.includes(c.provider_name)
   );
 
   const items = [];
@@ -152,46 +148,7 @@ export function ConnectedToolsList({
     );
   }
 
-  // Email Relay unified entry
-  if (emailRelayConnections.length > 0) {
-    const emailRelayIntegration = TOOL_INTEGRATIONS.find(i => i.name.toLowerCase() === 'email relay');
-    const providerNames = emailRelayConnections.map(c => {
-      return EMAIL_PROVIDER_NAMES[c.provider_name as keyof typeof EMAIL_PROVIDER_NAMES] || c.provider_name;
-    }).join(', ');
-
-    items.push(
-      <div
-        key="email_relay_unified"
-        className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
-      >
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <Mail className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h3 className="font-medium">Email Relay</h3>
-            <p className="text-sm text-muted-foreground">
-              Using: {providerNames}
-            </p>
-            {renderCapabilitiesBadges?.(emailRelayIntegration?.id)}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-            Connected
-          </Badge>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-red-500"
-            onClick={() => handleRemoveTools(emailRelayConnections, 'Email Relay providers')}
-          >
-            Remove
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // Email Relay removed - using individual provider entries now
 
   // Individual tools
   otherConnections.forEach((connection) => {

@@ -177,9 +177,9 @@ export function EnhancedChannelsModal({
       id = 'slack';
       gradient = 'from-green-500 to-teal-500';
       type = 'coming_soon';
-    } else if (lower.includes('email relay') || lower.includes('email_relay')) {
-      id = 'email_relay';
-      gradient = 'from-purple-500 to-pink-500';
+    } else if (lower.includes('smtp')) {
+      id = 'smtp';
+      gradient = 'from-green-500 to-emerald-500';
       type = 'api_key';
     }
 
@@ -455,7 +455,7 @@ export function EnhancedChannelsModal({
         providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
         providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
         providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
-        providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
+        providerName === 'smtp' && i.name.toLowerCase().includes('smtp')
       );
       
       return !!matchedIntegration;
@@ -501,7 +501,7 @@ export function EnhancedChannelsModal({
             providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
             providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
             providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
-            providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
+            providerName === 'smtp' && i.name.toLowerCase().includes('smtp')
           );
           
           // Use integration info or fallback to provider name
@@ -1036,8 +1036,9 @@ export function EnhancedChannelsModal({
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/gmail.modify'
     ];
-    if (serviceId === 'sendgrid') return ['send_email'];
-    if (serviceId === 'mailgun') return ['send_email', 'validate', 'stats', 'suppressions'];
+    if (serviceId === 'sendgrid') return ['sendgrid_send_email', 'sendgrid_email_templates', 'sendgrid_email_stats'];
+    if (serviceId === 'mailgun') return ['mailgun_send_email', 'mailgun_email_templates', 'mailgun_email_stats', 'mailgun_email_validation', 'mailgun_suppression_management'];
+    if (serviceId === 'smtp') return ['smtp_send_email', 'smtp_email_templates', 'smtp_email_stats'];
     return [];
   };
 

@@ -90,7 +90,7 @@ export function ChannelConnectionItem({
     providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
     providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
     providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
-    providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
+    providerName === 'smtp' && i.name.toLowerCase().includes('smtp')
   );
   
   // Determine display properties based on the matched integration or fallback to provider
@@ -107,8 +107,8 @@ export function ChannelConnectionItem({
     name = 'Mailgun';
     gradient = 'from-rose-500 to-pink-500';
   } else if (providerName === 'smtp') {
-    name = 'Email Relay';
-    gradient = 'from-purple-500 to-pink-500';
+    name = matchedIntegration?.name || 'SMTP Server';
+    gradient = 'from-green-500 to-emerald-500';
   } else if (matchedIntegration) {
     // Use integration name for other channel types
     name = matchedIntegration.name;

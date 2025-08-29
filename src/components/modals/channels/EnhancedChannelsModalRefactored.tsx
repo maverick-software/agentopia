@@ -127,8 +127,9 @@ export function EnhancedChannelsModalRefactored({
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/gmail.modify'
     ];
-    if (serviceId === 'sendgrid') return ['send_email'];
-    if (serviceId === 'mailgun') return ['send_email', 'validate', 'stats', 'suppressions'];
+    if (serviceId === 'sendgrid') return ['sendgrid_send_email', 'sendgrid_email_templates', 'sendgrid_email_stats'];
+    if (serviceId === 'mailgun') return ['mailgun_send_email', 'mailgun_email_templates', 'mailgun_email_stats', 'mailgun_email_validation', 'mailgun_suppression_management'];
+    if (serviceId === 'smtp') return ['smtp_send_email', 'smtp_email_templates', 'smtp_email_stats'];
     return [];
   };
 
@@ -355,11 +356,12 @@ export function EnhancedChannelsModalRefactored({
         .insert({
           user_id: user.id,
           oauth_provider_id: smtpProvider.id,
-          provider_name: 'smtp',
-          vault_key_id: vaultKeyId,
+          external_user_id: user.id, // Required field
+          external_username: modalState.smtpUsername,
+          connection_name: modalState.connectionName || 'SMTP.com',
+          vault_access_token_id: vaultKeyId, // ✅ Fixed: use correct column name
           connection_status: 'active',
-          display_name: `${modalState.smtpHost}:${modalState.smtpPort}`,
-          credential_data: { from_email: modalState.fromEmail }
+          credential_type: 'api_key'
         })
         .select()
         .single();
@@ -402,11 +404,8 @@ export function EnhancedChannelsModalRefactored({
       external_username: c.external_username
     })));
     
-    // FIXED: Use same logic as working Credentials page
-    // For Email Relay, show credentials from all email providers
-    const creds = serviceId === 'email_relay' 
-      ? connections.filter(c => ['smtp', 'sendgrid', 'mailgun'].includes(c.provider_name) && c.connection_status === 'active')
-      : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    // Database-driven credential filtering - no special cases
+    const creds = connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
     
     console.log('[renderCredentialSelector] Filtered credentials for', serviceId, ':', creds);
     
@@ -442,12 +441,8 @@ export function EnhancedChannelsModalRefactored({
           // Use same data structure as working Credentials page
           const connectionId = c.connection_id || c.id;
           
-          // For Email Relay, show which email provider this credential belongs to
-          const displayName = serviceId === 'email_relay' 
-            ? `${c.provider_name === 'smtp' ? 'SMTP Server' : 
-                c.provider_name === 'sendgrid' ? 'SendGrid' : 
-                c.provider_name === 'mailgun' ? 'Mailgun' : c.provider_name}`
-            : (c.provider_display_name || c.provider_name);
+          // Use database-driven display name - no special cases
+          const displayName = c.provider_display_name || c.provider_name;
             
           return (
             <div key={connectionId} className="flex items-center justify-between p-3 border rounded">
@@ -461,9 +456,8 @@ export function EnhancedChannelsModalRefactored({
                   try {
                     modalState.setConnectingService(serviceId);
                     
-                    // For Email Relay, use the actual provider's scopes instead of service scopes
-                    const actualProvider = serviceId === 'email_relay' ? c.provider_name : serviceId;
-                    const scopes = defaultScopesForService(actualProvider);
+                    // Use database-driven scopes - no special cases
+                    const scopes = defaultScopesForService(serviceId);
                     
                     const { error: grantError } = await supabase.rpc('grant_agent_integration_permission', {
                       p_agent_id: agentId,
@@ -604,17 +598,6 @@ export function EnhancedChannelsModalRefactored({
       </DialogContent>
 
       {/* Permission Management Modal */}
-      <ChannelPermissionsModal
-        isOpen={modalState.showPermissionsModal}
-        onClose={() => modalState.setShowPermissionsModal(false)}
-        agentId={agentId}
-        editingPermission={modalState.editingPermission}
-        onPermissionUpdated={fetchAgentPermissions}
-      />
-    </Dialog>
-  );
-}
-
       <ChannelPermissionsModal
         isOpen={modalState.showPermissionsModal}
         onClose={() => modalState.setShowPermissionsModal(false)}

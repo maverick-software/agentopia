@@ -63,19 +63,7 @@ export function AvailableToolsList({
       return hasWebSearchCredential ? 'available' : 'available';
     }
     
-    // For unified Email Relay, check if any email provider is connected
-    if (providerName === 'email relay' || providerName === 'email_relay') {
-      const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
-      const hasEmailPermission = agentPermissions.some(p => 
-        emailRelayProviders.includes(p.provider_name) && p.is_active
-      );
-      if (hasEmailPermission) return 'connected';
-      
-      const hasEmailCredential = connections.some(c => 
-        emailRelayProviders.includes(c.provider_name) && c.connection_status === 'active'
-      );
-      return hasEmailCredential ? 'available' : 'available';
-    }
+    // Email Relay removed - using direct provider-integration matching now
     
     // For other providers, check normally
     const exists = agentPermissions.some(p => p.provider_name === providerName && p.is_active);

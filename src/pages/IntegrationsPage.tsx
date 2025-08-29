@@ -138,8 +138,8 @@ export function IntegrationsPage() {
     switch (name) {
       case 'Gmail':
         return 'gmail';
-      case 'Email Relay':
-        return 'email_relay'; // Unified email service
+      case 'SMTP':
+        return 'smtp';
       case 'Web Search':
         return 'web_search'; // Unified web search - will check all providers
       case 'Serper API':
@@ -173,13 +173,7 @@ export function IntegrationsPage() {
       );
     }
     
-    // For unified Email Relay, check if any email provider is connected
-    if (provider === 'email_relay') {
-      const emailProviders = ['smtp', 'sendgrid', 'mailgun'];
-      return unifiedConnections.some(c => 
-        emailProviders.includes(c.provider_name) && c.connection_status === 'active'
-      );
-    }
+        // Email Relay removed - using direct provider matching now
     
     return unifiedConnections.some(c => c.provider_name === provider && c.connection_status === 'active');
   };

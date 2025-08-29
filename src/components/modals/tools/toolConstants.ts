@@ -41,9 +41,15 @@ export const getDefaultScopesForProvider = (provider: string): string[] => {
   if (['serper_api','serpapi','brave_search','web_search'].includes(provider)) {
     return ['web_search','news_search','image_search','local_search'];
   }
-  // For email relay providers
-  if (['smtp','sendgrid','mailgun','email_relay'].includes(provider)) {
-    return ['smtp_send_email','smtp_test_connection'];
+  // For email providers - using unique tool names now
+  if (provider === 'smtp') {
+    return ['smtp_send_email','smtp_email_templates','smtp_email_stats'];
+  }
+  if (provider === 'sendgrid') {
+    return ['sendgrid_send_email','sendgrid_email_templates','sendgrid_email_stats'];
+  }
+  if (provider === 'mailgun') {
+    return ['mailgun_send_email','mailgun_email_templates','mailgun_email_stats','mailgun_email_validation','mailgun_suppression_management'];
   }
   return [];
 };

@@ -54,7 +54,7 @@ export function ConnectedChannelsList({
       providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
       providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
       providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
-      providerName === 'smtp' && i.name.toLowerCase().includes('email relay')
+      providerName === 'smtp' && i.name.toLowerCase().includes('smtp')
     );
     
     console.log('[ConnectedChannelsList] Match result:', {

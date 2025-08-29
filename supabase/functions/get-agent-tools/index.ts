@@ -4,10 +4,9 @@
  * Returns all authorized MCP tools for an agent based on:
  * - Agent permissions (agent_integration_permissions)  
  * - User credentials (user_integration_credentials)
- * - Provider definitions (oauth_providers)
+ * - Integration capabilities (integration_capabilities) - DATABASE DRIVEN
  * 
- * Uses hardcoded provider->tool mappings since tool_definitions 
- * are not stored in database
+ * Uses database-driven tool discovery via integration_capabilities table
  */
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
@@ -36,174 +35,139 @@ interface AgentToolsResponse {
   };
 }
 
-// Provider -> Tool mappings (since tools are not stored in database)
-const PROVIDER_TOOL_MAPPINGS: Record<string, Record<string, ToolDefinition[]>> = {
-  gmail: {
-    'https://www.googleapis.com/auth/gmail.readonly': [
-      {
-        name: 'gmail_read_emails',
-        description: 'Read emails from Gmail inbox',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search query for emails' },
-            max_results: { type: 'number', description: 'Maximum number of emails to return', default: 10 }
-          },
-          required: ['query']
-        }
-      },
-      {
-        name: 'gmail_search_emails',
-        description: 'Search emails in Gmail',
-        parameters: {
-          type: 'object', 
-          properties: {
-            query: { type: 'string', description: 'Gmail search query' },
-            max_results: { type: 'number', description: 'Maximum results', default: 10 }
-          },
-          required: ['query']
-        }
-      }
-    ],
-    'https://www.googleapis.com/auth/gmail.send': [
-      {
-        name: 'gmail_send_email',
-        description: 'Send email via Gmail',
-        parameters: {
-          type: 'object',
-          properties: {
-            to: { type: 'string', description: 'Recipient email address' },
-            subject: { type: 'string', description: 'Email subject' },
-            body: { type: 'string', description: 'Email body content' },
-            cc: { type: 'string', description: 'CC recipients (optional)' },
-            bcc: { type: 'string', description: 'BCC recipients (optional)' }
-          },
-          required: ['to', 'subject', 'body']
-        }
-      }
-    ],
-    'https://www.googleapis.com/auth/gmail.modify': [
-      {
-        name: 'gmail_email_actions',
-        description: 'Perform actions on Gmail emails (mark read, archive, etc.)',
-        parameters: {
-          type: 'object',
-          properties: {
-            message_id: { type: 'string', description: 'Gmail message ID' },
-            action: { type: 'string', enum: ['mark_read', 'mark_unread', 'archive', 'delete'], description: 'Action to perform' }
-          },
-          required: ['message_id', 'action']
-        }
-      }
-    ]
-  },
-  
-  serper_api: {
-    'web_search': [
-      {
-        name: 'web_search',
-        description: 'Search the web using Serper API',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search query' },
-            num_results: { type: 'number', description: 'Number of results', default: 10 },
-            country: { type: 'string', description: 'Country code for localized results', default: 'us' }
-          },
-          required: ['query']
-        }
-      }
-    ],
-    'news_search': [
-      {
-        name: 'news_search',
-        description: 'Search news articles using Serper API', 
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'News search query' },
-            num_results: { type: 'number', description: 'Number of results', default: 10 }
-          },
-          required: ['query']
-        }
-      }
-    ],
-    'image_search': [
-      {
-        name: 'image_search',
-        description: 'Search images using Serper API',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Image search query' },
-            num_results: { type: 'number', description: 'Number of results', default: 10 }
-          },
-          required: ['query']
-        }
-      }
-    ],
-    'local_search': [
-      {
-        name: 'local_search',
-        description: 'Search local businesses using Serper API',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Local search query' },
-            location: { type: 'string', description: 'Location for local search' }
-          },
-          required: ['query', 'location']
-        }
-      }
-    ]
-  },
-  
-  smtp: {
-    'send_email': [
-      {
-        name: 'smtp_send_email',
-        description: 'Send email via SMTP server',
-        parameters: {
-          type: 'object',
-          properties: {
-            to: { type: 'string', description: 'Recipient email address' },
-            subject: { type: 'string', description: 'Email subject' },
-            body: { type: 'string', description: 'Email body content' },
-            from_name: { type: 'string', description: 'Sender name (optional)' }
-          },
-          required: ['to', 'subject', 'body']
-        }
-      }
-    ],
-    'email_templates': [
-      {
-        name: 'smtp_email_templates',
-        description: 'Send templated emails via SMTP',
-        parameters: {
-          type: 'object',
-          properties: {
-            template_name: { type: 'string', description: 'Template identifier' },
-            to: { type: 'string', description: 'Recipient email' },
-            variables: { type: 'object', description: 'Template variables' }
-          },
-          required: ['template_name', 'to']
-        }
-      }
-    ],
-    'email_stats': [
-      {
-        name: 'smtp_email_stats',
-        description: 'Get SMTP email sending statistics',
-        parameters: {
-          type: 'object',
-          properties: {
-            date_range: { type: 'string', description: 'Date range for stats (e.g., "7d", "30d")' }
-          }
-        }
-      }
-    ]
+// Generate parameters schema based on capability type (now tool name)
+function generateParametersForCapability(toolName: string) {
+  const baseSchema = {
+    type: 'object' as const,
+    properties: {} as Record<string, any>,
+    required: [] as string[]
+  };
+
+  // Handle email sending tools (smtp_send_email, sendgrid_send_email, mailgun_send_email)
+  if (toolName.includes('_send_email')) {
+      return {
+        ...baseSchema,
+        properties: {
+          to: { type: 'string', description: 'Recipient email address' },
+          subject: { type: 'string', description: 'Email subject' },
+          body: { type: 'string', description: 'Email body content' },
+          from_name: { type: 'string', description: 'Sender name (optional)' },
+          cc: { type: 'string', description: 'CC recipients (optional)' },
+          bcc: { type: 'string', description: 'BCC recipients (optional)' }
+        },
+        required: ['to', 'subject', 'body']
+      };
   }
-};
+
+  // Handle email template tools
+  if (toolName.includes('_email_templates')) {
+    return {
+      ...baseSchema,
+      properties: {
+        template_name: { type: 'string', description: 'Template identifier' },
+        to: { type: 'string', description: 'Recipient email' },
+        variables: { type: 'object', description: 'Template variables' }
+      },
+      required: ['template_name', 'to']
+    };
+  }
+
+  // Handle email stats tools
+  if (toolName.includes('_email_stats')) {
+    return {
+      ...baseSchema,
+      properties: {
+        date_range: { type: 'string', description: 'Date range for statistics (e.g., "7d", "30d")' },
+        metric_type: { type: 'string', description: 'Type of metrics to retrieve' }
+      },
+      required: []
+    };
+  }
+
+  // Handle web search tools
+  if (toolName.includes('web_search')) {
+    return {
+      ...baseSchema,
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        num_results: { type: 'number', description: 'Number of results to return', default: 10 }
+      },
+      required: ['query']
+    };
+  }
+
+  // Handle news search tools
+  if (toolName.includes('news_search')) {
+    return {
+      ...baseSchema,
+      properties: {
+        query: { type: 'string', description: 'News search query' },
+        num_results: { type: 'number', description: 'Number of results to return', default: 10 }
+      },
+      required: ['query']
+    };
+  }
+
+  // Handle image search tools
+  if (toolName.includes('image_search')) {
+    return {
+      ...baseSchema,
+      properties: {
+        query: { type: 'string', description: 'Image search query' },
+        num_results: { type: 'number', description: 'Number of results to return', default: 10 }
+      },
+      required: ['query']
+    };
+  }
+
+  // Handle Gmail-specific capabilities
+  if (toolName.includes('gmail') || toolName.includes('https://www.googleapis.com/auth/gmail')) {
+    if (toolName.includes('readonly') || toolName.includes('read') || toolName.includes('search')) {
+      return {
+        ...baseSchema,
+        properties: {
+          query: { type: 'string', description: 'Search query for emails' },
+          max_results: { type: 'number', description: 'Maximum number of emails to return', default: 10 }
+        },
+        required: ['query']
+      };
+    }
+    
+    if (toolName.includes('send')) {
+      return {
+        ...baseSchema,
+        properties: {
+          to: { type: 'string', description: 'Recipient email address' },
+          subject: { type: 'string', description: 'Email subject' },
+          body: { type: 'string', description: 'Email body content' },
+          cc: { type: 'string', description: 'CC recipients (optional)' },
+          bcc: { type: 'string', description: 'BCC recipients (optional)' }
+        },
+        required: ['to', 'subject', 'body']
+      };
+    }
+    
+    // Default Gmail tool parameters
+    return {
+      ...baseSchema,
+      properties: {
+        input: { type: 'string', description: `Gmail tool: ${toolName}` }
+      },
+      required: []
+    };
+  }
+
+  // Default fallback for any unrecognized tool
+  return {
+    ...baseSchema,
+    properties: {
+      input: { type: 'string', description: `Input for ${toolName}` }
+    },
+    required: []
+  };
+}
+
+// Database-driven tool discovery - no hardcoded mappings needed
 
 serve(async (req) => {
   // Handle CORS
@@ -229,7 +193,7 @@ serve(async (req) => {
 
     console.log(`[GetAgentTools] Fetching tools for agent ${agent_id}, user ${user_id}`);
 
-    // Single unified query for all authorized tools
+    // Database-driven query: Get agent permissions with direct provider → integration mapping
     const { data: authorizedTools, error } = await supabase
       .from('agent_integration_permissions')
       .select(`
@@ -243,6 +207,7 @@ serve(async (req) => {
           credential_type,
           connection_status,
           oauth_providers!inner(
+            id,
             name,
             display_name
           )
@@ -252,8 +217,8 @@ serve(async (req) => {
       .eq('user_integration_credentials.user_id', user_id)
       .eq('is_active', true)
       .eq('user_integration_credentials.connection_status', 'active')
-              .order('granted_at', { ascending: false });
-
+      .order('granted_at', { ascending: false });
+    
     if (error) {
       console.error('[GetAgentTools] Database error:', error);
       return new Response(
@@ -283,7 +248,27 @@ serve(async (req) => {
       );
     }
 
-    // Build tools using provider mappings
+    // No longer need separate Email Relay query - using direct provider → integration mapping
+
+    if (!authorizedTools || authorizedTools.length === 0) {
+      console.log(`[GetAgentTools] No authorized tools found for agent ${agent_id}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tools: [],
+          metadata: {
+            agent_id,
+            user_id,
+            provider_count: 0,
+            total_tools: 0,
+            cached: false
+          }
+        }),
+        { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Build tools using database-driven integration capabilities
     const tools: ToolDefinition[] = [];
     const toolNamesSeen = new Set<string>();
     const providersProcessed = new Set<string>();
@@ -295,24 +280,95 @@ serve(async (req) => {
 
       console.log(`[GetAgentTools] Processing ${provider.display_name} (${providerName}) with ${allowedScopes.length} scopes`);
 
-      const providerMappings = PROVIDER_TOOL_MAPPINGS[providerName.toLowerCase()];
-      if (!providerMappings) {
-        console.warn(`[GetAgentTools] No tool mappings found for provider: ${providerName}`);
+      // Skip if already processed this provider
+      if (providersProcessed.has(providerName)) {
         continue;
       }
 
-      // Map each allowed scope to its tools
-      for (const scope of allowedScopes) {
-        const scopeTools = providerMappings[scope] || [];
+      // Direct provider → integration lookup (try required_oauth_provider_id first)
+      let { data: integration, error: integrationError } = await supabase
+        .from('integrations')
+        .select(`
+          id,
+          name,
+          integration_capabilities(
+            capability_key,
+            display_label
+          )
+        `)
+        .eq('required_oauth_provider_id', provider.id)
+        .maybeSingle();
+
+      // Fallback: try to find integration by name matching (for older integrations)
+      if (!integration && !integrationError) {
+        console.log(`[GetAgentTools] No integration found via required_oauth_provider_id, trying name matching for ${providerName}`);
         
-        for (const tool of scopeTools) {
+        // Try direct name match first
+        const nameMapping: Record<string, string> = {
+          'gmail': 'Gmail',
+          'serper_api': 'Serper API',
+          'smtp': 'SMTP',
+          'sendgrid': 'SendGrid', 
+          'mailgun': 'Mailgun'
+        };
+        
+        const integrationName = nameMapping[providerName] || providerName;
+        
+        const { data: fallbackIntegration, error: fallbackError } = await supabase
+          .from('integrations')
+          .select(`
+            id,
+            name,
+            integration_capabilities(
+              capability_key,
+              display_label
+            )
+          `)
+          .ilike('name', integrationName)
+          .maybeSingle();
+          
+        if (fallbackError) {
+          console.warn(`[GetAgentTools] Could not fetch integration for provider ${providerName}:`, fallbackError);
+          continue;
+        }
+        
+        integration = fallbackIntegration;
+      }
+
+      if (integrationError && !integration) {
+        console.warn(`[GetAgentTools] Could not fetch integration for provider ${providerName}:`, integrationError);
+        continue;
+      }
+
+      if (!integration) {
+        console.warn(`[GetAgentTools] No integration found for provider: ${providerName}`);
+        continue;
+      }
+
+      console.log(`[GetAgentTools] Found integration: ${integration.name} with ${integration.integration_capabilities?.length || 0} capabilities`);
+
+      // Generate tools from integration capabilities (capability_key IS the tool name)
+      const capabilities = integration.integration_capabilities || [];
+      for (const capability of capabilities) {
+        // Check if this capability is allowed by the agent's scopes
+        if (allowedScopes.includes(capability.capability_key)) {
+          const toolName = capability.capability_key; // capability_key is already the unique tool name
+          
           // Avoid duplicates
-          if (toolNamesSeen.has(tool.name)) {
+          if (toolNamesSeen.has(toolName)) {
             continue;
           }
           
-          toolNamesSeen.add(tool.name);
+          // Create tool definition from capability
+          const tool: ToolDefinition = {
+            name: toolName,
+            description: capability.display_label || `${toolName} via ${integration.name}`,
+            parameters: generateParametersForCapability(toolName)
+          };
+
           tools.push(tool);
+          toolNamesSeen.add(toolName);
+          console.log(`[GetAgentTools] Added tool: ${toolName}`);
         }
       }
 

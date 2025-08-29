@@ -70,9 +70,9 @@ function mapIntegrationToService(integration: Integration): ChannelService {
     id = 'mailgun';
     gradient = 'from-rose-500 to-pink-500';
     type = 'api_key';
-  } else if (lower.includes('email relay') || lower.includes('email_relay')) {
-    id = 'email_relay';
-    gradient = 'from-purple-500 to-pink-500';
+  } else if (lower.includes('smtp')) {
+    id = 'smtp';
+    gradient = 'from-green-500 to-emerald-500';
     type = 'api_key';
   }
 
@@ -164,11 +164,6 @@ export function AvailableChannelsList({
             />
           );
         })}
-      </div>
-    </div>
-  );
-}
-
       </div>
     </div>
   );

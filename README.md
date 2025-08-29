@@ -130,7 +130,7 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   **🆕 SendGrid Integration:** Complete API-based SendGrid integration with agent inboxes, smart routing, and webhook processing for sending and receiving emails
 *   **🆕 Web Research Capabilities:** Integrated web search, page scraping, and content summarization through multiple providers (Serper API, SerpAPI, Brave Search)
 *   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
-*   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, timezone support, and Edge Function execution
+*   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, multi-step workflows, timezone support, and Edge Function execution
 *   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
@@ -1566,10 +1566,15 @@ Located in `services/`. These are designed for persistent execution on a server 
     * Eliminates `Cannot read properties of null (reading 'resolveAgent')` errors in production
 *   **🆕 Task Scheduling System (August 2025):**
     * Complete automated task scheduling infrastructure with one-time and recurring tasks
+    * **🔄 Multi-Step Workflow Capabilities**: Sequential task execution with context passing between steps
+    * **Step Management Interface**: Drag-and-drop step reordering, inline editing, and comprehensive step configuration
+    * **Enhanced Database Schema**: `task_steps` table with execution tracking, status management, and performance metrics
+    * **Modular Component Architecture**: StepManager, StepList, StepCard, StepEditor components (all ≤500 lines)
+    * **Database Functions**: `create_task_step()`, `update_task_step()`, `delete_task_step()` with validation and security
+    * **Backward Compatibility**: Existing single-step tasks continue to work with automatic migration support
     * Modern step-by-step wizard UI with colorful, gradient-based design and emoji indicators
     * Full timezone support with auto-detection and IANA timezone handling
     * PostgreSQL `pg_cron` integration for automated execution every 5 minutes
-    * Modular component architecture: TaskManagerModal (61 lines), TaskListModal (240 lines), TaskWizardModal (534 lines)
     * Edge Function integration: `agent-tasks` for CRUD operations, `task-executor` for automated processing
     * Croner library integration for timezone-aware cron expression calculation
     * Comprehensive task management with edit, run now, pause, and delete operations
@@ -2167,6 +2172,216 @@ Supporting Files:
 
 The Task Scheduling System provides a robust foundation for automated agent workflows, enabling users to create sophisticated automation patterns while maintaining a clean, intuitive user experience.
 
+## Multi-Step Task Workflows
+
+Agentopia's task system has been enhanced with **multi-step workflow capabilities**, allowing users to create complex, sequential tasks where each step has its own instructions and can optionally include context from previous steps. This transforms simple scheduled tasks into powerful automation workflows.
+
+### 🔄 **Multi-Step Architecture**
+
+#### **Core Concepts**
+- **Sequential Execution**: Steps execute in order, with each step building on previous results
+- **Context Passing**: Optionally include output from previous steps as context for subsequent steps
+- **Individual Instructions**: Each step has its own specific agent instructions
+- **Flexible Workflow**: Mix single-step and multi-step tasks based on complexity needs
+
+#### **Database Schema Enhancement**
+```sql
+-- Enhanced agent_tasks table
+agent_tasks: {
+  id: uuid,
+  user_id: uuid,
+  agent_id: uuid,
+  name: text,
+  instructions: text,              -- Legacy single-step instructions (still supported)
+  is_multi_step: boolean,          -- NEW: Indicates multi-step task
+  step_count: integer,             -- NEW: Number of steps in workflow
+  -- ... existing scheduling fields
+}
+
+-- NEW: Individual task steps
+task_steps: {
+  id: uuid,
+  task_id: uuid,                   -- Reference to parent task
+  step_order: integer,             -- Sequential order (1, 2, 3...)
+  step_name: text,                 -- Step title/description
+  instructions: text,              -- Step-specific agent instructions
+  include_previous_context: boolean, -- Whether to include previous step output
+  status: task_step_status,        -- 'pending', 'running', 'completed', 'failed', 'skipped'
+  execution_result: jsonb,         -- Step execution output
+  execution_started_at: timestamptz,
+  execution_completed_at: timestamptz,
+  execution_duration_ms: integer,
+  error_message: text,
+  retry_count: integer
+}
+```
+
+### 🎯 **User Experience**
+
+#### **Task Creation Workflow**
+The multi-step functionality integrates seamlessly into the existing task wizard:
+
+1. **Step 1-3**: Standard task setup (type, schedule, recurrence)
+2. **Step 4**: **Enhanced Instructions Step**
+   - **Option A**: Single instruction (legacy mode) - enter one set of instructions
+   - **Option B**: Multi-step workflow - use the Step Manager interface
+
+#### **Step Manager Interface**
+When users choose multi-step mode, they access a sophisticated step management interface:
+
+- **📋 Step List**: Visual list of all steps with drag-and-drop reordering
+- **➕ Add Step**: Create new steps with the Step Editor modal
+- **✏️ Edit Steps**: Inline editing or full modal editing for complex steps
+- **🔗 Context Toggle**: Easy enable/disable of context passing per step
+- **🗑️ Delete Steps**: Remove steps with automatic reordering
+
+#### **Step Editor Modal**
+Each step is configured through a comprehensive editor:
+- **Step Name**: Short, descriptive title for the step
+- **Instructions**: Detailed agent instructions specific to this step
+- **Context Toggle**: Include output from previous step as additional context
+- **Preview Mode**: See how the step will appear to the agent
+- **Validation**: Real-time validation ensuring all required fields are complete
+
+### ⚙️ **Technical Implementation**
+
+#### **Frontend Components**
+Following Philosophy #1 (≤500 lines per file), the multi-step system uses modular components:
+
+```
+src/components/modals/task-steps/
+├── StepManager.tsx        # Main orchestrator (~280 lines)
+├── StepList.tsx          # Step display with drag-and-drop (~220 lines)  
+├── StepCard.tsx          # Individual step cards (~180 lines)
+├── StepEditor.tsx        # Step creation/editing modal (~350 lines)
+└── useTaskSteps.ts       # State management hook (~300 lines)
+```
+
+#### **Database Functions**
+Three PostgreSQL functions handle step CRUD operations with validation:
+
+- **`create_task_step()`**: Creates new steps with automatic ordering
+- **`update_task_step()`**: Updates steps with reordering support
+- **`delete_task_step()`**: Removes steps with cleanup and reordering
+
+#### **Edge Function Integration**
+The existing `agent-tasks` Edge Function has been enhanced to support multi-step tasks:
+- **Task Creation**: Handles both single-step and multi-step task creation
+- **Step Storage**: After creating the main task, individual steps are saved
+- **Backward Compatibility**: Existing single-step tasks continue to work unchanged
+
+### 🔄 **Execution Flow**
+
+#### **Multi-Step Task Execution**
+When a multi-step task is triggered:
+
+1. **Task Initiation**: `task-executor` identifies the task as multi-step
+2. **Step-by-Step Processing**: Each step executes in sequence:
+   - Load step instructions and configuration
+   - Optionally include context from previous step
+   - Send instructions to agent via chat system
+   - Capture and store step execution results
+   - Update step status and timing metrics
+3. **Context Passing**: If enabled, previous step output is included in next step's context
+4. **Completion Tracking**: Task marked complete only when all steps finish successfully
+
+#### **Error Handling & Recovery**
+- **Step-Level Failures**: Individual steps can fail without stopping the entire workflow
+- **Retry Logic**: Failed steps can be retried with exponential backoff
+- **Skip Options**: Steps can be marked as "skipped" to continue workflow
+- **Rollback Capability**: Failed workflows can be restarted from any step
+
+### 🎨 **User Interface Features**
+
+#### **Visual Step Management**
+- **Drag-and-Drop Reordering**: Intuitive step sequencing with React DnD
+- **Color-Coded Status**: Visual indicators for step status (pending, running, completed, failed)
+- **Inline Editing**: Quick edits without opening full modal
+- **Context Flow Visualization**: Clear indicators showing which steps pass context
+
+#### **Step Validation**
+- **Real-Time Validation**: Immediate feedback on step configuration
+- **Required Field Checking**: Ensure all steps have necessary information
+- **Dependency Validation**: Verify context passing makes logical sense
+- **Workflow Completeness**: Confirm entire workflow is properly configured
+
+### 📊 **Migration & Compatibility**
+
+#### **Backward Compatibility**
+- **Existing Tasks**: All existing single-step tasks continue to work unchanged
+- **Automatic Migration**: Legacy tasks can be converted to multi-step format
+- **UI Flexibility**: Task wizard adapts to both single-step and multi-step modes
+- **API Compatibility**: All existing API endpoints remain functional
+
+#### **Migration Process**
+A database migration automatically converts existing tasks:
+```sql
+-- Existing tasks get converted to multi-step format with a single step
+INSERT INTO task_steps (task_id, step_order, step_name, instructions)
+SELECT id, 1, name || ' - Step 1', instructions 
+FROM agent_tasks 
+WHERE NOT EXISTS (SELECT 1 FROM task_steps WHERE task_id = agent_tasks.id);
+```
+
+### 🔧 **Development Benefits**
+
+#### **Modular Architecture**
+- **Separation of Concerns**: Each component handles a specific aspect of step management
+- **Type Safety**: Comprehensive TypeScript interfaces for all step-related data
+- **Reusable Components**: Step management components can be used in other contexts
+- **Testing**: Each component can be tested independently
+
+#### **Performance Optimization**
+- **Lazy Loading**: Step management components load only when needed
+- **Efficient Rendering**: Virtual scrolling for large step lists
+- **Optimistic Updates**: Immediate UI feedback with server synchronization
+- **Caching**: Step data cached to minimize database queries
+
+### 🚀 **Use Cases**
+
+#### **Content Creation Workflow**
+```
+Step 1: Research topic and gather information
+Step 2: Create outline based on research (include previous context)
+Step 3: Write first draft using outline (include previous context)  
+Step 4: Review and edit content (include previous context)
+Step 5: Format and publish final version
+```
+
+#### **Data Processing Pipeline**
+```
+Step 1: Extract data from source system
+Step 2: Clean and validate data (include previous context)
+Step 3: Transform data format (include previous context)
+Step 4: Load into target system
+Step 5: Send completion notification with summary
+```
+
+#### **Customer Onboarding Sequence**
+```
+Step 1: Send welcome email with getting started guide
+Step 2: Schedule follow-up call (1 day later)
+Step 3: Send tutorial resources (3 days later)
+Step 4: Request feedback survey (1 week later)
+Step 5: Assign to customer success manager
+```
+
+### 🔍 **Monitoring & Analytics**
+
+#### **Step-Level Metrics**
+- **Execution Times**: Track how long each step takes to complete
+- **Success Rates**: Monitor which steps fail most frequently
+- **Context Usage**: Analyze how often context passing is used effectively
+- **Workflow Patterns**: Identify common multi-step workflow patterns
+
+#### **Performance Insights**
+- **Bottleneck Detection**: Identify steps that consistently take longest
+- **Error Analysis**: Track common failure points and error messages
+- **Usage Analytics**: Understand how users create and structure workflows
+- **Optimization Opportunities**: Data-driven improvements to workflow efficiency
+
+The Multi-Step Task Workflow system transforms Agentopia from a simple task scheduler into a powerful workflow automation platform, enabling users to create sophisticated, sequential processes that leverage the full capabilities of their AI agents.
+
 ## Zapier MCP Integration
 
 Agentopia implements a cutting-edge integration with Zapier's Model Context Protocol (MCP) servers, enabling agents to access and utilize tools from over 8,000+ applications through a universal protocol. This integration transforms agents from isolated AI assistants into powerful automation engines that can interact with virtually any business application.
@@ -2491,7 +2706,7 @@ while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
 *   **✅ Light Mode Implementation:** **COMPLETE & PRODUCTION-READY** - Comprehensive dual-theme system implemented with light mode as default. Professional CSS variable architecture with 40+ semantic colors, WCAG AA accessibility compliance, and vibrant icon system. All major components updated with proper borders for enhanced visibility and separation.
 *   **✅ AgentEditPage Enhancement:** **COMPLETE** - Critical UX improvement resolving card visibility issues in light mode. Added professional borders, shadows, and complete theming to all agent management interfaces including datastore connections and web search permissions.
 *   **✅ Chat Handoff Protocol:** **COMPLETE** - Comprehensive knowledge transfer documentation created following premium protocol standards. All project documentation synchronized, database schema/policies archived, and continuation requirements documented in `docs/handoff/20250801_040010_*` files.
-*   **✅ Task Scheduling System:** **COMPLETE & PRODUCTION-READY** - Comprehensive automated task scheduling infrastructure with modern wizard UI, timezone support, and Edge Function integration. Modular component architecture with strict file size compliance and proper separation of concerns.
+*   **✅ Multi-Step Task Workflow System:** **COMPLETE & PRODUCTION-READY** - Revolutionary workflow automation platform with sequential task execution, context passing between steps, and sophisticated step management interface. Complete database schema with `task_steps` table, modular React components (StepManager, StepList, StepCard, StepEditor), PostgreSQL functions for CRUD operations, and seamless backward compatibility. Transforms simple scheduled tasks into powerful automation workflows.
 *   **✅ Enhanced Team Management System:** **COMPLETE & PRODUCTION-READY** - Modern team management workflow with modal-based creation, comprehensive team details with descriptions and member management, fixed edit functionality, and complete theme consistency. Includes proper TypeScript integration and modular component architecture.
 *   **✅ Zapier MCP Integration:** **COMPLETE & DEPLOYED** - Universal tool connectivity through Model Context Protocol allowing agents to access 8,000+ applications. Full implementation with dynamic tool discovery, seamless function calling integration, and comprehensive UI management. Metadata-based routing issue resolved for proper tool execution.
 *   **MCP Management Interface (Phase 2.3.1):** **40% Complete** - Major progress on Multi-MCP Management Components:

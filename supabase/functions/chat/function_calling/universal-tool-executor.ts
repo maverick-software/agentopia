@@ -22,7 +22,7 @@ export interface MCPToolExecutionContext {
 const TOOL_ROUTING_MAP: Record<string, {
   edgeFunction: string;
   actionMapping: (toolName: string) => string;
-  parameterMapping?: (params: Record<string, any>) => Record<string, any>;
+  parameterMapping?: (params: Record<string, any>, context?: any) => Record<string, any>;
 }> = {
   // Gmail tools
   'gmail_': {
@@ -43,18 +43,91 @@ const TOOL_ROUTING_MAP: Record<string, {
   
   // SMTP tools
   'smtp_': {
-    edgeFunction: 'smtp-send',
+    edgeFunction: 'smtp-api',
     actionMapping: (toolName: string) => {
       const actionMap: Record<string, string> = {
-        'smtp_send_email': 'send',
-        'smtp_send_bulk': 'send_bulk',
-        'smtp_validate_config': 'validate'
+        'smtp_send_email': 'send_email',
+        'smtp_email_templates': 'email_templates',
+        'smtp_email_stats': 'email_stats'
       };
-      return actionMap[toolName] || 'send';
+      return actionMap[toolName] || 'send_email';
     },
-    parameterMapping: (params: Record<string, any>) => ({
-      params: params  // Keep consistent parameter structure
-    })
+    parameterMapping: (params: Record<string, any>, context: any) => {
+      // Map tool name to action using the actionMapping function
+      const actionMap: Record<string, string> = {
+        'smtp_send_email': 'send_email',
+        'smtp_email_templates': 'email_templates',
+        'smtp_email_stats': 'email_stats'
+      };
+      const action = actionMap[context.toolName] || 'send_email';
+      
+      return {
+        action: action,
+        agent_id: context.agentId,
+        user_id: context.userId, 
+        params: params
+      };
+    }
+  },
+  
+  // SendGrid tools
+  'sendgrid_': {
+    edgeFunction: 'sendgrid-api',
+    actionMapping: (toolName: string) => {
+      const actionMap: Record<string, string> = {
+        'sendgrid_send_email': 'send_email',
+        'sendgrid_email_templates': 'email_templates',
+        'sendgrid_email_stats': 'email_stats'
+      };
+      return actionMap[toolName] || 'send_email';
+    },
+    parameterMapping: (params: Record<string, any>, context: any) => {
+      const actionMap: Record<string, string> = {
+        'sendgrid_send_email': 'send_email',
+        'sendgrid_email_templates': 'email_templates',
+        'sendgrid_email_stats': 'email_stats'
+      };
+      const action = actionMap[context.toolName] || 'send_email';
+      
+      return {
+        action: action,
+        agent_id: context.agentId,
+        user_id: context.userId, 
+        params: params
+      };
+    }
+  },
+  
+  // Mailgun tools
+  'mailgun_': {
+    edgeFunction: 'mailgun-service',
+    actionMapping: (toolName: string) => {
+      const actionMap: Record<string, string> = {
+        'mailgun_send_email': 'send_email',
+        'mailgun_email_templates': 'email_templates',
+        'mailgun_email_stats': 'email_stats',
+        'mailgun_email_validation': 'email_validation',
+        'mailgun_suppression_management': 'suppression_management'
+      };
+      return actionMap[toolName] || 'send_email';
+    },
+    parameterMapping: (params: Record<string, any>, context: any) => {
+      const actionMap: Record<string, string> = {
+        'mailgun_send_email': 'send_email',
+        'mailgun_email_templates': 'email_templates',
+        'mailgun_email_stats': 'email_stats',
+        'mailgun_email_validation': 'email_validation',
+        'mailgun_suppression_management': 'suppression_management'
+      };
+      const action = actionMap[context.toolName] || 'send_email';
+      
+      return {
+        action: action,
+        agent_id: context.agentId,
+        user_id: context.userId, 
+        params: params
+      };
+    }
   },
   
   // Web search tools (using web-search-api)
@@ -189,8 +262,9 @@ export class UniversalToolExecutor {
       };
       
       // Apply parameter mapping if provided, otherwise merge parameters directly
+      const context = { agentId, userId, toolName, parameters };
       const edgeFunctionParams = routingConfig.parameterMapping 
-        ? { ...baseParams, ...routingConfig.parameterMapping(parameters) }
+        ? { ...baseParams, ...routingConfig.parameterMapping(parameters, context) }
         : { ...baseParams, ...parameters };
       
       console.log(`[UniversalToolExecutor] Routing ${toolName} -> ${routingConfig.edgeFunction} (action: ${action})`);
@@ -324,7 +398,7 @@ export class UniversalToolExecutor {
     config: {
       edgeFunction: string;
       actionMapping: (toolName: string) => string;
-      parameterMapping?: (params: Record<string, any>) => Record<string, any>;
+      parameterMapping?: (params: Record<string, any>, context?: any) => Record<string, any>;
     }
   ) {
     TOOL_ROUTING_MAP[prefix] = config;

@@ -596,19 +596,14 @@ export function EnhancedToolsModal({
             webSearchProviders.includes(c.provider_name)
           );
           
-          // Group email relay providers under unified "Email Relay" entry
-          const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
-          const emailRelayConnections = toolConnections.filter(c => 
-            emailRelayProviders.includes(c.provider_name)
-          );
+          // Email Relay removed - using individual provider entries now
           
           // Only show connections for integrations that are actually classified as 'tool'
           const otherConnections = toolConnections.filter(c => {
             const isWebSearch = webSearchProviders.includes(c.provider_name);
-            const isEmailRelay = emailRelayProviders.includes(c.provider_name);
             
-            // Skip web search and email relay (handled separately)
-            if (isWebSearch || isEmailRelay) {
+            // Skip web search (handled separately)
+            if (isWebSearch) {
               return false;
             }
             

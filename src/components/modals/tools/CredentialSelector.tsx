@@ -45,13 +45,10 @@ export function CredentialSelector({
   const isWebSearch = provider === 'web search' || provider === 'web_search' || provider.toLowerCase().includes('web search');
   const webSearchProviders = ['serper_api', 'serpapi', 'brave_search'];
   
-  const isEmailRelay = provider === 'email relay' || provider === 'email_relay' || provider.toLowerCase().includes('email relay');
-  const emailRelayProviders = ['smtp', 'sendgrid', 'mailgun'];
+  // Email Relay removed - using direct provider matching now
   
   const creds = isWebSearch 
     ? connections.filter(c => webSearchProviders.includes(c.provider_name) && c.connection_status === 'active')
-    : isEmailRelay
-    ? connections.filter(c => emailRelayProviders.includes(c.provider_name) && c.connection_status === 'active')
     : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
 
   const handleAuthorizeAgent = async (connection: Connection) => {

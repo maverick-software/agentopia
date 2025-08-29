@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus } from 'lucide-react';
-import { TaskStep } from '@/types/tasks';
-import { StepManager } from './task-steps/StepManager';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
@@ -47,10 +45,6 @@ export function TaskWizardModal({
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [targetConversationId, setTargetConversationId] = useState('');
   const [selectedTimezone, setSelectedTimezone] = useState(getDefaultTimezone());
-  
-  // Multi-step workflow state
-  const [taskSteps, setTaskSteps] = useState<TaskStep[]>([]);
-  const [stepsValid, setStepsValid] = useState(false);
 
   const supabase = useSupabaseClient();
   const { user } = useAuth();
@@ -62,28 +56,17 @@ export function TaskWizardModal({
 
     setLoading(true);
     try {
-      // Determine if using step-based or legacy mode
-      const usingSteps = taskSteps.length > 0 && stepsValid;
-      const finalInstructions = usingSteps 
-        ? `Multi-step task with ${taskSteps.length} steps. See task_steps table for detailed instructions.`
-        : newTaskDescription;
-
       const taskData: any = {
         agent_id: agentId,
         name: newTaskTitle,
-        description: usingSteps 
-          ? `Multi-step workflow: ${taskSteps.map(s => s.step_name).join(' → ')}`
-          : newTaskDescription,
-        instructions: finalInstructions,
+        description: newTaskDescription,
+        instructions: newTaskDescription, // Map description to instructions
         task_type: 'scheduled',
         timezone: selectedTimezone,
         selected_tools: [],
         event_trigger_type: '',
         event_trigger_config: {},
-        target_conversation_id: targetConversationId || null,
-        // Add metadata for step-based tasks
-        is_multi_step: usingSteps,
-        step_count: taskSteps.length
+        target_conversation_id: targetConversationId || null
       };
 
       if (scheduleMode === 'one_time') {
@@ -108,32 +91,6 @@ export function TaskWizardModal({
         throw new Error(error.message || 'Failed to create task');
       }
 
-      // If using steps, save them to the database
-      if (usingSteps && result?.task_id && taskSteps.length > 0) {
-        try {
-          for (const step of taskSteps) {
-            const { error: stepError } = await supabase.rpc('create_task_step', {
-              p_task_id: result.task_id,
-              p_step_name: step.step_name,
-              p_instructions: step.instructions,
-              p_include_previous_context: step.include_previous_context,
-              p_step_order: step.step_order
-            });
-
-            if (stepError) {
-              console.error('Failed to create step:', stepError);
-              throw new Error(`Failed to create step "${step.step_name}": ${stepError.message}`);
-            }
-          }
-          
-          toast.success(`Task created with ${taskSteps.length} steps successfully!`);
-        } catch (stepErr: any) {
-          toast.error(`Task created but failed to save steps: ${stepErr.message}`);
-        }
-      } else {
-        toast.success('Task created successfully!');
-      }
-
       // Reset form
       setCurrentStep(1);
       setScheduleMode('one_time');
@@ -147,8 +104,6 @@ export function TaskWizardModal({
       setNewTaskDescription('');
       setNewTaskTitle('');
       setTargetConversationId('');
-      setTaskSteps([]);
-      setStepsValid(false);
 
       onTaskCreated();
       onClose();
@@ -182,10 +137,6 @@ export function TaskWizardModal({
 
   const handleCancel = () => {
     setCurrentStep(1);
-    setTaskSteps([]);
-    setStepsValid(false);
-    setNewTaskDescription('');
-    setNewTaskTitle('');
     onClose();
   };
 
@@ -447,46 +398,33 @@ export function TaskWizardModal({
               </div>
             )}
 
-            {/* Step 4: Multi-Step Instructions */}
+            {/* Step 4: Instructions */}
             {currentStep === 4 && (
               <div className="space-y-6">
                 <div className="text-center">
                   <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                    📝 Configure Task Steps
+                    📝 Task Instructions
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Break down your task into sequential steps with specific instructions
+                    Tell your agent exactly what you want it to do
                   </p>
                 </div>
                 
-                <StepManager
-                  agentId={agentId}
-                  agentName={agentData?.name}
-                  initialSteps={taskSteps}
-                  onStepsChange={setTaskSteps}
-                  onValidationChange={setStepsValid}
-                  isEditing={false}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-purple-200 dark:border-purple-800 shadow-sm p-4"
-                />
-                
-                {/* Legacy single instruction fallback */}
-                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-start space-x-2">
-                    <FileText className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-medium text-blue-800 dark:text-blue-400 mb-1">
-                        💡 Single Step Alternative
-                      </p>
-                      <p className="text-blue-700 dark:text-blue-300 text-xs mb-2">
-                        If you prefer a single instruction, add one step with all your requirements:
-                      </p>
-                      <Textarea 
-                        placeholder="Or enter a single comprehensive instruction here..." 
-                        value={newTaskDescription} 
-                        onChange={(e) => setNewTaskDescription(e.target.value)} 
-                        className="text-xs min-h-[60px] resize-none bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700" 
-                      />
-                    </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-purple-200 dark:border-purple-800 shadow-sm">
+                  <label className="flex items-center text-sm font-medium text-purple-700 dark:text-purple-400 mb-3">
+                    <span className="mr-2">💭</span> Instructions
+                  </label>
+                  <Textarea 
+                    placeholder="Be specific about what you want the agent to do. For example: 'Search for the latest AI news and summarize the top 3 articles' or 'Check our company's social media engagement and provide a brief report.'" 
+                    value={newTaskDescription} 
+                    onChange={(e) => setNewTaskDescription(e.target.value)} 
+                    className="min-h-[120px] resize-none border-purple-300 dark:border-purple-700 focus:border-purple-500 dark:focus:border-purple-500 bg-purple-50/30 dark:bg-purple-950/20" 
+                  />
+                  <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <p className="text-xs text-purple-700 dark:text-purple-400 flex items-center">
+                      <span className="mr-2">✨</span>
+                      Clear instructions help your agent perform tasks more effectively
+                    </p>
                   </div>
                 </div>
               </div>
@@ -593,7 +531,7 @@ export function TaskWizardModal({
                       (currentStep === 1 && !scheduleMode) ||
                       (currentStep === 2 && ((scheduleMode === 'one_time' && (!oneTimeDate || !oneTimeTime)) || (scheduleMode === 'recurring' && (!recurringStartDate || !recurringTime)))) ||
                       (currentStep === 3 && scheduleMode === 'recurring' && (!everyInterval || everyInterval < 1)) ||
-                      (currentStep === 4 && !stepsValid && !newTaskDescription.trim()) ||
+                      (currentStep === 4 && !newTaskDescription.trim()) ||
                       (currentStep === 5 && !newTaskTitle.trim())
                     }
                     className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-lg"

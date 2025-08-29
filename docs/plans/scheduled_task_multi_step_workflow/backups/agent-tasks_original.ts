@@ -416,12 +416,7 @@ async function handlePost(supabase: any, userId: string, body: any) {
   }
 
   return new Response(
-    JSON.stringify({ 
-      task, 
-      task_id: task.id,
-      is_multi_step: body.is_multi_step || false,
-      step_count: body.step_count || 0
-    }),
+    JSON.stringify({ task }),
     { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }
