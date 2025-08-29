@@ -614,3 +614,14 @@ export function EnhancedChannelsModalRefactored({
     </Dialog>
   );
 }
+
+      <ChannelPermissionsModal
+        isOpen={modalState.showPermissionsModal}
+        onClose={() => modalState.setShowPermissionsModal(false)}
+        agentId={agentId}
+        editingPermission={modalState.editingPermission}
+        onPermissionUpdated={fetchAgentPermissions}
+      />
+    </Dialog>
+  );
+}

@@ -119,12 +119,10 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
   
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('Edit clicked, showDropdown was:', showDropdown);
     setShowDropdown(!showDropdown);
   };
 
   const handleTypeChange = (newType: ConnectionType) => {
-    console.log('Type change to:', newType);
     // Call the edit callback with the new type
     onEdgeEdit(id, newType);
     setShowDropdown(false);
@@ -138,15 +136,15 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
         path={edgePath}
         style={{
           stroke: strokeColor,
-          strokeWidth: selected ? style.strokeWidth + 1 : style.strokeWidth,
+          strokeWidth: selected || showDropdown ? style.strokeWidth + 2 : style.strokeWidth,
           strokeDasharray: style.strokeDasharray,
-          opacity: selected ? 1 : 0.8,
+          opacity: selected || showDropdown ? 1 : 0.8,
         }}
         markerEnd={style.markerEnd ? `url(#${style.markerEnd})` : undefined}
         onClick={handleClick}
         className={cn(
           "cursor-pointer transition-all duration-200",
-          selected && "drop-shadow-lg"
+          (selected || showDropdown) && "drop-shadow-lg"
         )}
       />
       
@@ -156,11 +154,12 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+            zIndex: 1000
           }}
           className="pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center space-x-2">
+          <div className="group flex items-center space-x-2">
             {/* Connection label - click to edit */}
             <Badge 
               variant={selected ? "default" : "secondary"}
@@ -177,13 +176,13 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
               {label}
             </Badge>
             
-            {/* Controls - only show on hover or when selected */}
-            <div className={cn(
-              "flex items-center space-x-1 opacity-0 transition-opacity duration-200",
-              selected && "opacity-100"
-            )}>
-              {/* Edit dropdown */}
-              <div className="relative" ref={dropdownRef}>
+            {/* Controls - show dropdown arrow on hover, delete button on selection */}
+            <div className="flex items-center space-x-1">
+              {/* Edit dropdown - show on hover */}
+              <div className={cn(
+                "relative opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+                showDropdown && "opacity-100"
+              )} ref={dropdownRef}>
                 <Button
                   variant="outline"
                   size="icon"
@@ -240,14 +239,17 @@ export const TeamConnectionEdge = memo<EdgeProps<ConnectionEdgeData>>(({
                 )}
               </div>
               
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-6 w-6 bg-background/90 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground"
-                onClick={handleDelete}
-              >
-                <X className="h-3 w-3" />
-              </Button>
+              {/* Delete button - only show when selected */}
+              {selected && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6 bg-background/90 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={handleDelete}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           </div>
         </div>

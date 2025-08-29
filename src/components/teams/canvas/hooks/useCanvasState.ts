@@ -97,13 +97,29 @@ export function useCanvasState(
   const canvasStateRef = useRef(canvasState);
   const hasUnsavedChangesRef = useRef(false);
   
-  // Debounced state updates
+    // Debounced state updates
   const debouncedSetState = useMemo(
     () => batchUpdates ? 
       debounce((updates: Partial<CanvasState>) => {
-        setCanvasState(prev => ({ ...prev, ...updates }));
-      }, debounceMs) : 
-      (updates: Partial<CanvasState>) => setCanvasState(prev => ({ ...prev, ...updates })),
+        setCanvasState(prev => {
+          const updated = { ...prev, ...updates };
+          console.log('🔄 debouncedSetState updating:', { 
+            prevConnections: prev.connections.length, 
+            newConnections: updated.connections.length,
+            changeKeys: Object.keys(updates)
+          });
+          return updated;
+        });
+      }, debounceMs) :
+      (updates: Partial<CanvasState>) => setCanvasState(prev => {
+        const updated = { ...prev, ...updates };
+        console.log('🔄 debouncedSetState (immediate) updating:', { 
+          prevConnections: prev.connections.length, 
+          newConnections: updated.connections.length,
+          changeKeys: Object.keys(updates)
+        });
+        return updated;
+      }),
     [batchUpdates, debounceMs]
   );
 
@@ -137,6 +153,36 @@ export function useCanvasState(
     });
   }, [canvasState.teamPositions, debouncedSetState]);
 
+  // Add missing team positions manually (called when needed, not automatically)
+  const addMissingTeamPositions = useCallback((teamsToAdd: any[]) => {
+    const currentTeamIds = new Set(Array.from(canvasState.teamPositions.keys()));
+    const newTeams = teamsToAdd.filter(team => !currentTeamIds.has(team.id));
+    
+    if (newTeams.length > 0) {
+      console.log('🎯 Manually adding positions for new teams:', newTeams.map(t => t.id));
+      
+      const newPositions = new Map(canvasState.teamPositions);
+      
+      newTeams.forEach((team, index) => {
+        const existingPositions = Array.from(newPositions.values());
+        const maxY = existingPositions.length > 0 ? 
+          Math.max(...existingPositions.map(p => p.y)) : 0;
+        
+        newPositions.set(team.id, {
+          teamId: team.id,
+          x: index * 320 + 50,
+          y: maxY + 200,
+          createdAt: new Date().toISOString()
+        });
+      });
+      
+      debouncedSetState({
+        teamPositions: newPositions,
+        hasUnsavedChanges: true
+      });
+    }
+  }, [canvasState.teamPositions, debouncedSetState]);
+
   // Connection management
   const addConnection = useCallback((connection: Omit<TeamConnection, 'id'>) => {
     const newConnection: TeamConnection = {
@@ -145,15 +191,33 @@ export function useCanvasState(
       createdAt: new Date().toISOString()
     };
     
+    console.log('🏗️ useCanvasState.addConnection called with:', newConnection);
+    console.log('🏗️ Current connections before add:', canvasState.connections.length);
+    
     debouncedSetState({
       connections: [...canvasState.connections, newConnection],
       hasUnsavedChanges: true
     });
+    
+    console.log('🏗️ Connection added to state, new total will be:', canvasState.connections.length + 1);
   }, [canvasState.connections, debouncedSetState]);
 
   const removeConnection = useCallback((connectionId: string) => {
     debouncedSetState({
       connections: canvasState.connections.filter(conn => conn.id !== connectionId),
+      hasUnsavedChanges: true
+    });
+  }, [canvasState.connections, debouncedSetState]);
+
+  const updateConnection = useCallback((connectionId: string, updates: Partial<TeamConnection>) => {
+    const updatedConnections = canvasState.connections.map(conn => 
+      conn.id === connectionId 
+        ? { ...conn, ...updates }
+        : conn
+    );
+    
+    debouncedSetState({
+      connections: updatedConnections,
       hasUnsavedChanges: true
     });
   }, [canvasState.connections, debouncedSetState]);
@@ -248,34 +312,37 @@ export function useCanvasState(
   }, [canvasState.hasUnsavedChanges, onUnsavedChanges]);
 
   // Handle team list changes - add positions for new teams
-  useEffect(() => {
-    const currentTeamIds = new Set(Array.from(canvasState.teamPositions.keys()));
-    const newTeamIds = teams.filter(team => !currentTeamIds.has(team.id));
+  // DISABLED: This effect was clearing connections during position restoration
+  // Teams should only get positions when they're actually new, not during every load
+  // useEffect(() => {
+  //   const currentTeamIds = new Set(Array.from(canvasState.teamPositions.keys()));
+  //   const newTeamIds = teams.filter(team => !currentTeamIds.has(team.id));
     
-    if (newTeamIds.length > 0) {
-      const newPositions = new Map(canvasState.teamPositions);
+  //   if (newTeamIds.length > 0) {
+  //     console.log('🎯 Adding positions for new teams:', newTeamIds.map(t => t.id));
       
-      newTeamIds.forEach((team, index) => {
-        // Position new teams in a row below existing ones
-        const existingPositions = Array.from(newPositions.values());
-        const maxY = existingPositions.length > 0 ? 
-          Math.max(...existingPositions.map(p => p.y)) : 0;
+  //     const newPositions = new Map(canvasState.teamPositions);
+      
+  //     newTeamIds.forEach((team, index) => {
+  //       const existingPositions = Array.from(newPositions.values());
+  //       const maxY = existingPositions.length > 0 ? 
+  //         Math.max(...existingPositions.map(p => p.y)) : 0;
         
-        newPositions.set(team.id, {
-          teamId: team.id,
-          x: index * 320 + 50,
-          y: maxY + 200,
-          createdAt: new Date().toISOString()
-        });
-      });
+  //       newPositions.set(team.id, {
+  //         teamId: team.id,
+  //         x: index * 320 + 50,
+  //         y: maxY + 200,
+  //         createdAt: new Date().toISOString()
+  //       });
+  //     });
       
-      setCanvasState(prev => ({
-        ...prev,
-        teamPositions: newPositions,
-        hasUnsavedChanges: true
-      }));
-    }
-  }, [teams, canvasState.teamPositions]);
+  //     setCanvasState(prev => ({
+  //       ...prev,
+  //       teamPositions: newPositions,
+  //       hasUnsavedChanges: true
+  //     }));
+  //   }
+  // }, [teams]);
 
   return {
     // State
@@ -288,10 +355,12 @@ export function useCanvasState(
     
     // Team operations
     updateTeamPosition,
+    addMissingTeamPositions,
     
     // Connection operations
     addConnection,
     removeConnection,
+    updateConnection,
     
     // Selection operations
     selectTeams,

@@ -168,3 +168,8 @@ export function AvailableChannelsList({
     </div>
   );
 }
+
+      </div>
+    </div>
+  );
+}

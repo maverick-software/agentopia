@@ -149,8 +149,58 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     storageType: 'both',
     enableAutoSave: !readonly,
     onSaveSuccess: () => toast.success('Layout saved successfully'),
-    onSaveError: (error) => toast.error('Failed to save layout: ' + error.message)
+    onSaveError: (error) => toast.error('Failed to save layout: ' + error.message),
+    onLoadSuccess: (layout) => {
+      console.log('Loaded canvas layout:', layout);
+      // This callback will be called after loadLayout() completes
+      // The actual state loading is handled in the useEffect below
+    }
   });
+
+  // SIMPLE: Load database state on mount - ONCE
+  useEffect(() => {
+    if (readonly || !userId) return;
+    
+    const loadData = async () => {
+      try {
+        const savedLayout = await persistence.loadLayout();
+        
+        if (savedLayout) {
+          // Set the entire canvas state at once
+          if (savedLayout.connections?.length > 0) {
+            // Clear existing and set new connections
+            const currentConnections = [...canvasState.canvasState.connections];
+            currentConnections.forEach(conn => canvasState.removeConnection(conn.id));
+            
+            savedLayout.connections.forEach((conn) => {
+              canvasState.addConnection({
+                fromTeamId: conn.fromTeamId,
+                toTeamId: conn.toTeamId,
+                type: conn.type,
+                createdAt: conn.createdAt,
+                sourceHandle: conn.sourceHandle,
+                targetHandle: conn.targetHandle
+              });
+            });
+          }
+          
+          if (savedLayout.positions?.length > 0) {
+            savedLayout.positions.forEach(pos => {
+              canvasState.updateTeamPosition(pos.teamId, { x: pos.x, y: pos.y });
+            });
+          }
+        }
+        
+        // Add missing team positions
+        canvasState.addMissingTeamPositions(teams);
+        
+      } catch (error) {
+        console.error('Failed to load canvas data:', error);
+      }
+    };
+    
+    loadData();
+  }, [readonly, userId]); // Essential deps only
   
   // Handle connection start (must be defined before nodes useMemo)
   const handleConnectionStart = useCallback((teamId: string, handle: string) => {
@@ -159,36 +209,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   }, [readonly]);
   
   // Handle connection deletion (must be defined before edges useMemo)
-  const handleConnectionDelete = useCallback((connectionId: string) => {
-    if (readonly) return;
-    
-    // Remove from both the connections hook and canvas state
-    const removed = connections.removeConnection(connectionId);
-    if (removed) {
-      canvasState.removeConnection(connectionId);
-      toast.success('Connection removed');
-    }
-  }, [connections, canvasState, readonly]);
-
-  // Handle connection type editing (for selected connections)
-  const handleConnectionTypeChange = useCallback((connectionId: string, newType: ConnectionType) => {
-    if (readonly) return;
-    
-    // Find the connection and update it
-    const connection = canvasState.canvasState.connections.find(c => c.id === connectionId);
-    if (connection) {
-      // Remove the old connection
-      canvasState.removeConnection(connectionId);
-      
-      // Add the updated connection
-      canvasState.addConnection({
-        ...connection,
-        type: newType
-      });
-      
-      toast.success(`Connection updated to: ${newType.replace('_', ' ')}`);
-    }
-  }, [canvasState, readonly]);
+  // Removed - now inline to prevent infinite renders
 
   // Handle view mode change with guard to prevent unnecessary updates
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -243,8 +264,19 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
         onEdgeClick: () => {
           // Edge clicks are handled by the edge component now
         },
-        onEdgeDelete: handleConnectionDelete,
-        onEdgeEdit: handleConnectionTypeChange
+        onEdgeDelete: (connectionId: string) => {
+          if (readonly) return;
+          const removed = connections.removeConnection(connectionId);
+          if (removed) {
+            canvasState.removeConnection(connectionId);
+            toast.success('Connection removed');
+          }
+        },
+        onEdgeEdit: (connectionId: string, newType: ConnectionType) => {
+          if (readonly) return;
+          canvasState.updateConnection(connectionId, { type: newType });
+          toast.success(`Connection updated to: ${newType.replace('_', ' ')}`);
+        }
       }
     );
     return generatedEdges;
@@ -252,8 +284,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     canvasState.canvasState.connections,
     canvasState.canvasState.selectedConnections,
     teams,
-    handleConnectionDelete,
-    handleConnectionTypeChange
+    readonly
   ]);
   
   // React Flow state management
@@ -295,21 +326,27 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   const onConnect = useCallback((connection: Connection) => {
     if (readonly) return;
     
-    console.log('Connection attempted:', connection);
+    console.log('🔗 Connection attempted:', connection);
+    console.log('🔗 Current connections BEFORE adding:', canvasState.canvasState.connections.length);
     
-    // Create a simple connection directly
+    // Create a simple connection directly (id and createdAt will be generated by addConnection)
     const newConnectionData = {
-      id: `connection_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       fromTeamId: connection.source!,
       toTeamId: connection.target!,
       type: 'collaborates_with' as ConnectionType,
-      createdAt: new Date().toISOString(),
       sourceHandle: connection.sourceHandle,
       targetHandle: connection.targetHandle
     };
     
+    console.log('🔗 Adding connection data:', newConnectionData);
+    
     // Add to canvas state for persistence
     canvasState.addConnection(newConnectionData);
+    
+    // Check again after a short delay to see the actual state
+    setTimeout(() => {
+      console.log('🔗 Connection added, current connections (after delay):', canvasState.canvasState.connections.length);
+    }, 150);
     
     toast.success('Teams connected! Click the connection to change relationship type.');
     
@@ -329,6 +366,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   }, [canvasState]);
   
   const handleSaveLayout = useCallback(async () => {
+    console.log('💾 Save layout triggered');
     if (readonly) return;
     
     setIsSaving(true);
@@ -346,8 +384,25 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
         }
       };
       
-      await persistence.saveLayout(layout);
+      console.log('💾 Saving layout data:', {
+        userId,
+        workspaceId,
+        positionsCount: layout.positions.length,
+        connectionsCount: layout.connections.length,
+        connectionsData: layout.connections,
+        positionsData: layout.positions,
+        viewSettings: layout.viewSettings
+      });
+      
+      console.log('💾 Calling persistence.saveLayout()...');
+      const saveResult = await persistence.saveLayout(layout);
+      console.log('💾 Save result:', saveResult);
+      
       canvasState.markSaved();
+      console.log('✅ Layout saved successfully');
+    } catch (error) {
+      console.error('💥 Save failed:', error);
+      throw error;
     } finally {
       setIsSaving(false);
     }

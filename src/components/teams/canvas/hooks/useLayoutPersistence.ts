@@ -82,6 +82,7 @@ export function useLayoutPersistence(
       // Load from database
       if (storageType === 'database' || storageType === 'both') {
         try {
+          // Load canvas layout (positions, view settings)
           const { data, error } = await supabase.rpc(
             'get_team_canvas_layout',
             { 
@@ -95,6 +96,32 @@ export function useLayoutPersistence(
           const response = data as GetLayoutResponse;
           if (response.success && response.layout) {
             remoteLayout = response.layout;
+
+            // ALSO load individual connections from team_connections table
+            const { data: connectionsData, error: connectionsError } = await supabase
+              .from('team_connections')
+              .select('*')
+              .eq('created_by_user_id', userId);
+            
+            if (connectionsError) {
+              console.warn('Failed to load connections:', connectionsError);
+            } else if (connectionsData && connectionsData.length > 0) {
+              console.log(`📥 Loaded ${connectionsData.length} connections from team_connections table`);
+              
+              // Convert database connections to canvas format
+              const canvasConnections = connectionsData.map(dbConn => ({
+                id: `conn_${dbConn.id}`,
+                fromTeamId: dbConn.from_team_id,
+                toTeamId: dbConn.to_team_id,
+                type: dbConn.connection_type,
+                createdAt: dbConn.created_at,
+                sourceHandle: 'right', // Default, could be stored in future
+                targetHandle: 'left-target' // Default, could be stored in future
+              }));
+              
+              // Replace JSON connections with database connections
+              remoteLayout.connections = canvasConnections;
+            }
           }
         } catch (error) {
           console.warn('Failed to load from database:', error);
@@ -173,13 +200,20 @@ export function useLayoutPersistence(
       
       // Save to database
       if (storageType === 'database' || storageType === 'both') {
+        console.log('💾 Saving to database with data:', {
+          p_workspace_id: workspaceId || null,
+          p_positions: layout.positions,
+          p_connections: layout.connections,
+          p_view_settings: layout.viewSettings
+        });
+        
         const { data, error } = await supabase.rpc(
           'save_team_canvas_layout',
           {
             p_workspace_id: workspaceId || null,
-            p_positions: JSON.stringify(layout.positions),
-            p_connections: JSON.stringify(layout.connections),
-            p_view_settings: JSON.stringify(layout.viewSettings)
+            p_positions: layout.positions, // Send as JSONB object, not string
+            p_connections: layout.connections, // Send as JSONB object, not string
+            p_view_settings: layout.viewSettings // Send as JSONB object, not string
           }
         );
         
@@ -188,6 +222,44 @@ export function useLayoutPersistence(
         const response = data as SaveLayoutResponse;
         if (!response.success) {
           throw new Error(response.error || 'Failed to save layout');
+        }
+
+        // ALSO save individual connections to team_connections table
+        console.log('💾 Saving individual connections to team_connections table...');
+        
+        // First, delete all existing connections for this user
+        const { error: deleteError } = await supabase
+          .from('team_connections')
+          .delete()
+          .eq('created_by_user_id', userId);
+        
+        if (deleteError) {
+          console.error('Failed to delete existing connections:', deleteError);
+        }
+        
+        // Insert new connections (if any)
+        if (layout.connections && layout.connections.length > 0) {
+          const connectionsToInsert = layout.connections.map(conn => ({
+            from_team_id: conn.fromTeamId,
+            to_team_id: conn.toTeamId,
+            connection_type: conn.type,
+            created_by_user_id: userId,
+            created_at: conn.createdAt,
+            updated_at: new Date().toISOString()
+          }));
+          
+          const { error: insertError } = await supabase
+            .from('team_connections')
+            .insert(connectionsToInsert);
+          
+          if (insertError) {
+            console.error('Failed to save connections:', insertError);
+            throw new Error(`Failed to save connections: ${insertError.message}`);
+          }
+          
+          console.log(`✅ Saved ${connectionsToInsert.length} connections to database`);
+        } else {
+          console.log('✅ No connections to save - existing connections cleared');
         }
       }
       

@@ -17,6 +17,20 @@ export class TextMessageHandler implements MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean {
     return (message as any).content?.type === 'text';
   }
+  /** Normalize tool definitions and drop malformed ones */
+  private normalizeTools(tools: any[]): Array<{ name: string; description?: string; parameters: any }> {
+    const normalized: Array<{ name: string; description?: string; parameters: any }> = [];
+    for (const t of tools || []) {
+      const name = t?.name;
+      const params = t?.parameters;
+      if (typeof name === 'string' && params && typeof params === 'object') {
+        normalized.push({ name, description: t?.description || '', parameters: params });
+      } else {
+        try { console.log('[DEBUG] Dropping malformed tool before OpenAI:', JSON.stringify(t)); } catch {}
+      }
+    }
+    return normalized;
+  }
   
   private ensureProperMarkdownFormatting(text: string): string {
     // Split text into lines
@@ -305,8 +319,9 @@ Remember: ALWAYS use blank lines between elements for readability!`
         effectiveModel = 'gpt-4';
         
         // Debug: Log tools array before sending to OpenAI
-        console.log('[DEBUG] Router fallback - Available tools before OpenAI:', JSON.stringify(availableTools, null, 2));
-        const formattedTools = availableTools.map((fn) => ({ type: 'function', function: fn }));
+        const normalized = this.normalizeTools(availableTools);
+        console.log('[DEBUG] Router fallback - Available tools before OpenAI (normalized):', JSON.stringify(normalized, null, 2));
+        const formattedTools = normalized.map((fn) => ({ type: 'function', function: fn }));
         console.log('[DEBUG] Router fallback - Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
         
         completion = await this.openai.chat.completions.create({
@@ -316,7 +331,13 @@ Remember: ALWAYS use blank lines between elements for readability!`
       } else {
         const resolved = await router.resolveAgent(context.agent_id).catch(() => null);
         effectiveModel = resolved?.prefs?.model || effectiveModel;
-        const resp = await router.chat(context.agent_id, msgs as any, { tools: availableTools as any, temperature: 0.7, maxTokens: 1200 });
+        // Convert OpenAI format tools to LLMTool format for router
+        const llmTools = availableTools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }));
+        const resp = await router.chat(context.agent_id, msgs as any, { tools: llmTools, temperature: 0.7, maxTokens: 1200 });
         const respToolCalls = (resp.toolCalls || []) as Array<{ id: string; name: string; arguments: string }>;
         completion = {
           choices: [{ message: { content: resp.text, tool_calls: respToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
@@ -327,8 +348,9 @@ Remember: ALWAYS use blank lines between elements for readability!`
       effectiveModel = 'gpt-4';
       
       // Debug: Log tools array before sending to OpenAI
-      console.log('[DEBUG] Available tools before OpenAI:', JSON.stringify(availableTools, null, 2));
-      const formattedTools = availableTools.map((fn) => ({ type: 'function', function: fn }));
+      const normalized = this.normalizeTools(availableTools);
+      console.log('[DEBUG] Available tools before OpenAI (normalized):', JSON.stringify(normalized, null, 2));
+      const formattedTools = normalized.map((fn) => ({ type: 'function', function: fn }));
       console.log('[DEBUG] Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
       
       completion = await this.openai.chat.completions.create({
@@ -417,8 +439,15 @@ Remember: ALWAYS use blank lines between elements for readability!`
         // Get the model to retry with additional parameters
         let retryCompletion;
         if (router && useRouter && context.agent_id) {
+          // Convert OpenAI format tools to LLMTool format for router
+          const norm = this.normalizeTools(availableTools);
+          const llmToolsRetry = norm.map(tool => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters
+          }));
           const retryResp = await router.chat(context.agent_id, msgs as any, { 
-            tools: availableTools.map((fn) => ({ type: 'function', function: fn })), 
+            tools: llmToolsRetry, 
             tool_choice: 'auto',
             temperature: 0.7, 
             maxTokens: 1200 
@@ -433,7 +462,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
             messages: msgs,
             temperature: 0.7,
             max_tokens: 1200,
-            tools: availableTools.map((fn) => ({ type: 'function', function: fn })),
+            tools: this.normalizeTools(availableTools).map((fn) => ({ type: 'function', function: fn })),
             tool_choice: 'auto',
           });
         }
