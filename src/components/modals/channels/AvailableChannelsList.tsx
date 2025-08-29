@@ -126,9 +126,8 @@ export function AvailableChannelsList({
     const exists = agentPermissions.some(p => p.provider_name === provider && p.is_active);
     if (exists) return 'connected';
 
-    // Otherwise show available if user has a credential for this provider
-    const hasCredential = connections.some(c => c.provider_name === provider && c.connection_status === 'active');
-    return hasCredential ? 'available' : 'available';
+    // Otherwise show available (both existing credentials and new connections are supported)
+    return 'available';
   }
 
   return (

@@ -149,6 +149,19 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     onSaveError: (error) => toast.error('Failed to save layout: ' + error.message)
   });
   
+  // Handle connection start (must be defined before nodes useMemo)
+  const handleConnectionStart = useCallback((teamId: string, handle: string) => {
+    if (!connectionMode || readonly) return;
+    setIsConnecting(true);
+  }, [connectionMode, readonly]);
+  
+  // Handle connection deletion (must be defined before edges useMemo)
+  const handleConnectionDelete = useCallback((connectionId: string) => {
+    if (readonly) return;
+    connections.removeConnection(connectionId);
+    toast.success('Connection removed');
+  }, [connections, readonly]);
+  
   // Convert teams to React Flow nodes
   const nodes = useMemo<Node<TeamNodeData>[]>(() => {
     if (viewMode === 'grid') return [];
@@ -256,19 +269,6 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
       toast.success('Teams connected successfully');
     }
   }, [connectionMode, connections, readonly]);
-  
-  // Handle connection start
-  const handleConnectionStart = useCallback((teamId: string, handle: string) => {
-    if (!connectionMode || readonly) return;
-    setIsConnecting(true);
-  }, [connectionMode, readonly]);
-  
-  // Handle connection deletion
-  const handleConnectionDelete = useCallback((connectionId: string) => {
-    if (readonly) return;
-    connections.removeConnection(connectionId);
-    toast.success('Connection removed');
-  }, [connections, readonly]);
   
   // Toolbar callbacks
   const handleZoomIn = useCallback(() => {

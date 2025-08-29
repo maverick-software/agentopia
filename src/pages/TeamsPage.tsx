@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Loader2, AlertCircle, Building2, UserCheck, Target, Workflow } from 'lucide-react';
+import { Plus, Users, Loader2, AlertCircle, Building2, UserCheck, Target, Workflow, Network, Grid } from 'lucide-react';
 import { useTeams } from '../hooks/useTeams';
+import { useAuth } from '../contexts/AuthContext';
 import TeamCard from '../components/teams/TeamCard'; // Import the actual component
 import { CreateTeamModal } from '../components/modals/CreateTeamModal';
+import { VisualTeamCanvas } from '../components/teams/canvas/VisualTeamCanvas';
 import type { Team } from '../types';
+import type { ViewMode } from '../components/teams/canvas/types/canvas';
 
 // Placeholder for TeamCard until it's created
 const TeamCardPlaceholder: React.FC<{ team: Team }> = ({ team }) => (
@@ -19,6 +22,9 @@ const TeamCardPlaceholder: React.FC<{ team: Team }> = ({ team }) => (
 export const TeamsPage: React.FC = () => {
   const { teams, loading, error, fetchTeams } = useTeams();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCanvasModal, setShowCanvasModal] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,7 +41,38 @@ export const TeamsPage: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-foreground">Teams</h1>
+        <div className="flex items-center space-x-4">
+          <h1 className="text-2xl font-semibold text-foreground">Teams</h1>
+          
+          {/* View Toggle - only show if we have teams */}
+          {teams.length > 0 && (
+            <div className="flex items-center border rounded-md overflow-hidden">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center px-3 py-2 text-sm font-medium transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Grid className="h-4 w-4 mr-1" />
+                Grid
+              </button>
+              <button
+                onClick={() => setShowCanvasModal(true)}
+                className={`flex items-center px-3 py-2 text-sm font-medium transition-colors border-l ${
+                  showCanvasModal
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Network className="h-4 w-4 mr-1" />
+                Canvas
+              </button>
+            </div>
+          )}
+        </div>
+        
         <button
           onClick={() => setShowCreateModal(true)}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -149,6 +186,41 @@ export const TeamsPage: React.FC = () => {
         onClose={() => setShowCreateModal(false)}
         onTeamCreated={handleTeamCreated}
       />
+      
+      {/* Visual Team Canvas Modal */}
+      {user && (
+        <VisualTeamCanvas
+          isOpen={showCanvasModal}
+          onClose={() => setShowCanvasModal(false)}
+          teams={teams}
+          teamMembers={new Map()} // TODO: Implement team members fetching
+          userId={user.id}
+          workspaceId={undefined} // TODO: Implement workspace support
+          onTeamCreate={() => {
+            setShowCreateModal(true);
+          }}
+          onTeamUpdate={(teamId, updates) => {
+            // TODO: Implement team update
+            console.log('Update team:', teamId, updates);
+          }}
+          onTeamDelete={(teamId) => {
+            // TODO: Implement team delete
+            console.log('Delete team:', teamId);
+          }}
+          onLayoutSave={async (layout) => {
+            // Layout persistence is handled by the canvas component
+            console.log('Layout saved:', layout);
+          }}
+          onConnectionCreate={(connection) => {
+            console.log('Connection created:', connection);
+          }}
+          onConnectionDelete={(connectionId) => {
+            console.log('Connection deleted:', connectionId);
+          }}
+          showToolbar={true}
+          defaultViewMode="canvas"
+        />
+      )}
     </div>
   );
 }; 

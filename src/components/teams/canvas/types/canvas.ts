@@ -2,26 +2,7 @@
 // Generated from comprehensive design research and specifications
 
 import type { Node, Edge, Viewport } from 'reactflow';
-
-// Core Team Interface (extends existing team type)
-export interface Team {
-  id: string;
-  name: string;
-  description: string | null;
-  owner_user_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Team Member Interface
-export interface TeamMember {
-  id: string;
-  team_id: string;
-  agent_id: string;
-  team_role: string;
-  reports_to_user: boolean;
-  created_at: string;
-}
+import type { Team, TeamMember } from '@/types'; // Import existing types
 
 // Canvas Layout Data Structures
 export interface TeamPosition {

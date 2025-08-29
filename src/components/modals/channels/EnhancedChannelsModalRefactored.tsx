@@ -50,10 +50,20 @@ export function EnhancedChannelsModalRefactored({
   const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('channel');
   
-  // DEBUG: Log loaded integrations
+  // DEBUG: Log loaded integrations and connections
   useEffect(() => {
     console.log('[EnhancedChannelsModal] Loaded channel integrations:', integrations.map(i => ({ name: i.name, id: i.id, agent_classification: i.agent_classification })));
   }, [integrations]);
+  
+  useEffect(() => {
+    console.log('[EnhancedChannelsModal] Loaded connections:', connections.map(c => ({ 
+      id: c.id,
+      connection_name: c.connection_name,
+      provider_name: c.provider_name,
+      connection_status: c.connection_status,
+      external_username: c.external_username
+    })));
+  }, [connections]);
   
   // Capabilities state - fetch from database instead of hardcoding
   const [capabilitiesByIntegrationId, setCapabilitiesByIntegrationId] = useState<Record<string, any[]>>({});
@@ -377,10 +387,21 @@ export function EnhancedChannelsModalRefactored({
   const renderCredentialSelector = (serviceId: string) => {
     const provider = providerNameForServiceId(serviceId);
     
+    // DEBUG: Log credential selection process
+    console.log('[renderCredentialSelector] Service:', serviceId, 'Provider:', provider);
+    console.log('[renderCredentialSelector] All connections:', connections.map(c => ({ 
+      provider_name: c.provider_name, 
+      connection_name: c.connection_name,
+      connection_status: c.connection_status,
+      id: c.id
+    })));
+    
     // For Email Relay, show credentials from all email providers
     const creds = serviceId === 'email_relay' 
       ? connections.filter(c => ['smtp', 'sendgrid', 'mailgun'].includes(c.provider_name) && c.connection_status === 'active')
       : connections.filter(c => c.provider_name === provider && c.connection_status === 'active');
+    
+    console.log('[renderCredentialSelector] Filtered credentials for', serviceId, ':', creds);
     
     if (creds.length === 0) {
       return (

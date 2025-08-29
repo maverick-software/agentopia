@@ -2663,3 +2663,206 @@ This process remains largely the same:
 - **Conversations**: Multi-conversation support present; scheduled tasks should target or create `conversation_sessions`.
 - **Metrics**: Intermittent “Supabase export failed” logs are non-blocking; review exporter config when convenient.
 - **Memory**: Pinecone keys currently invalid; vector search falls back gracefully. Configure valid keys or disable episodic search.
+
+---
+
+## 🎨 Visual Team Canvas - August 2025
+
+**Date:** August 28, 2025  
+**Status:** Production Ready  
+**Feature Type:** Advanced Team Organization & Visualization
+
+### 🎯 Overview
+
+The **Visual Team Canvas** transforms team management from simple lists into an interactive, drag-and-drop organizational chart interface. Teams can now be visualized as connected nodes showing reporting structures, collaboration patterns, and support relationships - just like Lucidchart or organizational diagram tools.
+
+### ✨ Key Features
+
+#### **🖱️ Interactive Canvas Interface**
+- **Drag & Drop Team Positioning**: Move teams around a 2D canvas with real-time position saving
+- **Zoom & Pan Controls**: Navigate large organizational structures with smooth zoom and pan
+- **Grid & Canvas Views**: Toggle between traditional grid layout and visual canvas mode
+- **Minimap Navigation**: Overview panel for quick navigation across large team structures
+
+#### **🔗 Team Relationship Mapping**
+- **Visual Connections**: Draw connections between teams to show relationships
+- **Connection Types**: 
+  - `Reports To` (hierarchical with arrows)
+  - `Collaborates With` (peer-to-peer dashed lines) 
+  - `Supports` (service dotted lines)
+  - `Custom` (user-defined styling)
+- **Interactive Editing**: Click connections to edit/delete, hover for context menus
+
+#### **💾 Persistent Layouts**
+- **Auto-Save**: Canvas layouts automatically saved every 30 seconds
+- **Local & Database Storage**: Hybrid persistence with conflict resolution
+- **User-Specific Views**: Each user maintains their own organizational perspective
+- **Layout Export**: Export team structures for documentation or sharing
+
+#### **🎛️ Advanced Controls**
+- **Connection Mode**: Select connection type, then click teams to connect
+- **Toolbar Integration**: Zoom, save, reset, fit-to-view, and settings controls
+- **Keyboard Shortcuts**: Power-user navigation and actions
+- **Responsive Design**: Full mobile and tablet support with touch interactions
+
+### 🏗️ Technical Architecture
+
+#### **Database Schema**
+```sql
+-- User-specific canvas layouts with JSONB flexibility
+team_canvas_layouts (
+  id, user_id, workspace_id,
+  positions JSONB,      -- Team positions [{teamId, x, y}]
+  connections JSONB,    -- Connections [{fromTeamId, toTeamId, type}] 
+  view_settings JSONB   -- {zoom, centerX, centerY}
+)
+
+-- Individual team connections with full metadata
+team_connections (
+  id, from_team_id, to_team_id,
+  connection_type ENUM('reports_to', 'collaborates_with', 'supports', 'custom'),
+  label, color, style, created_by_user_id
+)
+```
+
+#### **Component Architecture**
+```
+src/components/teams/canvas/
+├── VisualTeamCanvas.tsx         # Main orchestrator (~280 lines)
+├── TeamNode.tsx                 # Custom React Flow node (~150 lines)
+├── TeamConnectionEdge.tsx       # Connection visualization (~120 lines)
+├── CanvasToolbar.tsx           # Controls & actions (~180 lines)
+├── hooks/
+│   ├── useCanvasState.ts       # Canvas state management
+│   ├── useTeamOperations.ts    # CRUD operations  
+│   ├── useConnections.ts       # Connection logic
+│   └── useLayoutPersistence.ts # Layout storage
+├── types/canvas.ts             # TypeScript definitions
+└── utils/canvasUtils.ts        # Conversion utilities
+```
+
+#### **Technology Stack**
+- **React Flow**: Professional-grade canvas and node editor
+- **Supabase Edge Functions**: Backend API with RLS security
+- **React Query**: Optimistic updates and data synchronization  
+- **Tailwind CSS**: Consistent design system integration
+- **TypeScript**: Full type safety across all components
+
+### 🔒 Security & Performance
+
+#### **Row Level Security (RLS)**
+- Users can only access their own canvas layouts
+- Team connections require ownership of both connected teams
+- Service role access for administrative functions
+- Comprehensive audit logging for all canvas operations
+
+#### **Performance Optimizations**
+- **Virtual Rendering**: Efficient rendering for 100+ team nodes
+- **Debounced Updates**: Batched state changes to prevent excessive renders
+- **Optimistic Updates**: Immediate UI feedback with rollback on errors
+- **Lazy Loading**: Components loaded only when canvas mode is accessed
+
+#### **Validation & Error Handling**
+- **Cycle Detection**: Prevents circular reporting structures
+- **Connection Limits**: Configurable maximum connections per team
+- **Data Validation**: Comprehensive input validation with user-friendly errors
+- **Graceful Degradation**: Fallback to grid view if canvas fails
+
+### 🚀 Integration Points
+
+#### **Teams Page Enhancement**
+- **View Toggle**: Seamless switch between Grid and Canvas modes
+- **Existing Functionality**: Full backward compatibility with current team management
+- **Modal Integration**: Canvas opens in full-screen modal with existing UI patterns
+- **Team CRUD**: Create, edit, delete teams directly from canvas
+
+#### **Future Workspace Integration**
+- **Multi-Workspace Support**: Ready for workspace-based team organization
+- **Sharing & Collaboration**: Foundation for team layout sharing
+- **Export Capabilities**: SVG/PDF export for documentation and presentations
+
+### 🎯 Usage Examples
+
+#### **Department Organization**
+```
+Engineering ──reports_to──→ CTO
+    ├── Frontend Team
+    ├── Backend Team  
+    └── DevOps Team ──supports──→ All Teams
+
+Marketing ──collaborates_with──→ Sales
+    ├── Content Team
+    └── Growth Team
+```
+
+#### **Project-Based Structure**
+```
+Project Alpha ──custom──→ Project Beta
+    ├── Development Squad
+    ├── Design Squad
+    └── QA Squad ──supports──→ All Squads
+```
+
+### 📊 Database Functions
+
+#### **Canvas Operations**
+- `save_team_canvas_layout()` - Save/update canvas layouts with validation
+- `get_team_canvas_layout()` - Retrieve layouts with access control  
+- `create_team_connection()` - Create connections with cycle detection
+- `delete_team_connection()` - Remove connections with ownership verification
+
+#### **Validation & Security**
+- Comprehensive input validation with business rule enforcement
+- Automatic cycle detection for hierarchical relationships
+- Performance monitoring for slow operations
+- Detailed error logging for debugging
+
+### 🎨 UI/UX Design
+
+#### **Visual Design Language**
+- **Team Nodes**: Card-based design with gradients and icons
+- **Connection Styles**: Distinct visual language for each relationship type
+- **Interactive States**: Hover effects, selection indicators, drag feedback
+- **Accessibility**: WCAG 2.1 compliant with keyboard navigation and screen readers
+
+#### **User Experience**
+- **Onboarding**: Contextual tooltips and guided first-use experience
+- **Progressive Disclosure**: Advanced features revealed as users become comfortable
+- **Error Prevention**: Clear visual feedback for invalid operations
+- **Mobile-First**: Touch-optimized interactions for all device types
+
+### 🔧 Implementation Status
+
+**✅ Completed Features:**
+- Complete database schema with migrations applied
+- Full React component suite with TypeScript
+- Interactive canvas with drag & drop
+- Connection creation and management
+- Layout persistence and auto-save
+- Integration with existing Teams page
+- Comprehensive error handling and validation
+
+**🔄 Ready for Enhancement:**
+- Team member visualization within nodes
+- Advanced auto-layout algorithms
+- Real-time collaborative editing
+- Template organizational structures
+- Analytics and insights dashboard
+
+### 🚀 Getting Started
+
+#### **Access the Canvas**
+1. Navigate to the **Teams** page
+2. Create at least one team if none exist
+3. Click the **Canvas** button in the view toggle
+4. Start organizing teams by dragging them around
+5. Use connection mode to draw relationships between teams
+
+#### **Best Practices**
+- **Start Simple**: Begin with basic positioning before adding connections
+- **Use Hierarchy**: Leverage "Reports To" connections for clear organizational structure  
+- **Color Coding**: Use custom connection colors to distinguish different relationship types
+- **Regular Saves**: While auto-save is active, manually save important layouts
+- **Mobile Testing**: Verify touch interactions work well on tablets and phones
+
+*The Visual Team Canvas represents a major evolution in team organization capabilities, providing the visual clarity and interactive control that modern organizations need to manage complex team structures effectively.*
