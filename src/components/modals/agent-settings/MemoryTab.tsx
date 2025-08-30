@@ -254,7 +254,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div>
         <h3 className="text-lg font-medium">Memory & Knowledge</h3>
         <p className="text-sm text-muted-foreground">

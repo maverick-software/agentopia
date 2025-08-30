@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
 
 import { 
@@ -20,7 +20,8 @@ import {
   Wrench,
   Mail,
   Plug,
-  FolderOpen
+  FolderOpen,
+  Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,7 @@ import { ToolsTab } from './agent-settings/ToolsTab';
 import { ChannelsTab } from './agent-settings/ChannelsTab';
 import { IntegrationsTab } from './agent-settings/IntegrationsTab';
 import { SourcesTab } from './agent-settings/SourcesTab';
+import { TeamTab } from './agent-settings/TeamTab';
 
 interface AgentSettingsModalProps {
   isOpen: boolean;
@@ -47,10 +49,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
 
 interface TabConfig {
   id: TabId;
@@ -113,6 +115,12 @@ const TABS: TabConfig[] = [
     label: 'Sources',
     icon: FolderOpen,
     description: 'Cloud storage connections'
+  },
+  {
+    id: 'team',
+    label: 'Team',
+    icon: Users,
+    description: 'Team assignments and collaboration'
   }
 ];
 
@@ -163,6 +171,8 @@ export function AgentSettingsModal({
         return <IntegrationsTab {...commonProps} />;
       case 'sources':
         return <SourcesTab {...commonProps} />;
+      case 'team':
+        return <TeamTab {...commonProps} />;
       default:
         return <GeneralTab {...commonProps} />;
     }
@@ -170,28 +180,26 @@ export function AgentSettingsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] p-0 gap-0">
-        <DialogHeader className="px-6 py-4 border-b border-border">
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-[900px] translate-x-[-50%] translate-y-[-50%] gap-0 border bg-background p-0 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] rounded-xl border-border dark:border-border max-h-[90vh]">
+        <DialogHeader className="px-6 py-4 border-b border-border dark:border-border bg-background dark:bg-background rounded-t-xl">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold">
+            <DialogTitle className="text-lg font-semibold text-foreground dark:text-foreground">
               Agent Settings
             </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="h-6 w-6 p-0"
-            >
+            <DialogPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
               <X className="h-4 w-4" />
-            </Button>
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
           </div>
         </DialogHeader>
 
-        <div className="flex h-[600px]">
+        <div className="flex min-h-[500px] max-h-[calc(90vh-80px)] rounded-b-xl overflow-hidden">
           {/* Sidebar Navigation */}
-          <div className="w-64 border-r border-border bg-muted/30">
+          <div className="w-56 border-r border-border dark:border-border bg-muted/30 dark:bg-muted/30">
             <div className="h-full overflow-y-auto">
-              <div className="p-4 space-y-1">
+              <div className="p-3 space-y-0.5">
                 {TABS.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -201,18 +209,18 @@ export function AgentSettingsModal({
                       key={tab.id}
                       onClick={() => handleTabChange(tab.id)}
                       className={cn(
-                        "w-full flex items-center justify-between p-3 rounded-lg text-left transition-colors",
+                        "w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors",
                         isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                          ? "bg-primary dark:bg-primary text-primary-foreground dark:text-primary-foreground"
+                          : "hover:bg-muted dark:hover:bg-muted text-muted-foreground dark:text-muted-foreground hover:text-foreground dark:hover:text-foreground"
                       )}
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2.5">
                         <Icon className="h-4 w-4" />
                         <div className="font-medium text-sm">{tab.label}</div>
                       </div>
                       {isActive && (
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-3.5 w-3.5" />
                       )}
                     </button>
                   );
@@ -222,15 +230,16 @@ export function AgentSettingsModal({
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <div className="flex-1 flex flex-col bg-background dark:bg-background overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
               <div className="p-6">
                 {renderTabContent()}
               </div>
             </div>
           </div>
         </div>
-      </DialogContent>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
     </Dialog>
   );
 }

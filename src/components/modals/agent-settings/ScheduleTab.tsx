@@ -16,7 +16,7 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
   const [showTaskManager, setShowTaskManager] = useState(false);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h3 className="text-lg font-medium">Schedule & Tasks</h3>
         <p className="text-sm text-muted-foreground">
