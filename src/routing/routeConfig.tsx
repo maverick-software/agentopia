@@ -54,6 +54,9 @@ import {
     MCPServerConfigPage,
 } from './lazyComponents';
 
+// Import Media Library page
+import { MediaLibraryPage } from '../pages/MediaLibraryPage';
+
 // Manually import the new non-lazy pages
 import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
@@ -81,6 +84,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/memory', element: DatastoresPage, protection: 'protected', layout: true },
   { path: '/memory/new', element: DatastoreEditPage, protection: 'protected', layout: true },
   { path: '/memory/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
+  { path: '/media', element: MediaLibraryPage, protection: 'protected', layout: true },
   { path: '/teams', element: TeamsPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId', element: TeamDetailsPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId/edit', element: EditTeamPage, protection: 'protected', layout: true },

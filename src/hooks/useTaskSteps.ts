@@ -63,9 +63,8 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
       errors.push('Instructions must be 5000 characters or less');
     }
     
-    if (step.include_previous_context && step.step_order === 1) {
-      errors.push('First step cannot include previous context');
-    }
+    // Note: First step can include previous context (conversation context)
+    // No validation needed here as it's a valid use case
     
     return errors;
   }, []);

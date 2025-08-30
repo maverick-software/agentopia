@@ -91,23 +91,14 @@ export function TaskListModal({
     if (!user) return;
     
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session?.session?.access_token) {
-        throw new Error('No authenticated session');
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-tasks/${taskId}`, {
+      const { data, error } = await supabase.functions.invoke('agent-tasks', {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.session.access_token}`,
-          'Content-Type': 'application/json',
-        }
+        body: { task_id: taskId }
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Edge Function error:', response.status, errorText);
-        throw new Error(`Failed to delete task: ${response.status}`);
+      if (error) {
+        console.error('Error deleting task:', error);
+        throw error;
       }
 
       await loadTasks();

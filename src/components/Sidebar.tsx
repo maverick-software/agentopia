@@ -65,6 +65,7 @@ const navItems: NavItem[] = [
   },
   { to: '/teams', icon: Building2, label: 'Teams' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/media', icon: FileText, label: 'Media' },
   { to: '/workflows', icon: GitBranch, label: 'Workflows' },
   { to: '/workflows/automations', icon: Zap, label: 'Automations' },
   { to: '/graph-settings', icon: Network, label: 'Knowledge Graph' },

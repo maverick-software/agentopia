@@ -801,7 +801,84 @@ GROUP BY credential_type;
 
 This system provides **military-grade security** for all sensitive credentials while maintaining developer-friendly APIs and seamless user experience.
 
-## Web Research Integration
+## 📧 SMTP Email Integration
+
+Agentopia implements a sophisticated SMTP email system that allows agents to send emails through any SMTP server with proper configuration management and secure credential storage.
+
+### **How SMTP Integration Works**
+
+**1. Integration Setup Process:**
+- Users navigate to the **Integrations page** and select **SMTP**
+- Choose from pre-configured providers (SMTP.com, Gmail, Outlook, etc.) or configure custom SMTP servers
+- Enter SMTP server details: hostname, port, username, password, and email settings
+- System stores complete SMTP configuration as JSON in **Supabase Vault** for maximum security
+- Connection metadata (host, port, settings) stored in `user_integration_credentials.connection_metadata`
+
+**2. Agent Permission System:**
+- Users grant agents access to SMTP tools through the **Channels modal** in agent chat
+- Permissions stored in `agent_integration_permissions` table with specific tool scopes
+- Each agent sees only `smtp_send_email` tool (with unique naming to prevent conflicts)
+
+**3. Email Sending Process:**
+```
+User: "Send an email to john@example.com about the meeting"
+↓
+Agent uses smtp_send_email tool
+↓
+universal-tool-executor routes to smtp-api Edge Function
+↓
+smtp-api discovers user's SMTP configuration from connection_metadata
+↓
+Decrypts password from Supabase Vault using vault_decrypt RPC
+↓
+Creates nodemailer transporter with complete SMTP config
+↓
+Sends email and returns success/failure result
+```
+
+**4. Configuration Storage Architecture:**
+- **Vault Storage**: Password encrypted in Supabase Vault (referenced by `vault_access_token_id`)
+- **Metadata Storage**: SMTP server settings (host, port, secure, from_email) in `connection_metadata` JSONB column
+- **Backward Compatibility**: Supports both new JSON configs and legacy password-only formats
+
+**5. Provider Presets:**
+Pre-configured settings for popular providers with correct hostnames and ports:
+- **SMTP.com**: `send.smtp.com:2525` (corrected from previous `smtp.smtp.com`)
+- **Gmail**: `smtp.gmail.com:587` with App Password instructions
+- **Outlook**: `smtp-mail.outlook.com:587`
+- **Yahoo**: `smtp.mail.yahoo.com:587`
+- **Custom**: Manual configuration for any SMTP server
+
+**6. Security Features:**
+- **Zero Plain-Text Storage**: All passwords encrypted in Supabase Vault
+- **Service Role Authentication**: Only server-side functions can decrypt credentials
+- **Connection Validation**: SMTP settings validated before storage
+- **Audit Trails**: Complete logging of email operations
+
+**7. Tool Discovery & Execution:**
+- `get-agent-tools` Edge Function dynamically discovers authorized tools from database
+- `smtp_send_email` tool appears only for agents with SMTP permissions
+- Tool execution includes automatic credential discovery and email sending
+- Comprehensive error handling with user-friendly messages
+
+### **Technical Components**
+
+**Database Tables:**
+- `user_integration_credentials`: Stores connection records with vault references
+- `agent_integration_permissions`: Controls which agents can use SMTP tools
+- `integration_capabilities`: Defines available SMTP capabilities dynamically
+
+**Edge Functions:**
+- `smtp-api`: Handles email sending with automatic credential discovery
+- `get-agent-tools`: Provides dynamic tool discovery for agents
+- `universal-tool-executor`: Routes SMTP tool calls to correct handler
+
+**Frontend Components:**
+- **Integrations Page**: SMTP provider setup with pre-configured options
+- **Channels Modal**: Agent permission management for SMTP access
+- **SMTPSetupModal**: Complete SMTP server configuration interface
+
+## 🔍 Web Research Integration
 
 Agentopia provides comprehensive web research capabilities that allow agents to search the web, scrape web pages, and summarize content to answer user questions with up-to-date information.
 

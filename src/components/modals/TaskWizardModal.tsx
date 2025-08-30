@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus } from 'lucide-react';
+import { Plus, FileText } from 'lucide-react';
 import { TaskStep } from '@/types/tasks';
 import { StepManager } from './task-steps/StepManager';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import { 
   getSupportedTimezones, 
   formatTimezoneLabel, 
@@ -43,7 +44,7 @@ export function TaskWizardModal({
   const [recurringTime, setRecurringTime] = useState('');
   const [everyInterval, setEveryInterval] = useState(1);
   const [everyUnit, setEveryUnit] = useState<'minute' | 'hour' | 'day' | 'week' | 'month' | 'year'>('day');
-  const [newTaskDescription, setNewTaskDescription] = useState('');
+
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [targetConversationId, setTargetConversationId] = useState('');
   const [selectedTimezone, setSelectedTimezone] = useState(getDefaultTimezone());
@@ -62,18 +63,16 @@ export function TaskWizardModal({
 
     setLoading(true);
     try {
-      // Determine if using step-based or legacy mode
-      const usingSteps = taskSteps.length > 0 && stepsValid;
-      const finalInstructions = usingSteps 
-        ? `Multi-step task with ${taskSteps.length} steps. See task_steps table for detailed instructions.`
-        : newTaskDescription;
+      // Determine if using step-based mode
+      const usingSteps = taskSteps.length > 0;
+      const finalInstructions = `Multi-step task with ${taskSteps.length} steps. See task_steps table for detailed instructions.`;
 
       const taskData: any = {
         agent_id: agentId,
         name: newTaskTitle,
-        description: usingSteps 
+        description: taskSteps.length > 0 
           ? `Multi-step workflow: ${taskSteps.map(s => s.step_name).join(' → ')}`
-          : newTaskDescription,
+          : 'Multi-step task workflow',
         instructions: finalInstructions,
         task_type: 'scheduled',
         timezone: selectedTimezone,
@@ -96,11 +95,10 @@ export function TaskWizardModal({
         taskData.cron_expression = generateCronExpression(everyUnit, everyInterval, recurringTime);
       }
 
+      console.log('Sending task data:', taskData);
+      
       const { data: result, error } = await supabase.functions.invoke('agent-tasks', {
-        body: taskData,
-        headers: {
-          'Content-Type': 'application/json',
-        }
+        body: taskData
       });
 
       if (error) {
@@ -144,7 +142,7 @@ export function TaskWizardModal({
       setRecurringTime('');
       setEveryInterval(1);
       setEveryUnit('day');
-      setNewTaskDescription('');
+
       setNewTaskTitle('');
       setTargetConversationId('');
       setTaskSteps([]);
@@ -160,7 +158,7 @@ export function TaskWizardModal({
   };
 
   const isFormValid = () => {
-    if (!newTaskTitle.trim() || !newTaskDescription.trim()) return false;
+    if (!newTaskTitle.trim()) return false;
     
     if (scheduleMode === 'one_time') {
       return oneTimeDate && oneTimeTime;
@@ -184,7 +182,6 @@ export function TaskWizardModal({
     setCurrentStep(1);
     setTaskSteps([]);
     setStepsValid(false);
-    setNewTaskDescription('');
     setNewTaskTitle('');
     onClose();
   };
@@ -470,25 +467,7 @@ export function TaskWizardModal({
                 />
                 
                 {/* Legacy single instruction fallback */}
-                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-start space-x-2">
-                    <FileText className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-medium text-blue-800 dark:text-blue-400 mb-1">
-                        💡 Single Step Alternative
-                      </p>
-                      <p className="text-blue-700 dark:text-blue-300 text-xs mb-2">
-                        If you prefer a single instruction, add one step with all your requirements:
-                      </p>
-                      <Textarea 
-                        placeholder="Or enter a single comprehensive instruction here..." 
-                        value={newTaskDescription} 
-                        onChange={(e) => setNewTaskDescription(e.target.value)} 
-                        className="text-xs min-h-[60px] resize-none bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700" 
-                      />
-                    </div>
-                  </div>
-                </div>
+
               </div>
             )}
 
@@ -593,7 +572,7 @@ export function TaskWizardModal({
                       (currentStep === 1 && !scheduleMode) ||
                       (currentStep === 2 && ((scheduleMode === 'one_time' && (!oneTimeDate || !oneTimeTime)) || (scheduleMode === 'recurring' && (!recurringStartDate || !recurringTime)))) ||
                       (currentStep === 3 && scheduleMode === 'recurring' && (!everyInterval || everyInterval < 1)) ||
-                      (currentStep === 4 && !stepsValid && !newTaskDescription.trim()) ||
+                      (currentStep === 4 && taskSteps.length === 0) ||
                       (currentStep === 5 && !newTaskTitle.trim())
                     }
                     className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-lg"

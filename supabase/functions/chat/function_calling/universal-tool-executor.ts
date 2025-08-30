@@ -168,6 +168,62 @@ const TOOL_ROUTING_MAP: Record<string, {
   'zapier_': {
     edgeFunction: 'mcp-execute',
     actionMapping: (toolName: string) => toolName // Pass through tool name
+  },
+  
+  // Media Library tools
+  'search_documents': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'search_documents',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'search_documents',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
+  'get_document_content': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'get_document_content',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_document_content',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
+  'list_assigned_documents': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'list_assigned_documents',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'list_assigned_documents',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
+  'get_document_summary': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'get_document_summary',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_document_summary',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
+  'find_related_documents': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'find_related_documents',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'find_related_documents',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
   }
 };
 

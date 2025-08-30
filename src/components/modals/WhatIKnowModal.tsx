@@ -24,12 +24,15 @@ import {
   X,
   File,
   Lightbulb,
-  MessageSquare
+  MessageSquare,
+  Library,
+  FileText
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import type { Datastore } from '@/types';
+import { MediaLibrarySelector } from './MediaLibrarySelector';
 
 interface WhatIKnowModalProps {
   isOpen: boolean;
@@ -122,11 +125,16 @@ export function WhatIKnowModal({
   // Datastore selection modals
   const [showVectorSelection, setShowVectorSelection] = useState(false);
   const [showKnowledgeSelection, setShowKnowledgeSelection] = useState(false);
+  
+  // Media Library integration
+  const [showMediaLibrarySelector, setShowMediaLibrarySelector] = useState(false);
+  const [assignedMediaCount, setAssignedMediaCount] = useState(0);
 
   // Load available datastores and current connections
   useEffect(() => {
     if (isOpen && user) {
       loadDatastores();
+      loadAssignedMediaCount();
     }
   }, [isOpen, user]);
 
@@ -203,6 +211,36 @@ export function WhatIKnowModal({
       setLoadingDatastores(false);
     }
   }, [user, supabase]);
+
+  const loadAssignedMediaCount = useCallback(async () => {
+    if (!user || !agentId) return;
+    
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) return;
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          action: 'list_documents',
+          agent_id: agentId
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setAssignedMediaCount(data.data.total_count || 0);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading assigned media count:', error);
+    }
+  }, [user, agentId, supabase]);
 
   const loadExistingDocuments = useCallback(async () => {
     if (!user || !agentData?.name) return;
@@ -893,10 +931,50 @@ export function WhatIKnowModal({
               </div>
             </div>
 
+            {/* Media Library Section */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">
+                Media Library Documents
+              </Label>
+              
+              <Card className="border-2 border-dashed border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20">
+                <CardContent className="p-4 text-center">
+                  <Library className="h-8 w-8 mx-auto mb-2 text-purple-500" />
+                  <p className="text-sm font-medium mb-1">
+                    {assignedMediaCount > 0 
+                      ? `${assignedMediaCount} document${assignedMediaCount !== 1 ? 's' : ''} assigned`
+                      : 'No documents assigned from Media Library'
+                    }
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Assign documents from your centralized media library for training data
+                  </p>
+                  <div className="flex gap-2 justify-center">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowMediaLibrarySelector(true)}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Assign from Library
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => navigate('/media')}
+                    >
+                      <FileText className="h-3 w-3 mr-1" />
+                      Manage Library
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Document Upload Section */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">
-                Upload documents to add to my knowledge
+                Upload documents directly to this agent
               </Label>
               
               {/* Upload Area */}
@@ -1021,7 +1099,19 @@ export function WhatIKnowModal({
         </DialogContent>
       </Dialog>
 
-
+      {/* Media Library Selector Modal */}
+      <MediaLibrarySelector
+        isOpen={showMediaLibrarySelector}
+        onClose={() => setShowMediaLibrarySelector(false)}
+        agentId={agentId}
+        agentName={agentData?.name}
+        onMediaAssigned={(assignedMedia) => {
+          setAssignedMediaCount(prev => prev + assignedMedia.length);
+          toast.success(`Assigned ${assignedMedia.length} document${assignedMedia.length !== 1 ? 's' : ''} from Media Library`);
+        }}
+        multiSelect={true}
+        assignmentType="training_data"
+      />
 
       {/* Vector Datastore Selection Modal */}
       <Dialog open={showVectorSelection} onOpenChange={setShowVectorSelection}>
