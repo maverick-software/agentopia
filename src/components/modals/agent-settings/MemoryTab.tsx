@@ -255,11 +255,10 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold mb-2">Agent Memory</h2>
-        <p className="text-muted-foreground text-sm">
-          Configure knowledge sources, context, and memory preferences.
+        <h3 className="text-lg font-medium">Memory & Knowledge</h3>
+        <p className="text-sm text-muted-foreground">
+          Configure context, knowledge sources, and documents for your agent.
         </p>
       </div>
 

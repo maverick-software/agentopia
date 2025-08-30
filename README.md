@@ -132,7 +132,7 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
 *   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, multi-step workflows, timezone support, and Edge Function execution
 *   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
-*   **🆕 Media Library System:** Comprehensive document and media management with centralized storage, agent assignment, and MCP tool integration for document search and review
+*   **🆕 Media Library System:** WordPress-style document and media management with centralized storage, agent training integration, MCP tool framework, and secure file handling with multi-format support
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -545,8 +545,8 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   **🆕 `sendgrid-inbound`**: Processes inbound emails via SendGrid Inbound Parse webhook with smart routing and auto-reply capabilities.
 *   **🆕 `agent-tasks`**: Manages CRUD operations for agent task scheduling, including cron expression calculation, timezone handling, and next run time computation.
 *   **🆕 `task-executor`**: Executes scheduled and event-based tasks, triggered via pg_cron on a 5-minute interval for automated task processing.
-*   **🆕 `media-library-api`**: Handles Media Library operations including file uploads, processing, signed URL generation, and document management with secure storage integration.
-*   **🆕 `media-library-mcp`**: Provides MCP tools for agents to search, review, and interact with documents stored in the Media Library system.
+*   **🆕 `media-library-api`**: Comprehensive Media Library API handling file uploads, processing, signed URL generation, document management, and secure storage integration with user-scoped access control.
+*   **🆕 `media-library-mcp`**: MCP tool provider enabling agents to search, review, and interact with documents from the Media Library through specialized tools for document discovery and content analysis.
 
 Also see database RPCs used by integrations UI:
 
@@ -1367,6 +1367,409 @@ const MEDIA_LIBRARY_TOOLS = {
 - Document analytics and usage tracking
 
 The Media Library system transforms Agentopia from a simple agent platform into a comprehensive knowledge management ecosystem, enabling agents to leverage organizational documents and media for more informed, accurate, and contextually relevant interactions.
+
+## 📚 Media Library System - Complete Guide
+
+The **Media Library System** is Agentopia's comprehensive document and media management platform that transforms how agents interact with organizational knowledge. This WordPress-style system provides centralized storage, intelligent document processing, and sophisticated agent integration capabilities.
+
+### 🎯 **System Overview**
+
+The Media Library serves as the central hub for all document and media assets in Agentopia, providing:
+
+- **📁 Centralized Storage**: WordPress-style media library with organized file management
+- **🤖 Agent Integration**: Seamless document assignment to agents for enhanced knowledge
+- **🔧 MCP Tool Framework**: Specialized tools enabling agents to search and interact with documents
+- **🔒 Enterprise Security**: Private storage with user-scoped access and signed URL generation
+- **📊 Processing Pipeline**: Automated document processing with status tracking and error handling
+
+### 🏗️ **Architecture & Components**
+
+#### **Database Schema**
+```sql
+-- Core media storage with comprehensive metadata
+media_library: {
+  id: uuid,
+  user_id: uuid,                    -- Document owner
+  file_name: text,                  -- Original filename
+  display_name: text,               -- User-friendly display name
+  file_type: text,                  -- MIME type
+  file_size: bigint,                -- Size in bytes
+  storage_path: text,               -- Supabase storage path
+  bucket: text,                     -- Storage bucket ('media-library')
+  category: text,                   -- Document category
+  description: text,                -- User description
+  tags: text[],                     -- Searchable tags
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed',
+  assigned_agents_count: integer,   -- Number of agents using this document
+  chunk_count: integer,             -- Number of processed chunks
+  file_url: text,                   -- Cached signed URL
+  is_archived: boolean,             -- Archive status
+  created_at: timestamptz,
+  updated_at: timestamptz
+}
+
+-- Agent-document assignments for training data
+agent_media_assignments: {
+  id: uuid,
+  agent_id: uuid,                   -- Assigned agent
+  media_id: uuid,                   -- Media library document
+  assignment_type: 'training' | 'reference' | 'context',
+  assigned_by_user_id: uuid,        -- User who made assignment
+  created_at: timestamptz
+}
+
+-- Document processing audit trail
+media_processing_logs: {
+  id: uuid,
+  media_id: uuid,                   -- Processed document
+  processing_step: text,            -- Processing stage
+  status: 'started' | 'completed' | 'failed',
+  details: jsonb,                   -- Processing details and results
+  created_at: timestamptz
+}
+
+-- Organized document categories
+media_categories: {
+  id: uuid,
+  name: text,                       -- Category name
+  description: text,                -- Category description
+  icon_name: text,                  -- Lucide icon name
+  color: text,                      -- UI color theme
+  is_default: boolean,              -- System default category
+  created_at: timestamptz
+}
+```
+
+#### **Storage Architecture**
+- **Private Supabase Bucket**: `media-library` bucket with user-scoped folder structure
+- **Path Organization**: `{user_id}/{sanitized_filename}` for secure, organized storage
+- **Access Control**: Row Level Security (RLS) ensures users only access their own documents
+- **Signed URLs**: Server-side generation for secure, time-limited document access
+
+### 🔧 **API Integration - media-library-api**
+
+The `media-library-api` Edge Function provides comprehensive document management capabilities:
+
+#### **Core Actions**
+```typescript
+// Upload new documents
+POST /functions/v1/media-library-api
+{
+  "action": "upload",
+  "file_name": "document.pdf",
+  "file_type": "application/pdf",
+  "file_size": 1024000,
+  "category": "general",
+  "description": "Important company document"
+}
+
+// List user's documents with filtering
+POST /functions/v1/media-library-api
+{
+  "action": "list_documents",
+  "category": "avatars",           // Optional filter
+  "sort_by": "created_at",
+  "sort_order": "desc",
+  "include_archived": false
+}
+
+// Process documents for agent training
+POST /functions/v1/media-library-api
+{
+  "action": "process",
+  "document_id": "uuid",
+  "agent_id": "uuid"              // Optional for immediate assignment
+}
+
+// Generate secure signed URLs
+POST /functions/v1/media-library-api
+{
+  "action": "get_signed_url",
+  "document_id": "uuid",
+  "expiry_seconds": 31536000      // 1 year for avatars, shorter for documents
+}
+
+// Assign documents to agents
+POST /functions/v1/media-library-api
+{
+  "action": "assign_to_agent",
+  "document_id": "uuid",
+  "agent_id": "uuid",
+  "assignment_type": "training"
+}
+
+// Get available categories
+POST /functions/v1/media-library-api
+{
+  "action": "get_categories"
+}
+```
+
+#### **Security Features**
+- **Service Role Authentication**: Bypasses RLS for secure server-side operations
+- **Filename Sanitization**: Prevents path traversal and injection attacks
+- **File Type Validation**: Ensures only supported formats are uploaded
+- **Size Limits**: 50MB maximum file size with configurable limits
+- **CORS Support**: Proper cross-origin handling for frontend integration
+
+### 🤖 **MCP Integration - media-library-mcp**
+
+The `media-library-mcp` Edge Function provides specialized MCP tools for agent document interaction:
+
+#### **Available MCP Tools**
+```typescript
+// Search for documents in the media library
+{
+  "name": "search_documents",
+  "description": "Search for documents in the media library by content, filename, or metadata",
+  "parameters": {
+    "query": { "type": "string", "description": "Search query or keywords" },
+    "category": { "type": "string", "description": "Optional category filter" },
+    "file_type": { "type": "string", "description": "Optional file type filter (pdf, docx, etc.)" },
+    "limit": { "type": "number", "description": "Maximum number of results (default: 10)" }
+  }
+}
+
+// Get detailed information about a specific document
+{
+  "name": "review_document",
+  "description": "Get comprehensive information about a specific document including metadata and content summary",
+  "parameters": {
+    "document_id": { "type": "string", "description": "UUID of the document to review" }
+  }
+}
+
+// List all documents assigned to the current agent
+{
+  "name": "list_assigned_documents",
+  "description": "List all documents that have been assigned to this agent for training or reference",
+  "parameters": {
+    "assignment_type": { "type": "string", "description": "Optional filter: training, reference, or context" }
+  }
+}
+
+// Get document content for analysis
+{
+  "name": "get_document_content",
+  "description": "Retrieve the processed content of a document for analysis or summarization",
+  "parameters": {
+    "document_id": { "type": "string", "description": "UUID of the document" },
+    "include_metadata": { "type": "boolean", "description": "Include file metadata in response" }
+  }
+}
+```
+
+#### **MCP Tool Usage Examples**
+```typescript
+// Agent searching for relevant documents
+const searchResult = await agent.callTool("search_documents", {
+  query: "quarterly financial report",
+  category: "reports",
+  limit: 5
+});
+
+// Agent reviewing a specific document
+const documentDetails = await agent.callTool("review_document", {
+  document_id: "550e8400-e29b-41d4-a716-446655440000"
+});
+
+// Agent listing its assigned training materials
+const assignedDocs = await agent.callTool("list_assigned_documents", {
+  assignment_type: "training"
+});
+```
+
+### 🎨 **User Interface Components**
+
+#### **MediaLibraryPage.tsx** - Main Interface
+- **Statistics Dashboard**: Visual cards showing document counts by status and type
+- **Upload Modal**: Drag-and-drop interface with progress tracking
+- **Document Grid/List**: Responsive display with search, filter, and sort capabilities
+- **Three-Dot Actions**: View, download, and delete operations for each document
+
+#### **MediaLibrarySelector.tsx** - Embeddable Selector
+- **Modal Integration**: Used within agent configuration modals
+- **Document Browser**: Browse and select existing library documents
+- **Upload Integration**: Upload new documents directly to library
+- **Category Filtering**: Organize documents by type and purpose
+
+#### **WhatIKnowModal.tsx** - Agent Knowledge Integration
+- **Media Assignment**: Assign documents from library to agents
+- **Upload Workflow**: New documents automatically stored in media library
+- **Knowledge Graph Options**: Submit documents to connected knowledge systems
+
+### 📊 **File Support & Processing**
+
+#### **Supported File Types**
+- **Documents**: PDF, Word (.docx), PowerPoint (.pptx), text files (.txt, .md)
+- **Images**: JPEG, PNG, GIF, WebP, SVG (including avatar images)
+- **Audio**: MP3, WAV, M4A, OGG
+- **Video**: MP4, WebM, AVI, MOV
+- **Archives**: ZIP (for document collections)
+
+#### **Processing Pipeline**
+```typescript
+// Document processing flow
+1. Upload → Validation → Storage → Database Record
+2. Optional Processing → Content Extraction → Chunking
+3. Agent Assignment → Training Data Integration
+4. Vector Embedding → Knowledge Graph Submission
+5. Status Updates → Completion Notification
+```
+
+#### **Processing Status Tracking**
+- **pending**: Document uploaded, awaiting processing
+- **processing**: Currently being processed for agent training
+- **completed**: Successfully processed and available to agents
+- **failed**: Processing failed, manual intervention may be required
+
+### 🔄 **Integration Workflows**
+
+#### **Document Upload & Assignment**
+```typescript
+// 1. User uploads document via Media Library page
+const uploadResponse = await fetch('/functions/v1/media-library-api', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${token}` },
+  body: JSON.stringify({
+    action: 'upload',
+    file_name: 'company-handbook.pdf',
+    file_type: 'application/pdf',
+    file_size: 2048000,
+    category: 'policies',
+    description: 'Employee handbook with company policies'
+  })
+});
+
+// 2. Document automatically stored in user's media library
+// 3. User assigns document to agent via WhatIKnowModal
+const assignResponse = await fetch('/functions/v1/media-library-api', {
+  method: 'POST',
+  body: JSON.stringify({
+    action: 'assign_to_agent',
+    document_id: uploadResponse.data.document_id,
+    agent_id: 'agent-uuid',
+    assignment_type: 'training'
+  })
+});
+
+// 4. Document processed and becomes available to agent via MCP tools
+```
+
+#### **Agent Document Interaction**
+```typescript
+// Agent can now search and interact with assigned documents
+const conversation = [
+  { role: 'user', content: 'What does our handbook say about vacation policy?' },
+  // Agent automatically uses search_documents MCP tool
+  { role: 'assistant', content: 'Let me search our company handbook...' },
+  // Tool call: search_documents({ query: "vacation policy", category: "policies" })
+  { role: 'assistant', content: 'According to the company handbook, employees accrue...' }
+];
+```
+
+### 🔒 **Security & Privacy**
+
+#### **Access Control**
+- **User Isolation**: RLS policies ensure users only access their own documents
+- **Agent Permissions**: Documents only accessible to explicitly assigned agents
+- **Signed URL Security**: Time-limited, server-generated URLs for document access
+- **Service Role Operations**: Secure server-side operations bypass client-side limitations
+
+#### **Data Protection**
+- **Private Storage**: All documents stored in private Supabase storage bucket
+- **Path Sanitization**: Filenames sanitized to prevent security vulnerabilities
+- **Audit Trails**: Comprehensive logging of all document operations
+- **Encryption**: Documents encrypted at rest and in transit
+
+### 🚀 **Use Cases & Examples**
+
+#### **Standard Operating Procedures (SOPs)**
+```typescript
+// Upload company SOPs
+1. HR uploads employee onboarding procedures
+2. Assigns SOPs to customer service agents
+3. Agents automatically reference procedures during customer interactions
+4. Documents searchable via MCP tools during conversations
+```
+
+#### **Knowledge Base Management**
+```typescript
+// Technical documentation workflow
+1. Engineering uploads API documentation and technical guides
+2. Categorizes by system and complexity level
+3. Assigns to technical support agents
+4. Agents provide accurate, document-backed technical support
+```
+
+#### **Training Material Distribution**
+```typescript
+// Agent training workflow
+1. Upload training materials and best practices
+2. Assign to new agent instances for onboarding
+3. Agents learn from materials automatically
+4. Update documents to improve agent knowledge over time
+```
+
+### 📈 **Performance & Monitoring**
+
+#### **System Metrics**
+- **Upload Performance**: Track file upload speeds and success rates
+- **Processing Times**: Monitor document processing duration and bottlenecks
+- **Agent Usage**: Analyze which documents agents access most frequently
+- **Storage Utilization**: Track storage usage and optimize for cost efficiency
+
+#### **Error Handling & Recovery**
+- **Upload Failures**: Automatic retry with exponential backoff
+- **Processing Errors**: Detailed error logging with recovery suggestions
+- **Access Issues**: Graceful degradation when documents are unavailable
+- **Quota Management**: Intelligent handling of storage and processing limits
+
+### 🔧 **Developer Integration**
+
+#### **Frontend Integration**
+```typescript
+// Using the Media Library in React components
+import { useMediaLibrary } from '@/hooks/useMediaLibrary';
+
+const MyComponent = () => {
+  const { documents, uploadDocument, assignToAgent } = useMediaLibrary();
+  
+  const handleUpload = async (file: File) => {
+    const result = await uploadDocument({
+      file,
+      category: 'training',
+      description: 'Training material for agent'
+    });
+    
+    if (result.success) {
+      await assignToAgent(result.document_id, agentId);
+    }
+  };
+};
+```
+
+#### **Backend Integration**
+```typescript
+// Accessing Media Library from Edge Functions
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(url, serviceRoleKey);
+
+// Query user's documents
+const { data: documents } = await supabase
+  .from('media_library')
+  .select('*')
+  .eq('user_id', userId)
+  .eq('processing_status', 'completed');
+
+// Generate signed URL for document access
+const { data: signedUrl } = await supabase.storage
+  .from('media-library')
+  .createSignedUrl(storagePath, 3600); // 1 hour expiry
+```
+
+The Media Library System represents a fundamental evolution in how AI agents interact with organizational knowledge, transforming document management from simple file storage into an intelligent, integrated knowledge ecosystem that enhances agent capabilities and user productivity.
 
 ### Gmail Integration Example
 

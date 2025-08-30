@@ -215,11 +215,10 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold mb-2">Agent Behavior</h2>
-        <p className="text-muted-foreground text-sm">
-          Configure how your agent thinks, reasons, and responds.
+        <h3 className="text-lg font-medium">Behavior & Instructions</h3>
+        <p className="text-sm text-muted-foreground">
+          Configure advanced reasoning, system instructions, and assistant behavior.
         </p>
       </div>
 

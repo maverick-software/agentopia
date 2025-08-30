@@ -13,15 +13,27 @@ import {
   Database, 
   Settings,
   X,
-  ChevronRight
+  ChevronRight,
+  Calendar,
+  Image,
+  MessageSquare,
+  Wrench,
+  Mail,
+  Plug,
+  FolderOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Import existing modal content components (we'll create these)
+// Import tab content components
+import { GeneralTab } from './agent-settings/GeneralTab';
+import { ScheduleTab } from './agent-settings/ScheduleTab';
 import { IdentityTab } from './agent-settings/IdentityTab';
 import { BehaviorTab } from './agent-settings/BehaviorTab';
 import { MemoryTab } from './agent-settings/MemoryTab';
-import { AdvancedReasoningTab } from './agent-settings/AdvancedReasoningTab';
+import { ToolsTab } from './agent-settings/ToolsTab';
+import { ChannelsTab } from './agent-settings/ChannelsTab';
+import { IntegrationsTab } from './agent-settings/IntegrationsTab';
+import { SourcesTab } from './agent-settings/SourcesTab';
 
 interface AgentSettingsModalProps {
   isOpen: boolean;
@@ -35,10 +47,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'identity' | 'behavior' | 'memory' | 'reasoning';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources';
 }
 
-type TabId = 'identity' | 'behavior' | 'memory' | 'reasoning';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources';
 
 interface TabConfig {
   id: TabId;
@@ -49,28 +61,58 @@ interface TabConfig {
 
 const TABS: TabConfig[] = [
   {
+    id: 'general',
+    label: 'General',
+    icon: Settings,
+    description: 'Name, role, and description'
+  },
+  {
+    id: 'schedule',
+    label: 'Schedule',
+    icon: Calendar,
+    description: 'Tasks and automation'
+  },
+  {
     id: 'identity',
     label: 'Identity',
-    icon: User,
-    description: 'Name, personality, and avatar'
+    icon: Image,
+    description: 'Avatar, model, and personality'
   },
   {
     id: 'behavior',
     label: 'Behavior',
     icon: Brain,
-    description: 'Reasoning style and model settings'
+    description: 'Reasoning and instructions'
   },
   {
     id: 'memory',
     label: 'Memory',
     icon: Database,
-    description: 'Knowledge sources and context'
+    description: 'Context, knowledge, and documents'
   },
   {
-    id: 'reasoning',
-    label: 'Advanced Reasoning',
-    icon: Settings,
-    description: 'Enhanced reasoning capabilities'
+    id: 'tools',
+    label: 'Tools',
+    icon: Wrench,
+    description: 'Voice, web search, and creation'
+  },
+  {
+    id: 'channels',
+    label: 'Channels',
+    icon: MessageSquare,
+    description: 'Email, SMS, and messaging'
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    icon: Plug,
+    description: 'Third-party connections'
+  },
+  {
+    id: 'sources',
+    label: 'Sources',
+    icon: FolderOpen,
+    description: 'Cloud storage connections'
   }
 ];
 
@@ -80,7 +122,7 @@ export function AgentSettingsModal({
   agentId,
   agentData,
   onAgentUpdated,
-  initialTab = 'identity'
+  initialTab = 'general'
 }: AgentSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
@@ -103,16 +145,26 @@ export function AgentSettingsModal({
     };
 
     switch (activeTab) {
+      case 'general':
+        return <GeneralTab {...commonProps} />;
+      case 'schedule':
+        return <ScheduleTab {...commonProps} />;
       case 'identity':
         return <IdentityTab {...commonProps} />;
       case 'behavior':
         return <BehaviorTab {...commonProps} />;
       case 'memory':
         return <MemoryTab {...commonProps} />;
-      case 'reasoning':
-        return <AdvancedReasoningTab {...commonProps} />;
+      case 'tools':
+        return <ToolsTab {...commonProps} />;
+      case 'channels':
+        return <ChannelsTab {...commonProps} />;
+      case 'integrations':
+        return <IntegrationsTab {...commonProps} />;
+      case 'sources':
+        return <SourcesTab {...commonProps} />;
       default:
-        return <IdentityTab {...commonProps} />;
+        return <GeneralTab {...commonProps} />;
     }
   };
 
@@ -157,15 +209,7 @@ export function AgentSettingsModal({
                     >
                       <div className="flex items-center space-x-3">
                         <Icon className="h-4 w-4" />
-                        <div>
-                          <div className="font-medium text-sm">{tab.label}</div>
-                          <div className={cn(
-                            "text-xs",
-                            isActive ? "text-primary-foreground/80" : "text-muted-foreground"
-                          )}>
-                            {tab.description}
-                          </div>
-                        </div>
+                        <div className="font-medium text-sm">{tab.label}</div>
                       </div>
                       {isActive && (
                         <ChevronRight className="h-4 w-4" />

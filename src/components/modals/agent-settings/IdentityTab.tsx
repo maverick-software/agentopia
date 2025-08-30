@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { GenerateAvatarModal } from '../GenerateAvatarModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getModelsByProvider } from '@/lib/llm/modelRegistry';
 import { toast } from 'react-hot-toast';
 
@@ -243,122 +244,142 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold mb-2">Agent Identity</h2>
-        <p className="text-muted-foreground text-sm">
-          Configure your agent's name, personality, and appearance.
+        <h3 className="text-lg font-medium">Identity & Appearance</h3>
+        <p className="text-sm text-muted-foreground">
+          Configure your agent's avatar, LLM model, and personality type.
         </p>
       </div>
 
-      {/* Avatar Section */}
-      <div className="space-y-4">
-        <Label className="text-base font-medium">Avatar</Label>
-        <div className="flex items-center space-x-6">
-          <Avatar className="h-20 w-20">
-            <AvatarImage src={avatarUrl || undefined} alt={name || 'Agent'} />
-            <AvatarFallback className="text-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-              {name?.charAt(0)?.toUpperCase() || 'A'}
-            </AvatarFallback>
-          </Avatar>
-          
+      <Card>
+        <CardHeader>
+          <CardTitle>Avatar & Image Generation</CardTitle>
+          <CardDescription>
+            Upload a custom avatar or generate one using AI.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center space-x-6">
+            <Avatar className="h-20 w-20">
+              <AvatarImage src={avatarUrl || undefined} alt={name || 'Agent'} />
+              <AvatarFallback className="text-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                {name?.charAt(0)?.toUpperCase() || 'A'}
+              </AvatarFallback>
+            </Avatar>
+            
+            <div className="space-y-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={uploading}>
+                    {uploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-4 w-4 mr-2" />
+                        Change Avatar
+                      </>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/*';
+                      input.onchange = handleFileUpload;
+                      input.click();
+                    }}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Image
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowGenerateModal(true)}>
+                    <ImageIcon className="h-4 w-4 mr-2" />
+                    Generate with AI
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <p className="text-xs text-muted-foreground">
+                PNG, JPEG, WebP, GIF, or SVG up to 50MB
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>LLM Model Selection</CardTitle>
+          <CardDescription>
+            Choose the language model that powers your agent's responses.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={uploading}>
-                  {uploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Camera className="h-4 w-4 mr-2" />
-                      Change Avatar
-                    </>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.onchange = handleFileUpload;
-                    input.click();
-                  }}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Image
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowGenerateModal(true)}>
-                  <ImageIcon className="h-4 w-4 mr-2" />
-                  Generate with AI
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Label htmlFor="model-select">Language Model</Label>
+            <Select defaultValue="gpt-4">
+              <SelectTrigger className="max-w-md">
+                <SelectValue placeholder="Select a model..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
+                <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
+                <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
-              PNG, JPEG, WebP, GIF, or SVG up to 50MB
+              Different models have varying capabilities and response styles.
             </p>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Basic Information */}
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-base font-medium">Agent Name</Label>
-          <Input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Enter agent name..."
-            className="max-w-md"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="description" className="text-base font-medium">Description</Label>
-          <Textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe what this agent does..."
-            rows={3}
-            className="max-w-md"
-          />
-        </div>
-      </div>
-
-      {/* Personality Selection */}
-      <div className="space-y-4">
-        <Label className="text-base font-medium">Personality</Label>
-        <Select value={selectedPersonality} onValueChange={setSelectedPersonality}>
-          <SelectTrigger className="max-w-md">
-            <SelectValue>
-              <div className="flex items-center space-x-2">
-                <span>{getSelectedPersonality()?.icon}</span>
-                <span>{getSelectedPersonality()?.name}</span>
-              </div>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {PERSONALITY_OPTIONS.map((personality) => (
-              <SelectItem key={personality.id} value={personality.id}>
-                <div className="flex items-center space-x-3">
-                  <span className="text-lg">{personality.icon}</span>
-                  <div>
-                    <div className="font-medium">{personality.name}</div>
-                    <div className="text-xs text-muted-foreground">{personality.description}</div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Personality Type (MBTI)</CardTitle>
+          <CardDescription>
+            Define your agent's personality traits and communication style.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Personality Style</Label>
+            <Select value={selectedPersonality} onValueChange={setSelectedPersonality}>
+              <SelectTrigger className="max-w-md">
+                <SelectValue>
+                  <div className="flex items-center space-x-2">
+                    <span>{getSelectedPersonality()?.icon}</span>
+                    <span>{getSelectedPersonality()?.name}</span>
                   </div>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {PERSONALITY_OPTIONS.map((personality) => (
+                  <SelectItem key={personality.id} value={personality.id}>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-lg">{personality.icon}</span>
+                      <div>
+                        <div className="font-medium">{personality.name}</div>
+                        <div className="text-xs text-muted-foreground">{personality.description}</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              This affects how your agent communicates and approaches problems.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Save Button */}
       <div className="flex justify-end pt-4 border-t">
