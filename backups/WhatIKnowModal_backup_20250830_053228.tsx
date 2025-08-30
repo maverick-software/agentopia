@@ -20,6 +20,9 @@ import {
   Database,
   Brain,
   Plus,
+  Upload,
+  X,
+  File,
   Lightbulb,
   MessageSquare,
   Library,
@@ -67,7 +70,26 @@ const MEMORY_PREFERENCES = [
   }
 ];
 
+const SUPPORTED_FILE_TYPES = {
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/msword': '.doc',
+  'text/plain': '.txt',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx'
+};
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+interface UploadedDocument {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  status: 'uploading' | 'processing' | 'completed' | 'error';
+  progress: number;
+  url?: string;
+}
 
 export function WhatIKnowModal({
   isOpen,
@@ -96,7 +118,9 @@ export function WhatIKnowModal({
   const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
   const [graphEnabled, setGraphEnabled] = useState<boolean>(false); // default OFF until loaded
   
-
+  // Document upload state
+  const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   // Datastore selection modals
   const [showVectorSelection, setShowVectorSelection] = useState(false);
@@ -218,7 +242,77 @@ export function WhatIKnowModal({
     }
   }, [user, agentId, supabase]);
 
+  const loadExistingDocuments = useCallback(async () => {
+    if (!user || !agentData?.name) return;
+    
+    try {
+      // Get the same path structure used in upload
+      const userName = (user?.user_metadata?.full_name || user?.email || user?.id || 'unknown_user')
+        .replace(/[^a-zA-Z0-9._-]/g, '_'); // Sanitize for file paths
+      const agentName = (agentData?.name || 'unknown_agent')
+        .replace(/[^a-zA-Z0-9._-]/g, '_'); // Sanitize for file paths
+      const folderPath = `${userName}/${agentName}`;
+      
+      console.log('Loading documents from path:', folderPath);
+      
+      // List files in the user/agent folder
+      const { data: files, error } = await supabase.storage
+        .from('datastore-documents')
+        .list(folderPath, {
+          limit: 100,
+          sortBy: { column: 'created_at', order: 'desc' }
+        });
 
+      if (error) {
+        console.error('Error loading existing documents:', error);
+        // Try listing from root if specific path fails
+        const { data: rootFiles, error: rootError } = await supabase.storage
+          .from('datastore-documents')
+          .list('', { limit: 100 });
+        
+        if (!rootError && rootFiles) {
+          console.log('Available folders in root:', rootFiles.map(f => f.name));
+        }
+        return;
+      }
+
+      console.log('Found files:', files);
+
+      if (files && files.length > 0) {
+        // Convert storage files to UploadedDocument format
+        const existingDocuments: UploadedDocument[] = files
+          .filter(file => file.name && !file.name.endsWith('/')) // Filter out folders
+          .map(file => {
+            const documentId = `existing_${file.name}_${Date.now()}`;
+            return {
+              id: documentId,
+              name: file.name,
+              type: file.metadata?.mimetype || 'application/octet-stream',
+              size: file.metadata?.size || 0,
+              status: 'completed' as const,
+              progress: 100,
+              url: supabase.storage
+                .from('datastore-documents')
+                .getPublicUrl(`${folderPath}/${file.name}`).data.publicUrl
+            };
+          });
+
+        console.log('Loaded existing documents:', existingDocuments);
+        setUploadedDocuments(existingDocuments);
+      } else {
+        console.log('No files found in folder:', folderPath);
+      }
+    } catch (error: any) {
+      console.error('Error loading existing documents:', error);
+    }
+  }, [user, agentData?.name, supabase]);
+
+  // Load existing documents when modal opens
+  useEffect(() => {
+    if (isOpen && user && agentData?.name) {
+      loadExistingDocuments();
+    }
+  }, [isOpen, user, agentData?.name, loadExistingDocuments]);
 
   const handleSelectVectorDatastore = () => {
     const vectorDatastores = getDatastoresByType('pinecone');
@@ -443,7 +537,181 @@ export function WhatIKnowModal({
     return JSON.stringify(currentConnections.sort()) !== JSON.stringify(connectedDatastores.sort());
   };
 
+  // Document upload handlers
+  const handleFileUpload = useCallback(async (files: FileList) => {
+    const validFiles = Array.from(files).filter(file => {
+      const isValidType = Object.keys(SUPPORTED_FILE_TYPES).includes(file.type);
+      const isValidSize = file.size <= MAX_FILE_SIZE;
+      
+      if (!isValidType) {
+        toast.error(`File ${file.name} has unsupported type: ${file.type}`);
+        return false;
+      }
+      
+      if (!isValidSize) {
+        toast.error(`File ${file.name} exceeds size limit: ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(1)}MB`);
+        return false;
+      }
+      
+      return true;
+    });
 
+    for (const file of validFiles) {
+      const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Add to uploaded documents state
+      const newDocument: UploadedDocument = {
+        id: documentId,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        status: 'uploading',
+        progress: 0
+      };
+
+      setUploadedDocuments(prev => [...prev, newDocument]);
+
+      try {
+        // Update progress
+        const updateProgress = (progress: number) => {
+          setUploadedDocuments(prev => 
+            prev.map(doc => 
+              doc.id === documentId 
+                ? { ...doc, progress, status: progress < 100 ? 'uploading' : 'processing' }
+                : doc
+            )
+          );
+        };
+
+        // Upload file to Supabase Storage - bucket_name/user_name/agent_name/file_name.pdf
+        const userName = (user?.user_metadata?.full_name || user?.email || user?.id || 'unknown_user')
+          .replace(/[^a-zA-Z0-9._-]/g, '_'); // Sanitize for file paths
+        const agentName = (agentData?.name || 'unknown_agent')
+          .replace(/[^a-zA-Z0-9._-]/g, '_'); // Sanitize for file paths
+        const filePath = `${userName}/${agentName}/${file.name}`;
+        
+        updateProgress(25);
+        
+        const { error: uploadError } = await supabase.storage
+          .from('datastore-documents')
+          .upload(filePath, file, {
+            contentType: file.type,
+            duplex: 'half'
+          });
+
+        if (uploadError) throw uploadError;
+
+        updateProgress(50);
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('datastore-documents')
+          .getPublicUrl(filePath);
+
+        updateProgress(75);
+
+        // Process document
+        try {
+          const { data: processResult, error: processError } = await supabase.functions.invoke(
+            'process-datastore-document',
+            {
+              body: {
+                document_id: documentId,
+                agent_id: agentId,
+                file_url: urlData.publicUrl,
+                file_name: file.name,
+                file_type: file.type
+              }
+            }
+          );
+
+          if (processError) {
+            console.warn('Document processing error:', processError);
+          } else {
+            console.log('Document processed successfully:', processResult);
+          }
+        } catch (processError) {
+          console.warn('Failed to process document:', processError);
+        }
+
+        updateProgress(100);
+
+        // Update document status to completed
+        setUploadedDocuments(prev => 
+          prev.map(doc => 
+            doc.id === documentId 
+              ? { ...doc, status: 'completed', url: urlData.publicUrl }
+              : doc
+          )
+        );
+
+        toast.success(`Document "${file.name}" uploaded successfully`);
+
+      } catch (error) {
+        console.error('Error uploading document:', error);
+        setUploadedDocuments(prev => 
+          prev.map(doc => 
+            doc.id === documentId 
+              ? { ...doc, status: 'error', progress: 0 }
+              : doc
+          )
+        );
+        toast.error(`Failed to upload "${file.name}"`);
+      }
+    }
+  }, [user?.id, agentId, supabase]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    if (e.dataTransfer.files) {
+      handleFileUpload(e.dataTransfer.files);
+    }
+  }, [handleFileUpload]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const removeDocument = (documentId: string) => {
+    setUploadedDocuments(prev => prev.filter(doc => doc.id !== documentId));
+  };
+
+  const getStatusIcon = (status: UploadedDocument['status']) => {
+    switch (status) {
+      case 'uploading':
+      case 'processing':
+        return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+      case 'completed':
+        return <Check className="h-4 w-4 text-green-500" />;
+      case 'error':
+        return <X className="h-4 w-4 text-destructive" />;
+      default:
+        return <File className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const getStatusText = (status: UploadedDocument['status']) => {
+    switch (status) {
+      case 'uploading':
+        return 'Uploading...';
+      case 'processing':
+        return 'Processing...';
+      case 'completed':
+        return 'Ready';
+      case 'error':
+        return 'Error';
+      default:
+        return 'Unknown';
+    }
+  };
 
   return (
     <>
@@ -703,7 +971,98 @@ export function WhatIKnowModal({
               </Card>
             </div>
 
+            {/* Document Upload Section */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">
+                Upload documents directly to this agent
+              </Label>
+              
+              {/* Upload Area */}
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
+                  isDragOver 
+                    ? 'border-primary bg-primary/5' 
+                    : 'border-muted-foreground/25 hover:border-primary/50'
+                }`}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+              >
+                <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm font-medium mb-1">
+                  Drop files here or click to browse
+                </p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Supports: .pdf, .docx, .txt, .ppt, .pptx (max 10MB)
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.accept = Object.values(SUPPORTED_FILE_TYPES).join(',');
+                    input.onchange = (e) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (files) handleFileUpload(files);
+                    };
+                    input.click();
+                  }}
+                >
+                  Browse Files
+                </Button>
+              </div>
 
+              {/* Uploaded Documents List */}
+              {uploadedDocuments.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Uploaded Documents</Label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {uploadedDocuments.map((doc) => (
+                      <div key={doc.id} className="flex items-center justify-between p-2 border border-border rounded-lg bg-card">
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          {getStatusIcon(doc.status)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{doc.name}</p>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-xs text-muted-foreground">
+                                {(doc.size / 1024).toFixed(1)} KB • {getStatusText(doc.status)}
+                              </p>
+                              {(doc.status === 'uploading' || doc.status === 'processing') && (
+                                <Progress value={doc.progress} className="w-12 h-1" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeDocument(doc.id)}
+                          disabled={doc.status === 'uploading' || doc.status === 'processing'}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Info Note */}
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Note:</strong> Documents will be processed and stored in your connected datastores. 
+                  Text will be extracted, chunked, and embedded for semantic search.
+                  {connectedDatastores.length > 0 ? (
+                    <> Connected to {connectedDatastores.length} datastore{connectedDatastores.length !== 1 ? 's' : ''}.</>
+                  ) : (
+                    <> No datastores connected - documents will be uploaded but not processed until you connect a Vector or Knowledge Graph datastore above.</>
+                  )}
+                </p>
+              </div>
+            </div>
 
             {/* Summary */}
             {(connectedDatastores.length > 0 || memoryPreferences.length > 0) && (

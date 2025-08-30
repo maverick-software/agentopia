@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-
+import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
 import { GenerateAvatarModal } from './GenerateAvatarModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -91,7 +91,7 @@ export function AboutMeModal({
   // UI state
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
-
+  const [showImageEditor, setShowImageEditor] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [model, setModel] = useState<string>('gpt-4o-mini');
@@ -105,7 +105,7 @@ export function AboutMeModal({
       setSelectedPersonality(agentData.personality || '');
       setAvatarUrl(agentData.avatar_url || null);
       setSaved(false);
-
+      setShowImageEditor(false);
       // Load agent llm preferences (wrap await in IIFE)
       (async () => {
         try {
@@ -185,7 +185,10 @@ export function AboutMeModal({
     }
   }, [agentId, name, description, selectedPersonality, avatarUrl, supabase, user, onAgentUpdated]);
 
-
+  const handleAvatarUpdate = useCallback((newAvatarUrl: string | null) => {
+    setAvatarUrl(newAvatarUrl);
+    setShowImageEditor(false);
+  }, []);
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files || event.target.files.length === 0 || !agentId || !user) {
@@ -193,89 +196,48 @@ export function AboutMeModal({
     }
 
     const file = event.target.files[0];
-    const maxSize = 50 * 1024 * 1024; // 50MB (Media Library limit)
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
 
     if (!allowedTypes.includes(file.type)) {
-      toast.error('Please upload a PNG, JPEG, WebP, GIF, or SVG image');
+      toast.error('Please upload a PNG, JPEG, or WebP image');
       return;
     }
 
     if (file.size > maxSize) {
-      toast.error('Image must be smaller than 50MB');
+      toast.error('Image must be smaller than 5MB');
       return;
     }
 
     setUploading(true);
 
     try {
-      // Upload to Media Library via API
-      const uploadResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'upload',
-          file_name: `avatar-${agentId}-${Date.now()}.${file.name.split('.').pop()}`,
-          file_type: file.type,
-          file_size: file.size,
-          category: 'avatars',
-          description: `Avatar for agent ${agentData?.name || agentId}`
-        })
-      });
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${agentId}-${Date.now()}.${fileExt}`;
 
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
-      }
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('agent-avatars')
+        .upload(fileName, file);
 
-      const uploadData = await uploadResponse.json();
+      if (uploadError) throw uploadError;
 
-      // Upload actual file to storage
-      const { error: storageError } = await supabase.storage
-        .from(uploadData.data.bucket)
-        .upload(uploadData.data.storage_path, file, {
-          contentType: file.type,
-          duplex: 'half'
-        });
-
-      if (storageError) {
-        throw new Error(`Storage upload failed: ${storageError.message}`);
-      }
-
-      // Get signed URL for the uploaded avatar
-      const urlResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'get_signed_url',
-          document_id: uploadData.data.media_id,
-          expiry_seconds: 31536000 // 1 year for avatars
-        })
-      });
-
-      if (!urlResponse.ok) {
-        throw new Error(`Failed to get avatar URL: ${urlResponse.status}`);
-      }
-
-      const urlData = await urlResponse.json();
-      const avatarUrl = urlData.data.signed_url;
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('agent-avatars')
+        .getPublicUrl(fileName);
 
       // Update agent record
       const { error: updateError } = await supabase
         .from('agents')
-        .update({ avatar_url: avatarUrl })
+        .update({ avatar_url: publicUrl })
         .eq('id', agentId)
         .eq('user_id', user.id);
 
       if (updateError) throw updateError;
 
-      setAvatarUrl(avatarUrl);
-      toast.success('Avatar uploaded to Media Library! 📸');
+      setAvatarUrl(publicUrl);
+      toast.success('Avatar uploaded successfully! 📸');
       
     } catch (error: any) {
       console.error('Error uploading avatar:', error);
@@ -285,7 +247,7 @@ export function AboutMeModal({
       // Reset the input value so the same file can be selected again
       event.target.value = '';
     }
-  }, [agentId, user, supabase, agentData?.name]);
+  }, [agentId, user, supabase]);
 
   const handleGeneratedAvatar = useCallback((newAvatarUrl: string) => {
     setAvatarUrl(newAvatarUrl);

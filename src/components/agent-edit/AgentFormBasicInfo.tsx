@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import type { Agent } from '@/types/index';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AgentProfileImageEditor } from './AgentProfileImageEditor';
+
 
 // Define personality templates structure (assuming it's passed)
 interface PersonalityTemplate {
@@ -54,14 +54,33 @@ export const AgentFormBasicInfo: React.FC<AgentFormBasicInfoProps> = ({
         <CardTitle>Basic Information</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Agent Profile Image Editor Integration */}
-        {agentData && agentData.id && (
-          <AgentProfileImageEditor 
-            agentId={agentData.id} 
-            currentAvatarUrl={agentData.avatar_url}
-            onAvatarUpdate={handleAvatarUpdate}
-          />
-        )}
+        {/* Avatar Display - Management moved to unified Agent Settings */}
+        <div className="flex items-center space-x-4 p-4 border rounded-lg bg-muted/30">
+          <div className="w-16 h-16">
+            {agentData?.avatar_url ? (
+              <img 
+                src={agentData.avatar_url} 
+                alt={agentData.name || 'Agent'}
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-lg font-medium">
+                  {agentData?.name?.charAt(0)?.toUpperCase() || 'A'}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            <h4 className="text-sm font-medium mb-1">Agent Avatar</h4>
+            <p className="text-xs text-muted-foreground mb-2">
+              Avatar management has moved to the unified Agent Settings in the chat interface.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Go to chat → brain icon → Identity to upload or generate avatars.
+            </p>
+          </div>
+        </div>
 
         {/* Agent Name */}
         <div className="space-y-1">

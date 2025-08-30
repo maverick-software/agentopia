@@ -16,7 +16,7 @@ import {
   Download,
   Eye,
   Trash2,
-  Edit,
+  MoreHorizontal,
   Tag,
   Calendar,
   FileType,
@@ -34,6 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -237,6 +238,17 @@ export function MediaLibraryPage() {
           } else {
             toast.warn(`${file.name} uploaded but processing failed: ${processData.error}`);
           }
+        } else {
+          // Handle process error
+          const errorText = await processResponse.text();
+          console.error('Process response error:', {
+            status: processResponse.status,
+            statusText: processResponse.statusText,
+            errorText,
+            fileName: file.name,
+            mediaId: uploadData.data.media_id
+          });
+          toast.warn(`${file.name} uploaded but processing failed: ${processResponse.status} ${processResponse.statusText}`);
         }
       }
 
@@ -250,6 +262,168 @@ export function MediaLibraryPage() {
       setUploading(false);
     }
   }, [user, selectedCategory, sortBy, sortOrder, supabase]);
+
+  const handleViewDocument = useCallback(async (file: MediaFile) => {
+    try {
+      console.log('Attempting to view document:', {
+        fileName: file.file_name,
+        storagePath: file.storage_path,
+        documentId: file.id
+      });
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error('No authenticated session');
+      }
+
+      // Get signed URL via Edge Function (uses service role)
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'get_signed_url',
+          document_id: file.id,
+          expiry_seconds: 3600 // 1 hour
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Signed URL response:', result);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get signed URL');
+      }
+      
+      if (!result.data?.signed_url) {
+        throw new Error('No signed URL returned');
+      }
+
+      console.log('Opening URL:', result.data.signed_url);
+      
+      // Open in new tab
+      window.open(result.data.signed_url, '_blank');
+    } catch (error: any) {
+      console.error('View document error:', error);
+      toast.error(`Failed to view document: ${error.message}`);
+    }
+  }, [supabase]);
+
+  const handleDownloadDocument = useCallback(async (file: MediaFile) => {
+    try {
+      console.log('Attempting to download document:', {
+        fileName: file.file_name,
+        storagePath: file.storage_path,
+        documentId: file.id
+      });
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error('No authenticated session');
+      }
+
+      // Get signed URL via Edge Function (uses service role)
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'get_signed_url',
+          document_id: file.id,
+          expiry_seconds: 300 // 5 minutes
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Download signed URL response:', result);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get signed URL');
+      }
+      
+      if (!result.data?.signed_url) {
+        throw new Error('No signed URL returned for download');
+      }
+
+      console.log('Downloading file via fetch to avoid navigation...');
+      
+      // Fetch the file as a blob to avoid any navigation
+      const fileResponse = await fetch(result.data.signed_url);
+      if (!fileResponse.ok) {
+        throw new Error(`Failed to fetch file: ${fileResponse.status} ${fileResponse.statusText}`);
+      }
+      
+      const blob = await fileResponse.blob();
+      
+      // Create blob URL and download
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = file.file_name;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      
+      // Trigger download
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      
+      toast.success(`Downloaded ${file.file_name}`);
+    } catch (error: any) {
+      console.error('Download document error:', error);
+      toast.error(`Failed to download document: ${error.message}`);
+    }
+  }, [supabase]);
+
+  const handleDeleteDocument = useCallback(async (file: MediaFile) => {
+    if (!confirm(`Are you sure you want to delete "${file.file_name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error('No authenticated session');
+      }
+
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('media-library')
+        .remove([file.storage_path]);
+
+      if (storageError) throw storageError;
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('media_library')
+        .delete()
+        .eq('id', file.id);
+
+      if (dbError) throw dbError;
+
+      toast.success(`Deleted ${file.file_name}`);
+      
+      // Reload media library
+      await loadMediaLibrary();
+    } catch (error: any) {
+      console.error('Delete document error:', error);
+      toast.error(`Failed to delete document: ${error.message}`);
+    }
+  }, [supabase, loadMediaLibrary]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -543,16 +717,31 @@ export function MediaLibraryPage() {
                       <span>{new Date(file.created_at).toLocaleDateString()}</span>
                     </div>
                     
-                    <div className="flex items-center gap-1 mt-3">
-                      <Button variant="ghost" size="sm" className="h-8 px-2">
-                        <Eye className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 px-2">
-                        <Download className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 px-2">
-                        <Edit className="h-3 w-3" />
-                      </Button>
+                    <div className="flex items-center justify-end mt-3">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 px-2">
+                            <MoreHorizontal className="h-3 w-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewDocument(file)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownloadDocument(file)}>
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteDocument(file)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardContent>
                 </Card>
@@ -585,17 +774,30 @@ export function MediaLibraryPage() {
                           {file.processing_status}
                         </Badge>
                         
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewDocument(file)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDownloadDocument(file)}>
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteDocument(file)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   </CardContent>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe, Upload, Image as ImageIcon, Edit, Database as DatabaseIcon, Settings } from 'lucide-react';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -16,7 +16,6 @@ import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
 import { AboutMeModal } from '../components/modals/AboutMeModal';
 import { HowIThinkModal } from '../components/modals/HowIThinkModal';
 import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
-import { AgentSettingsModal } from '../components/modals/AgentSettingsModal';
 import { EnhancedChannelsModalRefactored as EnhancedChannelsModal } from '../components/modals/channels/EnhancedChannelsModalRefactored';
 import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
 import { TaskManagerModal } from '../components/modals/TaskManagerModal';
@@ -31,8 +30,6 @@ import type { Message } from '../types';
 import type { Database } from '../types/database.types';
 import { useConversations } from '../hooks/useConversations';
 import { ToolCategorizer } from '../lib/toolCategorization';
-import { toast } from 'react-hot-toast';
-import { refreshAgentAvatarUrl } from '../lib/avatarUtils';
 
 function ConversationSelector({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
   const { items, createConversation } = useConversations(agentId, userId);
@@ -147,12 +144,6 @@ export function AgentChatPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
-  const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
-  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'identity' | 'behavior' | 'memory' | 'reasoning'>('identity');
-  
-  // File upload state
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(() => {
     return agentId ? localStorage.getItem(`agent_${agentId}_conversation_id`) : null;
   });
@@ -756,18 +747,6 @@ export function AgentChatPage() {
           return;
         }
         
-        // Refresh avatar URL if needed
-        console.log('Agent loaded with avatar URL:', data.avatar_url);
-        const refreshedAvatarUrl = await refreshAgentAvatarUrl(supabase, agentId, data.avatar_url);
-        if (refreshedAvatarUrl && refreshedAvatarUrl !== data.avatar_url) {
-          console.log('Avatar URL refreshed:', refreshedAvatarUrl);
-          data.avatar_url = refreshedAvatarUrl;
-        } else if (refreshedAvatarUrl) {
-          console.log('Avatar URL is still valid:', refreshedAvatarUrl);
-        } else {
-          console.log('No avatar URL available for agent:', agentId);
-        }
-
         setAgent(data);
       } catch (err) {
         if (!isMounted.current) return;
@@ -1084,146 +1063,6 @@ export function AgentChatPage() {
     }
   }, [handleSubmit]);
 
-  // File upload handler
-  const handleFileUpload = useCallback(async (files: FileList, uploadType: 'document' | 'image') => {
-    if (!user || !agent || files.length === 0) return;
-
-    setUploading(true);
-    const uploadedFiles: string[] = [];
-
-    try {
-      for (const file of Array.from(files)) {
-        const fileId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
-
-        // Validate file type and size
-        const maxSize = 50 * 1024 * 1024; // 50MB
-        if (file.size > maxSize) {
-          toast.error(`File ${file.name} exceeds 50MB limit`);
-          continue;
-        }
-
-        // Validate file type based on upload type
-        const allowedTypes = uploadType === 'image' 
-          ? ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
-          : ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-             'application/msword', 'text/plain', 'application/vnd.ms-powerpoint', 
-             'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
-
-        if (!allowedTypes.includes(file.type)) {
-          toast.error(`File type ${file.type} not supported for ${uploadType} upload`);
-          continue;
-        }
-
-        try {
-          // Upload to Media Library via API
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('category', uploadType === 'image' ? 'images' : 'documents');
-          formData.append('description', `Uploaded via chat on ${new Date().toLocaleDateString()}`);
-
-          setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
-
-          // Upload file
-          const uploadResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'upload',
-              file_name: file.name,
-              file_type: file.type,
-              file_size: file.size,
-              category: uploadType === 'image' ? 'images' : 'documents',
-              description: `Uploaded via chat on ${new Date().toLocaleDateString()}`
-            })
-          });
-
-          if (!uploadResponse.ok) {
-            throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
-          }
-
-          const uploadData = await uploadResponse.json();
-          setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
-
-          // Upload actual file to storage
-          const { error: storageError } = await supabase.storage
-            .from(uploadData.data.bucket)
-            .upload(uploadData.data.storage_path, file, {
-              contentType: file.type,
-              duplex: 'half'
-            });
-
-          if (storageError) {
-            throw new Error(`Storage upload failed: ${storageError.message}`);
-          }
-
-          setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
-
-          // Process the document and auto-assign to current agent
-          const processResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'process',
-              document_id: uploadData.data.media_id,
-              agent_id: agent.id // Auto-assign to current agent
-            })
-          });
-
-          setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-
-          if (processResponse.ok) {
-            uploadedFiles.push(file.name);
-            toast.success(`${file.name} uploaded and assigned to ${agent.name}`);
-          } else {
-            toast.warn(`${file.name} uploaded but processing failed`);
-          }
-
-        } catch (error: any) {
-          console.error('File upload error:', error);
-          toast.error(`Failed to upload ${file.name}: ${error.message}`);
-        } finally {
-          // Clean up progress tracking
-          setTimeout(() => {
-            setUploadProgress(prev => {
-              const newProgress = { ...prev };
-              delete newProgress[fileId];
-              return newProgress;
-            });
-          }, 2000);
-        }
-      }
-
-      if (uploadedFiles.length > 0) {
-        // Add a system message to chat indicating files were uploaded
-        const systemMessage: Message = {
-          id: `upload_${Date.now()}`,
-          role: 'system',
-          content: `📎 Uploaded ${uploadedFiles.length} ${uploadType}${uploadedFiles.length !== 1 ? 's' : ''}: ${uploadedFiles.join(', ')}. ${uploadedFiles.length === 1 ? 'It has' : 'They have'} been added to the Media Library and assigned to ${agent.name} for training.`,
-          timestamp: new Date().toISOString(),
-          conversation_id: selectedConversationId,
-          agent_id: agent.id,
-          user_id: user.id
-        };
-
-        setMessages(prev => [...prev, systemMessage]);
-        scrollToBottom();
-      }
-
-    } catch (error: any) {
-      console.error('Upload process error:', error);
-      toast.error(`Upload failed: ${error.message}`);
-    } finally {
-      setUploading(false);
-    }
-  }, [user, agent, supabase, selectedConversationId, scrollToBottom]);
-
   // Loading state
   if (!user) {
     return (
@@ -1289,37 +1128,19 @@ export function AgentChatPage() {
 	            </button>
 	            <div className="flex items-center space-x-3">
                   <div className="flex items-center space-x-3">
-                    {/* Avatar with hover edit functionality */}
-                    <div 
-                      className="relative group cursor-pointer"
-                      onClick={() => setShowAboutMeModal(true)}
-                    >
 	                    {agent?.avatar_url ? (
 	                      <img 
 	                        src={agent.avatar_url} 
 	                        alt={agent.name || 'Agent'}
-	                        className="w-6 h-6 rounded-full object-cover transition-all duration-200 group-hover:brightness-75"
-	                        onError={(e) => {
-	                          console.warn('Header avatar failed to load:', agent.avatar_url);
-	                          e.currentTarget.style.display = 'none';
-	                          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-	                          if (fallback) fallback.style.display = 'flex';
-	                        }}
+	                        className="w-6 h-6 rounded-full object-cover"
 	                      />
-	                    ) : null}
-	                    <div 
-	                      className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-all duration-200 group-hover:brightness-75"
-	                      style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
-	                    >
-	                      <span className="text-white text-xs font-medium">
-	                        {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-	                      </span>
-	                    </div>
-                      {/* Edit overlay on hover */}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <Edit className="w-3 h-3 text-white" />
-                      </div>
-                    </div>
+	                    ) : (
+	                      <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+	                        <span className="text-white text-xs font-medium">
+	                          {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+	                        </span>
+	                      </div>
+	                    )}
                     <div className="text-left">
                       <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
                       <DiscreetAIStatusIndicator 
@@ -1384,24 +1205,7 @@ export function AgentChatPage() {
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center max-w-md mx-auto px-6 animate-fade-in">
-                {agent?.avatar_url ? (
-                  <img 
-                    src={agent.avatar_url} 
-                    alt={agent.name || 'Agent'}
-                    className="w-16 h-16 rounded-full object-cover mx-auto mb-6 shadow-lg"
-                    onError={(e) => {
-                      console.warn('Avatar image failed to load:', agent.avatar_url);
-                      // Hide the broken image and show fallback
-                      e.currentTarget.style.display = 'none';
-                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (fallback) fallback.style.display = 'flex';
-                    }}
-                  />
-                ) : null}
-                <div 
-                  className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg"
-                  style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
-                >
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
                   <span className="text-white text-xl font-medium">
                     {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                   </span>
@@ -1671,29 +1475,19 @@ export function AgentChatPage() {
                             </span>
                           </div>
                         ) : (
-                          <>
-                            {agent?.avatar_url ? (
-                              <img 
-                                src={agent.avatar_url} 
-                                alt={agent.name || 'Agent'}
-                                className="w-8 h-8 rounded-full object-cover"
-                                onError={(e) => {
-                                  console.warn('Message avatar failed to load:', agent.avatar_url);
-                                  e.currentTarget.style.display = 'none';
-                                  const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                                  if (fallback) fallback.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div 
-                              className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center"
-                              style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
-                            >
+                          agent?.avatar_url ? (
+                            <img 
+                              src={agent.avatar_url} 
+                              alt={agent.name || 'Agent'}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
                               <span className="text-white text-sm font-medium">
                                 {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
                               </span>
                             </div>
-                          </>
+                          )
                         )}
                       </div>
                       
@@ -1852,67 +1646,20 @@ export function AgentChatPage() {
             <div className="flex items-center justify-between mt-2 px-2">
               {/* Left side - Tools */}
 	              <div className="flex items-center">
-	                {/* Agent Settings Menu */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      title="Agent Settings"
-                      className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent`}
-                    >
-                      <Brain className={`w-4 h-4 ${reasoningEnabled ? 'text-purple-500' : 'text-muted-foreground'}`} />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        setAgentSettingsInitialTab('identity');
-                        setShowAgentSettingsModal(true);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <User className="h-4 w-4 mr-2 text-blue-500" />
-                      Identity
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        setAgentSettingsInitialTab('behavior');
-                        setShowAgentSettingsModal(true);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Brain className="h-4 w-4 mr-2 text-purple-500" />
-                      Behavior
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        setAgentSettingsInitialTab('memory');
-                        setShowAgentSettingsModal(true);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <DatabaseIcon className="h-4 w-4 mr-2 text-green-500" />
-                      Memory
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        const next = !reasoningEnabled;
-                        setReasoningEnabled(next);
-                        if (agentId) localStorage.setItem(`agent_${agentId}_reasoning_enabled`, String(next));
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Settings className="h-4 w-4 mr-2 text-orange-500" />
-                      <div className="flex items-center justify-between w-full">
-                        <span>Advanced Reasoning</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${reasoningEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                          {reasoningEnabled ? 'ON' : 'OFF'}
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+	                {/* Reasoning toggle (icon button) */}
+	                <button
+	                  type="button"
+	                  title="Reasoning"
+	                  aria-pressed={reasoningEnabled}
+	                  onClick={() => {
+	                    const next = !reasoningEnabled;
+	                    setReasoningEnabled(next);
+	                    if (agentId) localStorage.setItem(`agent_${agentId}_reasoning_enabled`, String(next));
+	                  }}
+	                  className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent`}
+	                >
+	                  <Brain className={`w-4 h-4 ${reasoningEnabled ? 'text-purple-500' : 'text-muted-foreground'}`} />
+	                </button>
 	                
 	                {/* Web Search toggle (icon button) */}
 	                <button
@@ -1985,42 +1732,16 @@ export function AgentChatPage() {
 	                      <Paperclip className="w-4 h-4 text-emerald-500" />
 	                    </button>
 	                  </DropdownMenuTrigger>
-	                                    <DropdownMenuContent align="start" className="w-48">
-                    <DropdownMenuItem 
-                      className="cursor-pointer"
-                      onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.multiple = true;
-                        input.accept = '.pdf,.docx,.doc,.txt,.ppt,.pptx';
-                        input.onchange = (e) => {
-                          const files = (e.target as HTMLInputElement).files;
-                          if (files) handleFileUpload(files, 'document');
-                        };
-                        input.click();
-                      }}
-                      disabled={uploading}
-                    >
-                      <Paperclip className="w-4 h-4 mr-2 text-emerald-500" />
-                      {uploading ? 'Uploading...' : 'Attach file'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="cursor-pointer"
-                      onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.multiple = true;
-                        input.accept = 'image/*';
-                        input.onchange = (e) => {
-                          const files = (e.target as HTMLInputElement).files;
-                          if (files) handleFileUpload(files, 'image');
-                        };
-                        input.click();
-                      }}
-                      disabled={uploading}
-                    >
-                      <ImageIcon className="w-4 h-4 mr-2 text-pink-500" />
-                      {uploading ? 'Uploading...' : 'Upload image'}
+	                  <DropdownMenuContent align="start" className="w-48">
+	                    <DropdownMenuItem className="cursor-pointer">
+	                      <Paperclip className="w-4 h-4 mr-2 text-emerald-500" />
+	                      Attach file
+	                    </DropdownMenuItem>
+	                    <DropdownMenuItem className="cursor-pointer">
+	                      <svg className="w-4 h-4 mr-2 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Upload image
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -2189,25 +1910,6 @@ export function AgentChatPage() {
         isOpen={showProcessModal}
         onClose={() => setShowProcessModal(false)}
         processingDetails={currentProcessingDetails}
-      />
-
-      {/* Unified Agent Settings Modal */}
-      <AgentSettingsModal
-        isOpen={showAgentSettingsModal}
-        onClose={() => setShowAgentSettingsModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name,
-          description: agent?.description,
-          personality: agent?.personality,
-          avatar_url: agent?.avatar_url,
-          agent_datastores: agent?.agent_datastores
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent updated via unified modal:', updatedAgent);
-        }}
-        initialTab={agentSettingsInitialTab}
       />
     </div>
     </div>

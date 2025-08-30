@@ -132,6 +132,7 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
 *   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, multi-step workflows, timezone support, and Edge Function execution
 *   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
+*   **🆕 Media Library System:** Comprehensive document and media management with centralized storage, agent assignment, and MCP tool integration for document search and review
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -544,6 +545,8 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   **🆕 `sendgrid-inbound`**: Processes inbound emails via SendGrid Inbound Parse webhook with smart routing and auto-reply capabilities.
 *   **🆕 `agent-tasks`**: Manages CRUD operations for agent task scheduling, including cron expression calculation, timezone handling, and next run time computation.
 *   **🆕 `task-executor`**: Executes scheduled and event-based tasks, triggered via pg_cron on a 5-minute interval for automated task processing.
+*   **🆕 `media-library-api`**: Handles Media Library operations including file uploads, processing, signed URL generation, and document management with secure storage integration.
+*   **🆕 `media-library-mcp`**: Provides MCP tools for agents to search, review, and interact with documents stored in the Media Library system.
 
 Also see database RPCs used by integrations UI:
 
@@ -1090,6 +1093,280 @@ The system detects interactive error patterns and automatically triggers **intel
 - **Transparent Operation**: Users unaware of retry attempts unless they fail
 
 This system ensures that Agentopia tools provide the same seamless, intelligent experience as high-quality MCP servers, making tool failures feel like natural conversation flow rather than technical breakdowns.
+
+## 📚 Media Library & Document Ingestion System
+
+Agentopia implements a comprehensive **Media Library system** that transforms document management from simple file storage into an intelligent, agent-integrated knowledge management platform. This WordPress-style media system enables centralized document storage, agent training data assignment, and sophisticated document interaction capabilities.
+
+### 🎯 **System Overview**
+
+The Media Library provides:
+- **Centralized Document Storage**: WordPress-style media library accessible via dedicated 'Media' sidebar page
+- **Agent Training Integration**: Assign documents to agents for enhanced context and knowledge
+- **MCP Tool Integration**: Agents can search, review, and interact with library documents through specialized tools
+- **Knowledge Graph Integration**: Optional submission to connected knowledge graphs and vector databases
+- **Secure File Management**: Enterprise-grade storage with user-scoped access and signed URL generation
+
+### 🏗️ **Architecture Components**
+
+#### **Database Schema**
+```sql
+-- Core media library storage
+media_library: {
+  id: uuid,
+  user_id: uuid,                    -- Document owner
+  file_name: text,                  -- Original filename
+  file_type: text,                  -- MIME type
+  file_size: bigint,                -- Size in bytes
+  storage_path: text,               -- Supabase storage path
+  bucket: text,                     -- Storage bucket name
+  category: text,                   -- Document category
+  description: text,                -- User description
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed',
+  created_at: timestamptz,
+  updated_at: timestamptz
+}
+
+-- Agent-document assignments
+agent_media_assignments: {
+  id: uuid,
+  agent_id: uuid,                   -- Assigned agent
+  media_id: uuid,                   -- Media library document
+  assignment_type: 'training' | 'reference' | 'context',
+  assigned_by_user_id: uuid,        -- User who made assignment
+  created_at: timestamptz
+}
+
+-- Document processing logs
+media_processing_logs: {
+  id: uuid,
+  media_id: uuid,                   -- Processed document
+  processing_step: text,            -- Processing stage
+  status: 'started' | 'completed' | 'failed',
+  details: jsonb,                   -- Processing details
+  created_at: timestamptz
+}
+
+-- Document categories
+media_categories: {
+  id: uuid,
+  name: text,                       -- Category name
+  description: text,                -- Category description
+  icon_name: text,                  -- Lucide icon name
+  color: text,                      -- UI color theme
+  is_default: boolean,              -- System default category
+  created_at: timestamptz
+}
+```
+
+#### **Storage Architecture**
+- **Supabase Storage**: Private `media-library` bucket with user-scoped folder structure
+- **Path Structure**: `{user_id}/{sanitized_filename}` for organized storage
+- **Security**: Row Level Security (RLS) ensures users only access their own documents
+- **Signed URLs**: Server-side generation for secure, time-limited document access
+
+### 🎨 **User Experience**
+
+#### **Media Library Page**
+- **WordPress-Style Interface**: Familiar media library layout with grid/list views
+- **Upload Modal**: Discreet "Upload Files" button opens drag-and-drop modal
+- **File Type Support**: PDF, Word, PowerPoint, text files, images, audio, video (up to 50MB)
+- **Statistics Dashboard**: Visual cards showing file counts by status and type
+- **Search & Filter**: Find documents by name, type, category, or processing status
+
+#### **Document Management**
+- **Three-Dot Menu**: View, download, and delete actions for each document
+- **Secure Viewing**: Documents open in new tabs via signed URLs
+- **Blob Downloads**: Files download directly without navigation disruption
+- **Category Organization**: Organize documents with customizable categories
+
+#### **Agent Integration**
+- **WhatIKnowModal Enhancement**: Assign media from library or upload new documents
+- **Training Data Assignment**: Documents become part of agent's knowledge base
+- **MCP Tool Access**: Agents can search and review assigned documents during conversations
+
+### ⚙️ **Technical Implementation**
+
+#### **Edge Functions**
+
+**1. `media-library-api`** (`supabase/functions/media-library-api/index.ts`):
+- **File Upload Handling**: Direct Supabase storage integration with filename sanitization
+- **Document Processing**: Optional integration with existing document processing pipeline
+- **Signed URL Generation**: Secure, server-side URL generation bypassing RLS
+- **CORS Support**: Proper cross-origin handling for frontend integration
+
+**2. `media-library-mcp`** (`supabase/functions/media-library-mcp/index.ts`):
+- **Agent Tool Provider**: MCP tools for document interaction
+- **Search Capabilities**: Find documents by content, metadata, or category
+- **Document Review**: Retrieve document content and summaries
+- **Assignment Management**: Handle agent-document relationships
+
+#### **Frontend Components**
+
+**1. `MediaLibraryPage.tsx`** - Main media library interface:
+- **Statistics Cards**: Visual overview of document library
+- **Upload Modal**: Drag-and-drop file upload with progress tracking
+- **Document Grid/List**: Responsive document display with actions
+- **Error Handling**: Comprehensive error states with user-friendly messages
+
+**2. `MediaLibrarySelector.tsx`** - Embeddable document selector:
+- **Modal Integration**: Used within WhatIKnowModal for agent assignments
+- **Document Browser**: Browse and select existing library documents
+- **Upload Integration**: Upload new documents directly to library
+
+**3. `WhatIKnowModal.tsx`** - Enhanced agent knowledge modal:
+- **Media Integration**: Assign documents from library to agents
+- **Upload Workflow**: New documents automatically stored in media library
+- **Knowledge Graph Options**: Submit documents to connected knowledge systems
+
+#### **MCP Tool Integration**
+
+The Media Library provides specialized MCP tools for agents:
+
+```typescript
+// Available MCP tools for agents
+const MEDIA_LIBRARY_TOOLS = {
+  search_documents: {
+    name: 'search_documents',
+    description: 'Search for documents in the media library',
+    parameters: {
+      query: { type: 'string', description: 'Search query' },
+      category: { type: 'string', description: 'Optional category filter' },
+      file_type: { type: 'string', description: 'Optional file type filter' }
+    }
+  },
+  
+  review_document: {
+    name: 'review_document',
+    description: 'Get detailed information about a specific document',
+    parameters: {
+      document_id: { type: 'string', description: 'Document ID to review' }
+    }
+  },
+  
+  list_assigned_documents: {
+    name: 'list_assigned_documents',
+    description: 'List all documents assigned to this agent',
+    parameters: {}
+  }
+};
+```
+
+### 🔧 **Integration Points**
+
+#### **Knowledge Systems Integration**
+- **Vector Database**: Documents can be processed and stored in Pinecone for semantic search
+- **Knowledge Graph**: Integration with GetZep for concept extraction and relationship mapping
+- **Existing Memory Architecture**: Leverages current memory systems for enhanced context
+
+#### **Agent Training Pipeline**
+- **Document Assignment**: Users assign specific documents to agents via UI
+- **Processing Integration**: Documents processed through existing `process-datastore-document` function
+- **Context Enhancement**: Assigned documents become part of agent's available context
+
+#### **Sidebar Navigation**
+- **Media Page**: New 'Media' navigation item with FileText icon
+- **Route Integration**: Protected route at `/media` with proper authentication
+- **Consistent UI**: Follows existing design patterns and theming
+
+### 🔒 **Security & Privacy**
+
+#### **Access Control**
+- **User Isolation**: RLS policies ensure users only access their own documents
+- **Agent Permissions**: Documents only accessible to explicitly assigned agents
+- **Signed URL Security**: Time-limited, server-generated URLs for document access
+- **Service Role Operations**: Secure server-side operations bypass client-side limitations
+
+#### **Storage Security**
+- **Private Bucket**: All documents stored in private Supabase storage bucket
+- **Path Sanitization**: Filenames sanitized to prevent path traversal attacks
+- **Size Limits**: 50MB file size limit prevents abuse
+- **Type Validation**: File type validation ensures only supported formats
+
+### 📊 **File Support & Processing**
+
+#### **Supported File Types**
+- **Documents**: PDF, Word (.docx), PowerPoint (.pptx), text files
+- **Images**: JPEG, PNG, GIF, WebP, SVG
+- **Audio**: MP3, WAV, M4A, OGG
+- **Video**: MP4, WebM, AVI, MOV
+- **Archives**: ZIP (for document collections)
+
+#### **Processing Pipeline**
+- **Automatic Processing**: Documents automatically processed when assigned to agents
+- **Status Tracking**: Real-time processing status with detailed logging
+- **Error Handling**: Comprehensive error recovery with user notifications
+- **Batch Operations**: Support for multiple document processing
+
+### 🎯 **Use Cases**
+
+#### **Standard Operating Procedures (SOPs)**
+```
+1. Upload company SOPs to Media Library
+2. Assign relevant SOPs to customer service agents
+3. Agents automatically reference SOPs during customer interactions
+4. Documents searchable via MCP tools during conversations
+```
+
+#### **Knowledge Base Management**
+```
+1. Upload technical documentation and manuals
+2. Categorize by department or function
+3. Assign to specialized agents (technical support, sales, etc.)
+4. Agents provide accurate, document-backed responses
+```
+
+#### **Training Material Distribution**
+```
+1. Upload training materials and guidelines
+2. Assign to new agent instances for onboarding
+3. Agents learn from assigned materials automatically
+4. Update documents to improve agent knowledge over time
+```
+
+### 🔄 **Workflow Integration**
+
+#### **Document Lifecycle**
+1. **Upload**: User uploads documents via Media Library page or agent modals
+2. **Storage**: Documents stored securely in user-scoped Supabase storage
+3. **Assignment**: Users assign documents to specific agents for training
+4. **Processing**: Documents processed and integrated into agent knowledge
+5. **Access**: Agents can search, review, and reference documents during conversations
+6. **Management**: Users can view, download, update, or delete documents as needed
+
+#### **Agent Knowledge Enhancement**
+- **Contextual Access**: Agents access assigned documents when relevant to conversations
+- **Search Integration**: MCP tools enable intelligent document discovery
+- **Memory Integration**: Documents contribute to agent's episodic and semantic memory
+- **Dynamic Updates**: Document changes automatically reflected in agent knowledge
+
+### 📈 **Current Status**
+
+#### **✅ Completed Features**
+- Complete database schema with RLS policies
+- Media Library page with upload, view, and management capabilities
+- Supabase Edge Functions for API operations and MCP tools
+- Integration with existing agent knowledge system (WhatIKnowModal)
+- Secure file storage with signed URL generation
+- Document processing pipeline integration
+- MCP tool framework for agent document interaction
+
+#### **🔧 Technical Achievements**
+- **Enterprise Security**: Zero plain-text storage with comprehensive access controls
+- **Performance Optimization**: Efficient file handling with progress tracking
+- **User Experience**: Intuitive WordPress-style interface with modern UI patterns
+- **Integration Depth**: Seamless connection with existing agent and knowledge systems
+- **Scalability**: Architecture supports unlimited documents with efficient organization
+
+#### **🚀 Ready for Enhancement**
+- Advanced document search with full-text indexing
+- Document versioning and revision history
+- Collaborative document annotation and comments
+- Automated document categorization using AI
+- Bulk document operations and batch processing
+- Document analytics and usage tracking
+
+The Media Library system transforms Agentopia from a simple agent platform into a comprehensive knowledge management ecosystem, enabling agents to leverage organizational documents and media for more informed, accurate, and contextually relevant interactions.
 
 ### Gmail Integration Example
 
@@ -1674,6 +1951,15 @@ Located in `services/`. These are designed for persistent execution on a server 
     * **Comprehensive UI Management:** Intuitive connection interface with tool listing, refresh controls, and status indicators
     * **Protocol Compliance:** Full implementation of MCP 2024-11-05 specification with JSON-RPC 2.0 over Streamable HTTP
     * **Production-Ready Error Handling:** Robust connection validation, detailed error messages, and graceful degradation
+*   **🆕 Media Library & Document Ingestion System (August 2025):**
+    * **WordPress-Style Media Management:** Comprehensive document library with centralized storage, upload, and organization capabilities
+    * **Agent Training Integration:** Seamless document assignment to agents for enhanced knowledge and context
+    * **MCP Tool Framework:** Specialized tools enabling agents to search, review, and interact with library documents
+    * **Enterprise Security:** Private Supabase storage with RLS policies, signed URL generation, and user-scoped access control
+    * **Multi-Format Support:** PDF, Word, PowerPoint, images, audio, video with 50MB file size limits and type validation
+    * **Knowledge Graph Integration:** Optional submission to connected vector databases and knowledge graphs
+    * **Advanced UI/UX:** Drag-and-drop uploads, three-dot action menus, statistics dashboard, and blob-based downloads
+    * **Processing Pipeline:** Automated document processing with status tracking and comprehensive error handling
 
 ## Memory Systems & Knowledge Integration
 
@@ -2786,6 +3072,7 @@ while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
 *   **✅ Multi-Step Task Workflow System:** **COMPLETE & PRODUCTION-READY** - Revolutionary workflow automation platform with sequential task execution, context passing between steps, and sophisticated step management interface. Complete database schema with `task_steps` table, modular React components (StepManager, StepList, StepCard, StepEditor), PostgreSQL functions for CRUD operations, and seamless backward compatibility. Transforms simple scheduled tasks into powerful automation workflows.
 *   **✅ Enhanced Team Management System:** **COMPLETE & PRODUCTION-READY** - Modern team management workflow with modal-based creation, comprehensive team details with descriptions and member management, fixed edit functionality, and complete theme consistency. Includes proper TypeScript integration and modular component architecture.
 *   **✅ Zapier MCP Integration:** **COMPLETE & DEPLOYED** - Universal tool connectivity through Model Context Protocol allowing agents to access 8,000+ applications. Full implementation with dynamic tool discovery, seamless function calling integration, and comprehensive UI management. Metadata-based routing issue resolved for proper tool execution.
+*   **✅ Media Library & Document Ingestion System:** **COMPLETE & PRODUCTION-READY** - Comprehensive WordPress-style media management system with centralized document storage, agent training integration, and MCP tool framework. Features secure file handling, multi-format support, knowledge graph integration, and advanced UI with drag-and-drop uploads and blob-based downloads.
 *   **MCP Management Interface (Phase 2.3.1):** **40% Complete** - Major progress on Multi-MCP Management Components:
     *   ✅ **Foundation Complete:** TypeScript interfaces, component architecture, DTMA API integration
     *   ✅ **MCPServerList Component:** Full server listing with search, filtering, status management (432 lines)

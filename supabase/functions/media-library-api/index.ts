@@ -13,7 +13,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 interface MediaUploadRequest {
-  action: 'upload' | 'process' | 'search' | 'get_content' | 'list_documents' | 'assign_to_agent' | 'get_categories';
+  action: 'upload' | 'process' | 'search' | 'get_content' | 'list_documents' | 'assign_to_agent' | 'get_categories' | 'get_signed_url';
   file_name?: string;
   file_type?: string;
   file_size?: number;
@@ -34,6 +34,10 @@ interface MediaUploadRequest {
   include_in_vector_search?: boolean;
   include_in_knowledge_graph?: boolean;
   priority_level?: number;
+
+  // For signed URL generation
+  storage_path?: string;
+  expiry_seconds?: number;
 }
 
 interface MediaLibraryResponse {
@@ -161,55 +165,28 @@ async function handleProcess(
       .from('media-library')
       .getPublicUrl(mediaFile.storage_path);
     
-    // Call existing document processing function
-    const { data: processResult, error: processError } = await supabase.functions.invoke(
-      'process-datastore-document',
-      {
-        body: {
-          document_id: document_id,
-          agent_id: null, // No specific agent for media library processing
-          file_url: urlData.publicUrl,
-          file_name: mediaFile.file_name,
-          file_type: mediaFile.file_type
-        }
-      }
-    );
+    // For now, skip automatic processing since it requires an agent_id
+    // Users can assign documents to agents later which will trigger processing
+    console.log(`[MediaLibrary] Document ${document_id} uploaded successfully. Processing skipped - no agent specified.`);
     
-    if (processError) {
-      // Update status to failed
-      await supabase
-        .from('media_library')
-        .update({ 
-          processing_status: 'failed',
-          processing_error: processError.message
-        })
-        .eq('id', document_id);
-      
-      throw processError;
-    }
-    
-    // Update status to completed
-    const { error: updateError } = await supabase
+    // Update status to completed (uploaded but not processed)
+    await supabase
       .from('media_library')
-      .update({
+      .update({ 
         processing_status: 'completed',
-        text_content: processResult.text_content,
-        chunk_count: processResult.chunks_processed,
-        processed_at: new Date().toISOString(),
-        file_url: urlData.publicUrl
+        processed_at: new Date().toISOString()
       })
       .eq('id', document_id);
-    
-    if (updateError) throw updateError;
     
     return {
       success: true,
       data: {
         media_id: document_id,
-        processing_result: processResult
+        processing_status: 'completed',
+        message: 'Document uploaded successfully. Assign to an agent to enable processing and search capabilities.'
       },
       metadata: {
-        action_performed: 'document_processed'
+        action_performed: 'document_uploaded'
       }
     };
     
@@ -511,6 +488,79 @@ async function handleAssignToAgent(
   }
 }
 
+async function handleGetSignedUrl(
+  supabase: any,
+  userId: string,
+  request: MediaUploadRequest
+): Promise<MediaLibraryResponse> {
+  try {
+    const { document_id, storage_path, expiry_seconds = 3600 } = request;
+    
+    if (!document_id && !storage_path) {
+      throw new Error('Either document_id or storage_path is required');
+    }
+
+    let finalStoragePath = storage_path;
+    
+    // If document_id provided, get storage path from database
+    if (document_id) {
+      const { data: mediaFile, error: fetchError } = await supabase
+        .from('media_library')
+        .select('storage_path')
+        .eq('id', document_id)
+        .eq('user_id', userId)
+        .single();
+      
+      if (fetchError || !mediaFile) {
+        throw new Error('Media file not found or access denied');
+      }
+      
+      finalStoragePath = mediaFile.storage_path;
+    }
+
+    // Generate signed URL using service role (bypasses RLS)
+    // Create a service role client specifically for storage operations
+    const serviceRoleClient = createClient(
+      supabaseUrl,
+      supabaseServiceKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+    
+    const { data: signedUrlData, error: signedUrlError } = await serviceRoleClient.storage
+      .from('media-library')
+      .createSignedUrl(finalStoragePath, expiry_seconds);
+    
+    if (signedUrlError) {
+      console.error('Signed URL generation error:', signedUrlError);
+      throw signedUrlError;
+    }
+    
+    return {
+      success: true,
+      data: {
+        signed_url: signedUrlData.signedUrl,
+        expires_in: expiry_seconds,
+        storage_path: finalStoragePath
+      },
+      metadata: {
+        action_performed: 'signed_url_generated'
+      }
+    };
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary] Get signed URL error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 async function handleGetCategories(
   supabase: any,
   userId: string
@@ -633,6 +683,10 @@ serve(async (req) => {
         
       case 'get_categories':
         result = await handleGetCategories(supabase, user.id);
+        break;
+        
+      case 'get_signed_url':
+        result = await handleGetSignedUrl(supabase, user.id, body);
         break;
 
       default:

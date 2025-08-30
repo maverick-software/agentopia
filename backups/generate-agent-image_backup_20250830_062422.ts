@@ -139,73 +139,38 @@ serve(async (req) => {
       });
     }
 
-    // 8. Upload to Media Library via internal API call
+    // 8. Upload Blob to Supabase Storage
+    const imagePath = `public/${agentId}.png`; // Example path, use PNG
     let permanentImageUrl = '';
     try {
-      console.log('Uploading generated avatar to Media Library...');
-      
-      // First, create a media library entry
-      const fileName = `generated-avatar-${agentId}-${Date.now()}.png`;
-      
-      // Create media library record
-      const { data: mediaRecord, error: mediaError } = await supabaseAdminClient
-        .from('media_library')
-        .insert({
-          user_id: user.id,
-          file_name: fileName,
-          file_type: 'image/png',
-          file_size: imageBlob.size,
-          category: 'avatars',
-          description: `Generated avatar for agent ${agentId}`,
-          storage_path: `${user.id}/avatars/${fileName}`,
-          bucket: 'media-library',
-          processing_status: 'completed'
-        })
-        .select()
-        .single();
-
-      if (mediaError) {
-        console.error('Media Library record creation error:', mediaError);
-        throw mediaError;
-      }
-
-      const storagePath = `${user.id}/avatars/${fileName}`;
-      
-      // Upload to media-library bucket
+      console.log(`Uploading image to Supabase Storage at: ${imagePath}`);
       const { data: uploadData, error: uploadError } = await supabaseAdminClient.storage
-        .from('media-library')
-        .upload(storagePath, imageBlob, {
+        .from('agent-avatars')
+        .upload(imagePath, imageBlob, {
           cacheControl: '3600', // Cache for 1 hour
           upsert: true, // Overwrite if exists
           contentType: 'image/png' // Force PNG type
         });
 
       if (uploadError) {
-        console.error('Media Library Storage Upload Error:', uploadError);
-        // Clean up the media record if storage upload fails
-        await supabaseAdminClient
-          .from('media_library')
-          .delete()
-          .eq('id', mediaRecord.id);
+        console.error('Supabase Storage Upload Error:', uploadError);
         throw uploadError;
       }
 
-      // Generate signed URL for the avatar (1 year expiry for avatars)
-      const { data: urlData, error: urlError } = await supabaseAdminClient.storage
-        .from('media-library')
-        .createSignedUrl(storagePath, 31536000); // 1 year
-
-      if (urlError || !urlData?.signedUrl) {
-        console.error('Failed to create signed URL:', urlError);
-        throw new Error('Could not generate signed URL for avatar.');
-      }
+      // 9. Get the permanent public URL
+      const { data: urlData } = supabaseAdminClient.storage
+         .from('agent-avatars')
+         .getPublicUrl(imagePath);
       
-      permanentImageUrl = urlData.signedUrl;
-      console.log('Avatar uploaded to Media Library successfully. Signed URL generated.');
+      if (!urlData || !urlData.publicUrl) {
+        throw new Error('Could not get public URL after upload.');
+      }
+      permanentImageUrl = urlData.publicUrl;
+      console.log('Image uploaded successfully. Permanent URL:', permanentImageUrl);
 
     } catch (error) {
-      console.error('Error uploading avatar to Media Library:', error);
-      return new Response(JSON.stringify({ error: `Failed to store generated avatar: ${error.message}` }), {
+      console.error('Error uploading image to Supabase Storage:', error);
+      return new Response(JSON.stringify({ error: `Failed to store generated image: ${error.message}` }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         status: 500,
       });

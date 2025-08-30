@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { AgentProfileImageEditor } from '@/components/agent-edit/AgentProfileImageEditor';
+
 import { AgentIntegrationsManager } from '@/integrations/agent-management';
 
 import { AgentTasksManager } from '@/components/agent-edit/AgentTasksManager';
@@ -581,15 +581,33 @@ const AgentEditPage = () => {
                         </DialogDescription>
                     </DialogHeader>
                     
-                    {agentData && agentData.id && (
-                        <div className="py-4">
-                            <AgentProfileImageEditor 
-                                agentId={agentData.id} 
-                                currentAvatarUrl={agentData.avatar_url}
-                                onAvatarUpdate={handleAvatarUpdate}
-                            />
+                    <div className="py-4">
+                        <div className="text-center space-y-4">
+                            <div className="w-20 h-20 mx-auto">
+                                {agentData?.avatar_url ? (
+                                    <img 
+                                        src={agentData.avatar_url} 
+                                        alt={agentData.name || 'Agent'}
+                                        className="w-20 h-20 rounded-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                                        <span className="text-white text-2xl font-medium">
+                                            {agentData?.name?.charAt(0)?.toUpperCase() || 'A'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-sm text-muted-foreground">
+                                    Avatar management has moved to the unified Agent Settings.
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    Go to the agent chat page and click the brain icon → Identity to manage avatars.
+                                </p>
+                            </div>
                         </div>
-                    )}
+                    </div>
                     
                     <DialogFooter>
                         <DialogClose asChild>

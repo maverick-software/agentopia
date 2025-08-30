@@ -2,10 +2,6 @@
 
 There is an old table 'agent_oauth_permissions' and another named 'user_oauth_connections' that were consolidated into to 'agent_integration_permissions.' Grep the entire codebase and create a checklist of all the places in the codebase these calls exists. Then, go through each instance and replace it with the correct table name with the correct schema. Make sure the systems work after. Use the @plan_and_execute.mdc protocol.
 
-## Soft Refresh Fix ## (Completed)
-
-There is an issue with the site, where when I leave the page and come back for any reason, it soft refreshes. The problem is I lose data in the modals and other places if I need to tab away for any reason. This needs to be investigated and fixed.
-
 ## Memory Storage System Upgrade ##
 
 As of now, every conversation is being processed and implemented for our knowledge graph and pinecone index. This is not efficient and will result in large databases with mostly useless information. Instead, let's separate memory storage from the chat functionality, and build it as background process for determining what should qualify as 'memorable' and what shouldn't. 
@@ -21,6 +17,10 @@ Create an Account based media library where we store file uploads. The system wi
 
 The planning process should include adding the file upload feature to the chat page, wiring it up to the media library, adding a media library link to the sidebar, as well as the file ingestion for vector, sql (supabase) and knowledge graph. Also for the agent knowledge modal, where users can already add documents. Investigate that system and include it in the plan to extend it with this more comprehensive media library system.
 
+## Projects ##
+
+Create a project management system similar to Asana and Clickup that empowers users to assign  agents to complete tasks. This should be a hybrid system where users and agents can be assigned to tasks. The user should be in control of when the project starts, and when agents actually perform the tasks assigned to them. Agents should be aware of what projects they are assigned to and what tasks they are assigned to, even in the chat interface.This means we should implement the project mechanism as an MCP tool, so that the agent can discover it as a tool during chat and determine if it should use the Project MCP tools to find assigned projects, tasks, etc. The user can assign context to the task, including in-task text descriptions, or upload documents. They can also assign the results of other completed tasks from other agents, users or the same agent to the current task in case there are project dependencies. Sidebar link, page where users can see projects in a list or grid. Project details page, live editing. Slide-in panel from right side for task details like asana. file uploads for each task.
+
 ## Contact List ##
 
 Create a centralized contact list page and system that allows me to add contacts to the system. Name, Numbers (work, home, cell), email address, home address, work address, birthdate and notes. Then, on the agent chat page add 'Contacts' system so that we can add contacts or enable access to all contacts for that specific agent. Create a 'Contacts Lookup Tool' that we will make available via the MCP tool system our agents already have. Investigate, Research, Plan, Implement using the @plan_and_execute.mdc protocol.
@@ -31,11 +31,11 @@ Create a system where one user can invite other users, whether existing or not, 
 
 ## Teams ##
 
-We need to be able to add subaccounts or accounts with deledated access to 'Teams.' This would allow subaccounts to the teams they are a part of within their own login. 
+We need to be able to add deledated access for other user accounts. Users can invite other people to manage their accounts, CRUD agents, teams, projects, billing. Accounts with delegated access can view the interfaces of the primary account holder by switching into an instance of that account data, this way one account can be given delegated access to many accounts. This should allow for users to become managers and start AI agent agencies, or for internal AI departments to manage the main companies accounts. These delegated access accounts can be granted full access or limited access with granular permissions. This way users can be assigned access to specific agents, specific teams, and specific projects with read/write (view/edit) capabilities.
 
 ## Workspaces ##
 
-We will modify the 'Workspaces' feature to work for 'Teams.' Teams will have their own workspaces. These are essential chat rooms where agents and human team members can collaborate on tasks. Tagging people or agents with the @ symbold. 
+We will modify the 'Workspaces' feature to work for 'Teams.' Teams will have their own workspaces. We will call them "Team Rooms" instead of "Workspaces." These are essential chat rooms where agents and human team members can collaborate on tasks. Tagging people or agents with the @ symbols. 
 
 ## Tasks ##
 
@@ -44,6 +44,10 @@ Add 'Steps' to tasks, allowing users to add multi-step instructions for the agen
 ## AI-Generated Forms ##
 
 Create a tool that allows Agents to generate forms with custom fields, that can be sent out to external users via temporary links--limited by time or usage/access. These forms can be one-time use, or users can choose to save the forms and even edit them using AI. They would save those results in a table or tables in JSON or YAML so they can be universally generated and pulled in and retrieved and used for a universally-generated display to users.  
+
+## AI-Generated Dashboards/Reports ##
+
+Create an MCP system where agents can generate reports. These reports will have their own temporary pages that can be viewed and discarded, downloaded in PDF or saved as a view and updated upon request.
 
 ## Agentic Task Generation ##
 
@@ -121,6 +125,10 @@ This will allow us to add a model selection to the admin settings/setup area, wi
 ---
 
 ## Completed: 
+
+## Soft Refresh Fix ## (Completed)
+
+There is an issue with the site, where when I leave the page and come back for any reason, it soft refreshes. The problem is I lose data in the modals and other places if I need to tab away for any reason. This needs to be investigated and fixed.
 
 ## Human-Reasoning Markov CoT Processor ##
 
