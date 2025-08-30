@@ -557,7 +557,7 @@ async function handleGetCategories(
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders(req.headers.get('origin')) });
   }
 
   try {
@@ -635,7 +635,7 @@ serve(async (req) => {
       JSON.stringify(result),
       { 
         status: result.success ? 200 : 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders(req.headers.get('origin')), 'Content-Type': 'application/json' } 
       }
     );
 
@@ -648,7 +648,7 @@ serve(async (req) => {
       }),
       { 
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders(req.headers.get('origin')), 'Content-Type': 'application/json' } 
       }
     );
   }

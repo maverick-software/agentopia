@@ -420,7 +420,7 @@ DECLARE
         '{"name": "Training", "description": "Training materials and documentation", "icon_name": "GraduationCap", "color_hex": "#10B981"}',
         '{"name": "Reference", "description": "Reference documents and guides", "icon_name": "BookMarked", "color_hex": "#8B5CF6"}',
         '{"name": "Policies", "description": "Company policies and procedures", "icon_name": "Shield", "color_hex": "#F59E0B"}',
-        '{"name": "Templates", "description": "Document templates and forms", "icon_name": "FileTemplate", "color_hex": "#EF4444"}'
+        '{"name": "Templates", "description": "Document templates and forms", "icon_name": "FileText", "color_hex": "#EF4444"}'
     ];
     category JSONB;
 BEGIN

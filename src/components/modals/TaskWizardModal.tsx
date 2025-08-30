@@ -8,7 +8,7 @@ import { TaskStep } from '@/types/tasks';
 import { StepManager } from './task-steps/StepManager';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import { toast } from 'react-hot-toast';
 import { 
   getSupportedTimezones, 
   formatTimezoneLabel, 

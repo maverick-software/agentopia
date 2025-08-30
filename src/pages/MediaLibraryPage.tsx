@@ -677,7 +677,7 @@ export function MediaLibraryPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {Object.entries(stats.files_by_status).map(([status, count]) => (
+                    {stats?.files_by_status ? Object.entries(stats.files_by_status).map(([status, count]) => (
                       <div key={status} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Badge variant={getStatusBadgeVariant(status)}>
@@ -686,7 +686,9 @@ export function MediaLibraryPage() {
                         </div>
                         <span className="font-medium">{count}</span>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-sm text-muted-foreground">No status data available</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -697,7 +699,7 @@ export function MediaLibraryPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {Object.entries(stats.files_by_type).map(([type, count]) => (
+                    {stats?.files_by_type ? Object.entries(stats.files_by_type).map(([type, count]) => (
                       <div key={type} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           {getFileTypeIcon(`application/${type}`)}
@@ -705,7 +707,9 @@ export function MediaLibraryPage() {
                         </div>
                         <span className="font-medium">{count}</span>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-sm text-muted-foreground">No type data available</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>

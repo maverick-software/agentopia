@@ -9,7 +9,7 @@ import {
   User as UserIcon,
   Server, Key, Zap, Plus, MessageSquarePlus,
   MoreVertical, Pencil, Archive, Trash2,
-  Network
+  Network, FileText
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
