@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, FileText } from 'lucide-react';
+import { Plus, FileText, Zap, Calendar, RotateCcw, FileEdit, Tag, MessageCircle, Wand2, X, ArrowLeft, ArrowRight, Save, Clock, Hash, Lightbulb, Target, Edit3 } from 'lucide-react';
 import { TaskStep } from '@/types/tasks';
 import { StepManager } from './task-steps/StepManager';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
@@ -23,6 +23,21 @@ interface TaskWizardModalProps {
   agentId: string;
   agentData: { name?: string };
   onTaskCreated: () => void;
+  editingTask?: {
+    id: string;
+    title: string;
+    description: string;
+    status: string;
+    schedule_label?: string;
+    cron_expression?: string;
+    schedule?: string;
+    start_date?: string;
+    end_date?: string;
+    max_executions?: number;
+    timezone?: string;
+    task_type?: string;
+    instructions?: string;
+  } | null;
 }
 
 export function TaskWizardModal({
@@ -30,7 +45,8 @@ export function TaskWizardModal({
   onClose,
   agentId,
   agentData,
-  onTaskCreated
+  onTaskCreated,
+  editingTask
 }: TaskWizardModalProps) {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [loading, setLoading] = useState(false);
@@ -56,6 +72,75 @@ export function TaskWizardModal({
   const supabase = useSupabaseClient();
   const { user } = useAuth();
 
+  // Initialize form fields when editing a task
+  useEffect(() => {
+    if (editingTask) {
+      console.log('Initializing form with task data:', editingTask);
+      
+      setNewTaskTitle(editingTask.title || '');
+      
+      // Set timezone if available
+      if (editingTask.timezone) {
+        setSelectedTimezone(editingTask.timezone);
+      }
+      
+      // Determine schedule mode based on max_executions
+      if (editingTask.max_executions === 1) {
+        setScheduleMode('one_time');
+        
+        // Parse start_date for one-time tasks
+        if (editingTask.start_date) {
+          const startDate = new Date(editingTask.start_date);
+          const dateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          const timeStr = startDate.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+          
+          setOneTimeDate(dateStr);
+          setOneTimeTime(timeStr);
+        }
+      } else {
+        setScheduleMode('recurring');
+        
+        // Parse dates for recurring tasks
+        if (editingTask.start_date) {
+          const startDate = new Date(editingTask.start_date);
+          const dateStr = startDate.toISOString().split('T')[0];
+          const timeStr = startDate.toTimeString().split(' ')[0].substring(0, 5);
+          
+          setRecurringStartDate(dateStr);
+          setRecurringTime(timeStr);
+        }
+        
+        if (editingTask.end_date) {
+          const endDate = new Date(editingTask.end_date);
+          const endDateStr = endDate.toISOString().split('T')[0];
+          setRecurringEndDate(endDateStr);
+        }
+        
+        // Try to parse cron expression for interval (basic parsing)
+        if (editingTask.cron_expression) {
+          // This is a simplified cron parser - you might want to enhance this
+          // For now, we'll set some defaults
+          setEveryInterval(1);
+          setEveryUnit('day');
+        }
+      }
+    } else {
+      // Reset form when not editing
+      setNewTaskTitle('');
+      setScheduleMode('one_time');
+      setOneTimeDate('');
+      setOneTimeTime('');
+      setRecurringStartDate('');
+      setRecurringEndDate('');
+      setRecurringTime('');
+      setEveryInterval(1);
+      setEveryUnit('day');
+      setTargetConversationId('');
+      setTaskSteps([]);
+      setCurrentStep(1);
+      setSelectedTimezone(getDefaultTimezone());
+    }
+  }, [editingTask]);
 
 
   const handleSaveTask = async () => {
@@ -97,13 +182,28 @@ export function TaskWizardModal({
 
       console.log('Sending task data:', taskData);
       
-      const { data: result, error } = await supabase.functions.invoke('agent-tasks', {
-        body: taskData
-      });
+      let result, error;
+      
+      if (editingTask) {
+        // Update existing task
+        taskData.task_id = editingTask.id;
+        const response = await supabase.functions.invoke('agent-tasks', {
+          body: { ...taskData, action: 'update' }
+        });
+        result = response.data;
+        error = response.error;
+      } else {
+        // Create new task
+        const response = await supabase.functions.invoke('agent-tasks', {
+          body: taskData
+        });
+        result = response.data;
+        error = response.error;
+      }
 
       if (error) {
         console.error('Edge Function error:', error);
-        throw new Error(error.message || 'Failed to create task');
+        throw new Error(error.message || `Failed to ${editingTask ? 'update' : 'create'} task`);
       }
 
       // If using steps, save them to the database
@@ -124,12 +224,12 @@ export function TaskWizardModal({
             }
           }
           
-          toast.success(`Task created with ${taskSteps.length} steps successfully!`);
+          toast.success(`Task ${editingTask ? 'updated' : 'created'} with ${taskSteps.length} steps successfully!`);
         } catch (stepErr: any) {
-          toast.error(`Task created but failed to save steps: ${stepErr.message}`);
+          toast.error(`Task ${editingTask ? 'updated' : 'created'} but failed to save steps: ${stepErr.message}`);
         }
       } else {
-        toast.success('Task created successfully!');
+        toast.success(`Task ${editingTask ? 'updated' : 'created'} successfully!`);
       }
 
       // Reset form
@@ -191,29 +291,31 @@ export function TaskWizardModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto p-0">
-        <DialogTitle className="sr-only">Schedule Task Wizard</DialogTitle>
-        <DialogDescription className="sr-only">Create automated tasks for your agent using this step-by-step wizard</DialogDescription>
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 via-purple-50 to-cyan-50 dark:from-blue-950/30 dark:via-purple-950/30 dark:to-cyan-950/30 border border-blue-200 dark:border-blue-800">
-          {/* Header with gradient */}
-          <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+      <DialogContent className="sm:max-w-[800px] max-h-[85vh] overflow-y-auto p-0 border-0 bg-transparent">
+        <DialogTitle className="sr-only">{editingTask ? 'Edit Task' : 'Schedule Task Wizard'}</DialogTitle>
+        <DialogDescription className="sr-only">{editingTask ? 'Edit your automated task' : 'Create automated tasks for your agent using this step-by-step wizard'}</DialogDescription>
+        <div className="relative overflow-hidden rounded-xl bg-background dark:bg-background border border-border dark:border-border">
+          {/* Header */}
+          <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white dark:from-muted dark:to-muted dark:text-foreground rounded-t-xl">
             <h4 className="font-semibold text-lg flex items-center">
-              <span className="mr-2">🪄</span> Schedule Task
+              <Wand2 className="w-5 h-5 mr-2" /> {editingTask ? 'Edit Task' : 'Schedule Task'}
             </h4>
-            <p className="text-blue-100 text-sm mt-1">Create automated tasks for your agent</p>
+            <p className="text-blue-100 dark:text-muted-foreground text-sm mt-1">Create automated tasks for your agent</p>
           </div>
           
           {/* Modern Step Indicator */}
-          <div className="px-6 py-4 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm">
+          <div className="px-6 py-4 bg-muted/50 dark:bg-muted/50">
             <div className="flex items-center justify-between">
-              {[
-                { num: 1, label: 'Type', icon: '⚡', color: 'text-blue-600' },
-                { num: 2, label: 'Schedule', icon: '📅', color: 'text-green-600' },
-                ...(scheduleMode === 'recurring' ? [{ num: 3, label: 'Recurrence', icon: '🔄', color: 'text-orange-600' }] : []),
-                { num: 4, label: 'Instructions', icon: '📝', color: 'text-purple-600' },
-                { num: 5, label: 'Title', icon: '🏷️', color: 'text-pink-600' },
-                { num: 6, label: 'Conversation', icon: '💬', color: 'text-cyan-600' }
-              ].map((step, index) => {
+              {(() => {
+                const steps = [
+                  { num: 1, label: 'Type', icon: Zap, color: 'text-blue-600 dark:text-blue-400' },
+                  { num: 2, label: 'Schedule', icon: Calendar, color: 'text-blue-600 dark:text-blue-400' },
+                  ...(scheduleMode === 'recurring' ? [{ num: 3, label: 'Recurrence', icon: RotateCcw, color: 'text-blue-600 dark:text-blue-400' }] : []),
+                  { num: 4, label: 'Instructions', icon: FileEdit, color: 'text-blue-600 dark:text-blue-400' },
+                  { num: 5, label: 'Title', icon: Tag, color: 'text-blue-600 dark:text-blue-400' },
+                  { num: 6, label: 'Conversation', icon: MessageCircle, color: 'text-cyan-600 dark:text-cyan-400' }
+                ];
+                return steps.map((step, index) => {
                 const adjustedStepNum = scheduleMode === 'recurring' ? step.num : (step.num > 3 ? step.num - 1 : step.num);
                 const isActive = currentStep === adjustedStepNum;
                 const isCompleted = currentStep > adjustedStepNum;
@@ -223,45 +325,43 @@ export function TaskWizardModal({
                     <div className={`
                       flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300
                       ${isActive 
-                        ? `${step.color} bg-white border-current shadow-lg scale-110` 
+                        ? `${step.color} bg-background dark:bg-background border-current shadow-lg scale-110` 
                         : isCompleted 
-                          ? 'bg-green-500 border-green-500 text-white' 
-                          : 'bg-gray-100 border-gray-300 text-gray-400'
+                          ? 'bg-blue-500 dark:bg-blue-600 border-blue-500 dark:border-blue-600 text-white' 
+                          : 'bg-muted dark:bg-muted border-border dark:border-border text-muted-foreground'
                       }
                     `}>
-                      {isCompleted ? '✓' : step.icon}
+                      {isCompleted ? (
+                        <span className="text-sm">✓</span>
+                      ) : (
+                        <step.icon className="w-4 h-4" />
+                      )}
                     </div>
                     <div className="ml-2">
-                      <div className={`text-xs font-medium ${isActive ? step.color : isCompleted ? 'text-green-600' : 'text-gray-400'}`}>
+                      <div className={`text-xs font-medium ${isActive ? step.color : isCompleted ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'}`}>
                         {step.label}
                       </div>
                     </div>
-                    {index < ([
-                      { num: 1, label: 'Type', icon: '⚡', color: 'text-blue-600' },
-                      { num: 2, label: 'Schedule', icon: '📅', color: 'text-green-600' },
-                      ...(scheduleMode === 'recurring' ? [{ num: 3, label: 'Recurrence', icon: '🔄', color: 'text-orange-600' }] : []),
-                      { num: 4, label: 'Instructions', icon: '📝', color: 'text-purple-600' },
-                      { num: 5, label: 'Title', icon: '🏷️', color: 'text-pink-600' },
-                      { num: 6, label: 'Conversation', icon: '💬', color: 'text-cyan-600' }
-                    ].length - 1) && (
-                      <div className={`w-8 h-0.5 mx-2 ${isCompleted ? 'bg-green-500' : 'bg-gray-300'}`} />
+                    {index < (steps.length - 1) && (
+                      <div className={`w-8 h-0.5 mx-2 ${isCompleted ? 'bg-blue-500 dark:bg-blue-600' : 'bg-border dark:bg-border'}`} />
                     )}
                   </div>
                 );
-              })}
+              });
+              })()}
             </div>
           </div>
           
           {/* Content Area */}
-          <div className="px-6 py-6 space-y-6">
+          <div className="px-6 py-4 space-y-4 bg-background dark:bg-background">
             {/* Step 1: Type Selection */}
             {currentStep === 1 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
                     Choose Your Task Type
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Select whether this task runs once or repeats on a schedule
                   </p>
                 </div>
@@ -272,15 +372,17 @@ export function TaskWizardModal({
                     className={`
                       group relative p-6 rounded-xl border-2 transition-all duration-300 hover:scale-105 hover:shadow-lg
                       ${scheduleMode === 'one_time' 
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-lg' 
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20 shadow-lg' 
+                        : 'border-border dark:border-border bg-card dark:bg-card hover:border-blue-300 dark:hover:border-blue-600'
                       }
                     `}
                   >
                     <div className="text-center">
-                      <div className="text-3xl mb-3">⚡</div>
-                      <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">One-time</h4>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Run once at a specific time</p>
+                      <div className="mb-3">
+                        <Zap className="w-8 h-8 mx-auto text-blue-500" />
+                      </div>
+                      <h4 className="font-semibold text-foreground mb-2">One-time</h4>
+                      <p className="text-xs text-muted-foreground">Run once at a specific time</p>
                     </div>
                     {scheduleMode === 'one_time' && (
                       <div className="absolute top-2 right-2">
@@ -296,19 +398,21 @@ export function TaskWizardModal({
                     className={`
                       group relative p-6 rounded-xl border-2 transition-all duration-300 hover:scale-105 hover:shadow-lg
                       ${scheduleMode === 'recurring' 
-                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/50 shadow-lg' 
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-purple-300'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20 shadow-lg' 
+                        : 'border-border dark:border-border bg-card dark:bg-card hover:border-blue-300 dark:hover:border-blue-600'
                       }
                     `}
                   >
                     <div className="text-center">
-                      <div className="text-3xl mb-3">🔄</div>
-                      <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Recurring</h4>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">Repeat on a schedule</p>
+                      <div className="mb-3">
+                        <RotateCcw className="w-8 h-8 mx-auto text-blue-500" />
+                      </div>
+                      <h4 className="font-semibold text-foreground mb-2">Recurring</h4>
+                      <p className="text-xs text-muted-foreground">Repeat on a schedule</p>
                     </div>
                     {scheduleMode === 'recurring' && (
                       <div className="absolute top-2 right-2">
-                        <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
                           <span className="text-white text-xs">✓</span>
                         </div>
                       </div>
@@ -320,64 +424,67 @@ export function TaskWizardModal({
 
             {/* Step 2: Schedule */}
             {currentStep === 2 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                    📅 Set Your Schedule
+                  <h3 className="text-xl font-semibold text-foreground mb-2 flex items-center justify-center">
+                    <Calendar className="w-5 h-5 mr-2" />
+                    Set Your Schedule
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Choose when this task should {scheduleMode === 'one_time' ? 'run' : 'start running'}
                   </p>
                 </div>
                 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-green-200 dark:border-green-800 shadow-sm">
+                <div className="bg-card dark:bg-card rounded-xl p-6 border border-blue-200 dark:border-blue-800 shadow-sm">
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="space-y-2">
-                      <label className="flex items-center text-sm font-medium text-green-700 dark:text-green-400">
-                        <span className="mr-2">📅</span> {scheduleMode === 'one_time' ? 'Date' : 'Start date'}
+                      <label className="flex items-center text-sm font-medium text-blue-700 dark:text-blue-400">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        {scheduleMode === 'one_time' ? 'Date' : 'Start date'}
                       </label>
                       <Input 
                         type="date" 
                         value={scheduleMode==='one_time'? oneTimeDate : recurringStartDate} 
                         onChange={(e) => (scheduleMode==='one_time'? setOneTimeDate : setRecurringStartDate)(e.target.value)} 
-                        className="border-green-300 dark:border-green-700 focus:border-green-500 dark:focus:border-green-500" 
+                        className="border-blue-300 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-500" 
                       />
                     </div>
                     {scheduleMode === 'recurring' && (
                       <div className="space-y-2">
-                        <label className="flex items-center text-sm font-medium text-green-700 dark:text-green-400">
+                        <label className="flex items-center text-sm font-medium text-blue-700 dark:text-blue-400">
                           <span className="mr-2">🏁</span> End date (optional)
                         </label>
                         <Input 
                           type="date" 
                           value={recurringEndDate} 
                           onChange={(e) => setRecurringEndDate(e.target.value)} 
-                          className="border-green-300 dark:border-green-700 focus:border-green-500 dark:focus:border-green-500" 
+                          className="border-blue-300 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-500" 
                         />
                       </div>
                     )}
                   </div>
                   
                   <div className="space-y-4">
-                    <label className="flex items-center text-sm font-medium text-green-700 dark:text-green-400">
-                      <span className="mr-2">🕐</span> Select a time:
+                    <label className="flex items-center text-sm font-medium text-blue-700 dark:text-blue-400">
+                      <Clock className="w-4 h-4 mr-2" />
+                      Select a time:
                     </label>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-xs text-gray-600 dark:text-gray-400">Time</label>
+                        <label className="text-xs text-muted-foreground">Time</label>
                         <Input 
                           type="time" 
                           value={scheduleMode==='one_time'? oneTimeTime : recurringTime} 
                           onChange={(e) => (scheduleMode==='one_time'? setOneTimeTime : setRecurringTime)(e.target.value)} 
-                          className="border-green-300 dark:border-green-700 focus:border-green-500 dark:focus:border-green-500" 
+                          className="border-blue-300 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-500" 
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs text-gray-600 dark:text-gray-400">Timezone</label>
+                        <label className="text-xs text-muted-foreground">Timezone</label>
                         <select
                           value={selectedTimezone}
                           onChange={(e) => setSelectedTimezone(e.target.value)}
-                          className="w-full p-2 border border-green-300 dark:border-green-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-green-500 dark:focus:border-green-500 focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800"
+                          className="w-full p-2 border border-green-300 dark:border-green-700 rounded-lg text-sm bg-background dark:bg-background text-foreground focus:border-green-500 dark:focus:border-green-500 focus:ring-2 focus:ring-green-200 dark:focus:ring-green-800"
                         >
                           {getSupportedTimezones().map(tz => (
                             <option key={tz} value={tz}>{formatTimezoneLabel(tz)}</option>
@@ -392,38 +499,40 @@ export function TaskWizardModal({
 
             {/* Step 3: Recurrence (only for recurring tasks) */}
             {currentStep === 3 && scheduleMode === 'recurring' && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
                     🔄 Set Recurrence
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     How often should this task repeat?
                   </p>
                 </div>
                 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-orange-200 dark:border-orange-800 shadow-sm">
+                <div className="bg-card dark:bg-card rounded-xl p-6 border border-blue-200 dark:border-blue-800 shadow-sm">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="flex items-center text-sm font-medium text-orange-700 dark:text-orange-400">
-                        <span className="mr-2">🔢</span> Every
+                      <label className="flex items-center text-sm font-medium text-blue-700 dark:text-blue-400">
+                        <Hash className="w-4 h-4 mr-2" />
+                        Every
                       </label>
                       <Input 
                         type="number" 
                         min={1} 
                         value={everyInterval} 
                         onChange={(e) => setEveryInterval(Math.max(1, parseInt(e.target.value || '1', 10)))} 
-                        className="border-orange-300 dark:border-orange-700 focus:border-orange-500 dark:focus:border-orange-500" 
+                        className="border-blue-300 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-500" 
                       />
                     </div>
                     <div className="col-span-2 space-y-2">
-                      <label className="flex items-center text-sm font-medium text-orange-700 dark:text-orange-400">
-                        <span className="mr-2">⏰</span> Time unit
+                      <label className="flex items-center text-sm font-medium text-blue-700 dark:text-blue-400">
+                        <Clock className="w-4 h-4 mr-2" />
+                        Time unit
                       </label>
                       <select
                         value={everyUnit}
                         onChange={(e) => setEveryUnit(e.target.value as any)}
-                        className="w-full p-2 border border-orange-300 dark:border-orange-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-orange-500 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-800"
+                        className="w-full p-2 border border-blue-300 dark:border-blue-700 rounded-lg text-sm bg-background dark:bg-background text-foreground focus:border-blue-500 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800"
                       >
                         <option value="minute">Minute(s)</option>
                         <option value="hour">Hour(s)</option>
@@ -434,9 +543,9 @@ export function TaskWizardModal({
                       </select>
                     </div>
                   </div>
-                  <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
-                    <p className="text-xs text-orange-700 dark:text-orange-400 flex items-center">
-                      <span className="mr-2">💡</span>
+                  <div className="mt-4 p-3 bg-muted/50 dark:bg-muted/50 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
+                      <Lightbulb className="w-3 h-3 mr-2" />
                       For weeks and years, intervals greater than 1 are approximated due to cron limits.
                     </p>
                   </div>
@@ -446,15 +555,8 @@ export function TaskWizardModal({
 
             {/* Step 4: Multi-Step Instructions */}
             {currentStep === 4 && (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                    📝 Configure Task Steps
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Break down your task into sequential steps with specific instructions
-                  </p>
-                </div>
+              <div className="space-y-4">
+
                 
                 <StepManager
                   agentId={agentId}
@@ -463,7 +565,7 @@ export function TaskWizardModal({
                   onStepsChange={setTaskSteps}
                   onValidationChange={setStepsValid}
                   isEditing={false}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-purple-200 dark:border-purple-800 shadow-sm p-4"
+                  className="bg-card dark:bg-card rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm p-4"
                 />
                 
                 {/* Legacy single instruction fallback */}
@@ -475,27 +577,29 @@ export function TaskWizardModal({
             {currentStep === 5 && (
               <div className="space-y-6">
                 <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                    🏷️ Name Your Task
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    <Tag className="w-5 h-5 mr-2 inline" />
+                    Name Your Task
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Give your task a memorable title
                   </p>
                 </div>
                 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-pink-200 dark:border-pink-800 shadow-sm">
-                  <label className="flex items-center text-sm font-medium text-pink-700 dark:text-pink-400 mb-3">
-                    <span className="mr-2">✍️</span> Task Title
+                <div className="bg-card dark:bg-card rounded-xl p-6 border border-blue-200 dark:border-blue-800 shadow-sm">
+                  <label className="flex items-center text-sm font-medium text-blue-700 dark:text-blue-400 mb-3">
+                    <Edit3 className="w-4 h-4 mr-2" />
+                    Task Title
                   </label>
                   <Input 
                     placeholder="e.g., Daily Market Research, Weekly Social Media Check" 
                     value={newTaskTitle} 
                     onChange={(e) => setNewTaskTitle(e.target.value)} 
-                    className="border-pink-300 dark:border-pink-700 focus:border-pink-500 dark:focus:border-pink-500 bg-pink-50/30 dark:bg-pink-950/20"
+                    className="border-blue-300 dark:border-blue-700 focus:border-blue-500 dark:focus:border-blue-500 bg-background dark:bg-background"
                   />
-                  <div className="mt-3 p-3 bg-pink-50 dark:bg-pink-950/30 rounded-lg border border-pink-200 dark:border-pink-800">
-                    <p className="text-xs text-pink-700 dark:text-pink-400 flex items-center">
-                      <span className="mr-2">💡</span>
+                  <div className="mt-3 p-3 bg-muted/50 dark:bg-muted/50 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
+                      <Lightbulb className="w-3 h-3 mr-2" />
                       Choose a title that makes it easy to identify this task later
                     </p>
                   </div>
@@ -507,31 +611,32 @@ export function TaskWizardModal({
             {currentStep === 6 && (
               <div className="space-y-6">
                 <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
                     💬 Choose Conversation
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Where should the task results be sent?
                   </p>
                 </div>
                 
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-cyan-200 dark:border-cyan-800 shadow-sm">
+                <div className="bg-card dark:bg-card rounded-xl p-6 border border-cyan-200 dark:border-cyan-800 shadow-sm">
                   <label className="flex items-center text-sm font-medium text-cyan-700 dark:text-cyan-400 mb-3">
-                    <span className="mr-2">🗨️</span> Conversation destination
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Conversation destination
                   </label>
                   <select
                     value={targetConversationId}
                     onChange={(e) => setTargetConversationId(e.target.value)}
-                    className="w-full p-3 border border-cyan-300 dark:border-cyan-700 rounded-lg text-sm bg-cyan-50/30 dark:bg-cyan-950/20 text-gray-800 dark:text-gray-200 focus:border-cyan-500 dark:focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 dark:focus:ring-cyan-800"
+                    className="w-full p-3 border border-cyan-300 dark:border-cyan-700 rounded-lg text-sm bg-background dark:bg-background text-foreground focus:border-cyan-500 dark:focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 dark:focus:ring-cyan-800"
                   >
                     <option value="">✨ Create a new conversation</option>
                     {(Array.isArray(window.__agentopiaConversations) ? window.__agentopiaConversations : []).map((c: any) => (
                       <option key={c.conversation_id} value={c.conversation_id}>💬 {c.title || 'Conversation'}</option>
                     ))}
                   </select>
-                  <div className="mt-3 p-3 bg-cyan-50 dark:bg-cyan-950/30 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                  <div className="mt-3 p-3 bg-muted/50 dark:bg-muted/50 rounded-lg border border-cyan-200 dark:border-cyan-800">
                     <p className="text-xs text-cyan-700 dark:text-cyan-400 flex items-center">
-                      <span className="mr-2">🎯</span>
+                      <Target className="w-3 h-3 mr-2" />
                       {targetConversationId ? 'Task results will be added to the selected conversation' : 'A new conversation will be created for this task'}
                     </p>
                   </div>
@@ -541,25 +646,25 @@ export function TaskWizardModal({
           </div>
 
           {/* Modern Navigation Footer */}
-          <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-700 rounded-b-xl">
+          <div className="px-6 py-4 bg-muted/30 dark:bg-muted/30 border-t border-border dark:border-border rounded-b-xl">
             <div className="flex items-center justify-between">
               <div className="flex space-x-3">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={handleCancel}
-                  className="border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  ❌ Cancel
+                  <X className="w-4 h-4 mr-1" />
+                  Cancel
                 </Button>
                 {currentStep > 1 && (
                   <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={handleBack}
-                    className="border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
                   >
-                    ← Back
+                    <ArrowLeft className="w-4 h-4 mr-1" />
+                    Back
                   </Button>
                 )}
               </div>
@@ -575,9 +680,9 @@ export function TaskWizardModal({
                       (currentStep === 4 && taskSteps.length === 0) ||
                       (currentStep === 5 && !newTaskTitle.trim())
                     }
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-lg"
                   >
-                    Next → ✨
+                    Next
+                    <ArrowRight className="w-4 h-4 ml-1" />
                   </Button>
                 )}
                 {isLastStep && (
@@ -585,9 +690,9 @@ export function TaskWizardModal({
                     size="sm" 
                     onClick={handleSaveTask} 
                     disabled={!isFormValid() || loading}
-                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white border-0 shadow-lg"
                   >
-                    🚀 Save and Exit
+                    <Save className="w-4 h-4 mr-1" />
+                    {editingTask ? 'Update Task' : 'Save Task'}
                   </Button>
                 )}
               </div>

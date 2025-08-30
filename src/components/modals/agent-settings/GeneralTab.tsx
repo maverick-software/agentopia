@@ -69,87 +69,91 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
     description !== (agentData?.description || '');
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">General Information</h3>
-        <p className="text-sm text-muted-foreground">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="pb-4 border-b border-border">
+        <h3 className="text-lg font-semibold">General Information</h3>
+        <p className="text-sm text-muted-foreground mt-1">
           Configure your agent's basic information and identity.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Basic Details</CardTitle>
-          <CardDescription>
-            Set the fundamental information that defines your agent.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="agent-name">Agent Name *</Label>
-            <Input
-              id="agent-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter agent name..."
-              className="max-w-md"
-            />
-            <p className="text-xs text-muted-foreground">
-              This is how your agent will be identified in conversations.
-            </p>
-          </div>
+      {/* Form */}
+      <div className="space-y-6">
+        {/* Agent Name */}
+        <div className="space-y-2">
+          <Label htmlFor="agent-name" className="text-sm font-medium">
+            Agent Name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="agent-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter agent name"
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            This is how your agent will be identified in conversations.
+          </p>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="agent-role">Role</Label>
-            <Input
-              id="agent-role"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g., Customer Support Agent, Research Assistant..."
-              className="max-w-md"
-            />
-            <p className="text-xs text-muted-foreground">
-              Optional role or title that describes the agent's primary function.
-            </p>
-          </div>
+        {/* Role */}
+        <div className="space-y-2">
+          <Label htmlFor="agent-role" className="text-sm font-medium">
+            Role
+          </Label>
+          <Input
+            id="agent-role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            placeholder="e.g., Customer Support Agent, Research Assistant"
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional role or title that describes the agent's primary function.
+          </p>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="agent-description">Description</Label>
-            <Textarea
-              id="agent-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what this agent does and its purpose..."
-              className="min-h-[100px] resize-none"
-            />
-            <p className="text-xs text-muted-foreground">
-              A brief description of the agent's capabilities and intended use.
-            </p>
-          </div>
+        {/* Description */}
+        <div className="space-y-2">
+          <Label htmlFor="agent-description" className="text-sm font-medium">
+            Description
+          </Label>
+          <Textarea
+            id="agent-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe what this agent does and its purpose"
+            className="min-h-[100px] resize-none w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            A brief description of the agent's capabilities and intended use.
+          </p>
+        </div>
+      </div>
 
-          {hasChanges && (
-            <div className="flex items-center justify-end pt-4 border-t">
-              <Button
-                onClick={handleSave}
-                disabled={isLoading || !name.trim()}
-                className="min-w-[100px]"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Save Button - Fixed at bottom */}
+      {hasChanges && (
+        <div className="flex items-center justify-end pt-6 border-t border-border">
+          <Button
+            onClick={handleSave}
+            disabled={isLoading || !name.trim()}
+            size="sm"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

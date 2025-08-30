@@ -135,7 +135,7 @@ export function StepEditor({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-background dark:bg-background border border-border dark:border-border rounded-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             {isEditing ? (
@@ -145,7 +145,7 @@ export function StepEditor({
               </>
             ) : (
               <>
-                <Plus className="h-5 w-5 text-green-600" />
+                <Plus className="h-5 w-5 text-blue-600" />
                 <span>Add New Step</span>
               </>
             )}
@@ -173,11 +173,11 @@ export function StepEditor({
               maxLength={100}
             />
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">
+              <span className="text-muted-foreground">
                 A brief, descriptive name for this step
               </span>
               <span className={cn(
-                "text-gray-400",
+                "text-muted-foreground",
                 formData.step_name.length > 80 && "text-yellow-600",
                 formData.step_name.length > 95 && "text-red-600"
               )}>
@@ -200,11 +200,11 @@ export function StepEditor({
               maxLength={5000}
             />
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">
+              <span className="text-muted-foreground">
                 Clear, specific instructions help ensure successful execution
               </span>
               <span className={cn(
-                "text-gray-400",
+                "text-muted-foreground",
                 formData.instructions.length > 4000 && "text-yellow-600",
                 formData.instructions.length > 4800 && "text-red-600"
               )}>
@@ -215,12 +215,12 @@ export function StepEditor({
 
           {/* Context toggle (only show if not first step) */}
           {(!step || step.step_order > 1) && (
-            <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+            <Card className="bg-muted/50 dark:bg-muted/50 border-border dark:border-border">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
-                      <Label className="text-sm font-medium text-gray-800">
+                      <Label className="text-sm font-medium text-foreground">
                         Include Previous Context
                       </Label>
                       {formData.include_previous_context && (
@@ -229,7 +229,7 @@ export function StepEditor({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-muted-foreground">
                       Pass the results from the previous step to this step as additional context
                     </p>
                   </div>
@@ -246,7 +246,7 @@ export function StepEditor({
                     {formData.include_previous_context ? (
                       <ToggleRight className="h-6 w-6 text-blue-600" />
                     ) : (
-                      <ToggleLeft className="h-6 w-6 text-gray-400" />
+                      <ToggleLeft className="h-6 w-6 text-muted-foreground" />
                     )}
                   </Button>
                 </div>
@@ -255,7 +255,7 @@ export function StepEditor({
                 {canShowContextPreview && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <Label className="text-xs font-medium text-gray-700">
+                      <Label className="text-xs font-medium text-foreground">
                         Previous Step Result Preview
                       </Label>
                       <Button
@@ -270,8 +270,8 @@ export function StepEditor({
                     </div>
                     
                     {showContextPreview && (
-                      <div className="bg-white border border-blue-200 rounded p-3 max-h-32 overflow-y-auto">
-                        <pre className="text-xs text-gray-700 whitespace-pre-wrap">
+                      <div className="bg-background dark:bg-background border border-border dark:border-border rounded p-3 max-h-32 overflow-y-auto">
+                        <pre className="text-xs text-foreground whitespace-pre-wrap">
                           {JSON.stringify(previousStepResult, null, 2)}
                         </pre>
                       </div>
@@ -284,12 +284,12 @@ export function StepEditor({
 
           {/* Validation errors */}
           {validationErrors.length > 0 && (
-            <Card className="border-red-200 bg-red-50">
+            <Card className="border-destructive/50 bg-destructive/10">
               <CardContent className="p-4">
                 <div className="flex items-start space-x-2">
-                  <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                  <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-red-800 mb-2">
+                    <p className="text-sm font-medium text-destructive mb-2">
                       Please fix the following issues:
                     </p>
                     <ul className="space-y-1">
@@ -307,13 +307,13 @@ export function StepEditor({
           )}
 
           {/* Guidelines */}
-          <Card className="bg-gray-50 border-gray-200">
+          <Card className="bg-muted/30 dark:bg-muted/30 border-border dark:border-border">
             <CardContent className="p-4">
-              <h4 className="text-sm font-medium text-gray-800 mb-2 flex items-center">
-                <Edit3 className="h-4 w-4 mr-2 text-gray-600" />
+              <h4 className="text-sm font-medium text-foreground mb-2 flex items-center">
+                <Edit3 className="h-4 w-4 mr-2 text-muted-foreground" />
                 Step Guidelines
               </h4>
-              <ul className="space-y-1 text-xs text-gray-600">
+              <ul className="space-y-1 text-xs text-muted-foreground">
                 <li>• Be specific about what the agent should accomplish</li>
                 <li>• Include any necessary context or parameters</li>
                 <li>• Consider what information might be needed from previous steps</li>
@@ -336,7 +336,7 @@ export function StepEditor({
           <Button
             onClick={handleSave}
             disabled={validationErrors.length > 0 || isSaving}
-            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+            className=""
           >
             {isSaving ? (
               <>

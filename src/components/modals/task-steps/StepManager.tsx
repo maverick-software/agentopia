@@ -136,96 +136,29 @@ export function StepManager({
 
   return (
     <div className={cn("space-y-4", className)}>
-      {/* Header */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center">
-                <ListOrdered className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-base">Task Steps</CardTitle>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Configure sequential steps for {agentName || 'your agent'}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              {/* Validation status */}
-              {steps.length > 0 && (
-                <Badge 
-                  variant={isValid ? "default" : "destructive"}
-                  className="text-xs"
-                >
-                  {isValid ? (
-                    <>
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Valid
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      Issues
-                    </>
-                  )}
-                </Badge>
-              )}
-              
-              {/* Step count */}
-              <Badge variant="outline" className="text-xs">
-                {steps.length} {steps.length === 1 ? 'step' : 'steps'}
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-        
-        <CardContent className="pt-0">
-          {/* Quick stats */}
-          {steps.length > 0 && (
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-xs text-gray-500">Context Enabled</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {steps.filter(s => s.include_previous_context).length}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Validation Issues</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {Object.keys(validationErrors).length}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Total Characters</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {steps.reduce((acc, s) => acc + s.instructions.length, 0)}
-                </p>
-              </div>
-            </div>
-          )}
-          
-          {/* Error display */}
-          {error && (
-            <div className="mt-4 flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-red-700">
-                <p className="font-medium mb-1">Error</p>
-                <p>{error}</p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Header with Add Step button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-foreground">Configure Task Steps</h3>
+          <p className="text-sm text-muted-foreground">Break down your task into sequential steps with specific instructions</p>
+        </div>
+        <Button
+          onClick={() => handleStepEdit('new')}
+          size="sm"
+          className="flex items-center"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Step
+        </Button>
+      </div>
 
       {/* Loading state */}
       {isLoading && (
         <Card>
           <CardContent className="py-8">
             <div className="flex items-center justify-center space-x-3">
-              <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+              <p className="text-sm text-muted-foreground">
                 Loading task steps...
               </p>
             </div>
@@ -253,22 +186,15 @@ export function StepManager({
       {!isLoading && steps.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
-            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-100 to-blue-100 rounded-full flex items-center justify-center mb-4">
-              <ListOrdered className="h-8 w-8 text-purple-600" />
+            <div className="mx-auto w-16 h-16 bg-muted/50 dark:bg-muted/50 rounded-full flex items-center justify-center mb-4">
+              <ListOrdered className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+            <h3 className="text-lg font-medium text-foreground mb-2">
               No Steps Added Yet
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-sm mx-auto">
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
               Break down your task into sequential steps. Each step can have its own instructions and optionally receive context from the previous step.
             </p>
-            <Button
-              onClick={() => handleStepEdit('new')}
-              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add First Step
-            </Button>
           </CardContent>
         </Card>
       )}
@@ -289,25 +215,7 @@ export function StepManager({
         }
       />
 
-      {/* Help text */}
-      {steps.length > 0 && (
-        <Card className="bg-blue-50/50 border-blue-200">
-          <CardContent className="py-3">
-            <div className="flex items-start space-x-2">
-              <ListOrdered className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-blue-700">
-                <p className="font-medium mb-1">💡 Pro Tips:</p>
-                <ul className="space-y-0.5 list-disc list-inside">
-                  <li>Drag steps to reorder them</li>
-                  <li>Enable context to pass results between steps</li>
-                  <li>Use clear, specific instructions for each step</li>
-                  <li>Test your workflow with simple steps first</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
     </div>
   );
 }

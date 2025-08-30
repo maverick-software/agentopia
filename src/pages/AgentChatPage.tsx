@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe, Upload, Image as ImageIcon, Edit, Database as DatabaseIcon, Settings } from 'lucide-react';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe, Upload, Image as ImageIcon, Edit, Database as DatabaseIcon, Settings, Plug, Sliders } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
@@ -1845,147 +1845,42 @@ export function AgentChatPage() {
                   rows={1}
                   style={{ minHeight: '22px', maxHeight: '120px' }}
                 />
+                {/* Voice input button inside text area - disappears when typing */}
+                {!input.trim() && (
+                  <button
+                    type="button"
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors ml-2"
+                    disabled={!agent}
+                    title="Voice input"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19v4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 23h8" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Bottom controls - Outside the text area like Claude */}
             <div className="flex items-center justify-between mt-2 px-2">
-              {/* Left side - Tools */}
+              {/* Left side - File upload */}
 	              <div className="flex items-center">
-	                {/* Agent Settings Menu */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      title="Agent Settings"
-                      className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent`}
-                    >
-                      <Brain className={`w-4 h-4 ${reasoningEnabled ? 'text-purple-500' : 'text-muted-foreground'}`} />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        setAgentSettingsInitialTab('identity');
-                        setShowAgentSettingsModal(true);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <User className="h-4 w-4 mr-2 text-blue-500" />
-                      Identity
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        setAgentSettingsInitialTab('behavior');
-                        setShowAgentSettingsModal(true);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Brain className="h-4 w-4 mr-2 text-purple-500" />
-                      Behavior
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        setAgentSettingsInitialTab('memory');
-                        setShowAgentSettingsModal(true);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <DatabaseIcon className="h-4 w-4 mr-2 text-green-500" />
-                      Memory
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => {
-                        const next = !reasoningEnabled;
-                        setReasoningEnabled(next);
-                        if (agentId) localStorage.setItem(`agent_${agentId}_reasoning_enabled`, String(next));
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Settings className="h-4 w-4 mr-2 text-orange-500" />
-                      <div className="flex items-center justify-between w-full">
-                        <span>Advanced Reasoning</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${reasoningEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                          {reasoningEnabled ? 'ON' : 'OFF'}
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-	                
-	                {/* Web Search toggle (icon button) */}
-	                <button
-	                  type="button"
-	                  title={hasWebSearchCredentials ? (webSearchEnabled ? "Web Search: Enabled" : "Web Search: Disabled") : "Web Search: No credentials configured"}
-	                  aria-pressed={webSearchEnabled}
-	                  disabled={!hasWebSearchCredentials}
-	                  onClick={() => {
-	                    if (!hasWebSearchCredentials) return;
-	                    const next = !webSearchEnabled;
-	                    setWebSearchEnabled(next);
-	                    if (agentId) localStorage.setItem(`agent_${agentId}_web_search_enabled`, String(next));
-	                    // Update agent metadata to persist the setting
-	                    updateAgentWebSearchSetting(next);
-	                  }}
-	                  className={`mr-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent ${!hasWebSearchCredentials ? 'opacity-50 cursor-not-allowed' : ''}`}
-	                >
-	                  <Globe className={`w-4 h-4 ${
-	                    !hasWebSearchCredentials 
-	                      ? 'text-muted-foreground/50'
-	                      : webSearchEnabled 
-	                        ? 'text-blue-500' 
-	                        : 'text-muted-foreground'
-	                  }`} />
-	                </button>
-	                {/* New actions dropdown under input */}
-	                <DropdownMenu>
-	                  <DropdownMenuTrigger asChild>
-	                    <button
-	                      type="button"
-	                      title="Actions"
-	                      className="p-2 rounded-lg hover:bg-accent transition-colors"
-	                      disabled={!agent}
-	                    >
-	                      <Wrench className="w-4 h-4 text-cyan-500" />
-	                    </button>
-	                  </DropdownMenuTrigger>
-	                  <DropdownMenuContent align="start" className="w-44">
-	                    <DropdownMenuItem onClick={() => setShowToolsModal(true)} className="cursor-pointer">
-	                      <Wrench className="w-4 h-4 mr-2 text-cyan-500" />
-	                      Tools
-	                    </DropdownMenuItem>
-	                    <DropdownMenuItem onClick={() => setShowChannelsModal(true)} className="cursor-pointer">
-	                      <MessageSquare className="w-4 h-4 mr-2 text-green-500" />
-	                      Channels
-	                    </DropdownMenuItem>
-	                    <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
-	                      <BookOpen className="w-4 h-4 mr-2 text-orange-500" />
-	                      Sources
-	                    </DropdownMenuItem>
-	                  </DropdownMenuContent>
-	                </DropdownMenu>
-	                {/* Schedule icon next to other tools */}
-	                <button
-	                  type="button"
-	                  onClick={() => setShowTasksModal(true)}
-	                  className="p-2 rounded-lg hover:bg-accent transition-colors ml-1"
-	                  title="Schedule"
-	                  disabled={!agent}
-	                >
-	                  <Clock className="w-4 h-4 text-red-500" />
-	                </button>
+	                {/* File Upload - Far left */}
 	                <DropdownMenu>
 	                  <DropdownMenuTrigger asChild>
 	                    <button
 	                      type="button"
 	                      className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent transition-colors"
 	                      disabled={!agent}
+	                      title="Attach files"
 	                    >
 	                      <Paperclip className="w-4 h-4 text-emerald-500" />
 	                    </button>
 	                  </DropdownMenuTrigger>
-	                                    <DropdownMenuContent align="start" className="w-48">
+	                  <DropdownMenuContent align="start" className="w-48">
                     <DropdownMenuItem 
                       className="cursor-pointer"
                       onClick={() => {
@@ -2024,19 +1919,18 @@ export function AgentChatPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-
-                {/* Voice input button (like Claude) */}
+                
+                {/* Consolidated Settings Button - Opens unified modal */}
                 <button
                   type="button"
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors ml-1"
-                  disabled={!agent}
+                  title="Agent Settings"
+                  onClick={() => {
+                    setAgentSettingsInitialTab('general');
+                    setShowAgentSettingsModal(true);
+                  }}
+                  className="ml-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19v4" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 23h8" />
-                  </svg>
+                  <Sliders className="w-4 h-4 text-muted-foreground" />
                 </button>
               </div>
 
