@@ -65,7 +65,15 @@ async function handleUpload(
     
     // Generate storage path: user_id/category/timestamp_filename
     const timestamp = Date.now();
-    const sanitizedFileName = file_name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    // Better filename sanitization: preserve extension, handle spaces properly
+    const fileExtension = file_name.split('.').pop() || '';
+    const baseName = file_name.replace(/\.[^/.]+$/, ''); // Remove extension
+    const sanitizedBaseName = baseName
+      .replace(/\s+/g, '_')           // Replace multiple spaces with single underscore
+      .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace invalid chars with underscore
+      .replace(/_+/g, '_')            // Replace multiple underscores with single
+      .replace(/^_|_$/g, '');         // Remove leading/trailing underscores
+    const sanitizedFileName = fileExtension ? `${sanitizedBaseName}.${fileExtension}` : sanitizedBaseName;
     const storagePath = `${userId}/${category}/${timestamp}_${sanitizedFileName}`;
     
     // Create media library entry
@@ -89,20 +97,14 @@ async function handleUpload(
     
     if (insertError) throw insertError;
     
-    // Return upload URL for client to upload file
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('media-library')
-      .createSignedUploadUrl(storagePath);
-    
-    if (uploadError) throw uploadError;
-    
+    // Return storage path for client to upload directly
+    // Client will use supabase.storage.from('media-library').upload()
     return {
       success: true,
       data: {
         media_id: mediaEntry.id,
-        upload_url: uploadData.signedUrl,
         storage_path: storagePath,
-        token: uploadData.token
+        bucket: 'media-library'
       },
       metadata: {
         action_performed: 'upload_prepared'
@@ -110,10 +112,16 @@ async function handleUpload(
     };
     
   } catch (error: any) {
-    console.error('[MediaLibrary] Upload error:', error);
+    console.error('[MediaLibrary] Upload error:', {
+      error: error.message,
+      stack: error.stack,
+      fileName: request.file_name,
+      fileSize: request.file_size,
+      fileType: request.file_type
+    });
     return {
       success: false,
-      error: error.message
+      error: error.message || 'Upload failed'
     };
   }
 }

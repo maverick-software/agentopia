@@ -33,6 +33,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -93,6 +94,7 @@ export function MediaLibraryPage() {
   
   // Upload state
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   
   // Load data on component mount
   useEffect(() => {
@@ -202,17 +204,17 @@ export function MediaLibraryPage() {
           throw new Error(uploadData.error || `Upload failed for ${file.name}`);
         }
 
-        // Upload file to storage
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const storageResponse = await fetch(uploadData.data.upload_url, {
-          method: 'POST',
-          body: formData
-        });
+        // Upload file directly to Supabase storage (like other parts of the app)
+        const { error: storageError } = await supabase.storage
+          .from(uploadData.data.bucket)
+          .upload(uploadData.data.storage_path, file, {
+            contentType: file.type,
+            duplex: 'half'
+          });
 
-        if (!storageResponse.ok) {
-          throw new Error(`Storage upload failed for ${file.name}`);
+        if (storageError) {
+          console.error('Storage upload error:', storageError);
+          throw new Error(`Storage upload failed for ${file.name}: ${storageError.message}`);
         }
 
         // Process the document
@@ -329,10 +331,19 @@ export function MediaLibraryPage() {
         <div>
           <h1 className="text-3xl font-bold">Media Library</h1>
           <p className="text-muted-foreground">
-            Manage your documents, images, and media files for agent training
+            Manage your documents, images, and media files for agent training. 
+            Supports PDF, Word, PowerPoint, text, images (JPEG, PNG, GIF, WebP), 
+            audio (MP3, WAV), and video (MP4, WebM) files up to 50MB each.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowUploadModal(true)}
+            disabled={uploading}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            {uploading ? 'Uploading...' : 'Upload Files'}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -399,47 +410,6 @@ export function MediaLibraryPage() {
           </Card>
         </div>
       )}
-
-      {/* Upload Area */}
-      <Card>
-        <CardContent className="p-6">
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${
-              isDragOver 
-                ? 'border-primary bg-primary/5' 
-                : 'border-muted-foreground/25 hover:border-primary/50'
-            }`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-          >
-            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">
-              {uploading ? 'Uploading...' : 'Upload Media Files'}
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Drop files here or click to browse. Supports documents, images, audio, and video.
-            </p>
-            <Button 
-              onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.multiple = true;
-                input.accept = '*/*';
-                input.onchange = (e) => {
-                  const files = (e.target as HTMLInputElement).files;
-                  if (files) handleFileUpload(files);
-                };
-                input.click();
-              }}
-              disabled={uploading}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Browse Files
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       <Tabs defaultValue="library" className="space-y-4">
         <TabsList>
@@ -717,6 +687,60 @@ export function MediaLibraryPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Upload Modal */}
+      <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Media Files</DialogTitle>
+            <DialogDescription>
+              Upload documents, images, audio, and video files to your media library. 
+              Supports files up to 50MB each.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
+                isDragOver 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-muted-foreground/25 hover:border-primary/50'
+              }`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+              <h3 className="font-medium mb-2">
+                {uploading ? 'Uploading...' : 'Drop files here or click to browse'}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Supports documents, images, audio, and video (max 50MB)
+              </p>
+              <Button 
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.multiple = true;
+                  input.accept = '*/*';
+                  input.onchange = (e) => {
+                    const files = (e.target as HTMLInputElement).files;
+                    if (files) {
+                      handleFileUpload(files);
+                      setShowUploadModal(false);
+                    }
+                  };
+                  input.click();
+                }}
+                disabled={uploading}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Browse Files
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
