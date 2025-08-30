@@ -25,8 +25,7 @@ import {
   BookOpen,
   Shield,
   GraduationCap,
-  BookMarked,
-  FileTemplate
+  BookMarked
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -298,7 +297,7 @@ export function MediaLibraryPage() {
       case 'GraduationCap': return <GraduationCap className="h-4 w-4" />;
       case 'BookMarked': return <BookMarked className="h-4 w-4" />;
       case 'Shield': return <Shield className="h-4 w-4" />;
-      case 'FileTemplate': return <FileTemplate className="h-4 w-4" />;
+      case 'FileTemplate': return <FileText className="h-4 w-4" />;
       default: return <FileText className="h-4 w-4" />;
     }
   };
