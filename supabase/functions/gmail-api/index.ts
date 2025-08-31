@@ -77,44 +77,60 @@ serve(async (req) => {
       throw new Error('Please provide the required email parameters: action, recipient details, and message content.')
     }
 
-    // Create a Supabase client with the auth context
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      throw new Error('Missing Authorization header')
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    })
-
     // Create a service role client for vault access
     const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-
-    if (userError || !user) {
-      console.error('[gmail-api] User authentication failed:', userError);
-      throw new Error('User session has expired. Please refresh the page or log in again.')
+    // Get user ID from request body (passed by Universal Tool Executor)
+    const { user_id } = requestBody;
+    if (!user_id) {
+      throw new Error('Missing user_id in request body')
     }
+
+    console.log('[gmail-api] Using user_id from request body:', user_id);
 
     // Validate agent permissions for Gmail
     const requiredScopes = getRequiredScopes(action)
-    const { data: hasPermissions, error: permissionError } = await supabase.rpc(
+    console.log('[gmail-api] Validating permissions:', {
+      agent_id,
+      user_id,
+      action,
+      requiredScopes
+    });
+
+    const { data: hasPermissions, error: permissionError } = await supabaseServiceRole.rpc(
       'validate_agent_gmail_permissions',
       {
         p_agent_id: agent_id,
-        p_user_id: user.id,
+        p_user_id: user_id,
         p_required_scopes: requiredScopes
       }
     )
 
+    console.log('[gmail-api] Permission validation result:', {
+      hasPermissions,
+      permissionError
+    });
+
+    // Let's also manually check what permissions exist
+    const { data: debugPermissions } = await supabaseServiceRole
+      .from('agent_integration_permissions')
+      .select(`
+        allowed_scopes,
+        is_active,
+        permission_level,
+        user_integration_credentials!inner(
+          connection_status,
+          oauth_providers!inner(name)
+        )
+      `)
+      .eq('agent_id', agent_id)
+      .eq('user_integration_credentials.user_id', user_id)
+      .eq('user_integration_credentials.oauth_providers.name', 'gmail');
+
+    console.log('[gmail-api] Debug - Agent Gmail permissions:', debugPermissions);
+
     if (permissionError || !hasPermissions) {
-      throw new Error('Agent does not have required permissions for this Gmail operation')
+      throw new Error(`Agent does not have required permissions for this Gmail operation. Required: ${JSON.stringify(requiredScopes)}, Permission error: ${permissionError?.message || 'None'}`)
     }
 
     // Get user's Gmail access token from integration credentials
@@ -131,13 +147,28 @@ serve(async (req) => {
 
     const { data: connection, error: connectionError } = await supabaseServiceRole
       .from('user_integration_credentials')
-      .select('vault_access_token_id, vault_refresh_token_id, token_expires_at')
-      .eq('user_id', user.id)
+      .select('vault_access_token_id, vault_refresh_token_id, token_expires_at, connection_status, created_at, updated_at')
+      .eq('user_id', user_id)
       .eq('oauth_provider_id', gmailProvider.id)
       .eq('connection_status', 'active')
       .single();
 
+    console.log('[gmail-api] Connection query result:', {
+      connection,
+      connectionError,
+      user_id: user_id,
+      gmail_provider_id: gmailProvider.id
+    });
+
     if (connectionError || !connection) {
+      // Let's also check if there are any connections at all for this user
+      const { data: allConnections } = await supabaseServiceRole
+        .from('user_integration_credentials')
+        .select('id, connection_status, oauth_provider_id, created_at, updated_at')
+        .eq('user_id', user_id);
+      
+      console.log('[gmail-api] All user connections:', allConnections);
+      
       throw new Error(`No active Gmail connection found: ${connectionError?.message || 'Not found'}`);
     }
 
@@ -156,6 +187,8 @@ serve(async (req) => {
     } else {
       // SECURITY: Get access token from Supabase Vault (not directly from connection)
       const vaultTokenId = connection.vault_access_token_id;
+      console.log('[gmail-api] Vault token ID:', vaultTokenId);
+      
       if (!vaultTokenId) {
         throw new Error('Vault token ID is empty or not found.');
       }
@@ -164,11 +197,18 @@ serve(async (req) => {
       const { data: decryptedToken, error: vaultError } = await supabaseServiceRole
         .rpc('vault_decrypt', { vault_id: vaultTokenId });
 
+      console.log('[gmail-api] Vault decrypt result:', {
+        success: !!decryptedToken,
+        error: vaultError,
+        token_length: decryptedToken ? decryptedToken.length : 0
+      });
+
       if (vaultError || !decryptedToken) {
         throw new Error(`Failed to retrieve Gmail access token from vault: ${vaultError?.message || 'Token not found'}`);
       }
       
       accessToken = decryptedToken;
+      console.log('[gmail-api] Access token retrieved successfully, length:', accessToken.length);
     }
 
     // Execute the requested Gmail API action
@@ -275,19 +315,14 @@ serve(async (req) => {
 
 // Helper function to get required scopes for each action
 function getRequiredScopes(action: string): string[] {
+  // Return the mapped scope names that are stored in agent permissions,
+  // not the raw OAuth scopes
   const scopeMap: Record<string, string[]> = {
-    send_email: ['https://www.googleapis.com/auth/gmail.send'],
-    read_emails: ['https://www.googleapis.com/auth/gmail.readonly'],
-    search_emails: ['https://www.googleapis.com/auth/gmail.readonly'],
-    manage_labels: [
-      'https://www.googleapis.com/auth/gmail.labels',
-      // modify includes label changes on messages
-      'https://www.googleapis.com/auth/gmail.modify',
-    ],
-    email_actions: [
-      // delete/archive/mark read require modify scope
-      'https://www.googleapis.com/auth/gmail.modify',
-    ],
+    send_email: ['email.send'],
+    read_emails: ['email.read'],
+    search_emails: ['email.read'],
+    manage_labels: ['email.modify'],
+    email_actions: ['email.modify'],
   };
   return scopeMap[action] || [];
 }

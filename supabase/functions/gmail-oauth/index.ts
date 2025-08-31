@@ -182,7 +182,18 @@ serve(async (req) => {
 
     if (configError) {
       console.error('Failed to create/update Gmail configuration:', configError);
+    } else {
+      console.log('Gmail configuration created/updated successfully');
     }
+
+    // Log successful completion
+    console.log(`Gmail OAuth completed successfully for user ${userId}:`, {
+      connection_id: connection.id,
+      user_email: userInfo.email,
+      scopes_count: scopesGranted.length,
+      expires_at: expiresAt,
+      config_created: !configError
+    });
 
     return new Response(
       JSON.stringify({

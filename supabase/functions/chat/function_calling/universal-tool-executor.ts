@@ -381,14 +381,19 @@ export class UniversalToolExecutor {
         body: edgeFunctionParams
       };
       
-      // Include authorization header if auth token is provided
-      if (authToken) {
-        console.log(`[UniversalToolExecutor] Adding user auth token for ${toolName}`);
+      // Include authorization header if auth token is provided and valid
+      if (authToken && authToken.trim().length > 0 && authToken !== 'undefined' && authToken !== 'null') {
+        console.log(`[UniversalToolExecutor] Adding user auth token for ${toolName} (length: ${authToken.length})`);
         invokeOptions.headers = {
           'Authorization': `Bearer ${authToken}`
         };
       } else {
-        console.log(`[UniversalToolExecutor] No auth token provided for ${toolName} - using service role`);
+        console.log(`[UniversalToolExecutor] No valid auth token provided for ${toolName} - using service role`);
+        console.log(`[UniversalToolExecutor] Auth token debug:`, { 
+          provided: !!authToken, 
+          length: authToken?.length || 0,
+          value: authToken ? `${authToken.substring(0, 20)}...` : 'null/undefined'
+        });
       }
       
       // Call the appropriate edge function
