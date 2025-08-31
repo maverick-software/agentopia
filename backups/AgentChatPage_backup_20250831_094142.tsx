@@ -1,0 +1,2134 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe, Upload, Image as ImageIcon, Edit, Database as DatabaseIcon, Settings, Plug, Sliders } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { useAgents } from '../hooks/useAgents';
+import { useConnections } from '@/integrations/_shared';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
+import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
+import { AboutMeModal } from '../components/modals/AboutMeModal';
+import { HowIThinkModal } from '../components/modals/HowIThinkModal';
+import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
+import { AgentSettingsModal } from '../components/modals/AgentSettingsModal';
+import { EnhancedChannelsModalRefactored as EnhancedChannelsModal } from '../components/modals/channels/EnhancedChannelsModalRefactored';
+import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
+import { TaskManagerModal } from '../components/modals/TaskManagerModal';
+import { HistoryModal } from '../components/modals/HistoryModal';
+import { ProcessModal } from '../components/modals/ProcessModal';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
+import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicator';
+import { InlineThinkingIndicator } from '../components/InlineThinkingIndicator';
+import type { Message } from '../types';
+import type { Database } from '../types/database.types';
+import { useConversations } from '../hooks/useConversations';
+import { ToolCategorizer } from '../lib/toolCategorization';
+import { toast } from 'react-hot-toast';
+import { refreshAgentAvatarUrl } from '../lib/avatarUtils';
+
+function ConversationSelector({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
+  const { items, createConversation } = useConversations(agentId, userId);
+  return (
+    <div className="flex items-center space-x-2">
+      <select
+        className="text-xs bg-accent/50 rounded px-2 py-1 text-foreground"
+        value={selectedConversationId || ''}
+        onChange={(e) => onSelect(e.target.value || null)}
+      >
+        <option value="">All conversations</option>
+        {items.map((c) => (
+          <option key={c.conversation_id} value={c.conversation_id}>
+            {c.title || c.conversation_id.slice(0, 8)}
+          </option>
+        ))}
+      </select>
+      <button
+        className="p-1.5 hover:bg-accent rounded-lg transition-colors"
+        title="New conversation"
+        onClick={async () => {
+          const id = await createConversation(null);
+          onSelect(id);
+        }}
+      >
+        <Plus className="h-4 w-4 text-muted-foreground" />
+      </button>
+    </div>
+  );
+}
+
+function SidebarConversations({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
+  const { items, renameConversation, archiveConversation, createConversation } = useConversations(agentId, userId);
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="px-2 pb-2">
+        <button
+          className="w-full text-xs border border-border rounded-md px-2 py-1 hover:bg-accent"
+          onClick={async () => {
+            const id = await createConversation('New Conversation');
+            onSelect(id);
+          }}
+        >
+          + New conversation
+        </button>
+      </div>
+      {items.map((c) => {
+        const isActive = c.conversation_id === selectedConversationId;
+        return (
+          <div key={c.conversation_id} className={`px-3 py-2 cursor-pointer text-sm flex items-center justify-between ${isActive ? 'bg-accent' : 'hover:bg-accent/50'}`} onClick={() => onSelect(c.conversation_id)}>
+            <div className="flex-1 min-w-0 pr-2">
+              <div className="truncate font-medium">{c.title || c.conversation_id.slice(0, 8)}</div>
+              {c.last_message && (
+                <div className="truncate text-xs text-muted-foreground/80">{c.last_message}</div>
+              )}
+            </div>
+            {c.last_message_at && (
+              <div className="text-[10px] text-muted-foreground/70 ml-2 whitespace-nowrap">
+                {new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+            <div className="flex items-center space-x-2 opacity-70">
+              <button
+                className="text-[11px] hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const title = prompt('Rename conversation', c.title || '') || undefined;
+                  if (title !== undefined) renameConversation(c.conversation_id, title);
+                }}
+              >
+                Rename
+              </button>
+              <button
+                className="text-[11px] hover:underline text-red-500"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  archiveConversation(c.conversation_id);
+                }}
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type Agent = Database['public']['Tables']['agents']['Row'];
+
+export function AgentChatPage() {
+  const { user } = useAuth();
+  const { agentId } = useParams<{ agentId: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { updateAgent } = useAgents();
+  const { connections } = useConnections({ includeRevoked: false });
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
+  const [showAboutMeModal, setShowAboutMeModal] = useState(false);
+  const [showHowIThinkModal, setShowHowIThinkModal] = useState(false);
+  const [showWhatIKnowModal, setShowWhatIKnowModal] = useState(false);
+  const [showToolsModal, setShowToolsModal] = useState(false);
+  const [showChannelsModal, setShowChannelsModal] = useState(false);
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
+  const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
+  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'identity' | 'behavior' | 'memory' | 'reasoning'>('identity');
+  
+  // File upload state
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(() => {
+    // Check if we have a conversation ID in the URL first
+    const params = new URLSearchParams(location.search);
+    const urlConvId = params.get('conv');
+    if (urlConvId) return urlConvId;
+    
+    // Otherwise, start with a fresh chat (no conversation ID)
+    // This ensures clicking on an agent always starts with a new chat
+    return null;
+  });
+  
+  // Track if we're creating a new conversation to prevent race conditions
+  const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
+  // Reasoning toggle (persist per agent in localStorage)
+  const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
+    const key = `agent_${agentId}_reasoning_enabled`;
+    const v = localStorage.getItem(key);
+    return v === null ? true : v === 'true';
+  });
+  
+  // Web search toggle (persist per agent in localStorage)
+  const [webSearchEnabled, setWebSearchEnabled] = useState<boolean>(() => {
+    const key = `agent_${agentId}_web_search_enabled`;
+    const v = localStorage.getItem(key);
+    return v === null ? false : v === 'true';
+  });
+  
+  // Check if user has web search credentials available
+  const hasWebSearchCredentials = connections.some(c => 
+    ['serper_api', 'serpapi', 'brave_search'].includes(c.provider_name) && 
+    c.connection_status === 'active'
+  );
+  
+  // Function to update agent's web search setting in metadata
+  const updateAgentWebSearchSetting = useCallback(async (enabled: boolean) => {
+    if (!agentId || !agent) return;
+    
+    try {
+      const currentMetadata = agent.metadata || {};
+      const currentSettings = currentMetadata.settings || {};
+      
+      const updatedMetadata = {
+        ...currentMetadata,
+        settings: {
+          ...currentSettings,
+          web_search_enabled: enabled
+        }
+      };
+      
+      const { error } = await supabase
+        .from('agents')
+        .update({ metadata: updatedMetadata })
+        .eq('id', agentId);
+        
+      if (error) {
+        console.error('Error updating agent web search setting:', error);
+      } else {
+        console.log(`[AgentChat] Web search ${enabled ? 'enabled' : 'disabled'} for agent ${agentId}`);
+        setAgent(prev => prev ? { ...prev, metadata: updatedMetadata } : null);
+      }
+    } catch (error) {
+      console.error('Error updating agent web search setting:', error);
+    }
+  }, [agentId, agent]);
+  
+  // Sync webSearchEnabled state with agent metadata when agent loads
+  useEffect(() => {
+    if (agent && agentId) {
+      const settingFromDB = agent.metadata?.settings?.web_search_enabled;
+      if (settingFromDB !== undefined) {
+        setWebSearchEnabled(settingFromDB);
+        localStorage.setItem(`agent_${agentId}_web_search_enabled`, String(settingFromDB));
+      }
+    }
+  }, [agent, agentId]);
+  
+  // AI State tracking
+  const [aiState, setAiState] = useState<AIState | null>(null);
+  const [currentTool, setCurrentTool] = useState<ToolExecutionStatus | null>(null);
+  const [showAIIndicator, setShowAIIndicator] = useState(false);
+  const [processSteps, setProcessSteps] = useState<Array<{
+    state: AIState;
+    label: string;
+    duration?: number;
+    details?: string;
+    response?: string;
+    toolCall?: string;
+    toolResult?: any;
+    completed: boolean;
+    startTime?: Date;
+  }>>([]);
+  const [thinkingMessageIndex, setThinkingMessageIndex] = useState<number | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const fetchAgentAttempts = useRef(0);
+  const MAX_FETCH_ATTEMPTS = 5;
+  const isMounted = useRef(true);
+  const fetchInProgress = useRef(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: 'smooth',
+            block: 'end'
+          });
+        }
+      });
+    }
+  }, []);
+
+  // Normalize Markdown for consistent initial rendering
+  const formatMarkdown = useCallback((text: string): string => {
+    if (!text) return '';
+    const lines = text.split('\n');
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      const isList = /^([-*+]\s|\d+\.\s)/.test(trimmed);
+      const isHeader = /^#{1,6}\s/.test(trimmed);
+      // Ensure a blank line before lists and headers when missing
+      if ((isList || isHeader) && out.length > 0 && out[out.length - 1].trim() !== '') {
+        out.push('');
+      }
+      out.push(line);
+    }
+    return out.join('\n');
+  }, []);
+
+  // Auto-resize textarea
+  // Sync selected conversation with URL ?conv= param and localStorage
+  useEffect(() => {
+    // Listen for task modal activating a conversation
+    const handler = (e: any) => {
+      const detail = e?.detail;
+      if (!detail) return;
+      if (detail.agentId === agentId && detail.conversationId) {
+        setSelectedConversationId(detail.conversationId);
+        try { localStorage.setItem(`agent_${agentId}_conversation_id`, detail.conversationId); } catch {}
+        // Force a quick refresh of history
+        setMessages([]);
+        // Ensure sidebar list refreshes by touching last_active
+        try {
+          supabase.from('conversation_sessions')
+            .upsert({ conversation_id: detail.conversationId, agent_id: agentId, user_id: user?.id || null, last_active: new Date().toISOString(), status: 'active' });
+        } catch {}
+      }
+    };
+    window.addEventListener('agentopia:conversation:activated', handler as EventListener);
+    return () => window.removeEventListener('agentopia:conversation:activated', handler as EventListener);
+  }, [agentId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const conv = params.get('conv');
+    if (conv && conv !== selectedConversationId) {
+      // URL has a conversation ID, use it
+      setSelectedConversationId(conv);
+      if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
+    } else if (!conv && selectedConversationId) {
+      // URL has no conversation ID but we have one in state
+      // This happens when navigating to a new chat - clear the conversation
+      setSelectedConversationId(null);
+      setMessages([]);
+      if (agentId) {
+        try { 
+          localStorage.removeItem(`agent_${agentId}_conversation_id`);
+          localStorage.removeItem(`agent_${agentId}_session_id`);
+        } catch {}
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, agentId]);
+
+  // Reset messages when switching agent or conversation
+  useEffect(() => {
+    setMessages([]);
+    setIsHistoryLoading(true);
+  }, [agentId, selectedConversationId]);
+  const adjustTextareaHeight = useCallback(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const maxHeight = 200; // Max height in pixels
+      textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+    }
+  }, []);
+
+  // Conversation actions: rename, archive, share
+  const handleRenameConversation = useCallback(async () => {
+    if (!selectedConversationId || !agentId || !user?.id) return;
+    const currentTitle = '';
+    const next = prompt('Rename conversation', currentTitle);
+    if (next === null) return;
+    const title = next.trim();
+    try {
+      await supabase
+        .from('conversation_sessions')
+        .upsert({ conversation_id: selectedConversationId, agent_id: agentId, user_id: user.id, title }, { onConflict: 'conversation_id' });
+    } catch {}
+  }, [selectedConversationId, agentId, user?.id]);
+
+  const handleArchiveConversation = useCallback(async () => {
+    if (!selectedConversationId || !agentId) return;
+    try {
+      await supabase
+        .from('conversation_sessions')
+        .update({ status: 'abandoned', ended_at: new Date().toISOString() })
+        .eq('conversation_id', selectedConversationId)
+        .eq('agent_id', agentId);
+    } catch {}
+    setSelectedConversationId(null);
+    try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+    navigate(`/agents/${agentId}/chat`, { replace: true });
+    setMessages([]);
+  }, [selectedConversationId, agentId, navigate]);
+
+  const handleShareConversation = useCallback(async () => {
+    if (!agentId || !selectedConversationId) return;
+    const link = `${window.location.origin}/agents/${agentId}/chat?conv=${selectedConversationId}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      alert('Shareable link copied to clipboard');
+    } catch {
+      prompt('Copy link to share:', link);
+    }
+  }, [agentId, selectedConversationId]);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
+
+  // Auto-scroll to bottom when messages change - more controlled
+  useEffect(() => {
+    if (!isHistoryLoading && messages.length > 0 && messagesEndRef.current) {
+      const container = messagesEndRef.current.closest('.overflow-y-auto');
+      if (container) {
+        // Only auto-scroll if user is near the bottom (within 100px)
+        const isNearBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - 100;
+        
+        if (isNearBottom) {
+          requestAnimationFrame(() => {
+            if (messagesEndRef.current) {
+              messagesEndRef.current.scrollIntoView({ 
+                behavior: 'smooth',
+                block: 'end' 
+              });
+            }
+          });
+        }
+      }
+    }
+  }, [messages, isHistoryLoading]);
+
+  // Initial scroll when history loading completes - instant
+  useEffect(() => {
+    if (!isHistoryLoading && messages.length > 0) {
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: 'auto', // Instant scroll for initial load
+            block: 'end' 
+          });
+        }
+      }, 100);
+    }
+  }, [isHistoryLoading]);
+
+  // AI State Management Functions
+  const startAIProcessing = useCallback(() => {
+    setShowAIIndicator(true);
+    setAiState('thinking');
+    setCurrentTool(null);
+    setProcessSteps([]);
+    
+    // Add thinking message to chat
+    const thinkingMessage: Message = {
+      role: 'thinking',
+      content: 'Processing your request...',
+      timestamp: new Date(),
+      agentId: agent?.id,
+      userId: user?.id,
+      metadata: { isCompleted: false },
+      aiProcessDetails: { steps: [], toolsUsed: [] }
+    };
+    
+    setMessages(prev => {
+      const newMessages = [...prev, thinkingMessage];
+      setThinkingMessageIndex(newMessages.length - 1);
+      return newMessages;
+    });
+  }, [agent?.id, user?.id]);
+
+  const updateAIState = useCallback((newState: AIState, toolInfo?: Partial<ToolExecutionStatus>) => {
+    setAiState(newState);
+    if (toolInfo) {
+      setCurrentTool(prev => ({ ...prev, ...toolInfo } as ToolExecutionStatus));
+    }
+    
+    // Add step to process tracking
+    const stepLabel = {
+      'thinking': 'Analyzing your message',
+      'analyzing_tools': 'Checking available tools',
+      'executing_tool': toolInfo?.toolName ? `Using ${toolInfo.toolName}` : 'Executing tool',
+      'processing_results': 'Processing tool results',
+      'generating_response': 'Generating response',
+      'completed': 'Response ready',
+      'failed': 'Processing failed'
+    }[newState] || 'Processing';
+    
+    setProcessSteps(prev => {
+      const existingIndex = prev.findIndex(step => step.state === newState);
+      const newStep = {
+        state: newState,
+        label: stepLabel,
+        startTime: new Date(),
+        completed: false,
+        details: toolInfo?.provider ? `Using ${toolInfo.provider}` : undefined
+      };
+      
+      if (existingIndex >= 0) {
+        // Update existing step
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], ...newStep };
+        return updated;
+      } else {
+        // Add new step and mark previous as completed
+        const updated = prev.map(step => ({ ...step, completed: true }));
+        return [...updated, newStep];
+      }
+    });
+  }, []);
+
+  // Function to add response data to current step
+  const addStepResponse = useCallback((state: AIState, response: string) => {
+    setProcessSteps(prev => {
+      const updated = [...prev];
+      let stepIndex = -1;
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].state === state) {
+          stepIndex = i;
+          break;
+        }
+      }
+      if (stepIndex >= 0) {
+        updated[stepIndex] = { ...updated[stepIndex], response };
+      }
+      return updated;
+    });
+  }, []);
+
+  // Function to add tool call data to current step
+  const addStepToolCall = useCallback((state: AIState, toolCall: string, toolResult?: any) => {
+    setProcessSteps(prev => {
+      const updated = [...prev];
+      let stepIndex = -1;
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].state === state) {
+          stepIndex = i;
+          break;
+        }
+      }
+      if (stepIndex >= 0) {
+        updated[stepIndex] = { 
+          ...updated[stepIndex], 
+          toolCall,
+          ...(toolResult && { toolResult })
+        };
+      }
+      return updated;
+    });
+  }, []);
+
+  const completeAIProcessing = useCallback((success: boolean = true) => {
+    setAiState(success ? 'completed' : 'failed');
+    
+    // Mark all steps as completed
+    setProcessSteps(prev => prev.map(step => ({ ...step, completed: true })));
+    
+    // Update thinking message to completed state (keep it visible as "Thoughts")
+    if (thinkingMessageIndex !== null) {
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[thinkingMessageIndex]?.role === 'thinking') {
+          updated[thinkingMessageIndex] = {
+            ...updated[thinkingMessageIndex],
+            metadata: { isCompleted: true },
+            aiProcessDetails: {
+              steps: processSteps.map(step => ({ ...step, completed: true })),
+              totalDuration: Date.now() - (processSteps[0]?.startTime?.getTime() || Date.now()),
+              toolsUsed: processSteps.filter(s => s.details).map(s => s.details || '')
+            }
+          };
+        }
+        return updated;
+      });
+    }
+    
+    // Clean up state
+    setTimeout(() => {
+      setShowAIIndicator(false);
+      setAiState(null);
+      setCurrentTool(null);
+      setThinkingMessageIndex(null);
+    }, 500);
+  }, [thinkingMessageIndex, processSteps]);
+
+  const completeAIProcessingWithResponse = useCallback(async (responseContent: string) => {
+    setAiState('completed');
+    
+    // Mark all steps as completed
+    const completedSteps = await new Promise<typeof processSteps>((resolve) => {
+      setProcessSteps(prevSteps => {
+        const done = prevSteps.map(step => ({ ...step, completed: true }));
+
+        // Find and convert the thinking message to assistant response
+        setMessages(prev => {
+          const updated = [...prev];
+          // Find the most recent thinking message
+          let thinkingIndex = -1;
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].role === 'thinking' && !updated[i].metadata?.isCompleted) {
+              thinkingIndex = i;
+              break;
+            }
+          }
+          
+          if (thinkingIndex !== -1) {
+            // Convert to assistant message with thinking details
+            updated[thinkingIndex] = {
+              role: 'assistant',
+              content: responseContent,
+              timestamp: new Date(),
+              agentId: agent?.id,
+              userId: user?.id,
+              metadata: { isCompleted: true },
+              aiProcessDetails: {
+                steps: done,
+                totalDuration: Date.now() - (done[0]?.startTime?.getTime() || Date.now()),
+                toolsUsed: done.filter(s => s.details).map(s => s.details || '')
+              }
+            };
+          } else {
+            // Fallback: Add new assistant message if no thinking message found
+            updated.push({
+              role: 'assistant',
+              content: responseContent,
+              timestamp: new Date(),
+              agentId: agent?.id,
+              userId: user?.id,
+              metadata: { isCompleted: true },
+              aiProcessDetails: {
+                steps: done,
+                totalDuration: Date.now() - (done[0]?.startTime?.getTime() || Date.now()),
+                toolsUsed: done.filter(s => s.details).map(s => s.details || '')
+              }
+            });
+          }
+          return updated;
+        });
+        
+        return done;
+      });
+      // Resolve in next tick to ensure setState above applied
+      requestAnimationFrame(() => resolve(processSteps));
+    });
+
+    // Note: Do not persist here. The backend chat function persists the assistant
+    // response. Writing here would duplicate rows and cause repeated messages.
+    
+    // Clean up state
+    setTimeout(() => {
+      setShowAIIndicator(false);
+      setAiState(null);
+      setCurrentTool(null);
+      setThinkingMessageIndex(null);
+    }, 500);
+  }, [agent?.id, user?.id]);
+
+  // Simulate AI processing phases
+  const simulateAIProcessing = useCallback(async () => {
+    // Phase 1: Thinking
+    updateAIState('thinking');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    // Capture thinking response
+    addStepResponse('thinking', `User asked: "${input}"\nI need to understand what they're asking for and determine the best way to help them. Let me analyze this message and see if I need to use any tools or if I can respond directly.`);
+
+    // Phase 2: Analyzing tools
+    updateAIState('analyzing_tools');
+    await new Promise(resolve => setTimeout(resolve, 600));
+    // Capture tool analysis response using smart categorization
+    const detectedCategories = ToolCategorizer.categorizeByContent(input);
+    const toolAnalysis = detectedCategories.length > 0;
+    const categoryLabels = detectedCategories.map(cat => cat.label).join(', ');
+    
+    addStepResponse('analyzing_tools', `Checking available tools for this request...\nTool categories detected: ${categoryLabels || 'None'}\nAvailable tools: Email integration, Web search, File operations\nDecision: ${toolAnalysis ? `Will use ${categoryLabels} tools` : 'No tools needed for this request'}`);
+
+    // Phase 3: Check if we might execute a tool (simulate tool detection)
+    const mightUseTool = toolAnalysis;
+
+    if (mightUseTool) {
+      // Phase 4: Tool execution
+      const primaryCategory = ToolCategorizer.getPrimaryCategory(detectedCategories);
+      const toolProvider = primaryCategory?.id === 'email' ? 'email_service' : primaryCategory?.id || 'tool';
+      
+      updateAIState('executing_tool', {
+        toolName: `${toolProvider}_action`,
+        provider: toolProvider,
+        status: 'executing',
+        startTime: new Date(),
+      });
+      
+      // Capture tool call with dynamic categorization
+      const toolAction = primaryCategory?.id === 'email' ? 'send_email' : 
+                        primaryCategory?.id === 'web' ? 'web_search' :
+                        primaryCategory?.id === 'docs' ? 'create_document' :
+                        'execute_action';
+      
+      addStepToolCall('executing_tool', 
+        `${toolProvider}.${toolAction}({
+  ${primaryCategory?.id === 'email' ? 
+    `to: "user@example.com",
+  subject: "Response to your inquiry",
+  body: "Thank you for your message..."` :
+  primaryCategory?.id === 'web' ? 
+    `query: "search terms from user message",
+  type: "comprehensive"` :
+    `action: "process_request"`}
+})`,
+        {
+          success: true,
+          [primaryCategory?.id === 'email' ? 'message_id' : 
+           primaryCategory?.id === 'web' ? 'results_count' : 
+           'operation_id']: primaryCategory?.id === 'email' ? "msg_abc123" : 
+                           primaryCategory?.id === 'web' ? 5 : "op_xyz789",
+          executed_at: new Date().toISOString(),
+          category: primaryCategory?.label || 'General'
+        }
+      );
+      
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Phase 5: Processing results
+      updateAIState('processing_results', {
+        status: 'completed',
+        endTime: new Date(),
+      });
+      
+      const resultMessage = primaryCategory?.id === 'email' ? 'Email sent successfully!' :
+                           primaryCategory?.id === 'web' ? 'Web search completed!' :
+                           primaryCategory?.id === 'docs' ? 'Document created!' :
+                           'Operation completed successfully!';
+      
+      addStepResponse('processing_results', `Tool execution completed successfully!\n${resultMessage}\nProcessing the result to formulate a response to the user.`);
+      
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
+    // Phase 6: Generating response
+    updateAIState('generating_response');
+    const toolResults = mightUseTool ? 
+      `${ToolCategorizer.getPrimaryCategory(detectedCategories)?.label || 'Tool'} operation completed successfully` : 
+      'No tools used';
+      
+    addStepResponse('generating_response', `Generating final response based on:\n- User's original request: "${input}"\n- Tool results: ${toolResults}\n- Context: Friendly conversation\n\nFormulating helpful and conversational response...`);
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }, [input, updateAIState, addStepResponse, addStepToolCall]);
+
+  // Effect to handle component unmount for async operations
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Fetch agent details
+  useEffect(() => {
+    const fetchAgent = async () => {
+      if (!agentId || !user || fetchInProgress.current) return;
+      
+      fetchInProgress.current = true;
+      fetchAgentAttempts.current++;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        
+        const { data, error } = await supabase
+          .from('agents')
+          .select('*, agent_datastores(datastore_id)')
+          .eq('id', agentId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (error) {
+          if (error.code === 'PGRST116') {
+            throw new Error('Agent not found or you do not have permission to access it.');
+          }
+          throw error;
+        }
+        
+        if (!isMounted.current) {
+          console.log('[fetchAgent] Unmounted after Supabase query returned.');
+          return;
+        }
+        
+        // Refresh avatar URL if needed
+        console.log('Agent loaded with avatar URL:', data.avatar_url);
+        const refreshedAvatarUrl = await refreshAgentAvatarUrl(supabase, agentId, data.avatar_url);
+        if (refreshedAvatarUrl && refreshedAvatarUrl !== data.avatar_url) {
+          console.log('Avatar URL refreshed:', refreshedAvatarUrl);
+          data.avatar_url = refreshedAvatarUrl;
+        } else if (refreshedAvatarUrl) {
+          console.log('Avatar URL is still valid:', refreshedAvatarUrl);
+        } else {
+          console.log('No avatar URL available for agent:', agentId);
+        }
+
+        setAgent(data);
+      } catch (err) {
+        if (!isMounted.current) return;
+        
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load agent';
+        setError(errorMessage);
+        console.error('Error fetching agent:', err);
+      } finally {
+        if (isMounted.current) {
+          setLoading(false);
+          fetchInProgress.current = false;
+        }
+      }
+    };
+
+    fetchAgent();
+  }, [agentId, user]);
+
+	// Fetch chat history (strictly scoped to selected conversation)
+	useEffect(() => {
+		const fetchHistory = async () => {
+			if (!agentId || !user?.id) return;
+			
+			// Skip fetching if we're in the process of creating a new conversation
+			if (isCreatingNewConversation) return;
+			
+			setIsHistoryLoading(true);
+			try {
+				// If no conversation is selected, show a clean slate
+				if (!selectedConversationId) {
+					setMessages([]);
+					return;
+				}
+
+				// Validate conversation is active; if archived or missing, clear selection and redirect
+				try {
+					const { data: sessionRow } = await supabase
+						.from('conversation_sessions')
+						.select('status')
+						.eq('conversation_id', selectedConversationId)
+						.eq('agent_id', agentId)
+						.eq('user_id', user.id)
+						.maybeSingle();
+					if (!sessionRow || sessionRow.status !== 'active') {
+						setSelectedConversationId(null);
+						try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+						// Remove conv param from URL to show new conversation screen
+						navigate(`/agents/${agentId}/chat`, { replace: true });
+						setMessages([]);
+						return;
+					}
+				} catch { /* non-fatal; proceed */ }
+
+				const { data: assistantData, error: assistantErr } = await supabase
+					.from('chat_messages_v2')
+					.select('*')
+					.eq('sender_agent_id', agentId)
+					.eq('conversation_id', selectedConversationId as string)
+					.order('created_at', { ascending: true });
+				if (assistantErr) throw assistantErr;
+
+				const { data: userData, error: userErr } = await supabase
+					.from('chat_messages_v2')
+					.select('*')
+					.eq('sender_user_id', user.id)
+					.eq('conversation_id', selectedConversationId as string)
+					.order('created_at', { ascending: true });
+				if (userErr) throw userErr;
+
+				const rows = [...(assistantData || []), ...(userData || [])].sort(
+					(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+				);
+
+				const formatted: Message[] = rows.map((msg: any) => ({
+					role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
+					content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
+					timestamp: new Date(msg.created_at),
+					agentId: msg.sender_agent_id,
+					userId: msg.sender_agent_id ? user.id : msg.sender_user_id,
+				}));
+
+				setMessages(formatted);
+			} catch (err) {
+				console.error('Failed to fetch chat history:', err);
+				setError('Could not load chat history.');
+			} finally {
+				setIsHistoryLoading(false);
+			}
+		};
+
+		fetchHistory();
+	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation]);
+
+  // Submit Message Handler - Enhanced with AI state tracking
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !agent || sending || !user?.id) return;
+
+    const messageText = input.trim();
+    setInput('');
+    setSending(true);
+
+    // Establish conversation ID FIRST (before adding messages or starting AI processing)
+    // This ensures the UI switches to chat history view immediately
+    let convId = selectedConversationId;
+    let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+    
+    if (!selectedConversationId) {
+      // Set flag to prevent fetchHistory from clearing our messages
+      setIsCreatingNewConversation(true);
+      
+      // Create new conversation ID immediately for better UX
+      convId = crypto.randomUUID();
+      sessId = crypto.randomUUID();
+      setSelectedConversationId(convId);
+      // Reflect in URL for consistency
+      navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
+      localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
+      localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+    }
+
+    // Add user message after conversation context is established
+    const userMessage: Message = {
+      role: 'user',
+      content: messageText,
+      timestamp: new Date(),
+      userId: user.id,
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    
+    // Start AI processing indicator
+    startAIProcessing();
+    
+    // Immediate scroll for better UX
+    requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+
+    try {
+      setSending(true);
+      setError(null);
+
+      const { error: saveError } = await supabase
+        .from('chat_messages_v2')
+        .insert({
+          conversation_id: convId,
+          session_id: sessId,
+          channel_id: null,
+          role: 'user',
+          content: { type: 'text', text: messageText },
+          sender_user_id: user.id,
+          sender_agent_id: null,
+          metadata: { target_agent_id: agent.id },
+          context: { agent_id: agent.id, user_id: user.id }
+        });
+
+      if (saveError) throw saveError;
+
+      // Frontend fallback: ensure a session row exists with a reasonable title so the sidebar updates immediately
+      try {
+        const fallbackTitle = (() => {
+          const words = messageText.trim().split(/\s+/).slice(0, 6);
+          const titleCase = words
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+          return titleCase || 'New Conversation';
+        })();
+
+        // Check existing title first to avoid overwriting a good one
+        const { data: existing } = await supabase
+          .from('conversation_sessions')
+          .select('conversation_id, title')
+          .eq('conversation_id', convId)
+          .maybeSingle();
+
+        const needsTitle = !existing || !existing.title || existing.title.toLowerCase() === 'new conversation';
+        if (needsTitle) {
+          // Avoid ON CONFLICT since conversation_id is not unique-indexed
+          const base: any = {
+            agent_id: agent.id,
+            user_id: user.id,
+            title: fallbackTitle,
+            status: 'active',
+            last_active: new Date().toISOString(),
+          };
+          const upd = await supabase
+            .from('conversation_sessions')
+            .update(base)
+            .eq('conversation_id', convId)
+            .select('conversation_id');
+          if (!upd || !upd.data || upd.data.length === 0) {
+            await supabase
+              .from('conversation_sessions')
+              .insert({ conversation_id: convId, ...base });
+          }
+        }
+      } catch { /* non-fatal */ }
+      
+      // Clear the flag now that the conversation is saved
+      setIsCreatingNewConversation(false);
+
+      // Run AI processing simulation in parallel with actual request
+      const processingPromise = simulateAIProcessing();
+
+      // Create abort controller for this request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // Get the current session and access token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.access_token) {
+          throw new Error(`Authentication error: ${sessionError?.message || 'Could not get session token.'}`);
+      }
+      const accessToken = session.access_token;
+
+      // Get the stored context size preference for this agent
+      const contextSize = parseInt(
+        localStorage.getItem(`agent_${agent.id}_context_size`) || '25'
+      );
+
+      // Use the conversation and session IDs established earlier
+      const conversationId = convId;
+      const sessionId = sessId;
+
+      const requestBody: any = {
+        version: '2.0.0',
+        context: {
+          agent_id: agent.id,
+          user_id: user.id,
+          conversation_id: conversationId,
+          session_id: sessionId,
+          // Omit channel_id if not present; null fails v2 schema (expects string if provided)
+        },
+        message: {
+          role: 'user',
+          content: { type: 'text', text: messageText }
+        },
+        options: { 
+          context: { max_messages: contextSize },
+          reasoning: { enabled: reasoningEnabled, threshold: 0.3 }
+        }
+      };
+      // Ensure we do not send nulls for optional string fields
+      if (!agent?.id) delete requestBody.context.agent_id;
+      if (!user?.id) delete requestBody.context.user_id;
+      // Only include channel_id if we have a real channel to target
+      // (Agent chat is not scoped to a channel)
+
+      // Wait for both the API response and the processing simulation
+      const [response] = await Promise.all([
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+        }),
+        processingPromise
+      ]);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Chat API error response:', { status: response.status, errorText });
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      console.log('Chat API response:', responseData);
+      
+      // Store processing details for debugging modal (supports V2 and V1)
+      const v2Processing = responseData.processing_details || responseData.data?.processing_details;
+      if (v2Processing) {
+        setCurrentProcessingDetails(v2Processing);
+      }
+      
+      // Support both V2 and V1 response shapes
+      const v2Text = responseData?.data?.message?.content?.text;
+      const v1Text = responseData?.message;
+      const assistantReply = typeof v2Text === 'string' ? v2Text : v1Text;
+
+      if (typeof assistantReply !== 'string') {
+          console.error('Invalid response format from chat API:', responseData);
+          throw new Error('Received an invalid response format from the chat service.');
+      }
+
+      // Complete AI processing and convert thinking message to assistant response
+      await completeAIProcessingWithResponse(assistantReply);
+
+      // Scroll after updating message
+      if (isMounted.current) {
+        requestAnimationFrame(scrollToBottom);
+      }
+
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('[handleSubmit] Chat request cancelled.');
+        // Complete AI processing as failed
+        completeAIProcessing(false);
+      } else {
+        console.error('Error submitting chat message:', err);
+        // Complete AI processing as failed
+        completeAIProcessing(false);
+        if (isMounted.current) {
+             setError(`Failed to send message: ${err.message}. Please try again.`);
+             // Remove the optimistic user message on error
+             setMessages(prev => prev.filter(msg => msg !== userMessage));
+        }
+      }
+    } finally {
+      setSending(false);
+      setIsCreatingNewConversation(false); // Ensure flag is cleared
+    }
+  }, [input, agent, sending, user?.id, scrollToBottom, startAIProcessing, simulateAIProcessing, completeAIProcessing]);
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  }, [handleSubmit]);
+
+  // File upload handler
+  const handleFileUpload = useCallback(async (files: FileList, uploadType: 'document' | 'image') => {
+    if (!user || !agent || files.length === 0) return;
+
+    setUploading(true);
+    const uploadedFiles: string[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        const fileId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+
+        // Validate file type and size
+        const maxSize = 50 * 1024 * 1024; // 50MB
+        if (file.size > maxSize) {
+          toast.error(`File ${file.name} exceeds 50MB limit`);
+          continue;
+        }
+
+        // Validate file type based on upload type
+        const allowedTypes = uploadType === 'image' 
+          ? ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+          : ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+             'application/msword', 'text/plain', 'application/vnd.ms-powerpoint', 
+             'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+
+        if (!allowedTypes.includes(file.type)) {
+          toast.error(`File type ${file.type} not supported for ${uploadType} upload`);
+          continue;
+        }
+
+        try {
+          // Upload to Media Library via API
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('category', uploadType === 'image' ? 'images' : 'documents');
+          formData.append('description', `Uploaded via chat on ${new Date().toLocaleDateString()}`);
+
+          setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
+
+          // Upload file
+          const uploadResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'upload',
+              file_name: file.name,
+              file_type: file.type,
+              file_size: file.size,
+              category: uploadType === 'image' ? 'images' : 'documents',
+              description: `Uploaded via chat on ${new Date().toLocaleDateString()}`
+            })
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+          }
+
+          const uploadData = await uploadResponse.json();
+          setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
+
+          // Upload actual file to storage
+          const { error: storageError } = await supabase.storage
+            .from(uploadData.data.bucket)
+            .upload(uploadData.data.storage_path, file, {
+              contentType: file.type,
+              duplex: 'half'
+            });
+
+          if (storageError) {
+            throw new Error(`Storage upload failed: ${storageError.message}`);
+          }
+
+          setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
+
+          // Process the document and auto-assign to current agent
+          const processResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'process',
+              document_id: uploadData.data.media_id,
+              agent_id: agent.id // Auto-assign to current agent
+            })
+          });
+
+          setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+
+          if (processResponse.ok) {
+            uploadedFiles.push(file.name);
+            toast.success(`${file.name} uploaded and assigned to ${agent.name}`);
+          } else {
+            toast.warn(`${file.name} uploaded but processing failed`);
+          }
+
+        } catch (error: any) {
+          console.error('File upload error:', error);
+          toast.error(`Failed to upload ${file.name}: ${error.message}`);
+        } finally {
+          // Clean up progress tracking
+          setTimeout(() => {
+            setUploadProgress(prev => {
+              const newProgress = { ...prev };
+              delete newProgress[fileId];
+              return newProgress;
+            });
+          }, 2000);
+        }
+      }
+
+      if (uploadedFiles.length > 0) {
+        // Add a system message to chat indicating files were uploaded
+        const systemMessage: Message = {
+          id: `upload_${Date.now()}`,
+          role: 'system',
+          content: `📎 Uploaded ${uploadedFiles.length} ${uploadType}${uploadedFiles.length !== 1 ? 's' : ''}: ${uploadedFiles.join(', ')}. ${uploadedFiles.length === 1 ? 'It has' : 'They have'} been added to the Media Library and assigned to ${agent.name} for training.`,
+          timestamp: new Date().toISOString(),
+          conversation_id: selectedConversationId,
+          agent_id: agent.id,
+          user_id: user.id
+        };
+
+        setMessages(prev => [...prev, systemMessage]);
+        scrollToBottom();
+      }
+
+    } catch (error: any) {
+      console.error('Upload process error:', error);
+      toast.error(`Upload failed: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
+  }, [user, agent, supabase, selectedConversationId, scrollToBottom]);
+
+  // Loading state
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+        <div className="text-center">
+          <div className="text-[hsl(210,20%,98%)] text-lg">Please sign in to chat with agents.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !agent) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[hsl(210,15%,70%)] mx-auto mb-4" />
+          <div className="text-[hsl(210,20%,98%)]">Loading agent...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !agent) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-4" />
+          <div className="text-red-400 mb-4">Error loading agent: {error}</div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loading && !agent) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 text-yellow-400 mx-auto mb-4" />
+          <div className="text-yellow-400">Agent not found.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full bg-background overflow-hidden">
+      {/* Main Column */}
+      <div className="flex flex-col flex-1 min-w-0">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
+	          <div className="flex items-center space-x-3">
+	            <button
+	              onClick={() => navigate('/agents')}
+	              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
+	            >
+	              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+	            </button>
+	            <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-3">
+                    {/* Avatar with hover edit functionality */}
+                    <div 
+                      className="relative group cursor-pointer"
+                      onClick={() => setShowAboutMeModal(true)}
+                    >
+	                    {agent?.avatar_url ? (
+	                      <img 
+	                        src={agent.avatar_url} 
+	                        alt={agent.name || 'Agent'}
+	                        className="w-6 h-6 rounded-full object-cover transition-all duration-200 group-hover:brightness-75"
+	                        onError={(e) => {
+	                          console.warn('Header avatar failed to load:', agent.avatar_url);
+	                          e.currentTarget.style.display = 'none';
+	                          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+	                          if (fallback) fallback.style.display = 'flex';
+	                        }}
+	                      />
+	                    ) : null}
+	                    <div 
+	                      className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-all duration-200 group-hover:brightness-75"
+	                      style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
+	                    >
+	                      <span className="text-white text-xs font-medium">
+	                        {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+	                      </span>
+	                    </div>
+                      {/* Edit overlay on hover */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Edit className="w-3 h-3 text-white" />
+                      </div>
+                    </div>
+                    <div className="text-left">
+                      <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
+                      <DiscreetAIStatusIndicator 
+                        aiState={aiState}
+                        currentTool={currentTool}
+                        agentName={agent?.name || 'Agent'}
+                        isExecuting={aiState === 'executing_tool'}
+                      />
+                    </div>
+	                  </div>
+	            </div>
+	          </div>
+	          <div className="flex items-center space-x-2">
+	            {/* Share button */}
+	            <button 
+	              onClick={handleShareConversation} 
+	              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
+	              title="Share conversation"
+	            >
+	              <Share2 className="h-4 w-4 text-muted-foreground" />
+	            </button>
+	            
+	            {/* Agent menu */}
+	            <DropdownMenu>
+	              <DropdownMenuTrigger asChild>
+	                <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
+	                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+	                </button>
+	              </DropdownMenuTrigger>
+	              <DropdownMenuContent align="end" className="w-48">
+	                <DropdownMenuItem onClick={() => setShowAboutMeModal(true)} className="cursor-pointer">
+	                  <User className="h-4 w-4 mr-2 text-blue-500" />
+	                  Personality
+	                </DropdownMenuItem>
+	                <DropdownMenuItem onClick={() => setShowHowIThinkModal(true)} className="cursor-pointer">
+	                  <Brain className="h-4 w-4 mr-2 text-purple-500" />
+	                  Behavior
+	                </DropdownMenuItem>
+	                <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
+	                  <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
+	                  Memory
+	                </DropdownMenuItem>
+	                <DropdownMenuSeparator />
+	                <DropdownMenuItem onClick={() => setShowTeamAssignmentModal(true)} className="cursor-pointer">
+	                  <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
+	                  Add to Team
+	                </DropdownMenuItem>
+	              </DropdownMenuContent>
+	            </DropdownMenu>
+	          </div>
+      </div>
+
+      {/* Messages Container - Hidden scrollbar */}
+      <div className="flex-1 overflow-y-auto hide-scrollbar min-h-0 relative">
+        {/* Gradient fade effect at top of messages - Fixed positioning to prevent shifts */}
+        <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10 opacity-0 transition-opacity duration-300" 
+             style={{ opacity: messages.length > 0 ? 1 : 0 }} />
+        {isHistoryLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md mx-auto px-6 animate-fade-in">
+                {agent?.avatar_url ? (
+                  <img 
+                    src={agent.avatar_url} 
+                    alt={agent.name || 'Agent'}
+                    className="w-16 h-16 rounded-full object-cover mx-auto mb-6 shadow-lg"
+                    onError={(e) => {
+                      console.warn('Avatar image failed to load:', agent.avatar_url);
+                      // Hide the broken image and show fallback
+                      e.currentTarget.style.display = 'none';
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div 
+                  className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg"
+                  style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
+                >
+                  <span className="text-white text-xl font-medium">
+                    {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                  </span>
+                </div>
+                <h3 className="text-2xl font-semibold text-foreground mb-3">
+                  Chat with {agent?.name || 'Agent'}
+                </h3>
+                <p className="text-muted-foreground mb-8 leading-relaxed">
+                  Start a conversation with your AI assistant. Ask questions, get help, or just chat!
+                </p>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
+                    <div className="font-medium text-foreground">💡 Try asking:</div>
+                    <div className="text-muted-foreground mt-1">"What can you help me with?"</div>
+                  </div>
+                  <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
+                    <div className="font-medium text-foreground">🔍 Or request:</div>
+                    <div className="text-muted-foreground mt-1">"Help me analyze this data"</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto px-4 py-6 pb-8 min-h-full">
+              <div className="space-y-6">
+                {messages.map((message, index) => {
+                  // Handle thinking messages with inline indicator
+                  if (message.role === 'thinking') {
+                    const isCurrentThinking = index === thinkingMessageIndex && !message.metadata?.isCompleted;
+                    if (!isCurrentThinking) {
+                      return null; // hide previous/completed thinking indicators
+                    }
+                    return (
+                      <InlineThinkingIndicator
+                        key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
+                        isVisible={true}
+                        currentState={aiState}
+                        currentTool={currentTool}
+                        processSteps={processSteps.map(step => ({
+                          state: step.state,
+                          label: step.label,
+                          duration: step.duration,
+                          details: step.details,
+                          completed: step.completed
+                        }))}
+                        agentName={agent?.name || 'Agent'}
+                        agentAvatarUrl={agent?.avatar_url}
+                        isCompleted={false}
+                        className="mb-4"
+                      />
+                    );
+                  }
+                  
+                  // Handle assistant messages with thinking details
+                  if (message.role === 'assistant' && message.aiProcessDetails?.steps?.length) {
+                    return (
+                      <div key={`${message.role}-${index}-${message.timestamp.toISOString()}`} className="flex items-start space-x-4 animate-fade-in">
+                        {/* Avatar */}
+                        <div className="flex-shrink-0">
+                          {agent?.avatar_url ? (
+                            <img 
+                              src={agent.avatar_url} 
+                              alt={agent.name || 'Agent'}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                              <span className="text-white text-sm font-medium">
+                                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Message Content with integrated Thoughts */}
+                        <div className="flex-1 min-w-0 max-w-[70%] text-left space-y-3">
+                          {/* Header with Agent Name and Thoughts */}
+                          <div className="flex items-center space-x-2 mb-1 text-left">
+                            <span className="text-sm font-medium text-foreground">
+                              {agent?.name || 'Assistant'}
+                            </span>
+                            
+                            {/* Thoughts Section next to name */}
+                            <div className="flex items-center space-x-2">
+                              <details className="group">
+                                <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
+                                  <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
+                                  <span className="text-xs text-muted-foreground group-open:text-foreground">
+                                    Thoughts
+                                  </span>
+                                  <span className="text-xs text-muted-foreground/60">
+                                    {message.aiProcessDetails.steps.length} steps
+                                  </span>
+                                  <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                                </summary>
+                              <div className="absolute z-50 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
+                                <div className="space-y-3">
+                                  {message.aiProcessDetails.steps.map((step, stepIndex) => (
+                                    <div key={stepIndex} className="border border-border/30 rounded-md">
+                                      <details className="group">
+                                        <summary className="flex items-start space-x-2 text-xs p-2 cursor-pointer hover:bg-muted/30 rounded-md">
+                                          <div className="flex-shrink-0 mt-0.5">
+                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                                          </div>
+                                          <div className="flex-1">
+                                            <div className="font-medium text-foreground">{step.label}</div>
+                                            {step.details && (
+                                              <div className="text-muted-foreground mt-0.5">{step.details}</div>
+                                            )}
+                                            <div className="flex items-center space-x-2 mt-1">
+                                              {step.duration && (
+                                                <span className="text-muted-foreground/60">
+                                                  {step.duration}ms
+                                                </span>
+                                              )}
+                                              <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                                            </div>
+                                          </div>
+                                        </summary>
+                                        
+                                        <div className="px-4 pb-2 space-y-2 border-t border-border/20 mt-1">
+                                          {/* AI Response */}
+                                          {step.response && (
+                                            <div className="bg-muted/20 rounded p-2">
+                                              <div className="text-xs font-medium text-foreground mb-1">AI Response:</div>
+                                              <div className="text-xs text-muted-foreground whitespace-pre-wrap font-mono">
+                                                {step.response}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Tool Call */}
+                                          {step.toolCall && (
+                                            <div className="bg-blue-50 dark:bg-blue-950/20 rounded p-2">
+                                              <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Tool Call:</div>
+                                              <div className="text-xs text-blue-600 dark:text-blue-400 whitespace-pre-wrap font-mono">
+                                                {step.toolCall}
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Tool Result */}
+                                          {step.toolResult && (
+                                            <div className="bg-green-50 dark:bg-green-950/20 rounded p-2">
+                                              <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Tool Result:</div>
+                                              <div className="text-xs text-green-600 dark:text-green-400 whitespace-pre-wrap font-mono max-h-32 overflow-y-auto">
+                                                {typeof step.toolResult === 'string' 
+                                                  ? step.toolResult 
+                                                  : JSON.stringify(step.toolResult, null, 2)
+                                                }
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Show message if no detailed data available */}
+                                          {!step.response && !step.toolCall && !step.toolResult && (
+                                            <div className="text-xs text-muted-foreground/60 italic p-2">
+                                              No detailed response data captured for this step.
+                                            </div>
+                                          )}
+                                        </div>
+                                      </details>
+                                    </div>
+                                  ))}
+                                </div>
+                                {message.aiProcessDetails.totalDuration && (
+                                  <div className="mt-3 pt-2 border-t border-border/30 text-xs text-muted-foreground">
+                                    Total processing time: {message.aiProcessDetails.totalDuration}ms
+                                  </div>
+                                )}
+                              </div>
+                              </details>
+                              
+                              {/* Process Button */}
+                              {currentProcessingDetails && (
+                                <button
+                                  onClick={() => setShowProcessModal(true)}
+                                  className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors"
+                                  title="View detailed processing information"
+                                >
+                                  <BarChart3 className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">Process</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Main Response with timestamp in bottom right */}
+                          <div className="relative inline-block p-3 rounded-2xl shadow-sm bg-card text-card-foreground">
+                            <div className="text-sm leading-relaxed pr-16 prose prose-sm dark:prose-invert max-w-none
+                              prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
+                              prose-p:my-2 prose-p:leading-relaxed
+                              prose-ul:my-2 prose-ul:pl-6 prose-ul:list-disc
+                              prose-ol:my-2 prose-ol:pl-6 prose-ol:list-decimal
+                              prose-li:my-0.5
+                              prose-pre:my-3 prose-pre:p-3 prose-pre:bg-muted prose-pre:rounded-lg
+                              prose-code:px-1 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm
+                              prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic
+                              prose-strong:font-semibold prose-strong:text-foreground
+                              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
+                              prose-hr:my-4 prose-hr:border-muted-foreground/30">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  // Match renderer used in regular messages for consistent look
+                                  p: ({children}: any) => (<p className="my-3 leading-7">{children}</p>),
+                                  ul: ({children}: any) => (<ul className="my-3 pl-6 list-disc space-y-2">{children}</ul>),
+                                  ol: ({children}: any) => (<ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>),
+                                  li: ({children}: any) => (<li className="my-1 leading-7">{children}</li>),
+                                  h1: ({children}: any) => (<h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>),
+                                  h2: ({children}: any) => (<h2 className="text-xl font-semibold mt-5 mb-3">{children}</h2>),
+                                  h3: ({children}: any) => (<h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>),
+                                  code: ({node, inline, className, children, ...props}: any) => {
+                                    const match = /language-(\w+)/.exec(className || '');
+                                    return !inline && match ? (
+                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-4">
+                                        <code className={className} {...props}>
+                                          {children}
+                                        </code>
+                                      </pre>
+                                    ) : (
+                                      <code className="px-1 py-0.5 bg-muted rounded text-sm" {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                  blockquote: ({children}: any) => (
+                                    <blockquote className="border-l-4 border-muted-foreground/30 pl-4 italic my-4">{children}</blockquote>
+                                  ),
+                                  strong: ({children}: any) => (<strong className="font-semibold text-foreground">{children}</strong>),
+                                  a: ({href, children}: any) => (
+                                    <a href={href} className="text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">{children}</a>
+                                  ),
+                                  hr: () => (<hr className="my-6 border-muted-foreground/30" />),
+                                }}
+                              >
+                                {formatMarkdown(message.content)}
+                              </ReactMarkdown>
+                            </div>
+                            {/* Timestamp in bottom right corner */}
+                            <div className="absolute bottom-2 right-3 text-xs text-muted-foreground/60">
+                              {message.timestamp.toLocaleTimeString([], { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Handle regular messages
+                  return (
+                    <div
+                      key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
+                      className={`flex items-start space-x-4 animate-fade-in ${
+                        message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                      }`}
+                    >
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        {message.role === 'user' ? (
+                          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium">
+                              {user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            {agent?.avatar_url ? (
+                              <img 
+                                src={agent.avatar_url} 
+                                alt={agent.name || 'Agent'}
+                                className="w-8 h-8 rounded-full object-cover"
+                                onError={(e) => {
+                                  console.warn('Message avatar failed to load:', agent.avatar_url);
+                                  e.currentTarget.style.display = 'none';
+                                  const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                  if (fallback) fallback.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center"
+                              style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
+                            >
+                              <span className="text-white text-sm font-medium">
+                                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Message Content */}
+                      <div className={`flex-1 min-w-0 max-w-[70%] ${
+                        message.role === 'user' ? 'text-right' : 'text-left'
+                      }`}>
+                        <div className={`mb-1 ${
+                          message.role === 'user' ? 'text-right' : 'text-left'
+                        }`}>
+                          <span className="text-sm font-medium text-foreground">
+                            {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {message.timestamp.toLocaleTimeString([], { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </span>
+                        </div>
+                      <div className={`inline-block p-3 rounded-2xl shadow-sm text-left ${
+                          message.role === 'user' 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-card text-card-foreground'
+                        }`}>
+                          {message.role === 'assistant' ? (
+                            <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none
+                              prose-headings:mt-4 prose-headings:mb-3 prose-headings:font-semibold
+                              prose-p:my-3 prose-p:leading-7
+                              prose-ul:my-3 prose-ul:pl-6 prose-ul:list-disc prose-ul:space-y-2
+                              prose-ol:my-3 prose-ol:pl-6 prose-ol:list-decimal prose-ol:space-y-2
+                              prose-li:my-1 prose-li:leading-7
+                              prose-pre:my-4 prose-pre:p-4 prose-pre:bg-muted prose-pre:rounded-lg
+                              prose-code:px-1.5 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm prose-code:font-mono
+                              prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-4
+                              prose-strong:font-semibold prose-strong:text-foreground
+                              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
+                              prose-hr:my-6 prose-hr:border-muted-foreground/30
+                              [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  // Custom paragraph renderer to ensure spacing
+                                  p: ({children}: any) => (
+                                    <p className="my-3 leading-7">{children}</p>
+                                  ),
+                                  // Custom list renderers
+                                  ul: ({children}: any) => (
+                                    <ul className="my-3 pl-6 list-disc space-y-2">{children}</ul>
+                                  ),
+                                  ol: ({children}: any) => (
+                                    <ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>
+                                  ),
+                                  li: ({children}: any) => (
+                                    <li className="my-1 leading-7">{children}</li>
+                                  ),
+                                  // Headers with spacing
+                                  h1: ({children}: any) => (
+                                    <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>
+                                  ),
+                                  h2: ({children}: any) => (
+                                    <h2 className="text-xl font-semibold mt-5 mb-3">{children}</h2>
+                                  ),
+                                  h3: ({children}: any) => (
+                                    <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>
+                                  ),
+                                  // Ensure code blocks render properly
+                                  code: ({node, inline, className, children, ...props}: any) => {
+                                    const match = /language-(\w+)/.exec(className || '');
+                                    return !inline && match ? (
+                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-4">
+                                        <code className={className} {...props}>
+                                          {children}
+                                        </code>
+                                      </pre>
+                                    ) : (
+                                      <code className="px-1 py-0.5 bg-muted rounded text-sm" {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                  // Blockquotes
+                                  blockquote: ({children}: any) => (
+                                    <blockquote className="border-l-4 border-muted-foreground/30 pl-4 italic my-4">
+                                      {children}
+                                    </blockquote>
+                                  ),
+                                  // Strong/bold
+                                  strong: ({children}: any) => (
+                                    <strong className="font-semibold text-foreground">{children}</strong>
+                                  ),
+                                  // Links
+                                  a: ({href, children}: any) => (
+                                    <a href={href} className="text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">
+                                      {children}
+                                    </a>
+                                  ),
+                                  // Horizontal rule
+                                  hr: () => (
+                                    <hr className="my-6 border-muted-foreground/30" />
+                                  ),
+                                }}
+                              >
+                                {formatMarkdown(message.content)}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (
+                            <div className="text-sm leading-relaxed">
+                              <div className="flex items-center justify-between">
+                                <span>{message.content}</span>
+                                {message?.metadata?.source === 'scheduler' && (
+                                  <span className="ml-2 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">Scheduled</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {/* Note: Typing indicator now handled by InlineThinkingIndicator */}
+
+                {/* Removed prominent AI indicators - now using discreet header indicator */}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          )}
+          
+
+      </div>
+
+      {/* Fixed Input Area - Claude Style (Tools Outside Text Area) */}
+      <div className="flex-shrink-0 bg-background">
+        <div className="max-w-3xl mx-auto px-4 py-2">
+          <form onSubmit={handleSubmit} className="relative">
+            {/* Text input container - Clean text area only */}
+            <div className="relative bg-card border border-border/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md">
+              <div className="px-4 py-2 flex items-center">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message ${agent?.name || 'Agent'}...`}
+                  className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-normal disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
+                  disabled={!agent}
+                  rows={1}
+                  style={{ minHeight: '22px', maxHeight: '120px' }}
+                />
+                {/* Voice input button inside text area - disappears when typing */}
+                {!input.trim() && (
+                  <button
+                    type="button"
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors ml-2"
+                    disabled={!agent}
+                    title="Voice input"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19v4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 23h8" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom controls - Outside the text area like Claude */}
+            <div className="flex items-center justify-between mt-2 px-2">
+              {/* Left side - File upload */}
+	              <div className="flex items-center">
+	                {/* File Upload - Far left */}
+	                <DropdownMenu>
+	                  <DropdownMenuTrigger asChild>
+	                    <button
+	                      type="button"
+	                      className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent transition-colors"
+	                      disabled={!agent}
+	                      title="Attach files"
+	                    >
+	                      <Paperclip className="w-4 h-4 text-emerald-500" />
+	                    </button>
+	                  </DropdownMenuTrigger>
+	                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.multiple = true;
+                        input.accept = '.pdf,.docx,.doc,.txt,.ppt,.pptx';
+                        input.onchange = (e) => {
+                          const files = (e.target as HTMLInputElement).files;
+                          if (files) handleFileUpload(files, 'document');
+                        };
+                        input.click();
+                      }}
+                      disabled={uploading}
+                    >
+                      <Paperclip className="w-4 h-4 mr-2 text-emerald-500" />
+                      {uploading ? 'Uploading...' : 'Attach file'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.multiple = true;
+                        input.accept = 'image/*';
+                        input.onchange = (e) => {
+                          const files = (e.target as HTMLInputElement).files;
+                          if (files) handleFileUpload(files, 'image');
+                        };
+                        input.click();
+                      }}
+                      disabled={uploading}
+                    >
+                      <ImageIcon className="w-4 h-4 mr-2 text-pink-500" />
+                      {uploading ? 'Uploading...' : 'Upload image'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Consolidated Settings Button - Opens unified modal */}
+                <button
+                  type="button"
+                  title="Agent Settings"
+                  onClick={() => {
+                    setAgentSettingsInitialTab('general');
+                    setShowAgentSettingsModal(true);
+                  }}
+                  className="ml-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent"
+                >
+                  <Sliders className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+
+              {/* Right side - Send button */}
+              <div className="flex items-center">
+                <button
+                  type="submit"
+                  disabled={sending || !agent || !input.trim()}
+                  className="p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[36px] min-h-[36px] shadow-sm hover:scale-105 disabled:hover:scale-100"
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+          
+          {/* Discreet help text */}
+          <div className="text-xs text-muted-foreground/70 text-center mt-1 opacity-0 hover:opacity-100 transition-opacity duration-300">
+            Press <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">⇧</kbd>+<kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> for new line
+          </div>
+        </div>
+      </div>
+
+      {/* Team Assignment Modal */}
+      <TeamAssignmentModal
+        isOpen={showTeamAssignmentModal}
+        onClose={() => setShowTeamAssignmentModal(false)}
+        agentId={agentId || ''}
+        agentName={agent?.name || 'Agent'}
+        onTeamAssigned={(teamId, teamName) => {
+          console.log(`Agent ${agent?.name} assigned to team ${teamName}`);
+          // You could show a success toast here
+        }}
+      />
+
+      {/* About Me Modal */}
+      <AboutMeModal
+        isOpen={showAboutMeModal}
+        onClose={() => setShowAboutMeModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name,
+          description: agent?.description,
+          personality: agent?.personality,
+          avatar_url: agent?.avatar_url
+        }}
+        onAgentUpdated={async (updatedAgent) => {
+          setAgent(updatedAgent);
+          // Also update the agents hook state so sidebar gets updated
+          if (agentId) {
+            await updateAgent(agentId, updatedAgent);
+          }
+          console.log('Agent updated:', updatedAgent);
+        }}
+      />
+
+      {/* How I Think Modal */}
+      <HowIThinkModal
+        isOpen={showHowIThinkModal}
+        onClose={() => setShowHowIThinkModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          system_instructions: agent?.system_instructions,
+          assistant_instructions: agent?.assistant_instructions,
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent thinking updated:', updatedAgent);
+        }}
+      />
+
+      {/* What I Know Modal */}
+      <WhatIKnowModal
+        isOpen={showWhatIKnowModal}
+        onClose={() => setShowWhatIKnowModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name,
+          agent_datastores: agent?.agent_datastores || []
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent knowledge updated:', updatedAgent);
+        }}
+      />
+
+      {/* Enhanced Tools Modal */}
+      <EnhancedToolsModal
+        isOpen={showToolsModal}
+        onClose={() => setShowToolsModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent tools updated:', updatedAgent);
+        }}
+      />
+
+      {/* Enhanced Channels Modal */}
+      <EnhancedChannelsModal
+        isOpen={showChannelsModal}
+        onClose={() => setShowChannelsModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent channels updated:', updatedAgent);
+        }}
+      />
+
+      {/* Tasks Modal */}
+      <TaskManagerModal
+        isOpen={showTasksModal}
+        onClose={() => setShowTasksModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent tasks updated:', updatedAgent);
+        }}
+      />
+
+      {/* History Modal */}
+      <HistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent history updated:', updatedAgent);
+        }}
+      />
+
+      {/* Process Modal */}
+      <ProcessModal
+        isOpen={showProcessModal}
+        onClose={() => setShowProcessModal(false)}
+        processingDetails={currentProcessingDetails}
+      />
+
+      {/* Unified Agent Settings Modal */}
+      <AgentSettingsModal
+        isOpen={showAgentSettingsModal}
+        onClose={() => setShowAgentSettingsModal(false)}
+        agentId={agentId || ''}
+        agentData={{
+          name: agent?.name,
+          description: agent?.description,
+          personality: agent?.personality,
+          avatar_url: agent?.avatar_url,
+          agent_datastores: agent?.agent_datastores
+        }}
+        onAgentUpdated={(updatedAgent) => {
+          setAgent(updatedAgent);
+          console.log('Agent updated via unified modal:', updatedAgent);
+        }}
+        initialTab={agentSettingsInitialTab}
+      />
+    </div>
+    </div>
+  );
+}

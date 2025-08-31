@@ -62,7 +62,26 @@ const getStateIcon = (state: AIState, isActive: boolean = false) => {
   }
 };
 
-const getStateLabel = (state: AIState): string => 'Thinking...';
+const getStateLabel = (state: AIState): string => {
+  switch (state) {
+    case 'thinking':
+      return 'Thinking...';
+    case 'analyzing_tools':
+      return 'Analyzing tools...';
+    case 'executing_tool':
+      return 'Executing tool...';
+    case 'processing_results':
+      return 'Processing results...';
+    case 'generating_response':
+      return 'Generating response...';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    default:
+      return 'Processing...';
+  }
+};
 
 export function InlineThinkingIndicator({ 
   isVisible, 
@@ -160,7 +179,7 @@ export function InlineThinkingIndicator({
             {isExpanded && (
               <div className="bg-card/50 border border-border/30 rounded-2xl p-4 animate-fade-in">
                 <div className="space-y-3">
-                  {processSteps.map((step, index) => (
+                  {processSteps.length > 0 ? processSteps.map((step, index) => (
                     <div 
                       key={index}
                       className="flex items-start space-x-3 text-sm"
@@ -195,7 +214,11 @@ export function InlineThinkingIndicator({
                         )}
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="text-xs text-muted-foreground italic">
+                      Thinking process details would appear here...
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -1,58 +1,80 @@
-// src/types/chat.ts
+import type { Database } from './database.types';
+import type { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
+import type { Message } from './index';
 
-// Based on the schema defined in /database/README.md
+export type Agent = Database['public']['Tables']['agents']['Row'];
 
-export type MemberType = 'user' | 'agent' | 'team';
-
-export interface ChatRoom {
-  id: string; // uuid
-  name: string;
-  owner_user_id: string; // uuid
-  created_at: string; // timestamptz
-  // Add related entities if needed when fetching (e.g., channels, members)
+export interface ChatState {
+  agent: Agent | null;
+  messages: Message[];
+  input: string;
+  loading: boolean;
+  sending: boolean;
+  error: string | null;
+  isHistoryLoading: boolean;
+  selectedConversationId: string | null;
+  isCreatingNewConversation: boolean;
 }
 
-export interface ChatChannel {
-  id: string; // uuid
-  room_id: string; // uuid
-  name: string;
-  topic?: string | null;
-  created_at: string; // timestamptz
-  last_message_at?: string | null; // timestamptz
+export interface ModalState {
+  showTeamAssignmentModal: boolean;
+  showAboutMeModal: boolean;
+  showHowIThinkModal: boolean;
+  showWhatIKnowModal: boolean;
+  showToolsModal: boolean;
+  showChannelsModal: boolean;
+  showTasksModal: boolean;
+  showHistoryModal: boolean;
+  showProcessModal: boolean;
+  showAgentSettingsModal: boolean;
+  agentSettingsInitialTab: 'identity' | 'behavior' | 'memory' | 'reasoning';
 }
 
-export interface ChatRoomMember {
-  id: string; // uuid
-  room_id: string; // uuid
-  member_type: MemberType;
-  member_id: string; // uuid (references user, agent, or team based on member_type)
-  added_at: string; // timestamptz
-  // Potentially include fetched member details (e.g., name, avatar) later
-  user?: { id: string; full_name?: string | null; avatar_url?: string | null };
-  agent?: { id: string; name?: string | null };
-  team?: { id: string; name?: string | null };
+export interface FileUploadState {
+  uploading: boolean;
+  uploadProgress: {[key: string]: number};
 }
 
-export interface ChatMessage {
-  id: string; // uuid
-  channel_id: string; // uuid
-  sender_user_id?: string | null; // uuid
-  sender_agent_id?: string | null; // uuid
-  content: string;
-  metadata?: Record<string, any> | null; // jsonb
-  embedding?: number[] | null; // vector(1536) - Representing as number array, adjust if needed
-  created_at: string; // timestamptz
+export interface AIProcessingState {
+  aiState: AIState | null;
+  currentTool: ToolExecutionStatus | null;
+  showAIIndicator: boolean;
+  processSteps: Array<{
+    state: AIState;
+    label: string;
+    duration?: number;
+    details?: string;
+    response?: string;
+    toolCall?: string;
+    toolResult?: any;
+    completed: boolean;
+    startTime?: Date;
+  }>;
+  thinkingMessageIndex: number | null;
+  currentProcessingDetails: any;
+}
 
-  // Fields added/mapped in frontend logic 
-  role: 'user' | 'assistant';
-  timestamp: Date;
-  agentId?: string | null; // Consistent agent identifier
-  userId?: string | null; // Consistent user identifier (might be same as sender_user_id)
-  agentName?: string | null;
-  userName?: string | null;
-  userAvatar?: string | null;
+export interface AgentSettings {
+  reasoningEnabled: boolean;
+  webSearchEnabled: boolean;
+  hasWebSearchCredentials: boolean;
+}
 
-  // Keep original sender details if needed for other purposes
-  // sender_user?: { id: string; full_name?: string | null; avatar_url?: string | null };
-  // sender_agent?: { id: string; name?: string | null };
-} 
+export interface ChatHandlers {
+  handleSubmit: (e: React.FormEvent) => Promise<void>;
+  handleKeyDown: (e: React.KeyboardEvent) => void;
+  handleFileUpload: (files: FileList, uploadType: 'document' | 'image') => Promise<void>;
+  handleRenameConversation: () => Promise<void>;
+  handleArchiveConversation: () => Promise<void>;
+  handleShareConversation: () => Promise<void>;
+  adjustTextareaHeight: () => void;
+}
+
+export interface ChatRefs {
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  abortControllerRef: React.MutableRefObject<AbortController | null>;
+  fetchAgentAttempts: React.MutableRefObject<number>;
+  isMounted: React.MutableRefObject<boolean>;
+  fetchInProgress: React.MutableRefObject<boolean>;
+}

@@ -1,126 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Send, AlertCircle, Loader2, ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Plus, Paperclip, Clock, Archive, Share2, Globe, Upload, Image as ImageIcon, Edit, Database as DatabaseIcon, Settings, Plug, Sliders } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
 import { useConnections } from '@/integrations/_shared';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu';
-import { TeamAssignmentModal } from '../components/modals/TeamAssignmentModal';
-import { AboutMeModal } from '../components/modals/AboutMeModal';
-import { HowIThinkModal } from '../components/modals/HowIThinkModal';
-import { WhatIKnowModal } from '../components/modals/WhatIKnowModal';
-import { AgentSettingsModal } from '../components/modals/AgentSettingsModal';
-import { EnhancedChannelsModalRefactored as EnhancedChannelsModal } from '../components/modals/channels/EnhancedChannelsModalRefactored';
-import { EnhancedToolsModal } from '../components/modals/EnhancedToolsModal';
-import { TaskManagerModal } from '../components/modals/TaskManagerModal';
-import { HistoryModal } from '../components/modals/HistoryModal';
-import { ProcessModal } from '../components/modals/ProcessModal';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
-import { DiscreetAIStatusIndicator } from '../components/DiscreetAIStatusIndicator';
-import { InlineThinkingIndicator } from '../components/InlineThinkingIndicator';
 import type { Message } from '../types';
 import type { Database } from '../types/database.types';
-import { useConversations } from '../hooks/useConversations';
 import { ToolCategorizer } from '../lib/toolCategorization';
 import { toast } from 'react-hot-toast';
 import { refreshAgentAvatarUrl } from '../lib/avatarUtils';
 
-function ConversationSelector({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
-  const { items, createConversation } = useConversations(agentId, userId);
-  return (
-    <div className="flex items-center space-x-2">
-      <select
-        className="text-xs bg-accent/50 rounded px-2 py-1 text-foreground"
-        value={selectedConversationId || ''}
-        onChange={(e) => onSelect(e.target.value || null)}
-      >
-        <option value="">All conversations</option>
-        {items.map((c) => (
-          <option key={c.conversation_id} value={c.conversation_id}>
-            {c.title || c.conversation_id.slice(0, 8)}
-          </option>
-        ))}
-      </select>
-      <button
-        className="p-1.5 hover:bg-accent rounded-lg transition-colors"
-        title="New conversation"
-        onClick={async () => {
-          const id = await createConversation(null);
-          onSelect(id);
-        }}
-      >
-        <Plus className="h-4 w-4 text-muted-foreground" />
-      </button>
-    </div>
-  );
-}
+// Import extracted components
+import { ConversationSelector, SidebarConversations } from '../components/chat/ConversationComponents';
+import { MessageList, ChatStarterScreen } from '../components/chat/MessageComponents';
+import { ChatInput } from '../components/chat/ChatInput';
+import { ChatHeader } from '../components/chat/ChatHeader';
+import { ChatModals } from '../components/chat/ChatModals';
 
-function SidebarConversations({ agentId, userId, selectedConversationId, onSelect }: { agentId: string; userId: string | null; selectedConversationId: string | null; onSelect: (id: string | null) => void }) {
-  const { items, renameConversation, archiveConversation, createConversation } = useConversations(agentId, userId);
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="px-2 pb-2">
-        <button
-          className="w-full text-xs border border-border rounded-md px-2 py-1 hover:bg-accent"
-          onClick={async () => {
-            const id = await createConversation('New Conversation');
-            onSelect(id);
-          }}
-        >
-          + New conversation
-        </button>
-      </div>
-      {items.map((c) => {
-        const isActive = c.conversation_id === selectedConversationId;
-        return (
-          <div key={c.conversation_id} className={`px-3 py-2 cursor-pointer text-sm flex items-center justify-between ${isActive ? 'bg-accent' : 'hover:bg-accent/50'}`} onClick={() => onSelect(c.conversation_id)}>
-            <div className="flex-1 min-w-0 pr-2">
-              <div className="truncate font-medium">{c.title || c.conversation_id.slice(0, 8)}</div>
-              {c.last_message && (
-                <div className="truncate text-xs text-muted-foreground/80">{c.last_message}</div>
-              )}
-            </div>
-            {c.last_message_at && (
-              <div className="text-[10px] text-muted-foreground/70 ml-2 whitespace-nowrap">
-                {new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
-            <div className="flex items-center space-x-2 opacity-70">
-              <button
-                className="text-[11px] hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const title = prompt('Rename conversation', c.title || '') || undefined;
-                  if (title !== undefined) renameConversation(c.conversation_id, title);
-                }}
-              >
-                Rename
-              </button>
-              <button
-                className="text-[11px] hover:underline text-red-500"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  archiveConversation(c.conversation_id);
-                }}
-              >
-                Archive
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -1303,99 +1202,20 @@ export function AgentChatPage() {
     <div className="flex h-full bg-background overflow-hidden">
       {/* Main Column */}
       <div className="flex flex-col flex-1 min-w-0">
-      {/* Fixed Header */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
-	          <div className="flex items-center space-x-3">
-	            <button
-	              onClick={() => navigate('/agents')}
-	              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
-	            >
-	              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-	            </button>
-	            <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-3">
-                    {/* Avatar with hover edit functionality */}
-                    <div 
-                      className="relative group cursor-pointer"
-                      onClick={() => setShowAboutMeModal(true)}
-                    >
-	                    {agent?.avatar_url ? (
-	                      <img 
-	                        src={agent.avatar_url} 
-	                        alt={agent.name || 'Agent'}
-	                        className="w-6 h-6 rounded-full object-cover transition-all duration-200 group-hover:brightness-75"
-	                        onError={(e) => {
-	                          console.warn('Header avatar failed to load:', agent.avatar_url);
-	                          e.currentTarget.style.display = 'none';
-	                          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-	                          if (fallback) fallback.style.display = 'flex';
-	                        }}
-	                      />
-	                    ) : null}
-	                    <div 
-	                      className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-all duration-200 group-hover:brightness-75"
-	                      style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
-	                    >
-	                      <span className="text-white text-xs font-medium">
-	                        {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-	                      </span>
-	                    </div>
-                      {/* Edit overlay on hover */}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <Edit className="w-3 h-3 text-white" />
-                      </div>
-                    </div>
-                    <div className="text-left">
-                      <h1 className="text-sm font-semibold text-foreground">{agent?.name || 'Agent'}</h1>
-                      <DiscreetAIStatusIndicator 
-                        aiState={aiState}
-                        currentTool={currentTool}
-                        agentName={agent?.name || 'Agent'}
-                        isExecuting={aiState === 'executing_tool'}
-                      />
-                    </div>
-	                  </div>
-	            </div>
-	          </div>
-	          <div className="flex items-center space-x-2">
-	            {/* Share button */}
-	            <button 
-	              onClick={handleShareConversation} 
-	              className="p-1.5 hover:bg-accent rounded-lg transition-colors"
-	              title="Share conversation"
-	            >
-	              <Share2 className="h-4 w-4 text-muted-foreground" />
-	            </button>
-	            
-	            {/* Agent menu */}
-	            <DropdownMenu>
-	              <DropdownMenuTrigger asChild>
-	                <button className="p-1.5 hover:bg-accent rounded-lg transition-colors">
-	                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
-	                </button>
-	              </DropdownMenuTrigger>
-	              <DropdownMenuContent align="end" className="w-48">
-	                <DropdownMenuItem onClick={() => setShowAboutMeModal(true)} className="cursor-pointer">
-	                  <User className="h-4 w-4 mr-2 text-blue-500" />
-	                  Personality
-	                </DropdownMenuItem>
-	                <DropdownMenuItem onClick={() => setShowHowIThinkModal(true)} className="cursor-pointer">
-	                  <Brain className="h-4 w-4 mr-2 text-purple-500" />
-	                  Behavior
-	                </DropdownMenuItem>
-	                <DropdownMenuItem onClick={() => setShowWhatIKnowModal(true)} className="cursor-pointer">
-	                  <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
-	                  Memory
-	                </DropdownMenuItem>
-	                <DropdownMenuSeparator />
-	                <DropdownMenuItem onClick={() => setShowTeamAssignmentModal(true)} className="cursor-pointer">
-	                  <UserPlus className="h-4 w-4 mr-2 text-indigo-500" />
-	                  Add to Team
-	                </DropdownMenuItem>
-	              </DropdownMenuContent>
-	            </DropdownMenu>
-	          </div>
-      </div>
+      {/* Chat Header */}
+      <ChatHeader
+        agent={agent}
+        agentId={agentId || ''}
+        onShowTeamAssignment={() => setShowTeamAssignmentModal(true)}
+        onShowAboutMe={() => setShowAboutMeModal(true)}
+        onShowHowIThink={() => setShowHowIThinkModal(true)}
+        onShowWhatIKnow={() => setShowWhatIKnowModal(true)}
+        onShowTools={() => setShowToolsModal(true)}
+        onShowChannels={() => setShowChannelsModal(true)}
+        onShowTasks={() => setShowTasksModal(true)}
+        onShowHistory={() => setShowHistoryModal(true)}
+        onShowAgentSettings={() => setShowAgentSettingsModal(true)}
+      />
 
       {/* Messages Container - Hidden scrollbar */}
       <div className="flex-1 overflow-y-auto hide-scrollbar min-h-0 relative">
@@ -1407,728 +1227,73 @@ export function AgentChatPage() {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md mx-auto px-6 animate-fade-in">
-                {agent?.avatar_url ? (
-                  <img 
-                    src={agent.avatar_url} 
-                    alt={agent.name || 'Agent'}
-                    className="w-16 h-16 rounded-full object-cover mx-auto mb-6 shadow-lg"
-                    onError={(e) => {
-                      console.warn('Avatar image failed to load:', agent.avatar_url);
-                      // Hide the broken image and show fallback
-                      e.currentTarget.style.display = 'none';
-                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (fallback) fallback.style.display = 'flex';
-                    }}
-                  />
-                ) : null}
-                <div 
-                  className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg"
-                  style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
-                >
-                  <span className="text-white text-xl font-medium">
-                    {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                  </span>
-                </div>
-                <h3 className="text-2xl font-semibold text-foreground mb-3">
-                  Chat with {agent?.name || 'Agent'}
-                </h3>
-                <p className="text-muted-foreground mb-8 leading-relaxed">
-                  Start a conversation with your AI assistant. Ask questions, get help, or just chat!
-                </p>
-                <div className="grid grid-cols-1 gap-2 text-sm">
-                  <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
-                    <div className="font-medium text-foreground">💡 Try asking:</div>
-                    <div className="text-muted-foreground mt-1">"What can you help me with?"</div>
-                  </div>
-                  <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
-                    <div className="font-medium text-foreground">🔍 Or request:</div>
-                    <div className="text-muted-foreground mt-1">"Help me analyze this data"</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ChatStarterScreen agent={agent} />
           ) : (
             <div className="max-w-3xl mx-auto px-4 py-6 pb-8 min-h-full">
-              <div className="space-y-6">
-                {messages.map((message, index) => {
-                  // Handle thinking messages with inline indicator
-                  if (message.role === 'thinking') {
-                    const isCurrentThinking = index === thinkingMessageIndex && !message.metadata?.isCompleted;
-                    if (!isCurrentThinking) {
-                      return null; // hide previous/completed thinking indicators
-                    }
-                    return (
-                      <InlineThinkingIndicator
-                        key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
-                        isVisible={true}
-                        currentState={aiState}
-                        currentTool={currentTool}
-                        processSteps={processSteps.map(step => ({
-                          state: step.state,
-                          label: step.label,
-                          duration: step.duration,
-                          details: step.details,
-                          completed: step.completed
-                        }))}
-                        agentName={agent?.name || 'Agent'}
-                        agentAvatarUrl={agent?.avatar_url}
-                        isCompleted={false}
-                        className="mb-4"
-                      />
-                    );
-                  }
-                  
-                  // Handle assistant messages with thinking details
-                  if (message.role === 'assistant' && message.aiProcessDetails?.steps?.length) {
-                    return (
-                      <div key={`${message.role}-${index}-${message.timestamp.toISOString()}`} className="flex items-start space-x-4 animate-fade-in">
-                        {/* Avatar */}
-                        <div className="flex-shrink-0">
-                          {agent?.avatar_url ? (
-                            <img 
-                              src={agent.avatar_url} 
-                              alt={agent.name || 'Agent'}
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-                              <span className="text-white text-sm font-medium">
-                                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Message Content with integrated Thoughts */}
-                        <div className="flex-1 min-w-0 max-w-[70%] text-left space-y-3">
-                          {/* Header with Agent Name and Thoughts */}
-                          <div className="flex items-center space-x-2 mb-1 text-left">
-                            <span className="text-sm font-medium text-foreground">
-                              {agent?.name || 'Assistant'}
-                            </span>
-                            
-                            {/* Thoughts Section next to name */}
-                            <div className="flex items-center space-x-2">
-                              <details className="group">
-                                <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
-                                  <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
-                                  <span className="text-xs text-muted-foreground group-open:text-foreground">
-                                    Thoughts
-                                  </span>
-                                  <span className="text-xs text-muted-foreground/60">
-                                    {message.aiProcessDetails.steps.length} steps
-                                  </span>
-                                  <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
-                                </summary>
-                              <div className="absolute z-50 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
-                                <div className="space-y-3">
-                                  {message.aiProcessDetails.steps.map((step, stepIndex) => (
-                                    <div key={stepIndex} className="border border-border/30 rounded-md">
-                                      <details className="group">
-                                        <summary className="flex items-start space-x-2 text-xs p-2 cursor-pointer hover:bg-muted/30 rounded-md">
-                                          <div className="flex-shrink-0 mt-0.5">
-                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                                          </div>
-                                          <div className="flex-1">
-                                            <div className="font-medium text-foreground">{step.label}</div>
-                                            {step.details && (
-                                              <div className="text-muted-foreground mt-0.5">{step.details}</div>
-                                            )}
-                                            <div className="flex items-center space-x-2 mt-1">
-                                              {step.duration && (
-                                                <span className="text-muted-foreground/60">
-                                                  {step.duration}ms
-                                                </span>
-                                              )}
-                                              <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
-                                            </div>
-                                          </div>
-                                        </summary>
-                                        
-                                        <div className="px-4 pb-2 space-y-2 border-t border-border/20 mt-1">
-                                          {/* AI Response */}
-                                          {step.response && (
-                                            <div className="bg-muted/20 rounded p-2">
-                                              <div className="text-xs font-medium text-foreground mb-1">AI Response:</div>
-                                              <div className="text-xs text-muted-foreground whitespace-pre-wrap font-mono">
-                                                {step.response}
-                                              </div>
-                                            </div>
-                                          )}
-                                          
-                                          {/* Tool Call */}
-                                          {step.toolCall && (
-                                            <div className="bg-blue-50 dark:bg-blue-950/20 rounded p-2">
-                                              <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Tool Call:</div>
-                                              <div className="text-xs text-blue-600 dark:text-blue-400 whitespace-pre-wrap font-mono">
-                                                {step.toolCall}
-                                              </div>
-                                            </div>
-                                          )}
-                                          
-                                          {/* Tool Result */}
-                                          {step.toolResult && (
-                                            <div className="bg-green-50 dark:bg-green-950/20 rounded p-2">
-                                              <div className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Tool Result:</div>
-                                              <div className="text-xs text-green-600 dark:text-green-400 whitespace-pre-wrap font-mono max-h-32 overflow-y-auto">
-                                                {typeof step.toolResult === 'string' 
-                                                  ? step.toolResult 
-                                                  : JSON.stringify(step.toolResult, null, 2)
-                                                }
-                                              </div>
-                                            </div>
-                                          )}
-                                          
-                                          {/* Show message if no detailed data available */}
-                                          {!step.response && !step.toolCall && !step.toolResult && (
-                                            <div className="text-xs text-muted-foreground/60 italic p-2">
-                                              No detailed response data captured for this step.
-                                            </div>
-                                          )}
-                                        </div>
-                                      </details>
-                                    </div>
-                                  ))}
-                                </div>
-                                {message.aiProcessDetails.totalDuration && (
-                                  <div className="mt-3 pt-2 border-t border-border/30 text-xs text-muted-foreground">
-                                    Total processing time: {message.aiProcessDetails.totalDuration}ms
-                                  </div>
-                                )}
-                              </div>
-                              </details>
-                              
-                              {/* Process Button */}
-                              {currentProcessingDetails && (
-                                <button
-                                  onClick={() => setShowProcessModal(true)}
-                                  className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors"
-                                  title="View detailed processing information"
-                                >
-                                  <BarChart3 className="h-3 w-3 text-muted-foreground" />
-                                  <span className="text-xs text-muted-foreground">Process</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Main Response with timestamp in bottom right */}
-                          <div className="relative inline-block p-3 rounded-2xl shadow-sm bg-card text-card-foreground">
-                            <div className="text-sm leading-relaxed pr-16 prose prose-sm dark:prose-invert max-w-none
-                              prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
-                              prose-p:my-2 prose-p:leading-relaxed
-                              prose-ul:my-2 prose-ul:pl-6 prose-ul:list-disc
-                              prose-ol:my-2 prose-ol:pl-6 prose-ol:list-decimal
-                              prose-li:my-0.5
-                              prose-pre:my-3 prose-pre:p-3 prose-pre:bg-muted prose-pre:rounded-lg
-                              prose-code:px-1 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm
-                              prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic
-                              prose-strong:font-semibold prose-strong:text-foreground
-                              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
-                              prose-hr:my-4 prose-hr:border-muted-foreground/30">
-                              <ReactMarkdown 
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                  // Match renderer used in regular messages for consistent look
-                                  p: ({children}: any) => (<p className="my-3 leading-7">{children}</p>),
-                                  ul: ({children}: any) => (<ul className="my-3 pl-6 list-disc space-y-2">{children}</ul>),
-                                  ol: ({children}: any) => (<ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>),
-                                  li: ({children}: any) => (<li className="my-1 leading-7">{children}</li>),
-                                  h1: ({children}: any) => (<h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>),
-                                  h2: ({children}: any) => (<h2 className="text-xl font-semibold mt-5 mb-3">{children}</h2>),
-                                  h3: ({children}: any) => (<h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>),
-                                  code: ({node, inline, className, children, ...props}: any) => {
-                                    const match = /language-(\w+)/.exec(className || '');
-                                    return !inline && match ? (
-                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-4">
-                                        <code className={className} {...props}>
-                                          {children}
-                                        </code>
-                                      </pre>
-                                    ) : (
-                                      <code className="px-1 py-0.5 bg-muted rounded text-sm" {...props}>
-                                        {children}
-                                      </code>
-                                    );
-                                  },
-                                  blockquote: ({children}: any) => (
-                                    <blockquote className="border-l-4 border-muted-foreground/30 pl-4 italic my-4">{children}</blockquote>
-                                  ),
-                                  strong: ({children}: any) => (<strong className="font-semibold text-foreground">{children}</strong>),
-                                  a: ({href, children}: any) => (
-                                    <a href={href} className="text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">{children}</a>
-                                  ),
-                                  hr: () => (<hr className="my-6 border-muted-foreground/30" />),
-                                }}
-                              >
-                                {formatMarkdown(message.content)}
-                              </ReactMarkdown>
-                            </div>
-                            {/* Timestamp in bottom right corner */}
-                            <div className="absolute bottom-2 right-3 text-xs text-muted-foreground/60">
-                              {message.timestamp.toLocaleTimeString([], { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  // Handle regular messages
-                  return (
-                    <div
-                      key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
-                      className={`flex items-start space-x-4 animate-fade-in ${
-                        message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <div className="flex-shrink-0">
-                        {message.role === 'user' ? (
-                          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium">
-                              {user?.email?.charAt(0)?.toUpperCase() || 'U'}
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            {agent?.avatar_url ? (
-                              <img 
-                                src={agent.avatar_url} 
-                                alt={agent.name || 'Agent'}
-                                className="w-8 h-8 rounded-full object-cover"
-                                onError={(e) => {
-                                  console.warn('Message avatar failed to load:', agent.avatar_url);
-                                  e.currentTarget.style.display = 'none';
-                                  const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                                  if (fallback) fallback.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div 
-                              className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center"
-                              style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
-                            >
-                              <span className="text-white text-sm font-medium">
-                                {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                              </span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      
-                      {/* Message Content */}
-                      <div className={`flex-1 min-w-0 max-w-[70%] ${
-                        message.role === 'user' ? 'text-right' : 'text-left'
-                      }`}>
-                        <div className={`mb-1 ${
-                          message.role === 'user' ? 'text-right' : 'text-left'
-                        }`}>
-                          <span className="text-sm font-medium text-foreground">
-                            {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
-                          </span>
-                          <span className="text-xs text-muted-foreground ml-2">
-                            {message.timestamp.toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })}
-                          </span>
-                        </div>
-                      <div className={`inline-block p-3 rounded-2xl shadow-sm text-left ${
-                          message.role === 'user' 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-card text-card-foreground'
-                        }`}>
-                          {message.role === 'assistant' ? (
-                            <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none
-                              prose-headings:mt-4 prose-headings:mb-3 prose-headings:font-semibold
-                              prose-p:my-3 prose-p:leading-7
-                              prose-ul:my-3 prose-ul:pl-6 prose-ul:list-disc prose-ul:space-y-2
-                              prose-ol:my-3 prose-ol:pl-6 prose-ol:list-decimal prose-ol:space-y-2
-                              prose-li:my-1 prose-li:leading-7
-                              prose-pre:my-4 prose-pre:p-4 prose-pre:bg-muted prose-pre:rounded-lg
-                              prose-code:px-1.5 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm prose-code:font-mono
-                              prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-4
-                              prose-strong:font-semibold prose-strong:text-foreground
-                              prose-a:text-primary prose-a:underline prose-a:underline-offset-2
-                              prose-hr:my-6 prose-hr:border-muted-foreground/30
-                              [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                              <ReactMarkdown 
-                                remarkPlugins={[remarkGfm]}
-                                components={{
-                                  // Custom paragraph renderer to ensure spacing
-                                  p: ({children}: any) => (
-                                    <p className="my-3 leading-7">{children}</p>
-                                  ),
-                                  // Custom list renderers
-                                  ul: ({children}: any) => (
-                                    <ul className="my-3 pl-6 list-disc space-y-2">{children}</ul>
-                                  ),
-                                  ol: ({children}: any) => (
-                                    <ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>
-                                  ),
-                                  li: ({children}: any) => (
-                                    <li className="my-1 leading-7">{children}</li>
-                                  ),
-                                  // Headers with spacing
-                                  h1: ({children}: any) => (
-                                    <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>
-                                  ),
-                                  h2: ({children}: any) => (
-                                    <h2 className="text-xl font-semibold mt-5 mb-3">{children}</h2>
-                                  ),
-                                  h3: ({children}: any) => (
-                                    <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>
-                                  ),
-                                  // Ensure code blocks render properly
-                                  code: ({node, inline, className, children, ...props}: any) => {
-                                    const match = /language-(\w+)/.exec(className || '');
-                                    return !inline && match ? (
-                                      <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-4">
-                                        <code className={className} {...props}>
-                                          {children}
-                                        </code>
-                                      </pre>
-                                    ) : (
-                                      <code className="px-1 py-0.5 bg-muted rounded text-sm" {...props}>
-                                        {children}
-                                      </code>
-                                    );
-                                  },
-                                  // Blockquotes
-                                  blockquote: ({children}: any) => (
-                                    <blockquote className="border-l-4 border-muted-foreground/30 pl-4 italic my-4">
-                                      {children}
-                                    </blockquote>
-                                  ),
-                                  // Strong/bold
-                                  strong: ({children}: any) => (
-                                    <strong className="font-semibold text-foreground">{children}</strong>
-                                  ),
-                                  // Links
-                                  a: ({href, children}: any) => (
-                                    <a href={href} className="text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">
-                                      {children}
-                                    </a>
-                                  ),
-                                  // Horizontal rule
-                                  hr: () => (
-                                    <hr className="my-6 border-muted-foreground/30" />
-                                  ),
-                                }}
-                              >
-                                {formatMarkdown(message.content)}
-                              </ReactMarkdown>
-                            </div>
-                          ) : (
-                            <div className="text-sm leading-relaxed">
-                              <div className="flex items-center justify-between">
-                                <span>{message.content}</span>
-                                {message?.metadata?.source === 'scheduler' && (
-                                  <span className="ml-2 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30">Scheduled</span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                
-                {/* Note: Typing indicator now handled by InlineThinkingIndicator */}
-
-                {/* Removed prominent AI indicators - now using discreet header indicator */}
-                <div ref={messagesEndRef} />
-              </div>
+              <MessageList 
+                messages={messages}
+                agent={agent}
+                user={user}
+                thinkingMessageIndex={thinkingMessageIndex}
+                formatMarkdown={formatMarkdown}
+                currentProcessingDetails={currentProcessingDetails}
+                onShowProcessModal={() => setShowProcessModal(true)}
+                aiState={aiState}
+                currentTool={currentTool}
+                processSteps={processSteps}
+              />
             </div>
           )}
           
 
       </div>
 
-      {/* Fixed Input Area - Claude Style (Tools Outside Text Area) */}
-      <div className="flex-shrink-0 bg-background">
-        <div className="max-w-3xl mx-auto px-4 py-2">
-          <form onSubmit={handleSubmit} className="relative">
-            {/* Text input container - Clean text area only */}
-            <div className="relative bg-card border border-border/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md">
-              <div className="px-4 py-2 flex items-center">
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={`Message ${agent?.name || 'Agent'}...`}
-                  className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-normal disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
-                  disabled={!agent}
-                  rows={1}
-                  style={{ minHeight: '22px', maxHeight: '120px' }}
-                />
-                {/* Voice input button inside text area - disappears when typing */}
-                {!input.trim() && (
-                  <button
-                    type="button"
-                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors ml-2"
-                    disabled={!agent}
-                    title="Voice input"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19v4" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 23h8" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
+      {/* Chat Input */}
+      <ChatInput
+        input={input}
+        setInput={setInput}
+        agent={agent}
+        sending={sending}
+        uploading={uploading}
+        uploadProgress={uploadProgress}
+        onSubmit={handleSubmit}
+        onKeyDown={handleKeyDown}
+        onFileUpload={handleFileUpload}
+        adjustTextareaHeight={adjustTextareaHeight}
+        onShowAgentSettings={() => setShowAgentSettingsModal(true)}
+      />
 
-            {/* Bottom controls - Outside the text area like Claude */}
-            <div className="flex items-center justify-between mt-2 px-2">
-              {/* Left side - File upload */}
-	              <div className="flex items-center">
-	                {/* File Upload - Far left */}
-	                <DropdownMenu>
-	                  <DropdownMenuTrigger asChild>
-	                    <button
-	                      type="button"
-	                      className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent transition-colors"
-	                      disabled={!agent}
-	                      title="Attach files"
-	                    >
-	                      <Paperclip className="w-4 h-4 text-emerald-500" />
-	                    </button>
-	                  </DropdownMenuTrigger>
-	                  <DropdownMenuContent align="start" className="w-48">
-                    <DropdownMenuItem 
-                      className="cursor-pointer"
-                      onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.multiple = true;
-                        input.accept = '.pdf,.docx,.doc,.txt,.ppt,.pptx';
-                        input.onchange = (e) => {
-                          const files = (e.target as HTMLInputElement).files;
-                          if (files) handleFileUpload(files, 'document');
-                        };
-                        input.click();
-                      }}
-                      disabled={uploading}
-                    >
-                      <Paperclip className="w-4 h-4 mr-2 text-emerald-500" />
-                      {uploading ? 'Uploading...' : 'Attach file'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="cursor-pointer"
-                      onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.multiple = true;
-                        input.accept = 'image/*';
-                        input.onchange = (e) => {
-                          const files = (e.target as HTMLInputElement).files;
-                          if (files) handleFileUpload(files, 'image');
-                        };
-                        input.click();
-                      }}
-                      disabled={uploading}
-                    >
-                      <ImageIcon className="w-4 h-4 mr-2 text-pink-500" />
-                      {uploading ? 'Uploading...' : 'Upload image'}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                
-                {/* Consolidated Settings Button - Opens unified modal */}
-                <button
-                  type="button"
-                  title="Agent Settings"
-                  onClick={() => {
-                    setAgentSettingsInitialTab('general');
-                    setShowAgentSettingsModal(true);
-                  }}
-                  className="ml-3 inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors hover:bg-accent"
-                >
-                  <Sliders className="w-4 h-4 text-muted-foreground" />
-                </button>
-              </div>
-
-              {/* Right side - Send button */}
-              <div className="flex items-center">
-                <button
-                  type="submit"
-                  disabled={sending || !agent || !input.trim()}
-                  className="p-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center min-w-[36px] min-h-[36px] shadow-sm hover:scale-105 disabled:hover:scale-100"
-                >
-                  {sending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
-          
-          {/* Discreet help text */}
-          <div className="text-xs text-muted-foreground/70 text-center mt-1 opacity-0 hover:opacity-100 transition-opacity duration-300">
-            Press <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">⇧</kbd>+<kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">↵</kbd> for new line
-          </div>
-        </div>
       </div>
 
-      {/* Team Assignment Modal */}
-      <TeamAssignmentModal
-        isOpen={showTeamAssignmentModal}
-        onClose={() => setShowTeamAssignmentModal(false)}
+      {/* Chat Modals */}
+      <ChatModals
+        showTeamAssignmentModal={showTeamAssignmentModal}
+        showAboutMeModal={showAboutMeModal}
+        showHowIThinkModal={showHowIThinkModal}
+        showWhatIKnowModal={showWhatIKnowModal}
+        showToolsModal={showToolsModal}
+        showChannelsModal={showChannelsModal}
+        showTasksModal={showTasksModal}
+        showHistoryModal={showHistoryModal}
+        showProcessModal={showProcessModal}
+        showAgentSettingsModal={showAgentSettingsModal}
+        setShowTeamAssignmentModal={setShowTeamAssignmentModal}
+        setShowAboutMeModal={setShowAboutMeModal}
+        setShowHowIThinkModal={setShowHowIThinkModal}
+        setShowWhatIKnowModal={setShowWhatIKnowModal}
+        setShowToolsModal={setShowToolsModal}
+        setShowChannelsModal={setShowChannelsModal}
+        setShowTasksModal={setShowTasksModal}
+        setShowHistoryModal={setShowHistoryModal}
+        setShowProcessModal={setShowProcessModal}
+        setShowAgentSettingsModal={setShowAgentSettingsModal}
         agentId={agentId || ''}
-        agentName={agent?.name || 'Agent'}
-        onTeamAssigned={(teamId, teamName) => {
-          console.log(`Agent ${agent?.name} assigned to team ${teamName}`);
-          // You could show a success toast here
-        }}
+        agent={agent}
+        currentProcessingDetails={currentProcessingDetails}
+        agentSettingsInitialTab={agentSettingsInitialTab}
+        onAgentUpdated={setAgent}
+        updateAgent={updateAgent}
       />
-
-      {/* About Me Modal */}
-      <AboutMeModal
-        isOpen={showAboutMeModal}
-        onClose={() => setShowAboutMeModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name,
-          description: agent?.description,
-          personality: agent?.personality,
-          avatar_url: agent?.avatar_url
-        }}
-        onAgentUpdated={async (updatedAgent) => {
-          setAgent(updatedAgent);
-          // Also update the agents hook state so sidebar gets updated
-          if (agentId) {
-            await updateAgent(agentId, updatedAgent);
-          }
-          console.log('Agent updated:', updatedAgent);
-        }}
-      />
-
-      {/* How I Think Modal */}
-      <HowIThinkModal
-        isOpen={showHowIThinkModal}
-        onClose={() => setShowHowIThinkModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          system_instructions: agent?.system_instructions,
-          assistant_instructions: agent?.assistant_instructions,
-          name: agent?.name
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent thinking updated:', updatedAgent);
-        }}
-      />
-
-      {/* What I Know Modal */}
-      <WhatIKnowModal
-        isOpen={showWhatIKnowModal}
-        onClose={() => setShowWhatIKnowModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name,
-          agent_datastores: agent?.agent_datastores || []
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent knowledge updated:', updatedAgent);
-        }}
-      />
-
-      {/* Enhanced Tools Modal */}
-      <EnhancedToolsModal
-        isOpen={showToolsModal}
-        onClose={() => setShowToolsModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent tools updated:', updatedAgent);
-        }}
-      />
-
-      {/* Enhanced Channels Modal */}
-      <EnhancedChannelsModal
-        isOpen={showChannelsModal}
-        onClose={() => setShowChannelsModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent channels updated:', updatedAgent);
-        }}
-      />
-
-      {/* Tasks Modal */}
-      <TaskManagerModal
-        isOpen={showTasksModal}
-        onClose={() => setShowTasksModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent tasks updated:', updatedAgent);
-        }}
-      />
-
-      {/* History Modal */}
-      <HistoryModal
-        isOpen={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent history updated:', updatedAgent);
-        }}
-      />
-
-      {/* Process Modal */}
-      <ProcessModal
-        isOpen={showProcessModal}
-        onClose={() => setShowProcessModal(false)}
-        processingDetails={currentProcessingDetails}
-      />
-
-      {/* Unified Agent Settings Modal */}
-      <AgentSettingsModal
-        isOpen={showAgentSettingsModal}
-        onClose={() => setShowAgentSettingsModal(false)}
-        agentId={agentId || ''}
-        agentData={{
-          name: agent?.name,
-          description: agent?.description,
-          personality: agent?.personality,
-          avatar_url: agent?.avatar_url,
-          agent_datastores: agent?.agent_datastores
-        }}
-        onAgentUpdated={(updatedAgent) => {
-          setAgent(updatedAgent);
-          console.log('Agent updated via unified modal:', updatedAgent);
-        }}
-        initialTab={agentSettingsInitialTab}
-      />
-    </div>
     </div>
   );
 }
