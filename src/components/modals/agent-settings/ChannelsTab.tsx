@@ -4,7 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
+import { useChannelPermissions } from '../channels/useChannelPermissions';
+import { useAgentIntegrationPermissions } from '@/integrations/_shared/hooks/useAgentIntegrationPermissions';
 import { toast } from 'react-hot-toast';
 import { 
   Mail, 
@@ -13,9 +17,12 @@ import {
   Loader2, 
   Save,
   ExternalLink,
-  AlertCircle,
-  CheckCircle
+  Settings,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ChannelsTabProps {
   agentId: string;
@@ -32,6 +39,8 @@ interface ChannelSettings {
   whatsapp_enabled: boolean;
 }
 
+
+
 export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabProps) {
   const [settings, setSettings] = useState<ChannelSettings>({
     email_enabled: false,
@@ -43,25 +52,213 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   });
   const [isLoading, setIsLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [credentialModal, setCredentialModal] = useState({
+    isOpen: false,
+    channelType: null as 'email' | null,
+    selectedProvider: '',
+    availableProviders: [] as any[],
+    availableCredentials: [] as any[]
+  });
+
   const supabase = useSupabaseClient();
+  const { user } = useAuth();
+  
+  // Use the comprehensive permission system
+  const { agentPermissions, fetchAgentPermissions } = useChannelPermissions(agentId);
+  const { permissions: integrationPermissions, refetch: refetchPermissions } = useAgentIntegrationPermissions(agentId);
+
+  // Function to check if a channel is actually enabled based on active permissions
+  const isChannelEnabled = (channelType: string): boolean => {
+    const providerMap: Record<string, string[]> = {
+      email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+      sms: ['twilio', 'aws_sns'],
+      slack: ['slack'],
+      discord: ['discord'],
+      telegram: ['telegram'],
+      whatsapp: ['whatsapp_business']
+    };
+
+    const providers = providerMap[channelType] || [];
+    return agentPermissions.some(perm => 
+      perm.is_active && providers.includes(perm.provider_name)
+    );
+  };
 
   useEffect(() => {
-    // Load current channel settings from agent data
-    if (agentData) {
-      setSettings({
-        email_enabled: agentData.email_enabled || false,
-        sms_enabled: agentData.sms_enabled || false,
-        slack_enabled: agentData.slack_enabled || false,
-        discord_enabled: agentData.discord_enabled || false,
-        telegram_enabled: agentData.telegram_enabled || false,
-        whatsapp_enabled: agentData.whatsapp_enabled || false
-      });
-    }
-  }, [agentData]);
+    // Load current channel settings based on actual permissions, not just boolean fields
+    setSettings({
+      email_enabled: isChannelEnabled('email'),
+      sms_enabled: isChannelEnabled('sms'),
+      slack_enabled: isChannelEnabled('slack'),
+      discord_enabled: isChannelEnabled('discord'),
+      telegram_enabled: isChannelEnabled('telegram'),
+      whatsapp_enabled: isChannelEnabled('whatsapp')
+    });
+  }, [agentPermissions]);
 
-  const handleToggle = (channel: keyof ChannelSettings, enabled: boolean) => {
+
+
+  const handleToggle = async (channel: keyof ChannelSettings, enabled: boolean) => {
+    if (enabled && channel === 'email_enabled') {
+      // Open email provider selection modal
+      await openEmailProviderModal();
+      return;
+    }
+    
+    if (!enabled) {
+      // Disable channel by revoking permissions
+      await handleDisableChannel(channel);
+      return;
+    }
+    
+    // For other channels, just update the local state for now
     setSettings(prev => ({ ...prev, [channel]: enabled }));
     setHasChanges(true);
+  };
+
+  const handleDisableChannel = async (channel: keyof ChannelSettings) => {
+    try {
+      const channelType = channel.replace('_enabled', '');
+      const providerMap: Record<string, string[]> = {
+        email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+        sms: ['twilio', 'aws_sns'],
+        slack: ['slack'],
+        discord: ['discord'],
+        telegram: ['telegram'],
+        whatsapp: ['whatsapp_business']
+      };
+
+      const providers = providerMap[channelType] || [];
+      
+      // Find active permissions for this channel type
+      const activePermissions = agentPermissions.filter(perm => 
+        perm.is_active && providers.includes(perm.provider_name)
+      );
+
+      // Revoke all active permissions for this channel
+      for (const permission of activePermissions) {
+        const { error } = await supabase
+          .from('agent_integration_permissions')
+          .update({ 
+            is_active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', permission.id);
+
+        if (error) throw error;
+      }
+
+      // Refresh permissions to update the UI
+      await fetchAgentPermissions();
+      await refetchPermissions();
+      
+      toast.success(`${channelType.charAt(0).toUpperCase() + channelType.slice(1)} channel disabled`);
+    } catch (error) {
+      console.error('Error disabling channel:', error);
+      toast.error('Failed to disable channel');
+    }
+  };
+
+  const openEmailProviderModal = async () => {
+    // Check for existing email credentials in your system
+    try {
+      const { data: credentials, error } = await supabase
+        .from('user_integration_credentials')
+        .select(`
+          *,
+          oauth_providers!inner(name, display_name)
+        `)
+        .eq('user_id', user?.id)
+        .in('connection_status', ['active', 'connected'])
+        .in('oauth_providers.name', ['smtp', 'sendgrid', 'mailgun', 'gmail']);
+
+      if (error) {
+        console.error('Error loading email credentials:', error);
+      }
+
+      // Show provider selection modal with existing credentials
+      setCredentialModal({
+        isOpen: true,
+        channelType: 'email',
+        selectedProvider: '',
+        availableProviders: [
+          { id: 'smtp', name: 'SMTP', description: 'Generic SMTP server', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
+          { id: 'gmail', name: 'Gmail', description: 'Google Gmail', requiresApiKey: false, requiresOAuth: true, authType: 'oauth' },
+          { id: 'sendgrid', name: 'SendGrid', description: 'SendGrid email service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
+          { id: 'mailgun', name: 'Mailgun', description: 'Mailgun email service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' }
+        ],
+        availableCredentials: credentials || []
+      });
+    } catch (error) {
+      console.error('Error opening email provider modal:', error);
+      toast.error('Failed to load email providers');
+    }
+  };
+
+  const handleAuthorizeCredential = async (credentialId: string) => {
+    try {
+      // Check if permission already exists
+      const { data: existingPermission } = await supabase
+        .from('agent_integration_permissions')
+        .select('id, is_active')
+        .eq('agent_id', agentId)
+        .eq('user_oauth_connection_id', credentialId)
+        .single();
+
+      if (existingPermission) {
+        // If permission exists but is inactive, reactivate it
+        if (!existingPermission.is_active) {
+          const { error } = await supabase
+            .from('agent_integration_permissions')
+            .update({
+              is_active: true,
+              allowed_scopes: ['email.send'],
+              permission_level: 'custom',
+              granted_by_user_id: user?.id,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingPermission.id);
+
+          if (error) throw error;
+        }
+        // If already active, just proceed
+      } else {
+        // Create new permission
+        const { error } = await supabase
+          .from('agent_integration_permissions')
+          .insert({
+            agent_id: agentId,
+            user_oauth_connection_id: credentialId,
+            allowed_scopes: ['email.send'], // Basic email sending permission
+            permission_level: 'custom',
+            granted_by_user_id: user?.id,
+            is_active: true
+          });
+
+        if (error) throw error;
+      }
+
+      // Refresh permissions to update the UI
+      await fetchAgentPermissions();
+      await refetchPermissions();
+      
+      setCredentialModal(prev => ({ ...prev, isOpen: false }));
+      toast.success('Agent authorized to use email credentials');
+    } catch (error) {
+      console.error('Error authorizing credential:', error);
+      toast.error('Failed to authorize email access');
+    }
+  };
+
+  const handleProviderSelect = (providerId: string) => {
+    setCredentialModal(prev => ({ ...prev, selectedProvider: providerId }));
+  };
+
+  const handleCreateNewCredential = (providerId: string) => {
+    // Close this modal and redirect to integrations page for setup
+    setCredentialModal(prev => ({ ...prev, isOpen: false }));
+    toast.info(`Please set up ${providerId} credentials in the Integrations page first`);
+    // You could also open the specific provider setup modal here
   };
 
   const handleSave = async () => {
@@ -95,6 +292,51 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     }
   };
 
+  // Function to get connected providers for a channel
+  const getConnectedProviders = (channelType: string): string[] => {
+    const providerMap: Record<string, string[]> = {
+      email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+      sms: ['twilio', 'aws_sns'],
+      slack: ['slack'],
+      discord: ['discord'],
+      telegram: ['telegram'],
+      whatsapp: ['whatsapp_business']
+    };
+
+    const providers = providerMap[channelType] || [];
+    return agentPermissions
+      .filter(perm => perm.is_active && providers.includes(perm.provider_name))
+      .map(perm => perm.provider_name.charAt(0).toUpperCase() + perm.provider_name.slice(1));
+  };
+
+  // Function to check if credentials exist for a channel (even if not currently active)
+  const hasCredentialsForChannel = async (channelType: string): Promise<boolean> => {
+    try {
+      const providerMap: Record<string, string[]> = {
+        email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+        sms: ['twilio', 'aws_sns'],
+        slack: ['slack'],
+        discord: ['discord'],
+        telegram: ['telegram'],
+        whatsapp: ['whatsapp_business']
+      };
+
+      const providers = providerMap[channelType] || [];
+      
+      const { data: credentials } = await supabase
+        .from('user_integration_credentials')
+        .select('oauth_providers!inner(name)')
+        .eq('user_id', user?.id)
+        .in('connection_status', ['active', 'connected'])
+        .in('oauth_providers.name', providers);
+
+      return (credentials?.length || 0) > 0;
+    } catch (error) {
+      console.error('Error checking credentials:', error);
+      return false;
+    }
+  };
+
   const channels = [
     {
       id: 'email_enabled' as keyof ChannelSettings,
@@ -103,8 +345,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       icon: Mail,
       enabled: settings.email_enabled,
       requiresAuth: 'API or OAuth',
-      providers: ['Gmail', 'SMTP', 'SendGrid', 'Mailgun'],
-      status: 'configured' // This would be dynamic based on integrations
+      providers: getConnectedProviders('email'),
+      status: settings.email_enabled ? 'configured' : 'not_configured'
     },
     {
       id: 'sms_enabled' as keyof ChannelSettings,
@@ -113,8 +355,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       icon: Phone,
       enabled: settings.sms_enabled,
       requiresAuth: 'API',
-      providers: ['Twilio', 'AWS SNS'],
-      status: 'not_configured'
+      providers: getConnectedProviders('sms'),
+      status: settings.sms_enabled ? 'configured' : 'not_configured'
     },
     {
       id: 'slack_enabled' as keyof ChannelSettings,
@@ -123,8 +365,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       icon: MessageSquare,
       enabled: settings.slack_enabled,
       requiresAuth: 'OAuth',
-      providers: ['Slack API'],
-      status: 'not_configured'
+      providers: getConnectedProviders('slack'),
+      status: settings.slack_enabled ? 'configured' : 'not_configured'
     },
     {
       id: 'discord_enabled' as keyof ChannelSettings,
@@ -133,8 +375,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       icon: MessageSquare,
       enabled: settings.discord_enabled,
       requiresAuth: 'Bot Token',
-      providers: ['Discord Bot API'],
-      status: 'configured'
+      providers: getConnectedProviders('discord'),
+      status: settings.discord_enabled ? 'configured' : 'not_configured'
     },
     {
       id: 'telegram_enabled' as keyof ChannelSettings,
@@ -143,8 +385,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       icon: MessageSquare,
       enabled: settings.telegram_enabled,
       requiresAuth: 'Bot Token',
-      providers: ['Telegram Bot API'],
-      status: 'not_configured'
+      providers: getConnectedProviders('telegram'),
+      status: settings.telegram_enabled ? 'configured' : 'not_configured'
     },
     {
       id: 'whatsapp_enabled' as keyof ChannelSettings,
@@ -153,8 +395,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       icon: MessageSquare,
       enabled: settings.whatsapp_enabled,
       requiresAuth: 'API',
-      providers: ['WhatsApp Business API'],
-      status: 'not_configured'
+      providers: getConnectedProviders('whatsapp'),
+      status: settings.whatsapp_enabled ? 'configured' : 'not_configured'
     }
   ];
 
@@ -240,20 +482,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         })}
       </div>
 
-      <Card className="bg-muted/50">
-        <CardHeader>
-          <CardTitle className="text-base">Channel Configuration</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-3">
-            To enable these channels, you'll need to configure the required authentication in the Integrations section.
-          </p>
-          <Button variant="outline" size="sm">
-            <ExternalLink className="w-4 h-4 mr-2" />
-            Go to Integrations
-          </Button>
-        </CardContent>
-      </Card>
+
 
       {hasChanges && (
         <div className="flex items-center justify-end pt-4 border-t">
@@ -276,6 +505,164 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
           </Button>
         </div>
       )}
+
+      {/* Credential Configuration Modal */}
+      <Dialog open={credentialModal.isOpen} onOpenChange={(open) => 
+        setCredentialModal(prev => ({ ...prev, isOpen: open }))
+      }>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Settings className="h-5 w-5" />
+              <span>Configure {credentialModal.channelType?.toUpperCase()} Provider</span>
+            </DialogTitle>
+            <DialogDescription>
+              Select a provider and configure your credentials to enable this communication channel.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Existing Credentials */}
+            {credentialModal.availableCredentials.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Existing Credentials</Label>
+                <div className="space-y-2">
+                  {credentialModal.availableCredentials.map((cred) => (
+                    <div key={cred.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                      <div className="flex items-center space-x-3">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <div className="font-medium text-sm">
+                            {cred.connection_name || cred.oauth_providers?.display_name || 'Email Account'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {cred.oauth_providers?.display_name || cred.oauth_providers?.name || 'Unknown Provider'}
+                            {cred.external_username && ` • ${cred.external_username}`}
+                            {cred.connection_status && ` • ${cred.connection_status}`}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleAuthorizeCredential(cred.id)}
+                      >
+                        Authorize Agent
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or create new</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Select Provider</Label>
+              <Select value={credentialModal.selectedProvider} onValueChange={handleProviderSelect}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a provider..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {credentialModal.availableProviders.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      <div>
+                        <div className="font-medium">{provider.name}</div>
+                        <div className="text-xs text-muted-foreground">{provider.description}</div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Credential Input */}
+            {credentialModal.selectedProvider && (
+              <div className="space-y-4">
+                {(() => {
+                  const provider = credentialModal.availableProviders.find(p => p.id === credentialModal.selectedProvider);
+                  if (!provider) return null;
+
+                  return (
+                    <div className="space-y-3">
+                      {provider.authType === 'api_key' && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium flex items-center space-x-2">
+                            <Key className="h-4 w-4" />
+                            <span>API Key</span>
+                          </Label>
+                          <Input
+                            type="password"
+                            value={newApiKey}
+                            onChange={(e) => setNewApiKey(e.target.value)}
+                            placeholder="Enter your API key..."
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Your API key will be encrypted and stored securely.
+                          </p>
+                        </div>
+                      )}
+
+                      {provider.authType === 'bot_token' && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium flex items-center space-x-2">
+                            <Shield className="h-4 w-4" />
+                            <span>Bot Token</span>
+                          </Label>
+                          <Input
+                            type="password"
+                            value={newBotToken}
+                            onChange={(e) => setNewBotToken(e.target.value)}
+                            placeholder="Enter your bot token..."
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Your bot token will be encrypted and stored securely.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {provider.authType === 'oauth' && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                            This provider requires OAuth authentication. Click "Connect" to authorize access through {provider.name}.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex space-x-2 pt-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCredentialModal(prev => ({ ...prev, isOpen: false }))}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleCreateCredential}
+                          className="flex-1"
+                          disabled={
+                            (provider.authType === 'api_key' && !newApiKey.trim()) ||
+                            (provider.authType === 'bot_token' && !newBotToken.trim())
+                          }
+                        >
+                          {provider.authType === 'oauth' ? 'Connect' : 'Save'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

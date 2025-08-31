@@ -178,7 +178,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Grant execute permissions
 GRANT EXECUTE ON FUNCTION get_user_gmail_connection(UUID) TO anon, authenticated;
 
--- Ensure get_user_integration_credentials function exists (in case not migrated yet)
+-- Fix get_user_integration_credentials function to match existing signature
+DROP FUNCTION IF EXISTS public.get_user_integration_credentials(UUID);
+
 CREATE OR REPLACE FUNCTION public.get_user_integration_credentials(p_user_id UUID DEFAULT auth.uid())
 RETURNS TABLE(
     credential_id UUID,
@@ -186,12 +188,15 @@ RETURNS TABLE(
     provider_display_name TEXT,
     external_username TEXT,
     connection_name TEXT,
+    scopes_granted JSONB,
     connection_status TEXT,
     credential_type TEXT,
-    created_at TIMESTAMPTZ
+    token_expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
 ) AS $$
 BEGIN
-    -- Return data from the correct table name
+    -- Return data from the correct table name with all expected fields
     RETURN QUERY
     SELECT 
         uic.id as credential_id,
@@ -199,9 +204,12 @@ BEGIN
         op.display_name as provider_display_name,
         uic.external_username,
         uic.connection_name,
+        COALESCE(uic.scopes_granted, '{}'::jsonb) as scopes_granted,
         uic.connection_status,
         uic.credential_type,
-        uic.created_at
+        uic.token_expires_at,
+        uic.created_at,
+        uic.updated_at
     FROM user_integration_credentials uic
     LEFT JOIN oauth_providers op ON uic.oauth_provider_id = op.id
     WHERE uic.user_id = COALESCE(p_user_id, auth.uid())

@@ -9,13 +9,11 @@ import {
   Loader2, 
   Check, 
   Brain,
-  Zap,
   MessageSquare,
   Settings
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { getModelsByProvider } from '@/lib/llm/modelRegistry';
 import { toast } from 'react-hot-toast';
 
 interface BehaviorTabProps {
@@ -65,17 +63,12 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
 
   // Form state
   const [reasoningStyle, setReasoningStyle] = useState('analytical');
-  const [selectedModel, setSelectedModel] = useState('');
   const [customInstructions, setCustomInstructions] = useState('');
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [reasoningEnabled, setReasoningEnabled] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
-
-  // Available models
-  const [availableModels, setAvailableModels] = useState<any[]>([]);
 
   // Load agent settings
   useEffect(() => {
@@ -86,7 +79,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
       try {
         const { data, error } = await supabase
           .from('agents')
-          .select('metadata, model_provider, model_name')
+          .select('metadata')
           .eq('id', agentId)
           .single();
 
@@ -97,13 +90,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         
         setReasoningStyle(settings.reasoning_style || 'analytical');
         setCustomInstructions(settings.custom_instructions || '');
-        setWebSearchEnabled(settings.web_search_enabled === true);
         setReasoningEnabled(settings.reasoning_enabled === true);
-        
-        // Set model selection
-        if (data.model_provider && data.model_name) {
-          setSelectedModel(`${data.model_provider}:${data.model_name}`);
-        }
 
       } catch (error) {
         console.error('Error loading agent settings:', error);
@@ -115,34 +102,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
     loadAgentSettings();
   }, [agentId, supabase]);
 
-  // Load available models
-  useEffect(() => {
-    const loadModels = () => {
-      const models: any[] = [];
-      
-      // Get models from all providers
-      const providers = ['openai', 'anthropic', 'google', 'ollama'];
-      providers.forEach(provider => {
-        try {
-          const providerModels = getModelsByProvider(provider);
-          providerModels.forEach(model => {
-            models.push({
-              id: `${provider}:${model.id}`,
-              name: model.name,
-              provider: provider,
-              description: model.description || `${provider} model`
-            });
-          });
-        } catch (error) {
-          console.warn(`Failed to load models for provider ${provider}:`, error);
-        }
-      });
-      
-      setAvailableModels(models);
-    };
 
-    loadModels();
-  }, []);
 
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
@@ -150,13 +110,6 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
     setLoading(true);
     
     try {
-      // Parse model selection
-      let modelProvider = '';
-      let modelName = '';
-      if (selectedModel && selectedModel.includes(':')) {
-        [modelProvider, modelName] = selectedModel.split(':');
-      }
-
       // Get current metadata
       const { data: currentData } = await supabase
         .from('agents')
@@ -171,7 +124,6 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
           ...currentMetadata.settings,
           reasoning_style: reasoningStyle,
           custom_instructions: customInstructions,
-          web_search_enabled: webSearchEnabled,
           reasoning_enabled: reasoningEnabled
         }
       };
@@ -180,9 +132,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
       const { data, error } = await supabase
         .from('agents')
         .update({
-          metadata: updatedMetadata,
-          model_provider: modelProvider || null,
-          model_name: modelName || null
+          metadata: updatedMetadata
         })
         .eq('id', agentId)
         .eq('user_id', user.id)
@@ -203,7 +153,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
     } finally {
       setLoading(false);
     }
-  }, [agentId, user, reasoningStyle, selectedModel, customInstructions, webSearchEnabled, reasoningEnabled, supabase, onAgentUpdated]);
+  }, [agentId, user, reasoningStyle, customInstructions, reasoningEnabled, supabase, onAgentUpdated]);
 
   if (loadingSettings) {
     return (
@@ -221,39 +171,6 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
           Configure advanced reasoning, system instructions, and assistant behavior.
         </p>
       </div>
-
-      {/* Model Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Brain className="h-5 w-5" />
-            <span>Language Model</span>
-          </CardTitle>
-          <CardDescription>
-            Choose the AI model that powers your agent's responses
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <Label>Model</Label>
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger className="max-w-md">
-                <SelectValue placeholder="Select a model..." />
-              </SelectTrigger>
-              <SelectContent>
-                {availableModels.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    <div>
-                      <div className="font-medium">{model.name}</div>
-                      <div className="text-xs text-muted-foreground">{model.description}</div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Reasoning Style */}
       <Card>
@@ -291,36 +208,23 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         </CardContent>
       </Card>
 
-      {/* Capabilities */}
+      {/* Advanced Reasoning */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
-            <Zap className="h-5 w-5" />
-            <span>Capabilities</span>
+            <Brain className="h-5 w-5" />
+            <span>Advanced Reasoning</span>
           </CardTitle>
           <CardDescription>
-            Enable or disable specific agent capabilities
+            Enable enhanced reasoning capabilities and chain-of-thought processing
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="text-base">Web Search</Label>
+              <Label className="text-base">Enable Advanced Reasoning</Label>
               <div className="text-sm text-muted-foreground">
-                Allow agent to search the web for current information
-              </div>
-            </div>
-            <Switch
-              checked={webSearchEnabled}
-              onCheckedChange={setWebSearchEnabled}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-base">Advanced Reasoning</Label>
-              <div className="text-sm text-muted-foreground">
-                Enable enhanced reasoning capabilities and chain-of-thought processing
+                Activates sophisticated reasoning patterns including inductive, abductive, and deductive logic
               </div>
             </div>
             <Switch
@@ -331,30 +235,43 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         </CardContent>
       </Card>
 
-      {/* Custom Instructions */}
+      {/* System Instructions */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Settings className="h-5 w-5" />
-            <span>Custom Instructions</span>
+            <span>System Instructions</span>
           </CardTitle>
           <CardDescription>
-            Additional instructions to guide your agent's behavior
+            Core behavioral guidelines that define your agent's most important operating principles
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <Label>Instructions</Label>
-            <Textarea
-              value={customInstructions}
-              onChange={(e) => setCustomInstructions(e.target.value)}
-              placeholder="Enter custom instructions for your agent..."
-              rows={4}
-              className="max-w-md"
-            />
-            <p className="text-xs text-muted-foreground">
-              These instructions will be included in every conversation with your agent.
-            </p>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Primary Instructions</Label>
+              <Textarea
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                placeholder="Example: You are a professional customer support agent. Always be polite, helpful, and solution-focused. When handling complaints, acknowledge the issue, apologize sincerely, and provide clear next steps. Escalate to a human agent if the customer requests it or if the issue requires manual intervention."
+                rows={6}
+                className="w-full"
+              />
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium text-foreground">💡 Best Practices:</p>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>• Be specific about tone, style, and approach</li>
+                  <li>• Define clear boundaries and escalation rules</li>
+                  <li>• Include examples of desired responses</li>
+                  <li>• Specify any compliance or safety requirements</li>
+                </ul>
+              </div>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                <strong>Note:</strong> These instructions are sent as system prompts and take highest priority in guiding your agent's behavior. They will be applied to every conversation.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

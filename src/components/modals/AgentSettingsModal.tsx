@@ -21,7 +21,8 @@ import {
   Mail,
   Plug,
   FolderOpen,
-  Users
+  Users,
+  Library
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ import { ScheduleTab } from './agent-settings/ScheduleTab';
 import { IdentityTab } from './agent-settings/IdentityTab';
 import { BehaviorTab } from './agent-settings/BehaviorTab';
 import { MemoryTab } from './agent-settings/MemoryTab';
+import { MediaTab } from './agent-settings/MediaTab';
 import { ToolsTab } from './agent-settings/ToolsTab';
 import { ChannelsTab } from './agent-settings/ChannelsTab';
 import { IntegrationsTab } from './agent-settings/IntegrationsTab';
@@ -49,10 +51,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
 
 interface TabConfig {
   id: TabId;
@@ -90,7 +92,13 @@ const TABS: TabConfig[] = [
     id: 'memory',
     label: 'Memory',
     icon: Database,
-    description: 'Context, knowledge, and documents'
+    description: 'Context and knowledge sources'
+  },
+  {
+    id: 'media',
+    label: 'Media',
+    icon: Library,
+    description: 'SOPs and knowledge documents'
   },
   {
     id: 'tools',
@@ -163,6 +171,8 @@ export function AgentSettingsModal({
         return <BehaviorTab {...commonProps} />;
       case 'memory':
         return <MemoryTab {...commonProps} />;
+      case 'media':
+        return <MediaTab {...commonProps} />;
       case 'tools':
         return <ToolsTab {...commonProps} />;
       case 'channels':

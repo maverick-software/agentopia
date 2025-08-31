@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
 import { Loader2, Save } from 'lucide-react';
@@ -14,6 +15,7 @@ interface GeneralTabProps {
     name?: string;
     description?: string;
     role?: string;
+    model?: string;
   };
   onAgentUpdated?: (updatedData: any) => void;
 }
@@ -22,6 +24,7 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
   const [name, setName] = useState(agentData?.name || '');
   const [role, setRole] = useState(agentData?.role || '');
   const [description, setDescription] = useState(agentData?.description || '');
+  const [model, setModel] = useState(agentData?.model || 'gpt-4');
   const [isLoading, setIsLoading] = useState(false);
   const supabase = useSupabaseClient();
 
@@ -29,6 +32,7 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
     setName(agentData?.name || '');
     setRole(agentData?.role || '');
     setDescription(agentData?.description || '');
+    setModel(agentData?.model || 'gpt-4');
   }, [agentData]);
 
   const handleSave = async () => {
@@ -45,6 +49,7 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
           name: name.trim(),
           role: role.trim() || null,
           description: description.trim() || null,
+          model: model,
           updated_at: new Date().toISOString()
         })
         .eq('id', agentId)
@@ -66,7 +71,8 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
   const hasChanges = 
     name !== (agentData?.name || '') ||
     role !== (agentData?.role || '') ||
-    description !== (agentData?.description || '');
+    description !== (agentData?.description || '') ||
+    model !== (agentData?.model || 'gpt-4');
 
   return (
     <div className="space-y-6">
@@ -74,7 +80,7 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
       <div className="pb-4 border-b border-border">
         <h3 className="text-lg font-semibold">General Information</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Configure your agent's basic information and identity.
+          Configure your agent's basic information, identity, and language model.
         </p>
       </div>
 
@@ -130,6 +136,36 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
             A brief description of the agent's capabilities and intended use.
           </p>
         </div>
+
+        {/* LLM Model Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Language Model</CardTitle>
+            <CardDescription>
+              Choose the language model that powers your agent's responses.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="model-select">Model Selection</Label>
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger className="max-w-md">
+                  <SelectValue placeholder="Select a model..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
+                  <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                  <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
+                  <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Different models have varying capabilities and response styles.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Save Button - Fixed at bottom */}

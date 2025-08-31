@@ -10,18 +10,14 @@ import {
   Check, 
   Database,
   Brain,
-  Plus,
   Lightbulb,
-  MessageSquare,
-  Library,
-  FileText,
-  ExternalLink
+  MessageSquare
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import type { Datastore } from '@/types';
-import { MediaLibrarySelector } from '../MediaLibrarySelector';
+
 
 interface MemoryTabProps {
   agentId: string;
@@ -75,15 +71,12 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
   const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
   const [graphEnabled, setGraphEnabled] = useState<boolean>(false);
   
-  // Media Library integration
-  const [showMediaLibrarySelector, setShowMediaLibrarySelector] = useState(false);
-  const [assignedMediaCount, setAssignedMediaCount] = useState(0);
+
 
   // Load available datastores and current connections
   useEffect(() => {
     if (user) {
       loadDatastores();
-      loadAssignedMediaCount();
     }
   }, [user]);
 
@@ -150,22 +143,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
     }
   };
 
-  const loadAssignedMediaCount = async () => {
-    if (!user || !agentId) return;
-    
-    try {
-      const { count, error } = await supabase
-        .from('agent_media_assignments')
-        .select('*', { count: 'exact', head: true })
-        .eq('agent_id', agentId)
-        .eq('user_id', user.id);
 
-      if (error) throw error;
-      setAssignedMediaCount(count || 0);
-    } catch (error) {
-      console.error('Error loading assigned media count:', error);
-    }
-  };
 
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
@@ -402,49 +380,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         </CardContent>
       </Card>
 
-      {/* Media Library */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Library className="h-5 w-5" />
-            <span>Media Library</span>
-          </CardTitle>
-          <CardDescription>
-            Assign documents and media to your agent's knowledge base
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/50">
-            <div className="flex items-center space-x-3">
-              <FileText className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <div className="font-medium text-sm">Assigned Media</div>
-                <div className="text-xs text-muted-foreground">
-                  {assignedMediaCount} {assignedMediaCount === 1 ? 'item' : 'items'} assigned to this agent
-                </div>
-              </div>
-            </div>
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowMediaLibrarySelector(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Assign Media
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open('/media', '_blank')}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Open Library
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* Save Button */}
       <div className="flex justify-end pt-4 border-t">
@@ -463,16 +399,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         </Button>
       </div>
 
-      {/* Media Library Selector Modal */}
-      <MediaLibrarySelector
-        isOpen={showMediaLibrarySelector}
-        onClose={() => setShowMediaLibrarySelector(false)}
-        agentId={agentId}
-        onAssignmentComplete={() => {
-          setShowMediaLibrarySelector(false);
-          loadAssignedMediaCount();
-        }}
-      />
+
     </div>
   );
 }

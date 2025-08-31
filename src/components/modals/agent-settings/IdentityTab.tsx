@@ -248,7 +248,7 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
       <div>
         <h3 className="text-lg font-medium">Identity & Appearance</h3>
         <p className="text-sm text-muted-foreground">
-          Configure your agent's avatar, LLM model, and personality type.
+          Configure your agent's avatar and personality type.
         </p>
       </div>
 
@@ -312,34 +312,7 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>LLM Model Selection</CardTitle>
-          <CardDescription>
-            Choose the language model that powers your agent's responses.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="model-select">Language Model</Label>
-            <Select defaultValue="gpt-4">
-              <SelectTrigger className="max-w-md">
-                <SelectValue placeholder="Select a model..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
-                <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Different models have varying capabilities and response styles.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+
 
       <Card>
         <CardHeader>
