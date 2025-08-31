@@ -220,6 +220,13 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
             <NavLink
               key={agent.id}
               to={`/agents/${agent.id}/chat`}
+              onClick={() => {
+                // Clear stored conversation ID to ensure new chat starts fresh
+                try { 
+                  localStorage.removeItem(`agent_${agent.id}_conversation_id`);
+                  localStorage.removeItem(`agent_${agent.id}_session_id`);
+                } catch {}
+              }}
               className={({ isActive }): string =>
                 `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
                   isActive

@@ -154,8 +154,18 @@ export function AgentChatPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(() => {
-    return agentId ? localStorage.getItem(`agent_${agentId}_conversation_id`) : null;
+    // Check if we have a conversation ID in the URL first
+    const params = new URLSearchParams(location.search);
+    const urlConvId = params.get('conv');
+    if (urlConvId) return urlConvId;
+    
+    // Otherwise, start with a fresh chat (no conversation ID)
+    // This ensures clicking on an agent always starts with a new chat
+    return null;
   });
+  
+  // Track if we're creating a new conversation to prevent race conditions
+  const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
   // Reasoning toggle (persist per agent in localStorage)
   const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
     const key = `agent_${agentId}_reasoning_enabled`;
@@ -304,14 +314,20 @@ export function AgentChatPage() {
     const params = new URLSearchParams(location.search);
     const conv = params.get('conv');
     if (conv && conv !== selectedConversationId) {
+      // URL has a conversation ID, use it
       setSelectedConversationId(conv);
       if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
-      return;
-    }
-    // UX: opening an agent always lands on a fresh new chat until first send
-    if (!conv && agentId) {
-      try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+    } else if (!conv && selectedConversationId) {
+      // URL has no conversation ID but we have one in state
+      // This happens when navigating to a new chat - clear the conversation
       setSelectedConversationId(null);
+      setMessages([]);
+      if (agentId) {
+        try { 
+          localStorage.removeItem(`agent_${agentId}_conversation_id`);
+          localStorage.removeItem(`agent_${agentId}_session_id`);
+        } catch {}
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, agentId]);
@@ -790,6 +806,10 @@ export function AgentChatPage() {
 	useEffect(() => {
 		const fetchHistory = async () => {
 			if (!agentId || !user?.id) return;
+			
+			// Skip fetching if we're in the process of creating a new conversation
+			if (isCreatingNewConversation) return;
+			
 			setIsHistoryLoading(true);
 			try {
 				// If no conversation is selected, show a clean slate
@@ -855,7 +875,7 @@ export function AgentChatPage() {
 		};
 
 		fetchHistory();
-	}, [agentId, user?.id, selectedConversationId]);
+	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation]);
 
   // Submit Message Handler - Enhanced with AI state tracking
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -866,7 +886,26 @@ export function AgentChatPage() {
     setInput('');
     setSending(true);
 
-    // Add user message immediately
+    // Establish conversation ID FIRST (before adding messages or starting AI processing)
+    // This ensures the UI switches to chat history view immediately
+    let convId = selectedConversationId;
+    let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+    
+    if (!selectedConversationId) {
+      // Set flag to prevent fetchHistory from clearing our messages
+      setIsCreatingNewConversation(true);
+      
+      // Create new conversation ID immediately for better UX
+      convId = crypto.randomUUID();
+      sessId = crypto.randomUUID();
+      setSelectedConversationId(convId);
+      // Reflect in URL for consistency
+      navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
+      localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
+      localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+    }
+
+    // Add user message after conversation context is established
     const userMessage: Message = {
       role: 'user',
       content: messageText,
@@ -875,6 +914,10 @@ export function AgentChatPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Start AI processing indicator
+    startAIProcessing();
+    
     // Immediate scroll for better UX
     requestAnimationFrame(() => {
       scrollToBottom();
@@ -883,25 +926,6 @@ export function AgentChatPage() {
     try {
       setSending(true);
       setError(null);
-      
-      // Establish conversation ID FIRST (before starting AI processing)
-      // Only create new conversation if we don't have one
-      let convId = selectedConversationId;
-      let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
-      
-      if (!selectedConversationId) {
-        // Only create new conversation for the first message
-        convId = crypto.randomUUID();
-        sessId = crypto.randomUUID();
-        setSelectedConversationId(convId);
-        // Reflect in URL for consistency
-        navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
-        localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
-        localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
-      }
-      
-      // NOW start AI processing indicator (after conversation context is established)
-      startAIProcessing();
 
       const { error: saveError } = await supabase
         .from('chat_messages_v2')
@@ -958,6 +982,9 @@ export function AgentChatPage() {
           }
         }
       } catch { /* non-fatal */ }
+      
+      // Clear the flag now that the conversation is saved
+      setIsCreatingNewConversation(false);
 
       // Run AI processing simulation in parallel with actual request
       const processingPromise = simulateAIProcessing();
@@ -1070,6 +1097,7 @@ export function AgentChatPage() {
       }
     } finally {
       setSending(false);
+      setIsCreatingNewConversation(false); // Ensure flag is cleared
     }
   }, [input, agent, sending, user?.id, scrollToBottom, startAIProcessing, simulateAIProcessing, completeAIProcessing]);
 
@@ -1422,7 +1450,7 @@ export function AgentChatPage() {
               </div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto px-4 py-6 pb-8 min-h-full">
+            <div className="max-w-3xl mx-auto px-4 py-6 pb-8 min-h-full">
               <div className="space-y-6">
                 {messages.map((message, index) => {
                   // Handle thinking messages with inline indicator
@@ -1711,7 +1739,7 @@ export function AgentChatPage() {
                             })}
                           </span>
                         </div>
-                      <div className={`inline-block p-3 rounded-2xl shadow-sm ${
+                      <div className={`inline-block p-3 rounded-2xl shadow-sm text-left ${
                           message.role === 'user' 
                             ? 'bg-primary text-primary-foreground' 
                             : 'bg-card text-card-foreground'
