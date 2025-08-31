@@ -884,10 +884,7 @@ export function AgentChatPage() {
       setSending(true);
       setError(null);
       
-      // Start AI processing indicator
-      startAIProcessing();
-      
-      // Save user message to database (v2 schema)
+      // Establish conversation ID FIRST (before starting AI processing)
       const convId = selectedConversationId || crypto.randomUUID();
       if (!selectedConversationId) {
         setSelectedConversationId(convId);
@@ -897,6 +894,9 @@ export function AgentChatPage() {
       const sessId = crypto.randomUUID();
       localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+      
+      // NOW start AI processing indicator (after conversation context is established)
+      startAIProcessing();
 
       const { error: saveError } = await supabase
         .from('chat_messages_v2')
@@ -973,17 +973,9 @@ export function AgentChatPage() {
         localStorage.getItem(`agent_${agent.id}_context_size`) || '25'
       );
 
-      // Provide minimal v2 context with the SAME IDs used for the DB insert above
-      // Avoid generating a second conversation/session ID in the same submit handler
+      // Use the conversation and session IDs established earlier
       const conversationId = convId;
       const sessionId = sessId;
-      // Ensure URL reflects the new conversation exactly once
-      if (!selectedConversationId) {
-        setSelectedConversationId(conversationId);
-        navigate(`/agents/${agentId}/chat?conv=${conversationId}`, { replace: true });
-      }
-      localStorage.setItem(`agent_${agent.id}_conversation_id`, conversationId);
-      localStorage.setItem(`agent_${agent.id}_session_id`, sessionId);
 
       const requestBody: any = {
         version: '2.0.0',

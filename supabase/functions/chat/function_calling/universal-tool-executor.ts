@@ -259,12 +259,20 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
   }
   
   // Authentication/API key errors
-  if (lowerError.includes('api key') || lowerError.includes('authentication') || lowerError.includes('unauthorized')) {
+  if (lowerError.includes('api key') || lowerError.includes('authentication') || lowerError.includes('unauthorized') || lowerError.includes('expired')) {
     if (isEmailTool) {
+      if (lowerError.includes('expired') || lowerError.includes('token')) {
+        return 'Question: The email service OAuth token has expired. Please go to the Integrations page to re-authorize your email connection, then try again.';
+      }
       return 'Question: It looks like the email service needs to be set up. Please ensure your email integration is properly configured with valid credentials.';
     }
     if (isSearchTool) {
       return 'Question: The search service needs to be configured. Please add your web search API key in the integration settings.';
+    }
+    
+    // Generic OAuth expiration message
+    if (lowerError.includes('expired') || lowerError.includes('token')) {
+      return 'Question: The integration token has expired. Please go to the Integrations page to re-authorize this connection, then try again.';
     }
   }
   
@@ -285,6 +293,37 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
 export class UniversalToolExecutor {
   
   /**
+   * Check tool status by calling get-agent-tools and finding the specific tool
+   */
+  static async checkToolStatus(toolName: string, agentId: string, userId: string, supabase: any): Promise<{status: string, error_message?: string}> {
+    try {
+      // Call get-agent-tools to get current tool status
+      const { data: toolsResponse, error } = await supabase.functions.invoke('get-agent-tools', {
+        body: { agent_id: agentId, user_id: userId }
+      });
+
+      if (error || !toolsResponse?.success) {
+        console.error(`[UniversalToolExecutor] Failed to get tool status:`, error);
+        return { status: 'error', error_message: 'Unable to check tool status' };
+      }
+
+      // Find the specific tool
+      const tool = toolsResponse.tools?.find((t: any) => t.name === toolName);
+      if (!tool) {
+        return { status: 'error', error_message: `Tool ${toolName} not found or not authorized` };
+      }
+
+      return {
+        status: tool.status || 'active',
+        error_message: tool.error_message
+      };
+    } catch (err) {
+      console.error(`[UniversalToolExecutor] Error checking tool status:`, err);
+      return { status: 'error', error_message: 'Failed to check tool status' };
+    }
+  }
+
+  /**
    * Execute any tool by routing to the appropriate edge function
    * This is the universal solution that scales to any integration
    */
@@ -293,6 +332,17 @@ export class UniversalToolExecutor {
     
     try {
       console.log(`[UniversalToolExecutor] Executing ${toolName} for agent ${agentId}`);
+      
+      // Check tool status before execution
+      const toolStatus = await this.checkToolStatus(toolName, agentId, userId, supabase);
+      if (toolStatus.status !== 'active') {
+        console.log(`[UniversalToolExecutor] Tool ${toolName} is ${toolStatus.status}: ${toolStatus.error_message}`);
+        return {
+          success: false,
+          data: null,
+          error: toolStatus.error_message || `Tool is ${toolStatus.status} and cannot be used.`
+        };
+      }
       
       // Find the appropriate routing configuration
       const routingConfig = this.findRoutingConfig(toolName);

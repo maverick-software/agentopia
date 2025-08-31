@@ -20,6 +20,10 @@ interface ToolDefinition {
   name: string;
   description: string;
   parameters: any;
+  status: 'active' | 'expired' | 'error';
+  error_message?: string;
+  provider_name: string;
+  connection_name: string;
 }
 
 interface AgentToolsResponse {
@@ -33,6 +37,87 @@ interface AgentToolsResponse {
     total_tools: number;
     cached: boolean;
   };
+}
+
+// Helper function to map agent scopes to integration capabilities
+function mapScopeToCapability(scope: string, providerName: string): string[] {
+  // Gmail scope mappings
+  if (providerName === 'gmail') {
+    const gmailMappings: Record<string, string[]> = {
+      'email.send': ['send_email'],
+      'email.read': ['read_emails', 'search_emails'],
+      'email.modify': ['email_actions'],
+      'https://www.googleapis.com/auth/gmail.send': ['send_email'],
+      'https://www.googleapis.com/auth/gmail.readonly': ['read_emails', 'search_emails'],
+      'https://www.googleapis.com/auth/gmail.modify': ['email_actions']
+    };
+    return gmailMappings[scope] || [scope];
+  }
+  
+  // SMTP scope mappings
+  if (providerName === 'smtp') {
+    const smtpMappings: Record<string, string[]> = {
+      'email.send': ['smtp_send_email'],
+      'email.templates': ['smtp_email_templates'],
+      'email.stats': ['smtp_email_stats']
+    };
+    return smtpMappings[scope] || [scope];
+  }
+  
+  // Default: return the scope as-is
+  return [scope];
+}
+
+// Helper function to check if agent scope allows a capability
+function isScopeAllowed(capability: string, allowedScopes: string[], providerName: string): boolean {
+  // Direct match
+  if (allowedScopes.includes(capability)) {
+    return true;
+  }
+  
+  // Check mapped scopes
+  for (const scope of allowedScopes) {
+    const mappedCapabilities = mapScopeToCapability(scope, providerName);
+    if (mappedCapabilities.includes(capability)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Helper function to determine credential status
+function getCredentialStatus(credential: any): { status: 'active' | 'expired' | 'error', error_message?: string } {
+  // Check if connection status is explicitly set to expired or error
+  if (credential.connection_status === 'expired') {
+    return {
+      status: 'expired',
+      error_message: 'OAuth token has expired. Please re-authorize this integration.'
+    };
+  }
+  
+  if (credential.connection_status === 'error') {
+    return {
+      status: 'error',
+      error_message: 'Integration connection has an error. Please check your credentials.'
+    };
+  }
+  
+  // Check if OAuth token is expired based on timestamp
+  if (credential.token_expires_at) {
+    const expiresAt = new Date(credential.token_expires_at);
+    const now = new Date();
+    
+    if (expiresAt < now) {
+      return {
+        status: 'expired',
+        error_message: `OAuth token expired on ${expiresAt.toLocaleDateString()}. Please re-authorize this integration.`
+      };
+    }
+  }
+  
+  // Default to active
+  return { status: 'active' };
 }
 
 // Generate parameters schema based on capability type (now tool name)
@@ -193,7 +278,7 @@ serve(async (req) => {
 
     console.log(`[GetAgentTools] Fetching tools for agent ${agent_id}, user ${user_id}`);
 
-    // Database-driven query: Get agent permissions with direct provider → integration mapping
+    // Database-driven query: Get agent permissions including expired credentials
     const { data: authorizedTools, error } = await supabase
       .from('agent_integration_permissions')
       .select(`
@@ -206,6 +291,7 @@ serve(async (req) => {
           oauth_provider_id,
           credential_type,
           connection_status,
+          token_expires_at,
           oauth_providers!inner(
             id,
             name,
@@ -216,7 +302,7 @@ serve(async (req) => {
       .eq('agent_id', agent_id)
       .eq('user_integration_credentials.user_id', user_id)
       .eq('is_active', true)
-      .eq('user_integration_credentials.connection_status', 'active')
+      .in('user_integration_credentials.connection_status', ['active', 'expired'])
       .order('granted_at', { ascending: false });
     
     if (error) {
@@ -275,10 +361,14 @@ serve(async (req) => {
 
     for (const permission of authorizedTools) {
       const provider = permission.user_integration_credentials.oauth_providers;
+      const credential = permission.user_integration_credentials;
       const allowedScopes = permission.allowed_scopes || [];
       const providerName = provider.name;
+      
+      // Get credential status (active, expired, error)
+      const credentialStatus = getCredentialStatus(credential);
 
-      console.log(`[GetAgentTools] Processing ${provider.display_name} (${providerName}) with ${allowedScopes.length} scopes`);
+      console.log(`[GetAgentTools] Processing ${provider.display_name} (${providerName}) with ${allowedScopes.length} scopes - Status: ${credentialStatus.status}`);
 
       // Skip if already processed this provider
       if (providersProcessed.has(providerName)) {
@@ -346,29 +436,38 @@ serve(async (req) => {
       }
 
       console.log(`[GetAgentTools] Found integration: ${integration.name} with ${integration.integration_capabilities?.length || 0} capabilities`);
+      console.log(`[GetAgentTools] Agent allowed scopes:`, allowedScopes);
+      console.log(`[GetAgentTools] Integration capabilities:`, integration.integration_capabilities?.map(c => c.capability_key));
 
       // Generate tools from integration capabilities (capability_key IS the tool name)
       const capabilities = integration.integration_capabilities || [];
       for (const capability of capabilities) {
-        // Check if this capability is allowed by the agent's scopes
-        if (allowedScopes.includes(capability.capability_key)) {
-          const toolName = capability.capability_key; // capability_key is already the unique tool name
+        console.log(`[GetAgentTools] Checking capability: ${capability.capability_key} against scopes:`, allowedScopes);
+        const isAllowed = isScopeAllowed(capability.capability_key, allowedScopes, providerName);
+        console.log(`[GetAgentTools] Capability ${capability.capability_key} allowed: ${isAllowed}`);
+        // Check if this capability is allowed by the agent's scopes (with mapping)
+        if (isAllowed) {
+          const toolName = `${providerName}_${capability.capability_key}`; // Prefix with provider name
           
           // Avoid duplicates
           if (toolNamesSeen.has(toolName)) {
             continue;
           }
           
-          // Create tool definition from capability
+          // Create enhanced tool definition with status
           const tool: ToolDefinition = {
             name: toolName,
             description: capability.display_label || `${toolName} via ${integration.name}`,
-            parameters: generateParametersForCapability(toolName)
+            parameters: generateParametersForCapability(toolName),
+            status: credentialStatus.status,
+            error_message: credentialStatus.error_message,
+            provider_name: provider.name,
+            connection_name: credential.connection_name
           };
 
           tools.push(tool);
           toolNamesSeen.add(toolName);
-          console.log(`[GetAgentTools] Added tool: ${toolName}`);
+          console.log(`[GetAgentTools] Added tool: ${toolName} (Status: ${credentialStatus.status})`);
         }
       }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -68,9 +68,9 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   const { permissions: integrationPermissions, refetch: refetchPermissions } = useAgentIntegrationPermissions(agentId);
 
   // Function to check if a channel is actually enabled based on active permissions
-  const isChannelEnabled = (channelType: string): boolean => {
+  const isChannelEnabled = useCallback((channelType: string): boolean => {
     const providerMap: Record<string, string[]> = {
-      email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+      email: ['gmail', 'smtp', 'smtp_server', 'sendgrid', 'mailgun'],
       sms: ['twilio', 'aws_sns'],
       slack: ['slack'],
       discord: ['discord'],
@@ -79,22 +79,43 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     };
 
     const providers = providerMap[channelType] || [];
+    const actualProviderNames = agentPermissions.map(perm => perm.provider_name);
+    console.log(`[isChannelEnabled] Checking ${channelType}:`, {
+      expectedProviders: providers,
+      actualProviderNames,
+      agentPermissions,
+      activePermissions: agentPermissions.filter(perm => perm.is_active),
+      matchingPermissions: agentPermissions.filter(perm => 
+        perm.is_active && providers.includes(perm.provider_name)
+      ),
+      providerNameMatches: actualProviderNames.map(name => ({
+        name,
+        matchesExpected: providers.includes(name)
+      }))
+    });
+    
     return agentPermissions.some(perm => 
       perm.is_active && providers.includes(perm.provider_name)
     );
-  };
+  }, [agentPermissions]);
 
   useEffect(() => {
-    // Load current channel settings based on actual permissions, not just boolean fields
-    setSettings({
+    console.log('[ChannelsTab] agentPermissions updated:', agentPermissions);
+    
+    // Channel toggle state shows whether there are active permissions
+    // But the cards themselves should always be clickable/active
+    const newSettings = {
       email_enabled: isChannelEnabled('email'),
       sms_enabled: isChannelEnabled('sms'),
       slack_enabled: isChannelEnabled('slack'),
       discord_enabled: isChannelEnabled('discord'),
       telegram_enabled: isChannelEnabled('telegram'),
       whatsapp_enabled: isChannelEnabled('whatsapp')
-    });
-  }, [agentPermissions]);
+    };
+    
+    console.log('[ChannelsTab] New settings:', newSettings);
+    setSettings(newSettings);
+  }, [agentPermissions, isChannelEnabled]);
 
 
 
@@ -195,8 +216,61 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     }
   };
 
+  // Helper function to map OAuth scopes to agent capabilities
+  const mapOAuthScopesToAgentCapabilities = (oauthScopes: string[], providerName: string): string[] => {
+    if (providerName === 'gmail') {
+      const capabilities: string[] = [];
+      
+      // Map Gmail OAuth scopes to agent capabilities
+      if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.send')) {
+        capabilities.push('email.send');
+      }
+      if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.readonly')) {
+        capabilities.push('email.read');
+      }
+      if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.modify')) {
+        capabilities.push('email.modify');
+      }
+      
+      // Fallback: if no specific scopes found, grant basic send permission
+      return capabilities.length > 0 ? capabilities : ['email.send'];
+    }
+    
+    // For other providers, default to basic capabilities
+    if (providerName === 'smtp' || providerName === 'sendgrid' || providerName === 'mailgun') {
+      return ['email.send'];
+    }
+    
+    return ['email.send']; // Default fallback
+  };
+
   const handleAuthorizeCredential = async (credentialId: string) => {
     try {
+      // First, get the credential details to understand what OAuth scopes are available
+      const { data: credential, error: credentialError } = await supabase
+        .from('user_integration_credentials')
+        .select(`
+          *,
+          oauth_providers!inner(name, display_name)
+        `)
+        .eq('id', credentialId)
+        .single();
+
+      if (credentialError || !credential) {
+        throw new Error('Could not fetch credential details');
+      }
+
+      const providerName = credential.oauth_providers.name;
+      const oauthScopes = credential.scopes_granted || [];
+      
+      // Map OAuth scopes to agent capabilities
+      const allowedScopes = mapOAuthScopesToAgentCapabilities(oauthScopes, providerName);
+      
+      console.log(`[ChannelsTab] Mapping OAuth scopes for ${providerName}:`, {
+        oauthScopes,
+        mappedCapabilities: allowedScopes
+      });
+
       // Check if permission already exists
       const { data: existingPermission } = await supabase
         .from('agent_integration_permissions')
@@ -206,13 +280,13 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         .single();
 
       if (existingPermission) {
-        // If permission exists but is inactive, reactivate it
+        // If permission exists but is inactive, reactivate it with proper scopes
         if (!existingPermission.is_active) {
           const { error } = await supabase
             .from('agent_integration_permissions')
             .update({
               is_active: true,
-              allowed_scopes: ['email.send'],
+              allowed_scopes: allowedScopes,
               permission_level: 'custom',
               granted_by_user_id: user?.id,
               updated_at: new Date().toISOString()
@@ -220,16 +294,26 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
             .eq('id', existingPermission.id);
 
           if (error) throw error;
+        } else {
+          // Update existing active permission with correct scopes
+          const { error } = await supabase
+            .from('agent_integration_permissions')
+            .update({
+              allowed_scopes: allowedScopes,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingPermission.id);
+
+          if (error) throw error;
         }
-        // If already active, just proceed
       } else {
-        // Create new permission
+        // Create new permission with properly mapped scopes
         const { error } = await supabase
           .from('agent_integration_permissions')
           .insert({
             agent_id: agentId,
             user_oauth_connection_id: credentialId,
-            allowed_scopes: ['email.send'], // Basic email sending permission
+            allowed_scopes: allowedScopes,
             permission_level: 'custom',
             granted_by_user_id: user?.id,
             is_active: true
@@ -243,7 +327,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       await refetchPermissions();
       
       setCredentialModal(prev => ({ ...prev, isOpen: false }));
-      toast.success('Agent authorized to use email credentials');
+      toast.success(`Agent authorized with ${allowedScopes.length} ${providerName} capabilities`);
     } catch (error) {
       console.error('Error authorizing credential:', error);
       toast.error('Failed to authorize email access');
@@ -415,7 +499,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
           const isConfigured = channel.status === 'configured';
           
           return (
-            <Card key={channel.id} className={!isConfigured ? 'opacity-60' : ''}>
+            <Card key={channel.id}>
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
@@ -466,9 +550,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
                     <div className="flex items-center space-x-2">
                       <Switch
                         id={channel.id}
-                        checked={channel.enabled && isConfigured}
+                        checked={channel.enabled}
                         onCheckedChange={(checked) => handleToggle(channel.id, checked)}
-                        disabled={!isConfigured}
                       />
                       <Label htmlFor={channel.id} className="sr-only">
                         Toggle {channel.name}
