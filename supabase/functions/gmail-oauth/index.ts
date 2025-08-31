@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -21,24 +24,61 @@ interface UserInfo {
   id: string;
 }
 
-// Helper function to store OAuth tokens directly in the connection record
-// This uses your existing approach of storing tokens as encrypted text
+// Helper function to store OAuth tokens securely in Supabase Vault
+// Following the Supabase Vault Encryption Protocol
 async function storeOAuthTokens(
   supabase: SupabaseClient,
   userId: string,
-  tokens: OAuthTokenResponse
+  tokens: OAuthTokenResponse,
+  provider: string = 'gmail'
 ) {
   try {
-    console.log('Storing OAuth tokens for user:', userId);
+    console.log('Storing OAuth tokens securely in vault for user:', userId);
     
-    // Simply return the tokens to be stored directly in the user_integration_credentials table
-    // The encryption will be handled by your existing table structure
+    const timestamp = Date.now();
+    
+    // Create vault secrets for access token
+    const accessSecretName = `${provider}_access_token_${userId}_${timestamp}`;
+    const accessDescription = `${provider} access token for user ${userId} - Created: ${new Date().toISOString()}`;
+    
+    const { data: accessVaultId, error: accessVaultError } = await supabase.rpc('create_vault_secret', {
+      p_secret: tokens.access_token,
+      p_name: accessSecretName,
+      p_description: accessDescription
+    });
+
+    if (accessVaultError || !accessVaultId) {
+      throw new Error(`Failed to create vault secret for access token: ${accessVaultError?.message}`);
+    }
+
+    console.log('Access token stored in vault:', accessVaultId);
+
+    // Create vault secret for refresh token (if exists)
+    let refreshVaultId = null;
+    if (tokens.refresh_token) {
+      const refreshSecretName = `${provider}_refresh_token_${userId}_${timestamp}`;
+      const refreshDescription = `${provider} refresh token for user ${userId} - Created: ${new Date().toISOString()}`;
+      
+      const { data: refreshVaultIdResult, error: refreshVaultError } = await supabase.rpc('create_vault_secret', {
+        p_secret: tokens.refresh_token,
+        p_name: refreshSecretName,
+        p_description: refreshDescription
+      });
+
+      if (refreshVaultError || !refreshVaultIdResult) {
+        throw new Error(`Failed to create vault secret for refresh token: ${refreshVaultError?.message}`);
+      }
+
+      refreshVaultId = refreshVaultIdResult;
+      console.log('Refresh token stored in vault:', refreshVaultId);
+    }
+    
     return {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token || null
+      accessToken: accessVaultId,    // Return vault UUID, not the actual token
+      refreshToken: refreshVaultId   // Return vault UUID, not the actual token
     };
   } catch (error) {
-    console.error('Error preparing OAuth tokens:', error);
+    console.error('Error storing OAuth tokens in vault:', error);
     throw error;
   }
 }
@@ -116,8 +156,11 @@ serve(async (req) => {
       throw new Error('Invalid or expired token')
     }
 
-    const { accessToken, refreshToken } = await storeOAuthTokens(supabase, user.id, tokens);
-    console.log('OAuth tokens prepared for storage.');
+    // Use service role client for vault operations (required for create_vault_secret)
+    const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    
+    const { accessToken, refreshToken } = await storeOAuthTokens(supabaseServiceRole, user.id, tokens, 'gmail');
+    console.log('OAuth tokens securely stored in vault.');
 
     const { data: oauthProvider, error: providerError } = await supabase
       .from('oauth_providers')

@@ -320,9 +320,13 @@ function getRequiredScopes(action: string): string[] {
   const scopeMap: Record<string, string[]> = {
     send_email: ['email.send'],
     read_emails: ['email.read'],
-    search_emails: ['email.read'],
-    manage_labels: ['email.modify'],
+    search_emails: ['email.read', 'email.metadata'],
+    manage_labels: ['email.labels', 'email.modify'],
     email_actions: ['email.modify'],
+    compose_email: ['email.compose'],
+    insert_email: ['email.insert'],
+    get_profile: ['profile.email', 'profile.info'],
+    manage_settings: ['email.settings.basic', 'email.settings.sharing'],
   };
   return scopeMap[action] || [];
 }

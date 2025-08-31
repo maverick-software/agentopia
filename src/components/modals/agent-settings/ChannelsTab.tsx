@@ -218,31 +218,68 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
 
   // Helper function to map OAuth scopes to agent capabilities
   const mapOAuthScopesToAgentCapabilities = (oauthScopes: string[], providerName: string): string[] => {
-    if (providerName === 'gmail') {
-      const capabilities: string[] = [];
-      
-      // Map Gmail OAuth scopes to agent capabilities
-      if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.send')) {
-        capabilities.push('email.send');
-      }
-      if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.readonly')) {
-        capabilities.push('email.read');
-      }
-      if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.modify')) {
-        capabilities.push('email.modify');
-      }
-      
-      // Fallback: if no specific scopes found, grant basic send permission
-      return capabilities.length > 0 ? capabilities : ['email.send'];
+  if (providerName === 'gmail') {
+    const capabilities: string[] = [];
+    
+    // Core Gmail API scopes
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.send')) {
+      capabilities.push('email.send');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.readonly')) {
+      capabilities.push('email.read');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.modify')) {
+      capabilities.push('email.modify');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.compose')) {
+      capabilities.push('email.compose');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.insert')) {
+      capabilities.push('email.insert');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.labels')) {
+      capabilities.push('email.labels');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.metadata')) {
+      capabilities.push('email.metadata');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.settings.basic')) {
+      capabilities.push('email.settings.basic');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/gmail.settings.sharing')) {
+      capabilities.push('email.settings.sharing');
     }
     
-    // For other providers, default to basic capabilities
-    if (providerName === 'smtp' || providerName === 'sendgrid' || providerName === 'mailgun') {
-      return ['email.send'];
+    // User profile scopes
+    if (oauthScopes.includes('https://www.googleapis.com/auth/userinfo.email')) {
+      capabilities.push('profile.email');
+    }
+    if (oauthScopes.includes('https://www.googleapis.com/auth/userinfo.profile')) {
+      capabilities.push('profile.info');
     }
     
-    return ['email.send']; // Default fallback
-  };
+    // OpenID Connect
+    if (oauthScopes.includes('openid')) {
+      capabilities.push('openid');
+    }
+    if (oauthScopes.includes('email')) {
+      capabilities.push('profile.email');
+    }
+    if (oauthScopes.includes('profile')) {
+      capabilities.push('profile.info');
+    }
+    
+    // Fallback: if no specific scopes found, grant basic send permission
+    return capabilities.length > 0 ? capabilities : ['email.send'];
+  }
+  
+  // For other providers, default to basic capabilities
+  if (providerName === 'smtp' || providerName === 'sendgrid' || providerName === 'mailgun') {
+    return ['email.send'];
+  }
+  
+  return ['email.send']; // Default fallback
+};
 
   const handleAuthorizeCredential = async (credentialId: string) => {
     try {
