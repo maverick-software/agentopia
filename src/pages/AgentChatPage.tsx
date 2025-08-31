@@ -885,15 +885,20 @@ export function AgentChatPage() {
       setError(null);
       
       // Establish conversation ID FIRST (before starting AI processing)
-      const convId = selectedConversationId || crypto.randomUUID();
+      // Only create new conversation if we don't have one
+      let convId = selectedConversationId;
+      let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+      
       if (!selectedConversationId) {
+        // Only create new conversation for the first message
+        convId = crypto.randomUUID();
+        sessId = crypto.randomUUID();
         setSelectedConversationId(convId);
         // Reflect in URL for consistency
         navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
+        localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
+        localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
       }
-      const sessId = crypto.randomUUID();
-      localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
-      localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
       
       // NOW start AI processing indicator (after conversation context is established)
       startAIProcessing();
