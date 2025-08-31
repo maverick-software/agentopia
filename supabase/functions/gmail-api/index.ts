@@ -98,7 +98,8 @@ serve(async (req) => {
     )
 
     if (userError || !user) {
-      throw new Error('Invalid or expired token')
+      console.error('[gmail-api] User authentication failed:', userError);
+      throw new Error('User session has expired. Please refresh the page or log in again.')
     }
 
     // Validate agent permissions for Gmail
