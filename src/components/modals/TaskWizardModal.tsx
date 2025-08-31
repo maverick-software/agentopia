@@ -296,7 +296,7 @@ export function TaskWizardModal({
         <DialogDescription className="sr-only">{editingTask ? 'Edit your automated task' : 'Create automated tasks for your agent using this step-by-step wizard'}</DialogDescription>
         <div className="relative overflow-hidden rounded-xl bg-background dark:bg-background border border-border dark:border-border">
           {/* Header */}
-          <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white dark:from-muted dark:to-muted dark:text-foreground rounded-t-xl">
+          <div className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white dark:from-muted dark:to-muted dark:text-foreground rounded-t-xl">
             <h4 className="font-semibold text-lg flex items-center">
               <Wand2 className="w-5 h-5 mr-2" /> {editingTask ? 'Edit Task' : 'Schedule Task'}
             </h4>
@@ -304,7 +304,7 @@ export function TaskWizardModal({
           </div>
           
           {/* Modern Step Indicator */}
-          <div className="px-6 py-4 bg-muted/50 dark:bg-muted/50">
+          <div className="px-6 py-3 bg-muted/50 dark:bg-muted/50">
             <div className="flex items-center justify-between">
               {(() => {
                 const steps = [
@@ -575,7 +575,7 @@ export function TaskWizardModal({
 
             {/* Step 5: Title */}
             {currentStep === 5 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="text-center">
                   <h3 className="text-xl font-semibold text-foreground mb-2">
                     <Tag className="w-5 h-5 mr-2 inline" />
@@ -609,7 +609,7 @@ export function TaskWizardModal({
 
             {/* Step 6: Conversation */}
             {currentStep === 6 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="text-center">
                   <h3 className="text-xl font-semibold text-foreground mb-2">
                     💬 Choose Conversation

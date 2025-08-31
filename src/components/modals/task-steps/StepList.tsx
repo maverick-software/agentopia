@@ -43,8 +43,8 @@ export function StepList({
   if (steps.length === 0) {
     return (
       <div className="text-center py-12 px-6">
-        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-100 to-blue-100 rounded-full flex items-center justify-center mb-4">
-          <ListOrdered className="h-8 w-8 text-purple-600" />
+        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mb-4">
+          <ListOrdered className="h-8 w-8 text-blue-600" />
         </div>
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
           No Steps Added Yet
@@ -54,7 +54,7 @@ export function StepList({
         </p>
         <Button
           onClick={() => onStepEdit('new')}
-          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
         >
           <Plus className="h-4 w-4 mr-2" />
           Add First Step
@@ -66,22 +66,11 @@ export function StepList({
   return (
     <div className="space-y-4">
       {/* Steps header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <ListOrdered className="h-5 w-5 text-purple-600" />
-          <h4 className="font-medium text-gray-900 dark:text-gray-100">
-            Task Steps ({steps.length})
-          </h4>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onStepEdit('new')}
-          className="text-purple-600 border-purple-200 hover:bg-purple-50"
-        >
-          <Plus className="h-3 w-3 mr-1" />
-          Add Step
-        </Button>
+      <div className="flex items-center space-x-2">
+        <ListOrdered className="h-5 w-5 text-blue-600" />
+        <h4 className="font-medium text-gray-900 dark:text-gray-100">
+          Task Steps ({steps.length})
+        </h4>
       </div>
 
       {/* Drag and drop step list */}
@@ -162,15 +151,7 @@ export function StepList({
         </div>
       )}
 
-      {/* Steps summary */}
-      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-          <span>Total Steps: {steps.length}</span>
-          <span>
-            Context Enabled: {steps.filter(s => s.include_previous_context).length}
-          </span>
-        </div>
-      </div>
+
     </div>
   );
 }

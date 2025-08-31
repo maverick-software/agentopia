@@ -5,7 +5,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,10 +21,16 @@ import {
   ToggleRight,
   Edit3,
   Plus,
-  Loader2
+  Loader2,
+  HelpCircle,
+  Upload,
+  FileText,
+  Trash2,
+  Paperclip
 } from 'lucide-react';
 import { StepEditorProps, TaskStepFormData } from '@/types/tasks';
 import { cn } from '@/lib/utils';
+import { MediaLibrarySelector } from '@/components/modals/MediaLibrarySelector';
 
 export function StepEditor({
   step,
@@ -46,6 +51,17 @@ export function StepEditor({
   const [showContextPreview, setShowContextPreview] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [showGuidelinesHelp, setShowGuidelinesHelp] = useState(false);
+  const [showContextHelp, setShowContextHelp] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    url?: string;
+  }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Initialize form when step changes
   useEffect(() => {
@@ -133,9 +149,55 @@ export function StepEditor({
   const isEditing = !!step;
   const canShowContextPreview = previousStepResult && formData.include_previous_context;
 
+  // File handling functions
+  const handleFileUpload = async (files: File[]) => {
+    setIsUploading(true);
+    try {
+      // TODO: Implement actual file upload to media library
+      // For now, simulate the upload
+      const newFiles = files.map(file => ({
+        id: `temp-${Date.now()}-${Math.random()}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: URL.createObjectURL(file)
+      }));
+      
+      setAttachedFiles(prev => [...prev, ...newFiles]);
+    } catch (error) {
+      console.error('File upload failed:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveFile = (fileId: string) => {
+    setAttachedFiles(prev => prev.filter(file => file.id !== fileId));
+  };
+
+  const handleAttachFromLibrary = (libraryFiles: any[]) => {
+    const newFiles = libraryFiles.map(file => ({
+      id: file.id,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url: file.url
+    }));
+    
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    setShowMediaLibrary(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-background dark:bg-background border border-border dark:border-border rounded-xl">
+      <DialogContent 
+        className={cn(
+          "sm:max-w-[900px] max-h-[85vh] overflow-y-auto",
+          "bg-background dark:bg-background border border-border dark:border-border",
+          "!rounded-2xl"
+        )}
+        style={{ borderRadius: '1rem' }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             {isEditing ? (
@@ -144,138 +206,326 @@ export function StepEditor({
                 <span>Edit Step {step?.step_order}</span>
               </>
             ) : (
-              <>
-                <Plus className="h-5 w-5 text-blue-600" />
-                <span>Add New Step</span>
-              </>
+              <span>New Step</span>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowGuidelinesHelp(!showGuidelinesHelp)}
+              className="p-1 h-6 w-6 ml-2"
+              title="Step Guidelines"
+            >
+              <HelpCircle className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            </Button>
           </DialogTitle>
+          
           <DialogDescription>
             {isEditing 
               ? 'Modify the step name, instructions, and context settings.'
               : 'Create a new step with specific instructions for your agent.'
             }
           </DialogDescription>
+          
+          {/* Guidelines Help Tooltip */}
+          {showGuidelinesHelp && (
+            <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 mt-2 rounded-lg">
+              <CardContent className="p-3">
+                <h4 className="text-sm font-medium text-foreground mb-2 flex items-center">
+                  <Edit3 className="h-4 w-4 mr-2 text-blue-600" />
+                  Step Guidelines
+                </h4>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  <li>• Be specific about what the agent should accomplish</li>
+                  <li>• Include any necessary context or parameters</li>
+                  <li>• Consider what information might be needed from previous steps</li>
+                  <li>• Use clear, actionable language</li>
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+          
+
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Step name field */}
-          <div className="space-y-2">
-            <Label htmlFor="step_name" className="text-sm font-medium">
-              Step Name *
-            </Label>
-            <Input
-              id="step_name"
-              value={formData.step_name}
-              onChange={(e) => setFormData(prev => ({ ...prev, step_name: e.target.value }))}
-              placeholder="e.g., Send welcome email, Process user data..."
-              className="text-sm"
-              maxLength={100}
-            />
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">
-                A brief, descriptive name for this step
-              </span>
-              <span className={cn(
-                "text-muted-foreground",
-                formData.step_name.length > 80 && "text-yellow-600",
-                formData.step_name.length > 95 && "text-red-600"
-              )}>
-                {formData.step_name.length}/100
-              </span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-3">
+          {/* Left Column - Instructions */}
+          <div className="space-y-4">
+            {/* Step name field */}
+            <div className="space-y-2">
+              <Label htmlFor="step_name" className="text-sm font-medium">
+                Step Name *
+              </Label>
+              <Input
+                id="step_name"
+                value={formData.step_name}
+                onChange={(e) => setFormData(prev => ({ ...prev, step_name: e.target.value }))}
+                placeholder="e.g., Send welcome email, Process user data..."
+                className="text-sm rounded-lg"
+                maxLength={100}
+              />
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">
+                  A brief, descriptive name for this step
+                </span>
+                <span className={cn(
+                  "text-muted-foreground",
+                  formData.step_name.length > 80 && "text-yellow-600",
+                  formData.step_name.length > 95 && "text-red-600"
+                )}>
+                  {formData.step_name.length}/100
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Instructions field */}
-          <div className="space-y-2">
-            <Label htmlFor="instructions" className="text-sm font-medium">
-              Instructions *
-            </Label>
-            <Textarea
-              id="instructions"
-              value={formData.instructions}
-              onChange={(e) => setFormData(prev => ({ ...prev, instructions: e.target.value }))}
-              placeholder="Provide detailed instructions for what the agent should do in this step..."
-              className="text-sm min-h-[120px] resize-none"
-              maxLength={5000}
-            />
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">
-                Clear, specific instructions help ensure successful execution
-              </span>
-              <span className={cn(
-                "text-muted-foreground",
-                formData.instructions.length > 4000 && "text-yellow-600",
-                formData.instructions.length > 4800 && "text-red-600"
-              )}>
-                {formData.instructions.length}/5000
-              </span>
+            {/* Instructions field */}
+            <div className="space-y-2">
+              <Label htmlFor="instructions" className="text-sm font-medium">
+                Instructions *
+              </Label>
+              <Textarea
+                id="instructions"
+                value={formData.instructions}
+                onChange={(e) => setFormData(prev => ({ ...prev, instructions: e.target.value }))}
+                placeholder="Provide detailed instructions for what the agent should do in this step..."
+                className="text-sm min-h-[200px] resize-y rounded-lg"
+                maxLength={5000}
+              />
+              <div className="flex justify-end text-xs">
+                <span className={cn(
+                  "text-muted-foreground",
+                  formData.instructions.length > 4000 && "text-yellow-600",
+                  formData.instructions.length > 4800 && "text-red-600"
+                )}>
+                  {formData.instructions.length}/5000
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Context toggle (only show if not first step) */}
-          {(!step || step.step_order > 1) && (
-            <Card className="bg-muted/50 dark:bg-muted/50 border-border dark:border-border">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Label className="text-sm font-medium text-foreground">
-                        Include Previous Context
-                      </Label>
-                      {formData.include_previous_context && (
-                        <Badge variant="secondary" className="text-xs">
-                          Enabled
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Pass the results from the previous step to this step as additional context
-                    </p>
-                  </div>
-                  
+            {/* Include Previous Context - moved below instructions */}
+            {(!step || step.step_order > 1) && (
+              <div className="flex items-center justify-between p-4 bg-muted/30 dark:bg-muted/30 rounded-lg border border-border dark:border-border">
+                <div className="flex items-center space-x-3">
+                  <Label className="text-sm font-medium text-foreground">
+                    Include Previous Context
+                  </Label>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setFormData(prev => ({ 
-                      ...prev, 
-                      include_previous_context: !prev.include_previous_context 
-                    }))}
-                    className="p-2"
+                    onClick={() => setShowContextHelp(!showContextHelp)}
+                    className="p-1 h-6 w-6"
+                    title="Context Help"
                   >
-                    {formData.include_previous_context ? (
-                      <ToggleRight className="h-6 w-6 text-blue-600" />
-                    ) : (
-                      <ToggleLeft className="h-6 w-6 text-muted-foreground" />
-                    )}
+                    <HelpCircle className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                   </Button>
                 </div>
+                
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  onClick={() => setFormData(prev => ({ 
+                    ...prev, 
+                    include_previous_context: !prev.include_previous_context 
+                  }))}
+                  className="p-1 h-8 w-14 rounded-full"
+                >
+                  <div className={cn(
+                    "relative inline-flex h-6 w-12 items-center rounded-full transition-colors",
+                    formData.include_previous_context 
+                      ? "bg-blue-600" 
+                      : "bg-gray-300 dark:bg-gray-600"
+                  )}>
+                    <span
+                      className={cn(
+                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                        formData.include_previous_context ? "translate-x-7" : "translate-x-1"
+                      )}
+                    />
+                  </div>
+                </Button>
+              </div>
+            )}
 
-                {/* Context preview */}
-                {canShowContextPreview && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <Label className="text-xs font-medium text-foreground">
-                        Previous Step Result Preview
-                      </Label>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowContextPreview(!showContextPreview)}
-                        className="h-6 px-2 text-xs"
-                      >
-                        <Eye className="h-3 w-3 mr-1" />
-                        {showContextPreview ? 'Hide' : 'Show'}
-                      </Button>
+            {/* Context Help Tooltip */}
+            {showContextHelp && (
+              <Card className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 rounded-lg">
+                <CardContent className="p-3">
+                  <h4 className="text-sm font-medium text-foreground mb-2 flex items-center">
+                    <ToggleRight className="h-4 w-4 mr-2 text-green-600" />
+                    Previous Context
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, this step will receive the output/results from the previous step as additional context. 
+                    This is useful when steps need to build upon each other or when the current step needs data from the previous step's execution.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Right Column - File Attachments */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                File Attachments
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Upload files or attach from media library to provide additional context for this step.
+              </p>
+            </div>
+
+            {/* File Upload Actions */}
+            <div className="space-y-3">
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.accept = '.pdf,.doc,.docx,.txt,.md,.json,.csv,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp';
+                    input.onchange = (e) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (files) {
+                        handleFileUpload(Array.from(files));
+                      }
+                    };
+                    input.click();
+                  }}
+                  className="flex-1"
+                  disabled={isUploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Uploading...' : 'Upload Files'}
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMediaLibrary(true)}
+                  className="flex-1"
+                >
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  From Library
+                </Button>
+              </div>
+
+              {/* Attached Files List */}
+              {attachedFiles.length > 0 && (
+                <Card className="rounded-lg">
+                  <CardContent className="p-3">
+                    <h4 className="text-sm font-medium text-foreground mb-2">
+                      Attached Files ({attachedFiles.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {attachedFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className="flex items-center justify-between p-2 bg-muted/50 rounded border"
+                        >
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <FileText className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {file.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {(file.size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveFile(file.id)}
+                            className="p-1 h-6 w-6 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                    
-                    {showContextPreview && (
-                      <div className="bg-background dark:bg-background border border-border dark:border-border rounded p-3 max-h-32 overflow-y-auto">
-                        <pre className="text-xs text-foreground whitespace-pre-wrap">
-                          {JSON.stringify(previousStepResult, null, 2)}
-                        </pre>
-                      </div>
-                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* File Upload Guidelines */}
+              <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 rounded-lg">
+                <CardContent className="p-3">
+                  <h4 className="text-sm font-medium text-foreground mb-2">
+                    Supported File Types
+                  </h4>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p><strong>Documents:</strong> PDF, DOC, DOCX, TXT, MD</p>
+                    <p><strong>Data:</strong> JSON, CSV, XLSX, XLS</p>
+                    <p><strong>Images:</strong> PNG, JPG, JPEG, GIF, WEBP</p>
+                    <p className="mt-2 text-blue-600 dark:text-blue-400">
+                      Files are stored in your media library and can be reused across steps.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Action Buttons - moved from footer */}
+              <div className="flex justify-between space-x-3 pt-4 border-t border-border dark:border-border">
+                <Button
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={isSaving}
+                  className="flex-1"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+                
+                <Button
+                  onClick={handleSave}
+                  disabled={validationErrors.length > 0 || isSaving}
+                  className="flex-1"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {isEditing ? 'Update Step' : 'Add Step'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+
+          {/* Context preview (only show if context is enabled and we have previous results) */}
+          {canShowContextPreview && (
+            <Card className="bg-muted/50 dark:bg-muted/50 border-border dark:border-border rounded-lg">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-sm font-medium text-foreground">
+                    Previous Step Result Preview
+                  </Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowContextPreview(!showContextPreview)}
+                    className="h-6 px-2 text-xs"
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    {showContextPreview ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
+                
+                {showContextPreview && (
+                  <div className="bg-background dark:bg-background border border-border dark:border-border rounded p-3 max-h-32 overflow-y-auto">
+                    <pre className="text-xs text-foreground whitespace-pre-wrap">
+                      {JSON.stringify(previousStepResult, null, 2)}
+                    </pre>
                   </div>
                 )}
               </CardContent>
@@ -284,7 +534,7 @@ export function StepEditor({
 
           {/* Validation errors */}
           {validationErrors.length > 0 && (
-            <Card className="border-destructive/50 bg-destructive/10">
+            <Card className="border-destructive/50 bg-destructive/10 rounded-lg">
               <CardContent className="p-4">
                 <div className="flex items-start space-x-2">
                   <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
@@ -306,52 +556,23 @@ export function StepEditor({
             </Card>
           )}
 
-          {/* Guidelines */}
-          <Card className="bg-muted/30 dark:bg-muted/30 border-border dark:border-border">
-            <CardContent className="p-4">
-              <h4 className="text-sm font-medium text-foreground mb-2 flex items-center">
-                <Edit3 className="h-4 w-4 mr-2 text-muted-foreground" />
-                Step Guidelines
-              </h4>
-              <ul className="space-y-1 text-xs text-muted-foreground">
-                <li>• Be specific about what the agent should accomplish</li>
-                <li>• Include any necessary context or parameters</li>
-                <li>• Consider what information might be needed from previous steps</li>
-                <li>• Use clear, actionable language</li>
-              </ul>
-            </CardContent>
-          </Card>
+
         </div>
 
-        <DialogFooter className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={isSaving}
-          >
-            <X className="h-4 w-4 mr-2" />
-            Cancel
-          </Button>
-          
-          <Button
-            onClick={handleSave}
-            disabled={validationErrors.length > 0 || isSaving}
-            className=""
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                {isEditing ? 'Update Step' : 'Add Step'}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+
       </DialogContent>
+
+      {/* Media Library Selector Modal */}
+      {showMediaLibrary && (
+        <MediaLibrarySelector
+          isOpen={showMediaLibrary}
+          onClose={() => setShowMediaLibrary(false)}
+          onSelect={handleAttachFromLibrary}
+          multiple={true}
+          title="Attach Files from Media Library"
+          description="Select files from your media library to attach to this step."
+        />
+      )}
     </Dialog>
   );
 }
