@@ -328,7 +328,7 @@ export class UniversalToolExecutor {
    * This is the universal solution that scales to any integration
    */
   static async executeTool(context: MCPToolExecutionContext): Promise<MCPToolResult> {
-    const { toolName, parameters, supabase, agentId, userId } = context;
+    const { toolName, parameters, supabase, agentId, userId, authToken } = context;
     
     try {
       console.log(`[UniversalToolExecutor] Executing ${toolName} for agent ${agentId}`);
@@ -368,9 +368,9 @@ export class UniversalToolExecutor {
       };
       
       // Apply parameter mapping if provided, otherwise merge parameters directly
-      const context = { agentId, userId, toolName, parameters };
+      const mappingContext = { agentId, userId, toolName, parameters };
       const edgeFunctionParams = routingConfig.parameterMapping 
-        ? { ...baseParams, ...routingConfig.parameterMapping(parameters, context) }
+        ? { ...baseParams, ...routingConfig.parameterMapping(parameters, mappingContext) }
         : { ...baseParams, ...parameters };
       
       console.log(`[UniversalToolExecutor] Routing ${toolName} -> ${routingConfig.edgeFunction} (action: ${action})`);
@@ -382,10 +382,13 @@ export class UniversalToolExecutor {
       };
       
       // Include authorization header if auth token is provided
-      if (context.authToken) {
+      if (authToken) {
+        console.log(`[UniversalToolExecutor] Adding user auth token for ${toolName}`);
         invokeOptions.headers = {
-          'Authorization': `Bearer ${context.authToken}`
+          'Authorization': `Bearer ${authToken}`
         };
+      } else {
+        console.log(`[UniversalToolExecutor] No auth token provided for ${toolName} - using service role`);
       }
       
       // Call the appropriate edge function
