@@ -254,9 +254,9 @@ serve(async (req) => {
       const executionTime = Date.now() - startTime
 
       // Log successful operation
-      await supabase.rpc('log_gmail_operation', {
+      await supabaseServiceRole.rpc('log_gmail_operation', {
         p_agent_id: agent_id,
-        p_user_id: user.id,
+        p_user_id: user_id,
         p_operation_type: action,
         p_operation_params: params,
         p_operation_result: result,
@@ -282,9 +282,9 @@ serve(async (req) => {
       const executionTime = Date.now() - startTime
       
       // Log failed operation
-      await supabase.rpc('log_gmail_operation', {
+      await supabaseServiceRole.rpc('log_gmail_operation', {
         p_agent_id: agent_id,
-        p_user_id: user.id,
+        p_user_id: user_id,
         p_operation_type: action,
         p_operation_params: params,
         p_operation_result: null,
