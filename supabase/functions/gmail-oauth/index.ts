@@ -230,7 +230,7 @@ serve(async (req) => {
     }
 
     // Log successful completion
-    console.log(`Gmail OAuth completed successfully for user ${userId}:`, {
+    console.log(`Gmail OAuth completed successfully for user ${user.id}:`, {
       connection_id: connection.id,
       user_email: userInfo.email,
       scopes_count: scopesGranted.length,
