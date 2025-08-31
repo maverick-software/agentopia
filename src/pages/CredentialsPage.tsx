@@ -272,9 +272,9 @@ export function CredentialsPage() {
 
       {/* Details Modal */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-0 bg-background border-border">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-0 bg-background border-border !rounded-xl !border-border !bg-background">
           {selectedConnection && (
-            <div className="relative overflow-hidden rounded-xl bg-background border border-border">
+            <div className="relative overflow-hidden bg-background">
               {/* Header */}
               <div className="px-6 py-4 bg-muted/30 border-b border-border">
                 <h4 className="font-semibold text-lg flex items-center text-foreground">
