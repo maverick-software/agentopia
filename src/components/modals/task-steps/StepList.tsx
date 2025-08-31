@@ -65,13 +65,7 @@ export function StepList({
 
   return (
     <div className="space-y-4">
-      {/* Steps header */}
-      <div className="flex items-center space-x-2">
-        <ListOrdered className="h-5 w-5 text-blue-600" />
-        <h4 className="font-medium text-gray-900 dark:text-gray-100">
-          Task Steps ({steps.length})
-        </h4>
-      </div>
+
 
       {/* Drag and drop step list */}
       <DragDropContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
@@ -81,7 +75,7 @@ export function StepList({
               {...provided.droppableProps}
               ref={provided.innerRef}
               className={cn(
-                "space-y-3 min-h-[100px] p-2 rounded-lg transition-colors",
+                "space-y-4 min-h-[100px] p-2 rounded-lg transition-colors",
                 snapshot.isDraggingOver && "bg-blue-50 border-2 border-dashed border-blue-300"
               )}
             >

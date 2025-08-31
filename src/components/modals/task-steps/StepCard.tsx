@@ -77,29 +77,34 @@ export function StepCard({
       )}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
               <GripVertical className="h-4 w-4 text-gray-400" />
-              <Badge variant="outline" className="text-xs">
+              <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+                Editing Step
+              </span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="flex space-x-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleSave}
+                  className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                >
+                  <Check className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleCancel}
+                  className="h-7 px-2 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              <Badge className="text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-full px-3 py-1 ml-2">
                 Step {step.step_order}
               </Badge>
-            </div>
-            <div className="flex space-x-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleSave}
-                className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
-              >
-                <Check className="h-3 w-3" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleCancel}
-                className="h-7 px-2 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-              >
-                <X className="h-3 w-3" />
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -197,7 +202,7 @@ export function StepCard({
 
   return (
     <Card className={cn(
-      "group hover:shadow-md transition-all duration-200 cursor-pointer border-0",
+      "group hover:shadow-md transition-all duration-200 cursor-pointer border-0 bg-muted/30 dark:bg-muted/20 mb-3",
       isDragging && "rotate-1 shadow-xl opacity-80",
       validationErrors.length > 0 && "border-red-300 bg-red-50/30"
     )}>
@@ -205,50 +210,59 @@ export function StepCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <GripVertical className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
-            <Badge variant="outline" className="text-xs">
-              Step {step.step_order}
-            </Badge>
+            <h4 className={cn(
+              "font-medium text-sm",
+              step.instructions === 'Click edit to add instructions for this step...' 
+                ? "text-muted-foreground italic" 
+                : "text-gray-900 dark:text-gray-100"
+            )}>
+              {step.step_name}
+            </h4>
           </div>
           
-          <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="h-7 px-2"
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-3 w-3" />
-              ) : (
-                <ChevronRight className="h-3 w-3" />
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onEdit}
-              className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-            >
-              <Edit3 className="h-3 w-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onDelete}
-              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+          <div className="flex items-center space-x-1">
+            {/* Action buttons - visible on hover */}
+            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="h-7 px-2"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onEdit}
+                className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              >
+                <Edit3 className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onDelete}
+                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+            
+            {/* Step badge - visible when not hovering */}
+            <Badge className="text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-full px-3 py-1 group-hover:opacity-0 transition-opacity">
+              Step {step.step_order}
+            </Badge>
           </div>
         </div>
       </CardHeader>
       
       <CardContent className="pt-0">
         <div className="space-y-2">
-          <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm">
-            {step.step_name}
-          </h4>
-          
           {isExpanded && (
             <div className="space-y-3 border-t pt-3">
               <div>
@@ -276,10 +290,17 @@ export function StepCard({
             </div>
           )}
           
-          {!isExpanded && step.instructions.length > 100 && (
+          {!isExpanded && step.instructions.length > 100 && step.instructions !== 'Click edit to add instructions for this step...' && (
             <p className="text-xs text-gray-500 truncate">
               {step.instructions.substring(0, 100)}...
             </p>
+          )}
+          
+          {!isExpanded && step.instructions === 'Click edit to add instructions for this step...' && (
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground bg-muted/50 rounded p-2 mt-2">
+              <Edit3 className="h-3 w-3" />
+              <span className="italic">Click edit to add instructions for this step...</span>
+            </div>
           )}
         </div>
         

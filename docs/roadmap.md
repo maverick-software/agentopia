@@ -37,10 +37,6 @@ We need to be able to add deledated access for other user accounts. Users can in
 
 We will modify the 'Workspaces' feature to work for 'Teams.' Teams will have their own workspaces. We will call them "Team Rooms" instead of "Workspaces." These are essential chat rooms where agents and human team members can collaborate on tasks. Tagging people or agents with the @ symbols. 
 
-## Tasks ##
-
-Add 'Steps' to tasks, allowing users to add multi-step instructions for the agent to follow. Do this, then do this upon completion, etc. The tasks happen sequentially, and the user can choose to have the output of the previous step(s) included in the context of the next task or not.
-
 ## AI-Generated Forms ##
 
 Create a tool that allows Agents to generate forms with custom fields, that can be sent out to external users via temporary links--limited by time or usage/access. These forms can be one-time use, or users can choose to save the forms and even edit them using AI. They would save those results in a table or tables in JSON or YAML so they can be universally generated and pulled in and retrieved and used for a universally-generated display to users.  
@@ -124,7 +120,11 @@ This will allow us to add a model selection to the admin settings/setup area, wi
 
 ---
 
-## Completed: 
+## Completed: ##
+
+## Tasks ## (Completed)
+
+Add 'Steps' to tasks, allowing users to add multi-step instructions for the agent to follow. Do this, then do this upon completion, etc. The tasks happen sequentially, and the user can choose to have the output of the previous step(s) included in the context of the next task or not.
 
 ## Soft Refresh Fix ## (Completed)
 

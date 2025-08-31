@@ -56,11 +56,43 @@ export function StepManager({
     onValidationChange?.(isValid && steps.length > 0);
   }, [isValid, steps.length, onValidationChange]);
 
+  // Generate unique step name
+  const generateUniqueStepName = useCallback(() => {
+    const existingNames = new Set(steps.map(step => step.step_name));
+    let counter = 1;
+    let proposedName = `New Step ${counter}`;
+    
+    // Keep incrementing until we find a unique name
+    while (existingNames.has(proposedName)) {
+      counter++;
+      proposedName = `New Step ${counter}`;
+    }
+    
+    return proposedName;
+  }, [steps]);
+
+  // Handle adding a new step (instant gratification)
+  const handleAddNewStep = useCallback(async () => {
+    try {
+      // Create a new step with default values immediately
+      const uniqueStepName = generateUniqueStepName();
+      const newStepData = {
+        step_name: uniqueStepName,
+        instructions: 'Click edit to add instructions for this step...',
+        include_previous_context: false
+      };
+      
+      await addStep(newStepData);
+    } catch (err) {
+      console.error('Failed to create new step:', err);
+    }
+  }, [generateUniqueStepName, addStep]);
+
   // Handle step editing
   const handleStepEdit = useCallback((stepId: string | null) => {
     if (stepId === 'new') {
-      setStepToEdit(null);
-      setShowStepEditor(true);
+      // This now triggers immediate step creation
+      handleAddNewStep();
     } else if (stepId) {
       const step = steps.find(s => s.id === stepId);
       setStepToEdit(step);
@@ -70,7 +102,7 @@ export function StepManager({
       setShowStepEditor(false);
       setStepToEdit(null);
     }
-  }, [steps]);
+  }, [steps, handleAddNewStep]);
 
   // Handle step save from editor
   const handleStepSave = useCallback(async (stepData: TaskStepFormData) => {
@@ -213,6 +245,7 @@ export function StepManager({
             ? steps.find(s => s.step_order === stepToEdit.step_order - 1)?.execution_result
             : undefined
         }
+        existingStepNames={steps.map(s => s.step_name)}
       />
 
 

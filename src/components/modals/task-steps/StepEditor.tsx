@@ -37,7 +37,8 @@ export function StepEditor({
   isOpen,
   onSave,
   onCancel,
-  previousStepResult
+  previousStepResult,
+  existingStepNames = []
 }: StepEditorProps) {
   
   // Form state
@@ -90,6 +91,15 @@ export function StepEditor({
       errors.push('Step name is required');
     } else if (formData.step_name.length > 100) {
       errors.push('Step name must be 100 characters or less');
+    } else {
+      // Check for duplicate names (excluding current step if editing)
+      const trimmedName = formData.step_name.trim();
+      const isDuplicate = existingStepNames.some(existingName => 
+        existingName === trimmedName && existingName !== step?.step_name
+      );
+      if (isDuplicate) {
+        errors.push('Step name must be unique');
+      }
     }
     
     if (!formData.instructions.trim()) {
@@ -106,7 +116,7 @@ export function StepEditor({
     }
     
     return errors;
-  }, [formData, step]);
+  }, [formData, step, existingStepNames]);
 
   // Handle form submission
   const handleSave = useCallback(async () => {

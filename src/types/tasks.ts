@@ -113,6 +113,7 @@ export interface StepEditorProps {
   onSave: (stepData: TaskStepFormData) => void;
   onCancel: () => void;
   previousStepResult?: any;
+  existingStepNames?: string[];
 }
 
 export interface ContextToggleProps {
