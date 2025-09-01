@@ -134,6 +134,36 @@ export interface MessageContext {
   // State Context
   state_version?: string;
   state_delta?: StateDelta;
+  
+  // Reasoning Context (Advanced Reasoning System)
+  reasoning?: {
+    session_id?: string;
+    iterations: number;
+    final_confidence: number;
+    conclusion: string;
+    insights: string[];
+    steps: Array<{
+      step: number;
+      state: string;
+      hypothesis?: string;
+      confidence: number;
+      timestamp: string;
+    }>;
+    critiques?: Array<{
+      type: string;
+      severity: number;
+      description: string;
+      suggestion: string;
+    }>;
+    alternative_perspectives?: Array<{
+      perspective: string;
+      reasoning: string;
+      confidence: number;
+      supporting_points: string[];
+    }>;
+    reconsideration_cycles?: number;
+    reasoning_style?: 'inductive' | 'deductive' | 'abductive' | 'analogical' | 'causal' | 'probabilistic';
+  };
 }
 
 export interface Entity {

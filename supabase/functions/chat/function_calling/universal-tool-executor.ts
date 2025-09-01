@@ -224,6 +224,35 @@ const TOOL_ROUTING_MAP: Record<string, {
       user_id: context.userId,
       params: params
     })
+  },
+  
+  // Advanced Reasoning tools (MCP-based)
+  'reasoning_': {
+    edgeFunction: 'advanced-reasoning',
+    actionMapping: (toolName: string) => {
+      const actionMap: Record<string, string> = {
+        'reasoning_execute_chain': 'execute_chain',
+        'reasoning_inductive': 'inductive_reasoning',
+        'reasoning_deductive': 'deductive_reasoning',
+        'reasoning_abductive': 'abductive_reasoning'
+      };
+      return actionMap[toolName] || 'execute_chain';
+    },
+    parameterMapping: (params: Record<string, any>, context: any) => {
+      const action = context.toolName === 'reasoning_execute_chain' ? 'execute_chain' :
+                   context.toolName === 'reasoning_inductive' ? 'inductive_reasoning' :
+                   context.toolName === 'reasoning_deductive' ? 'deductive_reasoning' :
+                   context.toolName === 'reasoning_abductive' ? 'abductive_reasoning' :
+                   'execute_chain';
+      
+      return {
+        action: action,
+        agent_id: context.agentId,
+        user_id: context.userId,
+        tool_name: context.toolName,
+        ...params  // Pass all reasoning parameters directly
+      };
+    }
   }
 };
 

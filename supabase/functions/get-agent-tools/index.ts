@@ -242,6 +242,36 @@ function generateParametersForCapability(toolName: string) {
     };
   }
 
+  // Handle reasoning tools
+  if (toolName.startsWith('reasoning_')) {
+    if (toolName === 'reasoning_execute_chain') {
+      return {
+        ...baseSchema,
+        properties: {
+          query: { type: 'string', description: 'The question or problem to analyze' },
+          reasoning_style: { 
+            type: 'string', 
+            enum: ['inductive', 'deductive', 'abductive', 'analogical', 'causal', 'probabilistic'],
+            description: 'Type of reasoning to apply' 
+          },
+          max_iterations: { type: 'number', description: 'Maximum reasoning iterations (default: 6)', minimum: 1, maximum: 10 },
+          confidence_threshold: { type: 'number', description: 'Confidence threshold to stop reasoning (default: 0.85)', minimum: 0.1, maximum: 1.0 }
+        },
+        required: ['query']
+      };
+    } else if (toolName.includes('_inductive') || toolName.includes('_deductive') || toolName.includes('_abductive')) {
+      return {
+        ...baseSchema,
+        properties: {
+          query: { type: 'string', description: 'The question or problem to analyze' },
+          context: { type: 'string', description: 'Additional context for reasoning (optional)' },
+          max_steps: { type: 'number', description: 'Maximum reasoning steps (default: 4)', minimum: 1, maximum: 8 }
+        },
+        required: ['query']
+      };
+    }
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,

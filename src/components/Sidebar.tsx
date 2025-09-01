@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
+import { CreateAgentWizard } from './CreateAgentWizard';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -148,6 +149,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
   const { agents, fetchAllAgents } = useAgents();
   const [isExpanded, setIsExpanded] = useState(false);
   const [recentAgents, setRecentAgents] = useState<any[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const isActiveOrParent = location.pathname.startsWith('/agents');
 
@@ -254,25 +256,25 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
           ))}
           
           {/* Create New Agent Button */}
-          <NavLink
-            to="/agents/new"
-            className={({ isActive }): string =>
-              `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
-                isActive
-                  ? 'bg-sidebar-accent/20 text-sidebar-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent'
-              }`
-            }
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center space-x-3 rounded-md transition-colors py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent w-full"
             style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
           >
             <div className="w-4 h-4 rounded bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center flex-shrink-0">
               <span className="text-white text-xs font-bold">+</span>
             </div>
             <span className="font-medium truncate text-green-600 dark:text-green-400">Create New</span>
-          </NavLink>
+          </button>
 
         </div>
       )}
+      
+      {/* Create Agent Wizard */}
+      <CreateAgentWizard 
+        open={showCreateModal} 
+        onOpenChange={setShowCreateModal} 
+      />
     </div>
   );
 };

@@ -284,6 +284,70 @@ Remember: ALWAYS use blank lines between elements for readability!`
     // Current message
     msgs.push({ role: 'user', content: (message as any).content?.text || '' });
 
+    // CRITICAL INTEGRATION: Add reasoning context if available
+    const reasoningContext = (message as any).context?.reasoning;
+    if (reasoningContext && reasoningContext.enabled && reasoningContext.steps?.length > 0) {
+      console.log(`[TextMessageHandler] Integrating reasoning chain with ${reasoningContext.steps.length} steps (style: ${reasoningContext.style})`);
+      
+      let reasoningPrompt = `=== ADVANCED REASONING ANALYSIS ===\n`;
+      reasoningPrompt += `The user's query has been analyzed using ${reasoningContext.style?.toUpperCase() || 'ANALYTICAL'} reasoning.\n`;
+      reasoningPrompt += `Analysis Confidence: ${(reasoningContext.score * 100).toFixed(1)}% (threshold: ${(reasoningContext.threshold * 100).toFixed(0)}%)\n\n`;
+      
+      reasoningPrompt += `REASONING CHAIN (${reasoningContext.steps.length} steps):\n`;
+      reasoningContext.steps.forEach((step: any, index: number) => {
+        const stepNum = index + 1;
+        const state = step.state?.toUpperCase() || 'ANALYSIS';
+        const confidence = step.confidence ? ` [${(step.confidence * 100).toFixed(0)}% confidence]` : '';
+        
+        if (step.question) {
+          reasoningPrompt += `${stepNum}. [${state}] Question: ${step.question}${confidence}\n`;
+        }
+        if (step.hypothesis) {
+          reasoningPrompt += `${stepNum}. [${state}] Analysis: ${step.hypothesis}${confidence}\n`;
+        }
+        if (step.description && !step.hypothesis && !step.question) {
+          reasoningPrompt += `${stepNum}. [${state}] ${step.description}${confidence}\n`;
+        }
+        
+        // Include memory insights if available
+        if (step.memory_insights?.length > 0) {
+          reasoningPrompt += `   → Memory Context: ${step.memory_insights.join(', ')}\n`;
+        }
+        
+        // Include episodic/semantic memory counts
+        if (step.episodic_count > 0 || step.semantic_count > 0) {
+          reasoningPrompt += `   → Memories Referenced: ${step.episodic_count} episodic, ${step.semantic_count} semantic\n`;
+        }
+      });
+      
+      // Add reasoning conclusion
+      const finalStep = reasoningContext.steps[reasoningContext.steps.length - 1];
+      if (finalStep && (finalStep.state === 'conclude' || finalStep.type === 'decision')) {
+        reasoningPrompt += `\nREASONING CONCLUSION:\n`;
+        reasoningPrompt += `${finalStep.hypothesis || finalStep.description}\n`;
+        if (finalStep.confidence) {
+          reasoningPrompt += `Final Confidence: ${(finalStep.confidence * 100).toFixed(0)}%\n`;
+        }
+      }
+      
+      reasoningPrompt += `\nINSTRUCTIONS FOR RESPONSE:\n`;
+      reasoningPrompt += `• Build upon the reasoning analysis above\n`;
+      reasoningPrompt += `• Incorporate the insights and conclusions reached\n`;
+      reasoningPrompt += `• Address any uncertainties identified in the analysis\n`;
+      reasoningPrompt += `• Maintain appropriate confidence level based on the reasoning\n`;
+      reasoningPrompt += `• Reference the reasoning process when it adds value to your response\n`;
+      reasoningPrompt += `=== END REASONING ANALYSIS ===`;
+      
+      // Add as assistant message for immediate processing (ephemeral - not stored)
+      msgs.push({ role: 'assistant', content: reasoningPrompt });
+      
+      console.log(`[TextMessageHandler] Added ephemeral reasoning context (${reasoningPrompt.length} chars) as assistant message - will not be stored`);
+    } else if (reasoningContext) {
+      console.log(`[TextMessageHandler] Reasoning context available but disabled or no steps (enabled: ${reasoningContext.enabled}, steps: ${reasoningContext.steps?.length || 0})`);
+    } else {
+      console.log(`[TextMessageHandler] No reasoning context available`);
+    }
+
     // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
     const authToken = (context as any)?.options?.auth?.token || '';
     console.log(`[FunctionCalling] Auth token available: ${!!authToken}`);
@@ -574,7 +638,15 @@ Remember: ALWAYS use blank lines between elements for readability!`
       role: 'assistant',
       content: { type: 'text', text },
       timestamp: new Date().toISOString(),
-      metadata: { model: effectiveModel, tokens: { prompt: promptTokens, completion: completionTokens, total: tokensTotal }, source: 'api' },
+      metadata: { 
+        model: effectiveModel, 
+        tokens: { prompt: promptTokens, completion: completionTokens, total: tokensTotal }, 
+        source: 'api' 
+      },
+      // Keep original context without reasoning (reasoning is ephemeral for this response only)
+      context: {
+        ...((message as any).context || {})
+      }
     } as any;
 
     // FEEDBACK LOOP: Persist memories (episodic always; semantic if Pinecone configured)

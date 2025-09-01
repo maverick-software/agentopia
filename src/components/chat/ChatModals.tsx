@@ -185,8 +185,22 @@ export function ChatModals({
         isOpen={showAgentSettingsModal}
         onClose={() => setShowAgentSettingsModal(false)}
         agentId={agentId}
+        agentData={{
+          name: agent?.name,
+          description: agent?.description,
+          personality: agent?.personality,
+          avatar_url: agent?.avatar_url,
+          agent_datastores: agent?.agent_datastores,
+          metadata: agent?.metadata
+        }}
         initialTab={agentSettingsInitialTab}
-        onAgentUpdated={onAgentUpdated}
+        onAgentUpdated={async (updatedAgent) => {
+          onAgentUpdated(updatedAgent);
+          // Also update the agents hook state so sidebar gets updated
+          if (agentId) {
+            await updateAgent(agentId, updatedAgent);
+          }
+        }}
       />
     </>
   );

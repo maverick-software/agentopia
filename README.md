@@ -133,6 +133,7 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, multi-step workflows, timezone support, and Edge Function execution
 *   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
 *   **🆕 Media Library System:** WordPress-style document and media management with centralized storage, agent training integration, MCP tool framework, and secure file handling with multi-format support
+*   **🆕 Advanced Reasoning System:** MCP-style iterative reasoning engine with inductive, deductive, and abductive reasoning capabilities, confidence tracking, critic system with reconsideration cycles, and ephemeral reasoning context integration
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -1922,6 +1923,173 @@ const { data: signedUrl } = await supabase.storage
 ```
 
 The Media Library System represents a fundamental evolution in how AI agents interact with organizational knowledge, transforming document management from simple file storage into an intelligent, integrated knowledge ecosystem that enhances agent capabilities and user productivity.
+
+## 🧠 Advanced Reasoning System
+
+Agentopia implements a sophisticated **MCP-style Advanced Reasoning System** that transforms simple AI responses into intelligent, iterative thought processes. This system enables agents to perform complex analysis using multiple reasoning methodologies with confidence tracking and adversarial validation.
+
+### 🎯 **System Overview**
+
+The Advanced Reasoning System provides:
+- **Multiple Reasoning Types**: Inductive, deductive, and abductive reasoning engines
+- **Iterative Processing**: Markov chain-based reasoning that cycles until confidence thresholds are met
+- **Adversarial Critic System**: Challenges conclusions and triggers reconsideration cycles
+- **Ephemeral Integration**: Reasoning context provided to LLM without long-term storage
+- **MCP Tool Framework**: Reasoning capabilities exposed as discoverable agent tools
+
+### 🔧 **Core Components**
+
+#### **Reasoning Engines**
+- **Inductive Reasoning**: Pattern identification and generalization from observations
+- **Deductive Reasoning**: Logical inference from premises and rules
+- **Abductive Reasoning**: Best explanation selection for observed phenomena
+- **Complexity Analyzer**: Determines appropriate reasoning style based on query analysis
+
+#### **Iterative Markov Controller**
+- **Confidence Tracking**: Monitors reasoning confidence throughout the process
+- **State Management**: Manages reasoning states (analyze, hypothesize, test, observe, update, conclude)
+- **Context Accumulation**: Builds upon previous reasoning steps for deeper analysis
+- **Safety Controls**: Maximum iteration limits and confidence thresholds prevent infinite loops
+
+#### **Critic System**
+- **Adversarial Evaluation**: Challenges reasoning conclusions across 6 dimensions
+- **Fallacy Detection**: Identifies 15+ types of logical fallacies and cognitive biases
+- **Reconsideration Cycles**: Triggers up to 2-3 reconsideration rounds for low-confidence conclusions
+- **Alternative Perspectives**: Generates opposing viewpoints when confidence remains low
+
+### 🏗️ **Technical Architecture**
+
+#### **Database Schema**
+```sql
+-- Reasoning session tracking
+reasoning_sessions: {
+  id: uuid,
+  agent_id: uuid,
+  user_id: uuid,
+  conversation_id: uuid,
+  reasoning_style: 'inductive' | 'deductive' | 'abductive',
+  iterations: integer,
+  final_confidence: decimal,
+  conclusion: text,
+  insights: text[],
+  created_at: timestamptz
+}
+
+-- Individual reasoning steps
+reasoning_steps: {
+  id: uuid,
+  session_id: uuid,
+  step_order: integer,
+  reasoning_state: text,
+  hypothesis: text,
+  confidence: decimal,
+  memory_insights: text[],
+  episodic_count: integer,
+  semantic_count: integer,
+  created_at: timestamptz
+}
+```
+
+#### **Edge Function Integration**
+- **`advanced-reasoning`**: Main MCP server providing reasoning tools
+- **Tool Discovery**: Reasoning tools automatically available to all agents
+- **Permission System**: Agents granted reasoning access upon creation
+- **Universal Tool Executor**: Routes reasoning tool calls to advanced-reasoning function
+
+### 🎨 **User Experience**
+
+#### **Agent Tool Access**
+Agents automatically have access to reasoning tools:
+- `reasoning_execute_chain` - Full iterative reasoning with automatic style selection
+- `reasoning_inductive` - Focused inductive reasoning for pattern analysis
+- `reasoning_deductive` - Logical deduction from premises
+- `reasoning_abductive` - Best explanation inference
+
+#### **Reasoning Integration**
+- **Transparent Operation**: Reasoning happens automatically when agents detect complex queries
+- **Ephemeral Context**: Reasoning results provided to LLM as assistant message context
+- **No Storage**: Reasoning context used only for current response generation
+- **Process Visibility**: Reasoning steps visible in agent "Thoughts" dropdown
+
+### ⚙️ **Configuration & Setup**
+
+#### **Automatic Agent Access**
+All agents receive reasoning tool access automatically:
+```sql
+-- Reasoning permissions granted on agent creation
+INSERT INTO agent_integration_permissions (
+  agent_id,
+  user_oauth_connection_id,
+  allowed_scopes: '["reasoning_execute_chain", "reasoning_inductive", "reasoning_deductive", "reasoning_abductive"]',
+  permission_level: 'full',
+  is_active: true
+);
+```
+
+#### **Reasoning Configuration**
+Agents can be configured with reasoning parameters:
+```json
+{
+  "reasoning_config": {
+    "enabled": true,
+    "threshold": 0.85,
+    "max_iterations": 6,
+    "confidence_threshold": 0.85,
+    "enable_critic": true,
+    "max_reconsiderations": 2
+  }
+}
+```
+
+### 🔄 **Reasoning Flow**
+
+#### **Execution Process**
+1. **Query Analysis**: Complexity analyzer determines if reasoning is needed
+2. **Style Selection**: Automatic selection of appropriate reasoning type
+3. **Iterative Processing**: Markov chain cycles through reasoning states
+4. **Confidence Tracking**: Each step evaluated for confidence level
+5. **Critic Evaluation**: Adversarial system challenges conclusions
+6. **Reconsideration**: Low-confidence conclusions trigger additional cycles
+7. **Context Integration**: Final reasoning provided as ephemeral LLM context
+
+#### **Memory Integration**
+- **Episodic Memory**: Vector search provides relevant experiences
+- **Semantic Memory**: Knowledge graph contributes factual context
+- **Memory Insights**: Retrieved memories influence reasoning steps
+- **Context Enrichment**: Memory connections enhance reasoning quality
+
+### 🛡️ **Safety & Controls**
+
+#### **Built-in Safeguards**
+- **Maximum Iterations**: Prevents infinite reasoning loops (default: 6)
+- **Confidence Thresholds**: Stops reasoning when sufficient confidence reached
+- **Timeout Controls**: Processing time limits prevent resource exhaustion
+- **Error Handling**: Graceful degradation when reasoning fails
+
+#### **Quality Assurance**
+- **Adversarial Testing**: Critic system challenges all conclusions
+- **Bias Detection**: Identifies cognitive biases and logical fallacies
+- **Alternative Views**: Presents opposing perspectives for low-confidence results
+- **Transparency**: Complete reasoning process visible for validation
+
+### 📊 **Current Status**
+
+#### **✅ Production-Ready Features**
+- Complete MCP-style reasoning system with all three reasoning types
+- Iterative Markov controller with confidence tracking and safety controls
+- Adversarial critic system with reconsideration cycles and fallacy detection
+- Ephemeral integration with LLM pipeline for contextual reasoning
+- Automatic agent permission system with tool discovery
+- Database schema with comprehensive reasoning session tracking
+
+#### **🔧 Technical Achievements**
+- **MCP Compliance**: Full Model Context Protocol implementation
+- **Type Safety**: Comprehensive TypeScript interfaces throughout
+- **Performance**: Efficient reasoning with configurable limits
+- **Integration**: Seamless integration with existing chat and memory systems
+- **Scalability**: Architecture supports unlimited reasoning complexity
+
+The Advanced Reasoning System transforms Agentopia agents from simple responders into sophisticated analytical engines capable of complex thought processes, critical evaluation, and nuanced decision-making that rivals human-level reasoning capabilities.
 
 ### Gmail Integration Example
 

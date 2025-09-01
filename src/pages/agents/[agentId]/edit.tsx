@@ -44,6 +44,10 @@ const AgentEditPage = () => {
     const { agentId } = useParams<{ agentId: string }>();
     const supabase = useSupabaseClient();
     const { user } = useAuth();
+    
+    // Determine if we're editing an existing agent or creating a new one
+    const isEditing = agentId && agentId !== 'new';
+    const isCreating = agentId === 'new';
 
     const [agentData, setAgentData] = useState<Partial<Agent> | null>(null);
     const [loading, setLoading] = useState(true);
@@ -81,10 +85,32 @@ const AgentEditPage = () => {
     ]);
 
     useEffect(() => {
-        if (!agentId || !user) {
+        if (!user) {
             setLoading(false); 
             if (agentData !== null) setAgentData(null);
             return; 
+        }
+
+        // Handle new agent creation
+        if (isCreating) {
+            setAgentData({
+                name: '',
+                description: '',
+                personality: 'helpful',
+                active: true,
+                system_instructions: '',
+                assistant_instructions: '',
+                avatar_url: null,
+                user_id: user.id
+            });
+            setLoading(false);
+            return;
+        }
+
+        // Handle existing agent editing
+        if (!isEditing) {
+            setLoading(false);
+            return;
         }
 
         const fetchAgentAndRelatedData = async () => {

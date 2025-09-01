@@ -1,263 +1,163 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
-// Setup type definitions for built-in Supabase Runtime APIs
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-// import { corsHeaders } from '../_shared/cors.ts' // Remove CORS import for now
 
-console.log(`Function 'generate-agent-image' up and running!`);
-
-// Define expected request body structure
-interface RequestPayload {
-  prompt: string;
-  agentId: string;
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 serve(async (req) => {
-  // 1. Handle CORS preflight request
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    // Simplified CORS headers
-    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*' , 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' } });
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // 2. Create Supabase client with auth context from request headers
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
-    )
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
 
-    // 3. Get user session
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      console.error('User not authenticated:', userError);
-      return new Response(JSON.stringify({ error: 'User not authenticated' }), { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+    // Get user from JWT token
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('No authorization header')
     }
 
-    // 4. Parse request body
-    const { prompt, agentId }: RequestPayload = await req.json();
-    if (!prompt || !agentId) {
-      return new Response(JSON.stringify({ error: 'Missing prompt or agentId' }), { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    
+    if (authError || !user) {
+      throw new Error('Invalid or expired token')
     }
 
-    // 5. Authorize: Check if user can manage this agent
-    const supabaseAdminClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-    const { data: canManage, error: rpcError } = await supabaseAdminClient
-      .rpc('can_manage_agent', { agent_id_param: agentId });
+    // Parse request body
+    const { 
+      theme, 
+      gender, 
+      hairColor, 
+      eyeColor, 
+      customInstructions,
+      agentName 
+    } = await req.json()
 
-    if (rpcError) {
-      console.error('RPC Error checking permissions:', rpcError);
-      return new Response(JSON.stringify({ error: 'Failed to check permissions' }), { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
-    }
-    if (!canManage) {
-      console.warn(`User ${user.id} attempted to generate image for agent ${agentId} without permission.`);
-      return new Response(JSON.stringify({ error: 'User does not have permission to manage this agent' }), { status: 403, headers: { 'Access-Control-Allow-Origin': '*' } });
+    if (!theme) {
+      throw new Error('Theme is required')
     }
 
-    console.log(`User ${user.id} authorized to generate image for agent ${agentId}. Prompt: ${prompt}`);
+    // Build image prompt based on theme and attributes
+    let prompt = ''
+    
+    switch (theme) {
+      case 'professional':
+        prompt = 'Professional headshot portrait, business attire, confident expression, clean background, high quality, photorealistic'
+        break
+      case 'business-casual':
+        prompt = 'Business casual portrait, smart casual clothing, friendly approachable expression, modern office background, professional lighting'
+        break
+      case 'futuristic':
+        prompt = 'Futuristic sci-fi character portrait, high-tech aesthetic, sleek modern design, digital elements, cyberpunk style, professional quality'
+        break
+      case 'alien':
+        prompt = 'Friendly alien character portrait, otherworldly features, unique alien characteristics, colorful and imaginative, professional digital art'
+        break
+      case 'animal':
+        prompt = 'Anthropomorphic animal character portrait, professional anthropomorphic design, friendly expression, high quality digital art'
+        break
+      case 'custom':
+        prompt = customInstructions || 'Professional character portrait, unique design, high quality digital art'
+        break
+      default:
+        prompt = 'Professional character portrait, friendly expression, clean background, high quality'
+    }
 
-    // 6. Call OpenAI DALL-E API
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    // Add physical attributes if specified
+    if (gender && gender !== 'neutral') {
+      prompt += `, ${gender} character`
+    }
+    
+    if (hairColor) {
+      prompt += `, ${hairColor.toLowerCase()} hair`
+    }
+    
+    if (eyeColor) {
+      prompt += `, ${eyeColor.toLowerCase()} eyes`
+    }
+
+    // Add quality and style modifiers
+    prompt += ', portrait orientation, centered composition, professional lighting, high resolution, detailed, clean, modern style'
+
+    console.log('Generated image prompt:', prompt)
+
+    // Generate image using OpenAI DALL-E API
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiApiKey) {
-      console.error('OpenAI API key not configured.');
-      return new Response(JSON.stringify({ error: 'OpenAI API key not configured server-side.' }), { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+      throw new Error('OpenAI API key not configured')
     }
 
-    let generatedImageUrl = '';
-    try {
-      console.log('Calling DALL-E 3 API...')
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiApiKey}`,
-        },
-        body: JSON.stringify({
-          model: "dall-e-3",
-          prompt: prompt,
-          n: 1,
-          size: "1024x1024", 
-          response_format: "url", 
-          quality: "standard"
-        }),
-      });
+    const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+        style: 'natural'
+      }),
+    })
 
-      if (!response.ok) {
-        const errorBody = await response.json();
-        console.error('OpenAI API Error:', errorBody);
-        throw new Error(`OpenAI API request failed: ${response.statusText} - ${JSON.stringify(errorBody.error)}`);
-      }
-
-      const result = await response.json();
-      if (!result.data || result.data.length === 0 || !result.data[0].url) {
-         throw new Error('OpenAI API did not return a valid image URL.');
-      }
-
-      generatedImageUrl = result.data[0].url; 
-      console.log('DALL-E 3 generated image URL (temporary):', generatedImageUrl);
-
-    } catch (error) {
-        console.error('Error calling OpenAI API:', error);
-        return new Response(JSON.stringify({ error: `Failed to generate image: ${error.message}` }), {
-          headers: { 'Access-Control-Allow-Origin': '*' },
-          status: 500,
-        });
+    if (!openaiResponse.ok) {
+      const errorData = await openaiResponse.json()
+      throw new Error(`OpenAI API error: ${errorData.error?.message || openaiResponse.statusText}`)
     }
 
-    // 7. Download image from temporary URL
-    let imageBlob: Blob;
-    try {
-      console.log('Downloading generated image from temporary URL...');
-      const imageResponse = await fetch(generatedImageUrl);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to download generated image: ${imageResponse.statusText}`);
-      }
-      imageBlob = await imageResponse.blob();
-      console.log(`Image downloaded successfully. Type: ${imageBlob.type}, Size: ${imageBlob.size}`);
+    const openaiData = await openaiResponse.json()
+    const imageUrl = openaiData.data[0]?.url
 
-      // Basic validation (optional but recommended)
-      if (!imageBlob.type.startsWith('image/')) {
-        throw new Error(`Downloaded file is not an image: ${imageBlob.type}`);
-      }
-      // Add size validation if desired (e.g., < 5MB)
-      // const maxSize = 5 * 1024 * 1024; 
-      // if (imageBlob.size > maxSize) { ... }
-
-    } catch (error) {
-      console.error('Error downloading image from OpenAI URL:', error);
-      return new Response(JSON.stringify({ error: `Failed to process generated image: ${error.message}` }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        status: 500,
-      });
+    if (!imageUrl) {
+      throw new Error('Failed to generate image')
     }
 
-    // 8. Upload to Media Library via internal API call
-    let permanentImageUrl = '';
-    try {
-      console.log('Uploading generated avatar to Media Library...');
-      
-      // First, create a media library entry
-      const fileName = `generated-avatar-${agentId}-${Date.now()}.png`;
-      
-      // Create media library record
-      const { data: mediaRecord, error: mediaError } = await supabaseAdminClient
-        .from('media_library')
-        .insert({
-          user_id: user.id,
-          file_name: fileName,
-          file_type: 'image/png',
-          file_size: imageBlob.size,
-          category: 'avatars',
-          description: `Generated avatar for agent ${agentId}`,
-          storage_path: `${user.id}/avatars/${fileName}`,
-          bucket: 'media-library',
-          processing_status: 'completed'
-        })
-        .select()
-        .single();
+    console.log('Generated image URL:', imageUrl)
 
-      if (mediaError) {
-        console.error('Media Library record creation error:', mediaError);
-        throw mediaError;
-      }
+    // Optionally, you could download and store the image in Supabase Storage here
+    // For now, we'll return the OpenAI URL directly
 
-      const storagePath = `${user.id}/avatars/${fileName}`;
-      
-      // Upload to media-library bucket
-      const { data: uploadData, error: uploadError } = await supabaseAdminClient.storage
-        .from('media-library')
-        .upload(storagePath, imageBlob, {
-          cacheControl: '3600', // Cache for 1 hour
-          upsert: true, // Overwrite if exists
-          contentType: 'image/png' // Force PNG type
-        });
-
-      if (uploadError) {
-        console.error('Media Library Storage Upload Error:', uploadError);
-        // Clean up the media record if storage upload fails
-        await supabaseAdminClient
-          .from('media_library')
-          .delete()
-          .eq('id', mediaRecord.id);
-        throw uploadError;
-      }
-
-      // Generate signed URL for the avatar (1 year expiry for avatars)
-      const { data: urlData, error: urlError } = await supabaseAdminClient.storage
-        .from('media-library')
-        .createSignedUrl(storagePath, 31536000); // 1 year
-
-      if (urlError || !urlData?.signedUrl) {
-        console.error('Failed to create signed URL:', urlError);
-        throw new Error('Could not generate signed URL for avatar.');
-      }
-      
-      permanentImageUrl = urlData.signedUrl;
-      console.log('Avatar uploaded to Media Library successfully. Signed URL generated.');
-
-    } catch (error) {
-      console.error('Error uploading avatar to Media Library:', error);
-      return new Response(JSON.stringify({ error: `Failed to store generated avatar: ${error.message}` }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        status: 500,
-      });
-    }
-
-    // 10. Update agents table with permanent avatar_url
-    try {
-        const { error: updateError } = await supabaseAdminClient
-            .from('agents')
-            .update({ avatar_url: permanentImageUrl })
-            .eq('id', agentId)
-            .eq('user_id', user.id); // Ensure user still owns agent
-
-        if (updateError) {
-            console.error('DB Update Error:', updateError);
-            // Consider if we should delete the uploaded storage object if DB update fails
-            throw new Error('Failed to update agent avatar URL in database.');
-        }
-        console.log(`Agent ${agentId} avatar_url updated successfully.`);
-
-    } catch(error) {
-        console.error('Error updating agent table:', error);
-        // Consider cleanup of uploaded image
-        return new Response(JSON.stringify({ error: `Failed to finalize avatar update: ${error.message}` }), {
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-          status: 500,
-        });
-    }
-
-    // 11. Return permanent image URL
-    return new Response(JSON.stringify({ imageUrl: permanentImageUrl }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        imageUrl: imageUrl,
+        prompt: prompt
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      },
+    )
 
   } catch (error) {
-    console.error('General error in function:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, // Simplified CORS
-      status: 500,
-    });
+    console.error('Error in generate-agent-image function:', error)
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      },
+    )
   }
 })
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/generate-agent-image' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/

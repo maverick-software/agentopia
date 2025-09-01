@@ -1239,14 +1239,14 @@ export function AgentChatPage() {
                 currentProcessingDetails={currentProcessingDetails}
                 onShowProcessModal={() => setShowProcessModal(true)}
                 aiState={aiState}
-                currentTool={currentTool}
+                        currentTool={currentTool}
                 processSteps={processSteps}
               />
-            </div>
-          )}
+                            </div>
+                          )}
           
 
-      </div>
+                                          </div>
 
       {/* Chat Input */}
       <ChatInput
@@ -1257,13 +1257,13 @@ export function AgentChatPage() {
         uploading={uploading}
         uploadProgress={uploadProgress}
         onSubmit={handleSubmit}
-        onKeyDown={handleKeyDown}
+                  onKeyDown={handleKeyDown}
         onFileUpload={handleFileUpload}
         adjustTextareaHeight={adjustTextareaHeight}
         onShowAgentSettings={() => setShowAgentSettingsModal(true)}
       />
 
-      </div>
+              </div>
 
       {/* Chat Modals */}
       <ChatModals

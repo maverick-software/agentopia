@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import type { Agent } from '../types';
+import { CreateAgentWizard } from '../components/CreateAgentWizard';
 
 // Agent categories for filtering
 const AGENT_CATEGORIES = [
@@ -28,6 +29,7 @@ export function AgentsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('all');
   const totalFetchAttempts = useRef(0);
@@ -281,7 +283,7 @@ export function AgentsPage() {
                 Teams
               </button>
               <button
-                onClick={() => navigate('/agents/new')}
+                onClick={() => setShowCreateModal(true)}
                 className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -393,7 +395,7 @@ export function AgentsPage() {
               }
             </p>
             <button
-              onClick={() => navigate('/agents/new')}
+              onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors duration-200 font-medium"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -442,6 +444,12 @@ export function AgentsPage() {
           </div>
         </div>
       )}
+
+      {/* Create Agent Wizard */}
+      <CreateAgentWizard 
+        open={showCreateModal} 
+        onOpenChange={setShowCreateModal} 
+      />
     </div>
   );
 }

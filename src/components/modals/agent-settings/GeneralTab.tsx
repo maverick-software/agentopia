@@ -8,6 +8,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
 import { Loader2, Save } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+
+const MBTI_TYPES = [
+  { type: 'INTJ', name: 'The Architect', description: 'Imaginative and strategic thinkers with a plan for everything' },
+  { type: 'INTP', name: 'The Thinker', description: 'Innovative inventors with an unquenchable thirst for knowledge' },
+  { type: 'ENTJ', name: 'The Commander', description: 'Bold, imaginative and strong-willed leaders, always finding a way' },
+  { type: 'ENTP', name: 'The Debater', description: 'Smart and curious thinkers who cannot resist an intellectual challenge' },
+  { type: 'INFJ', name: 'The Advocate', description: 'Creative and insightful, inspired and independent perfectionists' },
+  { type: 'INFP', name: 'The Mediator', description: 'Poetic, kind and altruistic people, always eager to help a good cause' },
+  { type: 'ENFJ', name: 'The Protagonist', description: 'Charismatic and inspiring leaders, able to mesmerize their listeners' },
+  { type: 'ENFP', name: 'The Campaigner', description: 'Enthusiastic, creative and sociable free spirits' },
+  { type: 'ISTJ', name: 'The Logistician', description: 'Practical and fact-minded, reliable and responsible' },
+  { type: 'ISFJ', name: 'The Protector', description: 'Warm-hearted and dedicated, always ready to protect their loved ones' },
+  { type: 'ESTJ', name: 'The Executive', description: 'Excellent administrators, unsurpassed at managing things or people' },
+  { type: 'ESFJ', name: 'The Consul', description: 'Extraordinarily caring, social and popular people, always eager to help' },
+  { type: 'ISTP', name: 'The Virtuoso', description: 'Bold and practical experimenters, masters of all kinds of tools' },
+  { type: 'ISFP', name: 'The Adventurer', description: 'Flexible and charming artists, always ready to explore new possibilities' },
+  { type: 'ESTP', name: 'The Entrepreneur', description: 'Smart, energetic and perceptive people, truly enjoy living on the edge' },
+  { type: 'ESFP', name: 'The Entertainer', description: 'Spontaneous, energetic and enthusiastic people - life is never boring' }
+];
+
+const getMBTIName = (type: string): string => {
+  return MBTI_TYPES.find(mbti => mbti.type === type)?.name || 'Unknown Type';
+};
+
+const getMBTIDescription = (type: string): string => {
+  return MBTI_TYPES.find(mbti => mbti.type === type)?.description || 'No description available';
+};
 
 interface GeneralTabProps {
   agentId: string;
@@ -16,6 +44,13 @@ interface GeneralTabProps {
     description?: string;
     role?: string;
     model?: string;
+    personality?: string;
+    metadata?: {
+      mbtiType?: string;
+      purpose?: string;
+      theme?: string;
+      [key: string]: any;
+    };
   };
   onAgentUpdated?: (updatedData: any) => void;
 }
@@ -166,6 +201,34 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
             </div>
           </CardContent>
         </Card>
+
+        {/* MBTI Personality Display */}
+        {agentData?.metadata?.mbtiType && (
+          <Card className="bg-muted/30">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Badge variant="secondary">{agentData.metadata.mbtiType}</Badge>
+                Personality Type
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="font-medium">
+                  {getMBTIName(agentData.metadata.mbtiType)}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {getMBTIDescription(agentData.metadata.mbtiType)}
+                </p>
+                {agentData.metadata.purpose && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="text-sm font-medium mb-1">Original Purpose</div>
+                    <p className="text-sm text-muted-foreground">{agentData.metadata.purpose}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Save Button - Fixed at bottom */}
