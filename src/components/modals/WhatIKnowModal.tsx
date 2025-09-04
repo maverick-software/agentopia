@@ -416,7 +416,7 @@ export function WhatIKnowModal({
         // Fetch updated agent data
         const { data: updatedAgent } = await supabase
           .from('agents')
-          .select(`*, agent_datastores(datastore_id)`)
+          .select(`*`)
           .eq('id', agentId)
           .single();
           

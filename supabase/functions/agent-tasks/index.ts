@@ -438,7 +438,12 @@ async function handleGet(supabase: any, userId: string, agentId: string | null, 
 }
 
 async function handlePost(supabase: any, userId: string, body: any) {
-  // Validate required fields
+  // Check if this is an update action
+  if (body.action === 'update' && body.task_id) {
+    return await handleTaskUpdate(supabase, userId, body.task_id, body)
+  }
+  
+  // Validate required fields for creation
   const requiredFields = ['agent_id', 'name', 'instructions', 'task_type']
   for (const field of requiredFields) {
     if (!body[field]) {
@@ -485,6 +490,16 @@ async function handlePost(supabase: any, userId: string, body: any) {
     nextRunAt = calculateNextRunTime(body.cron_expression, body.timezone || 'UTC')
   }
 
+  // Handle date range validation - if start_date equals end_date, set end_date to null
+  let startDate = body.start_date || null;
+  let endDate = body.end_date || null;
+  
+  // If both dates are the same, treat as single-day task (end_date = null)
+  if (startDate && endDate && startDate === endDate) {
+    endDate = null;
+    console.log('Same start/end date detected, setting end_date to null for single-day task');
+  }
+
   // Create the task
   const taskData = {
     agent_id: body.agent_id,
@@ -501,10 +516,12 @@ async function handlePost(supabase: any, userId: string, body: any) {
     event_trigger_type: body.event_trigger_type || null,
     event_trigger_config: body.event_trigger_config || {},
     max_executions: body.max_executions || null,
-    start_date: body.start_date || null,
-    end_date: body.end_date || null,
+    start_date: startDate,
+    end_date: endDate,
     created_by: userId
   }
+
+  console.log('About to insert task data:', JSON.stringify(taskData, null, 2));
 
   const { data: task, error } = await supabase
     .from('agent_tasks')
@@ -512,9 +529,12 @@ async function handlePost(supabase: any, userId: string, body: any) {
     .select()
     .single()
 
+  console.log('Database insert result - error:', error, 'data:', task);
+
   if (error) {
+    console.error('Database insertion failed:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to create task', details: error.message }),
+      JSON.stringify({ error: 'Failed to create task', details: error.message, code: error.code }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
@@ -536,6 +556,106 @@ async function handlePost(supabase: any, userId: string, body: any) {
       step_count: body.step_count || 0
     }),
     { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function handleTaskUpdate(supabase: any, userId: string, taskId: string, body: any) {
+  if (!taskId) {
+    return new Response(
+      JSON.stringify({ error: 'Task ID is required for update action' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // Verify user owns the task
+  const { data: existingTask, error: taskError } = await supabase
+    .from('agent_tasks')
+    .select('id, agent_id, task_type, cron_expression')
+    .eq('id', taskId)
+    .eq('user_id', userId)
+    .single()
+
+  if (taskError || !existingTask) {
+    return new Response(
+      JSON.stringify({ error: 'Task not found or access denied' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // Validate task type specific requirements if changing
+  const newTaskType = body.task_type || existingTask.task_type
+  if (newTaskType === 'scheduled') {
+    const cronExpression = body.cron_expression || existingTask.cron_expression
+    if (!cronExpression) {
+      return new Response(
+        JSON.stringify({ error: 'Cron expression is required for scheduled tasks' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+  }
+
+  if (newTaskType === 'event_based' && !body.event_trigger_type) {
+    return new Response(
+      JSON.stringify({ error: 'Event trigger type is required for event-based tasks' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // Handle date range validation for updates
+  let updateData = { ...body }
+  // Remove action and task_id from update data as they're not table columns
+  delete updateData.action
+  delete updateData.task_id
+  delete updateData.is_multi_step
+  delete updateData.step_count
+  
+  // Fix date range constraint violation
+  if (updateData.start_date && updateData.end_date && updateData.start_date === updateData.end_date) {
+    updateData.end_date = null;
+    console.log('Same start/end date detected in update, setting end_date to null for single-day task');
+  }
+  
+  if (body.cron_expression && body.cron_expression !== existingTask.cron_expression) {
+    updateData.next_run_at = calculateNextRunTime(body.cron_expression, body.timezone || 'UTC')
+  }
+
+  const { data: task, error } = await supabase
+    .from('agent_tasks')
+    .update(updateData)
+    .eq('id', taskId)
+    .eq('user_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    return new Response(
+      JSON.stringify({ error: 'Failed to update task', details: error.message }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // Handle scheduling updates if needed
+  if (body.cron_expression && body.cron_expression !== existingTask.cron_expression) {
+    // Unschedule old task
+    await unscheduleTaskFromPgCron(supabase, taskId);
+    
+    // Schedule new task if it's still scheduled type
+    if (newTaskType === 'scheduled') {
+      const schedulingSuccess = await scheduleTaskWithPgCron(supabase, taskId, body.cron_expression, updateData);
+      if (!schedulingSuccess) {
+        console.warn('Task updated but rescheduling failed for task:', taskId);
+      }
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ 
+      task, 
+      task_id: task.id,
+      is_multi_step: body.is_multi_step || false,
+      step_count: body.step_count || 0
+    }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }
 

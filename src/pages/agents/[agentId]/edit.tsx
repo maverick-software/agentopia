@@ -122,7 +122,7 @@ const AgentEditPage = () => {
             try {
                 const { data: agent, error: agentError } = await supabase
                     .from('agents')
-                    .select(`*, agent_datastores(datastore_id)`)
+                    .select(`*, *`)
                     .eq('id', agentId)
                     .eq('user_id', user.id)
                     .single();
@@ -727,7 +727,7 @@ const AgentEditPage = () => {
                                        // Refresh agent data to show updated connections
                                        const { data: updatedAgent, error: fetchError } = await supabase
                                            .from('agents')
-                                           .select(`*, agent_datastores(datastore_id)`)
+                                           .select(`*, *`)
                                            .eq('id', agentId)
                                            .eq('user_id', user.id)
                                            .single();
@@ -795,7 +795,7 @@ const AgentEditPage = () => {
                             // Refresh agent data
                             const { data: updatedAgent } = await supabase
                                 .from('agents')
-                                .select(`*, agent_datastores(datastore_id)`)
+                                .select(`*, *`)
                                 .eq('id', agentId)
                                 .eq('user_id', user.id)
                                 .single();
@@ -840,7 +840,7 @@ const AgentEditPage = () => {
                             // Refresh agent data
                             const { data: updatedAgent } = await supabase
                                 .from('agents')
-                                .select(`*, agent_datastores(datastore_id)`)
+                                .select(`*, *`)
                                 .eq('id', agentId)
                                 .eq('user_id', user.id)
                                 .single();

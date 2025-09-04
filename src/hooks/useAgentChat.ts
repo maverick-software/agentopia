@@ -232,7 +232,7 @@ export function useAgentChat() {
         
         const { data, error } = await supabase
           .from('agents')
-          .select('*, agent_datastores(datastore_id)')
+          .select('*')
           .eq('id', agentId)
           .eq('user_id', user.id)
           .single();

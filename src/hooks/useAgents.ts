@@ -66,7 +66,7 @@ export function useAgents(): UseAgentsReturn {
     try {
       const { data, error: fetchError } = await supabase
         .from('agents')
-        .select('*') // Select all fields for editing
+        .select('*') // Select all fields
         .eq('id', agentId)
         .maybeSingle(); // Expect 0 or 1 result
 
@@ -95,7 +95,7 @@ export function useAgents(): UseAgentsReturn {
       const { data, error: insertError } = await supabase
         .from('agents')
         .insert(dataToInsert as any)
-        .select()
+        .select('*')
         .single(); // Return the created record
 
       if (insertError) throw insertError;
@@ -110,6 +110,12 @@ export function useAgents(): UseAgentsReturn {
   }, [user]);
 
   const updateAgent = useCallback(async (agentId: string, agentData: Partial<Agent>): Promise<Agent | null> => {
+    if (!user) {
+      console.error('No authenticated user for updateAgent');
+      setError({ message: 'User not authenticated', code: 'AUTH_ERROR' } as PostgrestError);
+      return null;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -120,8 +126,8 @@ export function useAgents(): UseAgentsReturn {
         .from('agents')
         .update(updateData as any)
         .eq('id', agentId)
-        // Optional: Add .eq('user_id', user.id) if RLS doesn't cover updates strictly
-        .select()
+        .eq('user_id', user.id) // Ensure we only update agents owned by current user
+        .select('*')
         .single(); // Return the updated record
 
       if (updateError) throw updateError;
@@ -143,7 +149,7 @@ export function useAgents(): UseAgentsReturn {
     } finally {
       setLoading(false);
     }
-  }, []); // No user dependency, RLS should handle auth
+  }, [user]); // Include user dependency for authentication check
 
   // --- Existing Functions --- 
 
