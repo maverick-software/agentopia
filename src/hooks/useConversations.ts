@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface ConversationItem {
   conversation_id: string;
@@ -14,6 +15,7 @@ export function useConversations(agentId: string | null, userId: string | null) 
   const [items, setItems] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<RealtimeChannel | null>(null);
 
   const fetchConversations = useCallback(async () => {
     if (!agentId || !userId) return;

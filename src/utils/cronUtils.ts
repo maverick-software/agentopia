@@ -104,16 +104,43 @@ function getDayOrdinalSuffix(day: number): string {
 }
 
 /**
+ * Get current time for UI display
+ */
+function getCurrentTime(): Date {
+  return new Date();
+}
+
+/**
+ * Get server time from Supabase (more accurate than browser time)
+ */
+export async function getServerTime(supabase: any): Promise<Date> {
+  try {
+    const { data, error } = await supabase.rpc('get_current_utc_time');
+    if (error) {
+      console.warn('Failed to get server time:', error);
+      return new Date(); // Fallback to local time
+    }
+    return new Date(data);
+  } catch (error) {
+    console.warn('Error fetching server time:', error);
+    return new Date(); // Fallback to local time
+  }
+}
+
+/**
  * Format a next run date into a relative time string
  */
-export function formatNextRunTime(nextRunAt: string | Date | null): string {
+export function formatNextRunTime(nextRunAt: string | Date | null, isOneTime: boolean = false): string {
   if (!nextRunAt) return 'Overdue';
   
   const nextRun = new Date(nextRunAt);
-  const now = new Date();
+  const now = getCurrentTime();
   const diffMs = nextRun.getTime() - now.getTime();
   
-  if (diffMs < 0) return 'Overdue';
+  // For any task (one-time or recurring), if the time has passed, show as overdue
+  if (diffMs < 0) {
+    return 'Overdue';
+  }
   
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);

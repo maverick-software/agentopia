@@ -5,7 +5,8 @@ import { Calendar, Plus, Clock, History, CheckCircle2, AlertCircle, Check, Edit2
 import { TaskWizardModal } from '../TaskWizardModal';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { parseCronExpression, formatNextRunTime } from '@/utils/cronUtils';
+import { parseCronExpression, formatNextRunTime, getServerTime } from '@/utils/cronUtils';
+import { useAgentTaskStatus } from '@/hooks/useAgentTaskStatus';
 
 interface Task {
   id: string;
@@ -25,6 +26,60 @@ interface Task {
   name?: string; // Some tasks use 'name' instead of 'title'
 }
 
+// Component to display next run time with server time verification
+function NextRunTimeDisplay({ nextRunAt, isOneTime, supabase }: { nextRunAt: string; isOneTime: boolean; supabase: any }) {
+  const [timeText, setTimeText] = useState('Loading...');
+
+  useEffect(() => {
+    const calculateTimeDisplay = async () => {
+      try {
+        // Try to get server time for accuracy
+        const serverTime = await getServerTime(supabase);
+        const nextRun = new Date(nextRunAt);
+        const diffMs = nextRun.getTime() - serverTime.getTime();
+        
+        if (diffMs < 0) {
+          setTimeText('Overdue');
+          return;
+        }
+        
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffMinutes < 1) setTimeText('Starting soon');
+        else if (diffMinutes < 60) setTimeText(`In ${diffMinutes}m`);
+        else if (diffHours < 24) setTimeText(`In ${diffHours}h ${diffMinutes % 60}m`);
+        else if (diffDays < 7) setTimeText(`In ${diffDays}d ${diffHours % 24}h`);
+        else {
+          setTimeText(nextRun.toLocaleDateString([], { 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }));
+        }
+      } catch (error) {
+        console.warn('Server time failed, using local time');
+        // Fallback to local browser time
+        const nextRun = new Date(nextRunAt);
+        const now = new Date(); 
+        const diffMs = nextRun.getTime() - now.getTime();
+        
+        if (diffMs < 0) {
+          setTimeText('Overdue');
+        } else {
+          setTimeText(formatNextRunTime(nextRunAt, isOneTime));
+        }
+      }
+    };
+    
+    calculateTimeDisplay();
+  }, [nextRunAt, isOneTime, supabase]);
+
+  return <span>Next: {timeText}</span>;
+}
+
 interface ScheduleTabProps {
   agentId: string;
   agentData?: any;
@@ -40,6 +95,9 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
   
   const supabase = useSupabaseClient();
   const { user } = useAuth();
+  
+  // Real-time agent task status tracking
+  const { runningTasks, isAgentBusy, taskExecutions } = useAgentTaskStatus(agentId);
 
   const loadTasks = async () => {
     if (!agentId || !user) return;
@@ -78,8 +136,18 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
     loadTasks();
   }, [agentId, user]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
+  const getStatusIcon = (task: Task) => {
+    // Check if this task is currently running
+    const isRunning = runningTasks.includes(task.id);
+    
+    if (isRunning) {
+      return <div className="flex items-center space-x-1">
+        <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Running</span>
+      </div>;
+    }
+    
+    switch (task.status) {
       case 'active': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'paused': return <Clock className="h-4 w-4 text-yellow-500" />;
       case 'completed': return <Check className="h-4 w-4 text-blue-500" />;
@@ -225,7 +293,7 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
-                        {getStatusIcon(task.status)}
+                        {getStatusIcon(task)}
                         <h5 className="font-medium text-sm">{task.title || task.name}</h5>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
@@ -246,7 +314,7 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                       {task.next_run_at && (
                         <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
                           <Calendar className="h-3 w-3" />
-                          <span>Next: {formatNextRunTime(task.next_run_at)}</span>
+                          <NextRunTimeDisplay nextRunAt={task.next_run_at} isOneTime={task.max_executions === 1} supabase={supabase} />
                         </div>
                       )}
                     </div>

@@ -95,31 +95,52 @@ function convertCronToUTC(cronExpression: string, timezone: string = 'UTC'): str
       return cronExpression; // Return original if invalid
     }
 
-    // Convert timezone to UTC offset
+    // Get proper timezone offset accounting for DST
     let offsetHours = 0;
+    const now = new Date();
+    
+    // Check if the target timezone is in daylight saving time
+    const isDST = (tz: string) => {
+      try {
+        const jan = new Date(now.getFullYear(), 0, 1);
+        const jul = new Date(now.getFullYear(), 6, 1);
+        const janOffset = -new Date(jan.toLocaleString('en-US', { timeZone: tz })).getTimezoneOffset();
+        const julOffset = -new Date(jul.toLocaleString('en-US', { timeZone: tz })).getTimezoneOffset();
+        const currentOffset = -new Date(now.toLocaleString('en-US', { timeZone: tz })).getTimezoneOffset();
+        return currentOffset !== Math.min(janOffset, julOffset); // DST if not standard time
+      } catch (error) {
+        console.error('Error checking DST for timezone:', tz, error);
+        return false; // Fallback to standard time
+      }
+    };
+    
     switch (timezone) {
       case 'America/Los_Angeles':
       case 'America/Vancouver':
-        offsetHours = 8; // PST is UTC-8, so add 8 to convert to UTC
+        offsetHours = 7; // Currently in PDT (UTC-7) - September 2025
         break;
       case 'America/Denver':
+        offsetHours = isDST(timezone) ? 6 : 7; // MDT is UTC-6, MST is UTC-7
+        break;
       case 'America/Phoenix':
-        offsetHours = 7; // MST is UTC-7
+        offsetHours = 7; // Arizona doesn't observe DST
         break;
       case 'America/Chicago':
-        offsetHours = 6; // CST is UTC-6
+        offsetHours = isDST() ? 5 : 6; // CDT is UTC-5, CST is UTC-6
         break;
       case 'America/New_York':
-        offsetHours = 5; // EST is UTC-5
+        offsetHours = isDST() ? 4 : 5; // EDT is UTC-4, EST is UTC-5
         break;
       case 'UTC':
       default:
         offsetHours = 0;
         break;
     }
+    
+    console.log(`Timezone ${timezone} offset: ${offsetHours} hours (DST: ${isDST()})`);
 
     // Convert to UTC time
-    let utcHour = cronHour + offsetHours;
+    let utcHour = Math.floor(cronHour + offsetHours); // Ensure integer hour
     let utcDay = day;
 
     // Handle day rollover
@@ -170,27 +191,38 @@ function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC', 
     // Get current time in the specified timezone
     const now = new Date();
     
-    // Convert timezone to offset (simplified - covers major US timezones)
+    // Get proper timezone offset accounting for DST
     let offsetHours = 0;
-    switch (timezone) {
-      case 'America/Los_Angeles':
-      case 'America/Vancouver':
-        offsetHours = -8; // PST (ignoring DST for now)
-        break;
-      case 'America/Denver':
-      case 'America/Phoenix':
-        offsetHours = -7; // MST
-        break;
-      case 'America/Chicago':
-        offsetHours = -6; // CST
-        break;
-      case 'America/New_York':
-        offsetHours = -5; // EST
-        break;
-      case 'UTC':
-      default:
-        offsetHours = 0;
-        break;
+    try {
+      // Use Intl.DateTimeFormat to get the actual current offset for the timezone
+      const testDate = new Date();
+      const utcTime = testDate.getTime();
+      const localTime = new Date(testDate.toLocaleString('en-US', { timeZone: timezone })).getTime();
+      offsetHours = (localTime - utcTime) / (1000 * 60 * 60);
+      console.log(`Calculated timezone offset for ${timezone}: ${offsetHours} hours`);
+    } catch (error) {
+      console.error('Error calculating timezone offset, using fallback:', error);
+      // Fallback to hardcoded values (without DST)
+      switch (timezone) {
+        case 'America/Los_Angeles':
+        case 'America/Vancouver':
+          offsetHours = -8; // PST fallback
+          break;
+        case 'America/Denver':
+        case 'America/Phoenix':
+          offsetHours = -7; // MST fallback
+          break;
+        case 'America/Chicago':
+          offsetHours = -6; // CST fallback
+          break;
+        case 'America/New_York':
+          offsetHours = -5; // EST fallback
+          break;
+        case 'UTC':
+        default:
+          offsetHours = 0;
+          break;
+      }
     }
 
     // Calculate next run time

@@ -146,7 +146,7 @@ serve(async (req) => {
         }
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
-          { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
       case 'GET':
@@ -155,7 +155,7 @@ serve(async (req) => {
       default:
         return new Response(
           JSON.stringify({ error: 'Method not allowed' }),
-          { status: 405, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+          { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }
   } catch (error) {
@@ -192,7 +192,7 @@ async function executeScheduledTasks(supabase: any) {
     console.error('Error fetching due tasks:', fetchError)
     return new Response(
       JSON.stringify({ error: 'Failed to fetch due tasks', details: fetchError.message }),
-      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -253,7 +253,7 @@ async function executeScheduledTasks(supabase: any) {
       results,
       processed_count: results.length
     }),
-    { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }
 
@@ -261,7 +261,7 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
   if (!taskId) {
     return new Response(
       JSON.stringify({ error: 'Task ID is required' }),
-      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -283,14 +283,14 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
   if (fetchError || !task) {
     return new Response(
       JSON.stringify({ error: 'Task not found' }),
-      { status: 404, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
   if (task.status !== 'active') {
     return new Response(
       JSON.stringify({ error: 'Task is not active' }),
-      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -316,13 +316,13 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
         output: result.output,
         conversation_id: result.conversation_id
       }),
-      { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
     console.error(`Error executing task ${taskId}:`, error)
     return new Response(
       JSON.stringify({ error: 'Task execution failed', details: error.message }),
-      { status: 500, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 }
@@ -350,7 +350,7 @@ async function executeEventBasedTask(supabase: any, eventType: string, eventData
     console.error('Error fetching event-based tasks:', fetchError)
     return new Response(
       JSON.stringify({ error: 'Failed to fetch event-based tasks', details: fetchError.message }),
-      { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -400,13 +400,37 @@ async function executeEventBasedTask(supabase: any, eventType: string, eventData
       results,
       processed_count: results.length
     }),
-    { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }
 
 async function executeTask(supabase: any, task: any, triggerType: string, triggerData: any) {
   const startTime = Date.now()
   console.log(`Executing task: ${task.name} (${task.id})`)
+
+  // Check if this is a multi-step task
+  let isMultiStep = false
+  let taskSteps: any[] = []
+  
+  // Check if task instructions indicate multi-step
+  if (task.instructions && task.instructions.includes('Multi-step task')) {
+    console.log('Detected multi-step task, loading steps...')
+    
+    // Load task steps
+    const { data: steps, error: stepsError } = await supabase
+      .from('task_steps')
+      .select('*')
+      .eq('task_id', task.id)
+      .order('step_order', { ascending: true })
+    
+    if (!stepsError && steps && steps.length > 0) {
+      taskSteps = steps
+      isMultiStep = true
+      console.log(`Loaded ${taskSteps.length} steps for task ${task.id}`)
+    } else {
+      console.error('Failed to load task steps:', stepsError)
+    }
+  }
 
   // Create execution record
   const { data: execution, error: execError } = await supabase
@@ -417,12 +441,14 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
       status: 'running',
       trigger_type: triggerType,
       trigger_data: triggerData,
-      instructions_used: task.instructions,
+      instructions_used: isMultiStep ? `Multi-step task with ${taskSteps.length} steps` : task.instructions,
       tools_used: task.selected_tools,
       started_at: new Date().toISOString(),
       metadata: {
         agent_name: task.agents?.name,
-        trigger_type: triggerType
+        trigger_type: triggerType,
+        is_multi_step: isMultiStep,
+        step_count: taskSteps.length
       }
     })
     .select()
@@ -458,44 +484,183 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
       }
     } catch (_e) { /* non-fatal */ }
 
-    // Insert the scheduled user message (visible in UI)
-    const { error: insertMsgErr } = await supabase
-      .from('chat_messages_v2')
-      .insert({
-        conversation_id: conversationId,
-        session_id: sessionId,
-        channel_id: null,
-        role: 'user',
-        content: { type: 'text', text: task.instructions },
-        sender_user_id: task.user_id,
-        sender_agent_id: null,
-        metadata: { target_agent_id: task.agent_id, source: 'scheduler', task_id: task.id, trigger_type: triggerType },
-        context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId }
-      })
-    if (insertMsgErr) throw insertMsgErr
+    let finalOutput = ''
+    let allToolOutputs: any[] = []
 
-    // Call chat edge function to produce assistant reply (service role, act-as)
-    const chatUrl = Deno.env.get('SUPABASE_URL') + '/functions/v1/chat'
-    const chatResp = await fetch(chatUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-        'X-Agentopia-Service': 'task-executor',
-      },
-      body: JSON.stringify({
-        version: '2.0.0',
-        message: { role: 'user', content: { type: 'text', text: task.instructions } },
-        context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId },
-        options: { context: { max_messages: 20 } }
+    if (isMultiStep && taskSteps.length > 0) {
+      // Execute each step sequentially
+      console.log(`Executing ${taskSteps.length} steps sequentially...`)
+      
+      for (const step of taskSteps) {
+        console.log(`Executing step ${step.step_order}: ${step.step_name}`)
+        
+        // Update step status to running
+        await supabase
+          .from('task_steps')
+          .update({
+            status: 'running',
+            execution_started_at: new Date().toISOString()
+          })
+          .eq('id', step.id)
+        
+        // Build context from previous steps if needed
+        let stepInstructions = step.instructions
+        if (step.include_previous_context && step.step_order > 1) {
+          // Get previous step results
+          const { data: prevSteps } = await supabase
+            .from('task_steps')
+            .select('step_order, step_name, execution_result')
+            .eq('task_id', task.id)
+            .lt('step_order', step.step_order)
+            .eq('status', 'completed')
+            .order('step_order', { ascending: true })
+          
+          if (prevSteps && prevSteps.length > 0) {
+            const contextInfo = prevSteps.map(ps => 
+              `Step ${ps.step_order} (${ps.step_name}) result: ${JSON.stringify(ps.execution_result?.output || 'No output')}`
+            ).join('\n')
+            stepInstructions = `Previous steps context:\n${contextInfo}\n\nCurrent step instructions:\n${step.instructions}`
+          }
+        }
+        
+        // Insert the step message (visible in UI)
+        const { error: insertMsgErr } = await supabase
+          .from('chat_messages_v2')
+          .insert({
+            conversation_id: conversationId,
+            session_id: sessionId,
+            channel_id: null,
+            role: 'user',
+            content: { type: 'text', text: stepInstructions },
+            sender_user_id: task.user_id,
+            sender_agent_id: null,
+            metadata: { 
+              target_agent_id: task.agent_id, 
+              source: 'scheduler', 
+              task_id: task.id, 
+              trigger_type: triggerType,
+              step_id: step.id,
+              step_order: step.step_order,
+              step_name: step.step_name
+            },
+            context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId }
+          })
+        if (insertMsgErr) {
+          console.error(`Failed to insert step ${step.step_order} message:`, insertMsgErr)
+          // Update step status to failed
+          await supabase
+            .from('task_steps')
+            .update({
+              status: 'failed',
+              error_message: insertMsgErr.message,
+              execution_completed_at: new Date().toISOString()
+            })
+            .eq('id', step.id)
+          continue // Skip to next step
+        }
+
+        // Call chat edge function to produce assistant reply for this step
+        const chatUrl = Deno.env.get('SUPABASE_URL') + '/functions/v1/chat'
+        const chatResp = await fetch(chatUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'X-Agentopia-Service': 'task-executor',
+          },
+          body: JSON.stringify({
+            version: '2.0.0',
+            message: { role: 'user', content: { type: 'text', text: stepInstructions } },
+            context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId },
+            options: { context: { max_messages: 20 } }
+          })
+        })
+        
+        if (!chatResp.ok) {
+          const errTxt = await chatResp.text()
+          console.error(`Step ${step.step_order} chat invocation failed:`, errTxt)
+          // Update step status to failed
+          await supabase
+            .from('task_steps')
+            .update({
+              status: 'failed',
+              error_message: `Chat invocation failed: ${chatResp.status}`,
+              execution_completed_at: new Date().toISOString()
+            })
+            .eq('id', step.id)
+          continue // Skip to next step
+        }
+        
+        const chatData = await chatResp.json()
+        const stepOutput = typeof chatData?.data?.message?.content?.text === 'string' ? 
+          chatData.data.message.content.text : 'Step executed.'
+        
+        // Update step status to completed
+        await supabase
+          .from('task_steps')
+          .update({
+            status: 'completed',
+            execution_result: { output: stepOutput, chat_data: chatData?.data },
+            execution_completed_at: new Date().toISOString(),
+            execution_duration_ms: Date.now() - new Date(step.execution_started_at).getTime()
+          })
+          .eq('id', step.id)
+        
+        // Accumulate outputs
+        finalOutput += `Step ${step.step_order} (${step.step_name}): ${stepOutput}\n\n`
+        if (chatData?.data?.tool_outputs) {
+          allToolOutputs.push(...chatData.data.tool_outputs)
+        }
+        
+        console.log(`Step ${step.step_order} completed successfully`)
+      }
+      
+      console.log('All steps completed')
+    } else {
+      // Single-step task execution (original logic)
+      const { error: insertMsgErr } = await supabase
+        .from('chat_messages_v2')
+        .insert({
+          conversation_id: conversationId,
+          session_id: sessionId,
+          channel_id: null,
+          role: 'user',
+          content: { type: 'text', text: task.instructions },
+          sender_user_id: task.user_id,
+          sender_agent_id: null,
+          metadata: { target_agent_id: task.agent_id, source: 'scheduler', task_id: task.id, trigger_type: triggerType },
+          context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId }
+        })
+      if (insertMsgErr) throw insertMsgErr
+
+      // Call chat edge function to produce assistant reply (service role, act-as)
+      const chatUrl = Deno.env.get('SUPABASE_URL') + '/functions/v1/chat'
+      const chatResp = await fetch(chatUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'X-Agentopia-Service': 'task-executor',
+        },
+        body: JSON.stringify({
+          version: '2.0.0',
+          message: { role: 'user', content: { type: 'text', text: task.instructions } },
+          context: { agent_id: task.agent_id, user_id: task.user_id, conversation_id: conversationId, session_id: sessionId },
+          options: { context: { max_messages: 20 } }
+        })
       })
-    })
-    if (!chatResp.ok) {
-      const errTxt = await chatResp.text()
-      throw new Error(`chat invocation failed: ${chatResp.status} ${errTxt}`)
+      if (!chatResp.ok) {
+        const errTxt = await chatResp.text()
+        throw new Error(`chat invocation failed: ${chatResp.status} ${errTxt}`)
+      }
+      const chatData = await chatResp.json()
+      finalOutput = typeof chatData?.data?.message?.content?.text === 'string' ? chatData.data.message.content.text : 'Task executed. Reply generated.'
+      if (chatData?.data?.tool_outputs) {
+        allToolOutputs = chatData.data.tool_outputs
+      }
     }
-    const chatData = await chatResp.json()
-    const output = typeof chatData?.data?.message?.content?.text === 'string' ? chatData.data.message.content.text : 'Task executed. Reply generated.'
+
+    const output = finalOutput
 
     // Touch conversation_sessions to ensure it appears in lists immediately
     try {
@@ -528,7 +693,7 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
         completed_at: completedAt,
         duration_ms: duration,
         output: output,
-        tool_outputs: [], // Would contain actual tool outputs
+        tool_outputs: allToolOutputs, // Contains all tool outputs from all steps
         conversation_id: conversationId,
       })
       .eq('id', execution.id)
