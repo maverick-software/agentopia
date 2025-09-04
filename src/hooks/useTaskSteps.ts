@@ -82,17 +82,7 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
       }
     });
     
-    // Validate step name uniqueness
-    const stepNames = steps.map(s => s.step_name.trim().toLowerCase());
-    const duplicateNames = stepNames.filter((name, index) => stepNames.indexOf(name) !== index);
-    
-    if (duplicateNames.length > 0) {
-      steps.forEach(step => {
-        if (duplicateNames.includes(step.step_name.trim().toLowerCase())) {
-          errors[step.id] = [...(errors[step.id] || []), 'Step name must be unique'];
-        }
-      });
-    }
+    // Note: Removed step name uniqueness validation since system handles uniqueness automatically
     
     setValidationErrors(errors);
   }, [steps, validateStep, validateSteps]);
@@ -130,7 +120,9 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
         error_message: row.error_message,
         retry_count: row.retry_count || 0,
         created_at: row.created_at,
-        updated_at: row.updated_at
+        updated_at: row.updated_at,
+        // For existing steps, use a human-readable display name
+        display_name: `Step ${row.step_order}`
       }));
       
       setSteps(loadedSteps);
@@ -144,23 +136,35 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
     }
   }, [taskId, user, supabase, onStepsChange]);
 
+  // Generate unique step name automatically
+  const generateUniqueStepName = useCallback((userStepName: string, stepOrder: number): string => {
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2, 8);
+    return `step_${stepOrder}_${timestamp}_${randomId}`;
+  }, []);
+
   // Add new step
   const addStep = useCallback(async (stepData: TaskStepFormData): Promise<TaskStep | null> => {
     if (!user) return null;
     
     try {
+      const stepOrder = steps.length + 1;
+      const uniqueStepName = generateUniqueStepName(stepData.step_name, stepOrder);
+      
       // Create temporary step for immediate UI feedback
       const tempStep: TaskStep = {
         id: `temp-${Date.now()}`,
         task_id: taskId || '',
-        step_order: steps.length + 1,
-        step_name: stepData.step_name,
+        step_order: stepOrder,
+        step_name: uniqueStepName, // Use unique name internally
         instructions: stepData.instructions,
         include_previous_context: stepData.include_previous_context,
         status: 'pending',
         retry_count: 0,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        // Store user's display name separately for UI
+        display_name: stepData.step_name
       };
       
       // Add to local state immediately
@@ -173,7 +177,7 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
         const { data, error: createError } = await supabase
           .rpc('create_task_step', {
             p_task_id: taskId,
-            p_step_name: stepData.step_name,
+            p_step_name: uniqueStepName, // Use unique name for database
             p_instructions: stepData.instructions,
             p_include_previous_context: stepData.include_previous_context
           });
@@ -204,10 +208,24 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
   // Update existing step
   const updateStep = useCallback(async (stepId: string, updates: Partial<TaskStepFormData>): Promise<boolean> => {
     try {
+      // Generate unique name if step_name is being updated
+      let dbUpdates = { ...updates };
+      if (updates.step_name) {
+        const currentStep = steps.find(s => s.id === stepId);
+        if (currentStep) {
+          dbUpdates.step_name = generateUniqueStepName(updates.step_name, currentStep.step_order);
+        }
+      }
+      
       // Update local state immediately
       const updatedSteps = steps.map(step => 
         step.id === stepId 
-          ? { ...step, ...updates, updated_at: new Date().toISOString() }
+          ? { 
+              ...step, 
+              ...dbUpdates,
+              display_name: updates.step_name || step.display_name, // Keep user's display name
+              updated_at: new Date().toISOString() 
+            }
           : step
       );
       setSteps(updatedSteps);
@@ -218,7 +236,7 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
         const { error: updateError } = await supabase
           .rpc('update_task_step', {
             p_step_id: stepId,
-            p_step_name: updates.step_name,
+            p_step_name: dbUpdates.step_name, // Use unique name for database
             p_instructions: updates.instructions,
             p_include_previous_context: updates.include_previous_context
           });
@@ -236,7 +254,7 @@ export function useTaskSteps(options: UseTaskStepsOptions): UseTaskStepsReturn {
       toast.error(`Failed to update step: ${err.message}`);
       return false;
     }
-  }, [steps, taskId, supabase, onStepsChange]);
+  }, [steps, taskId, supabase, onStepsChange, generateUniqueStepName]);
 
   // Delete step
   const deleteStep = useCallback(async (stepId: string): Promise<boolean> => {

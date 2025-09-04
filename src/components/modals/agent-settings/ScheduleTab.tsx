@@ -5,6 +5,7 @@ import { Calendar, Plus, Clock, History, CheckCircle2, AlertCircle, Check, Edit2
 import { TaskWizardModal } from '../TaskWizardModal';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { parseCronExpression, formatNextRunTime } from '@/utils/cronUtils';
 
 interface Task {
   id: string;
@@ -20,6 +21,8 @@ interface Task {
   timezone?: string;
   task_type?: string;
   instructions?: string;
+  next_run_at?: string;
+  name?: string; // Some tasks use 'name' instead of 'title'
 }
 
 interface ScheduleTabProps {
@@ -223,13 +226,27 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
                         {getStatusIcon(task.status)}
-                        <h5 className="font-medium text-sm">{task.title}</h5>
+                        <h5 className="font-medium text-sm">{task.title || task.name}</h5>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
                       {(task.schedule_label || task.cron_expression || task.schedule) && (
                         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          <span>{task.schedule_label || task.cron_expression || task.schedule}</span>
+                          <span>
+                            {task.schedule_label || 
+                             (task.cron_expression ? 
+                               (task.max_executions === 1 ? 
+                                 `One-time at ${parseCronExpression(task.cron_expression, task.timezone).replace('Daily at ', '')}` : 
+                                 parseCronExpression(task.cron_expression, task.timezone)
+                               ) : null) ||
+                             task.schedule}
+                          </span>
+                        </div>
+                      )}
+                      {task.next_run_at && (
+                        <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>Next: {formatNextRunTime(task.next_run_at)}</span>
                         </div>
                       )}
                     </div>

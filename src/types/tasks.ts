@@ -49,7 +49,7 @@ export interface TaskStep {
   id: string;
   task_id: string;
   step_order: number;
-  step_name: string;
+  step_name: string; // Unique internal name for database
   instructions: string;
   include_previous_context: boolean;
   context_data?: any;
@@ -62,6 +62,7 @@ export interface TaskStep {
   retry_count: number;
   created_at: string;
   updated_at: string;
+  display_name?: string; // User-friendly name for UI display
 }
 
 export interface TaskStepFormData {

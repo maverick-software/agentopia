@@ -32,7 +32,7 @@ export function StepCard({
 }: StepCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editData, setEditData] = useState<TaskStepFormData>({
-    step_name: step.step_name,
+    step_name: step.display_name || step.step_name,
     instructions: step.instructions,
     include_previous_context: step.include_previous_context
   });
@@ -62,7 +62,7 @@ export function StepCard({
   // Handle cancel editing
   const handleCancel = useCallback(() => {
     setEditData({
-      step_name: step.step_name,
+      step_name: step.display_name || step.step_name,
       instructions: step.instructions,
       include_previous_context: step.include_previous_context
     });
@@ -216,7 +216,7 @@ export function StepCard({
                 ? "text-muted-foreground italic" 
                 : "text-gray-900 dark:text-gray-100"
             )}>
-              {step.step_name}
+              {step.display_name || step.step_name}
             </h4>
           </div>
           

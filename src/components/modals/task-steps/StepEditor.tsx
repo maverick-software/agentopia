@@ -68,7 +68,7 @@ export function StepEditor({
   useEffect(() => {
     if (step) {
       setFormData({
-        step_name: step.step_name,
+        step_name: step.display_name || step.step_name,
         instructions: step.instructions,
         include_previous_context: step.include_previous_context
       });
@@ -91,16 +91,8 @@ export function StepEditor({
       errors.push('Step name is required');
     } else if (formData.step_name.length > 100) {
       errors.push('Step name must be 100 characters or less');
-    } else {
-      // Check for duplicate names (excluding current step if editing)
-      const trimmedName = formData.step_name.trim();
-      const isDuplicate = existingStepNames.some(existingName => 
-        existingName === trimmedName && existingName !== step?.step_name
-      );
-      if (isDuplicate) {
-        errors.push('Step name must be unique');
-      }
     }
+    // Note: Removed uniqueness validation - system handles uniqueness automatically
     
     if (!formData.instructions.trim()) {
       errors.push('Instructions are required');

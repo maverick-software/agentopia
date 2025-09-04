@@ -76,22 +76,152 @@ async function unscheduleTaskFromPgCron(supabase: any, taskId: string): Promise<
   }
 }
 
-// Simple helper to calculate next run time for display purposes
-function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC'): string | null {
+// Convert timezone-aware cron expression to UTC cron expression
+function convertCronToUTC(cronExpression: string, timezone: string = 'UTC'): string {
   try {
-    console.log('Calculating next run time for display:', cronExpression, 'timezone:', timezone);
+    // Parse cron expression: minute hour day month dayOfWeek
+    const parts = cronExpression.trim().split(' ');
+    if (parts.length !== 5) {
+      console.error('Invalid cron expression format:', cronExpression);
+      return cronExpression; // Return original if invalid
+    }
+
+    const [minute, hour, day, month, dayOfWeek] = parts;
+    const cronMinute = parseInt(minute);
+    const cronHour = parseInt(hour);
+
+    if (isNaN(cronMinute) || isNaN(cronHour)) {
+      console.error('Invalid hour/minute in cron:', cronExpression);
+      return cronExpression; // Return original if invalid
+    }
+
+    // Convert timezone to UTC offset
+    let offsetHours = 0;
+    switch (timezone) {
+      case 'America/Los_Angeles':
+      case 'America/Vancouver':
+        offsetHours = 8; // PST is UTC-8, so add 8 to convert to UTC
+        break;
+      case 'America/Denver':
+      case 'America/Phoenix':
+        offsetHours = 7; // MST is UTC-7
+        break;
+      case 'America/Chicago':
+        offsetHours = 6; // CST is UTC-6
+        break;
+      case 'America/New_York':
+        offsetHours = 5; // EST is UTC-5
+        break;
+      case 'UTC':
+      default:
+        offsetHours = 0;
+        break;
+    }
+
+    // Convert to UTC time
+    let utcHour = cronHour + offsetHours;
+    let utcDay = day;
+
+    // Handle day rollover
+    if (utcHour >= 24) {
+      utcHour -= 24;
+      // Note: This is simplified - doesn't handle month/year rollover
+      if (day === '*') {
+        utcDay = '*'; // Daily tasks stay daily
+      }
+    } else if (utcHour < 0) {
+      utcHour += 24;
+      // Note: This is simplified - doesn't handle month/year rollover  
+      if (day === '*') {
+        utcDay = '*'; // Daily tasks stay daily
+      }
+    }
+
+    const utcCron = `${cronMinute} ${utcHour} ${utcDay} ${month} ${dayOfWeek}`;
+    console.log(`Converted cron from ${timezone}: ${cronExpression} → UTC: ${utcCron}`);
+    return utcCron;
+  } catch (error) {
+    console.error('Error converting cron to UTC:', error);
+    return cronExpression; // Return original on error
+  }
+}
+
+// Calculate next run time based on cron expression and timezone
+function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC', isOneTime: boolean = false): string | null {
+  try {
+    console.log('Calculating next run time:', cronExpression, 'timezone:', timezone);
     
-    // Simple fallback calculation for display - actual scheduling handled by pg_cron
+    // Parse cron expression: minute hour day month dayOfWeek
+    const parts = cronExpression.trim().split(' ');
+    if (parts.length !== 5) {
+      console.error('Invalid cron expression format:', cronExpression);
+      return null;
+    }
+
+    const [minute, hour, day, month, dayOfWeek] = parts;
+    const cronMinute = parseInt(minute);
+    const cronHour = parseInt(hour);
+
+    if (isNaN(cronMinute) || isNaN(cronHour)) {
+      console.error('Invalid hour/minute in cron:', cronExpression);
+      return null;
+    }
+
+    // Get current time in the specified timezone
     const now = new Date();
-    now.setMinutes(now.getMinutes() + 5);
     
-    console.log('Next run calculated (display only):', now.toISOString());
-    return now.toISOString();
+    // Convert timezone to offset (simplified - covers major US timezones)
+    let offsetHours = 0;
+    switch (timezone) {
+      case 'America/Los_Angeles':
+      case 'America/Vancouver':
+        offsetHours = -8; // PST (ignoring DST for now)
+        break;
+      case 'America/Denver':
+      case 'America/Phoenix':
+        offsetHours = -7; // MST
+        break;
+      case 'America/Chicago':
+        offsetHours = -6; // CST
+        break;
+      case 'America/New_York':
+        offsetHours = -5; // EST
+        break;
+      case 'UTC':
+      default:
+        offsetHours = 0;
+        break;
+    }
+
+    // Calculate next run time
+    const localNow = new Date(now.getTime() + (offsetHours * 60 * 60 * 1000));
+    const nextRun = new Date(localNow);
+    
+    // Set the target time
+    nextRun.setHours(cronHour, cronMinute, 0, 0);
+    
+    // If the time has already passed today
+    if (nextRun <= localNow) {
+      if (isOneTime) {
+        // For one-time tasks, if the time has passed, return null (will be marked as overdue)
+        return null;
+      } else {
+        // For recurring tasks, schedule for tomorrow
+        nextRun.setDate(nextRun.getDate() + 1);
+      }
+    }
+    
+    // Convert back to UTC for storage
+    const utcNextRun = new Date(nextRun.getTime() - (offsetHours * 60 * 60 * 1000));
+    
+    console.log('Next run calculated:', utcNextRun.toISOString());
+    return utcNextRun.toISOString();
   } catch (error) {
     console.error('Error calculating next run time:', error);
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 5);
-    return now.toISOString();
+    // Fallback: 1 hour from now
+    const fallback = new Date();
+    fallback.setHours(fallback.getHours() + 1);
+    return fallback.toISOString();
   }
 }
 
@@ -487,7 +617,8 @@ async function handlePost(supabase: any, userId: string, body: any) {
   // Calculate next run time for scheduled tasks
   let nextRunAt = null
   if (body.task_type === 'scheduled' && body.cron_expression) {
-    nextRunAt = calculateNextRunTime(body.cron_expression, body.timezone || 'UTC')
+    const isOneTime = body.max_executions === 1;
+    nextRunAt = calculateNextRunTime(body.cron_expression, body.timezone || 'UTC', isOneTime)
   }
 
   // Handle date range validation - if start_date equals end_date, set end_date to null
@@ -513,12 +644,13 @@ async function handlePost(supabase: any, userId: string, body: any) {
     cron_expression: body.cron_expression || null,
     timezone: body.timezone || 'UTC',
     next_run_at: nextRunAt,
-    event_trigger_type: body.event_trigger_type || null,
+    event_trigger_type: body.event_trigger_type === '' ? null : (body.event_trigger_type || null),
     event_trigger_config: body.event_trigger_config || {},
     max_executions: body.max_executions || null,
     start_date: startDate,
     end_date: endDate,
-    created_by: userId
+    created_by: userId,
+    conversation_id: body.target_conversation_id || null
   }
 
   console.log('About to insert task data:', JSON.stringify(taskData, null, 2));
@@ -541,7 +673,9 @@ async function handlePost(supabase: any, userId: string, body: any) {
 
   // Schedule the task with pg_cron if it's a scheduled task
   if (body.task_type === 'scheduled' && body.cron_expression) {
-    const schedulingSuccess = await scheduleTaskWithPgCron(supabase, task.id, body.cron_expression, taskData);
+    // Convert timezone-aware cron to UTC for pg_cron
+    const utcCronExpression = convertCronToUTC(body.cron_expression, body.timezone || 'UTC');
+    const schedulingSuccess = await scheduleTaskWithPgCron(supabase, task.id, utcCronExpression, taskData);
     if (!schedulingSuccess) {
       console.warn('Task created but scheduling failed for task:', task.id);
       // Don't fail the entire request - task is created, scheduling can be retried
@@ -570,7 +704,7 @@ async function handleTaskUpdate(supabase: any, userId: string, taskId: string, b
   // Verify user owns the task
   const { data: existingTask, error: taskError } = await supabase
     .from('agent_tasks')
-    .select('id, agent_id, task_type, cron_expression')
+    .select('id, agent_id, task_type, cron_expression, timezone')
     .eq('id', taskId)
     .eq('user_id', userId)
     .single()
@@ -609,6 +743,17 @@ async function handleTaskUpdate(supabase: any, userId: string, taskId: string, b
   delete updateData.is_multi_step
   delete updateData.step_count
   
+  // Map frontend field names to database column names
+  if (updateData.target_conversation_id !== undefined) {
+    updateData.conversation_id = updateData.target_conversation_id
+    delete updateData.target_conversation_id
+  }
+  
+  // Fix enum validation - convert empty strings to null
+  if (updateData.event_trigger_type === '') {
+    updateData.event_trigger_type = null
+  }
+  
   // Fix date range constraint violation
   if (updateData.start_date && updateData.end_date && updateData.start_date === updateData.end_date) {
     updateData.end_date = null;
@@ -616,9 +761,12 @@ async function handleTaskUpdate(supabase: any, userId: string, taskId: string, b
   }
   
   if (body.cron_expression && body.cron_expression !== existingTask.cron_expression) {
-    updateData.next_run_at = calculateNextRunTime(body.cron_expression, body.timezone || 'UTC')
+    const isOneTime = body.max_executions === 1;
+    updateData.next_run_at = calculateNextRunTime(body.cron_expression, body.timezone || 'UTC', isOneTime)
   }
 
+  console.log('About to update task with data:', JSON.stringify(updateData, null, 2));
+  
   const { data: task, error } = await supabase
     .from('agent_tasks')
     .update(updateData)
@@ -627,9 +775,12 @@ async function handleTaskUpdate(supabase: any, userId: string, taskId: string, b
     .select()
     .single()
 
+  console.log('Database update result - error:', error, 'data:', task);
+
   if (error) {
+    console.error('Database update failed:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to update task', details: error.message }),
+      JSON.stringify({ error: 'Failed to update task', details: error.message, code: error.code }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
@@ -641,7 +792,9 @@ async function handleTaskUpdate(supabase: any, userId: string, taskId: string, b
     
     // Schedule new task if it's still scheduled type
     if (newTaskType === 'scheduled') {
-      const schedulingSuccess = await scheduleTaskWithPgCron(supabase, taskId, body.cron_expression, updateData);
+      // Convert timezone-aware cron to UTC for pg_cron
+      const utcCronExpression = convertCronToUTC(body.cron_expression, body.timezone || existingTask.timezone || 'UTC');
+      const schedulingSuccess = await scheduleTaskWithPgCron(supabase, taskId, utcCronExpression, updateData);
       if (!schedulingSuccess) {
         console.warn('Task updated but rescheduling failed for task:', taskId);
       }
@@ -704,7 +857,8 @@ async function handlePut(supabase: any, userId: string, taskId: string, body: an
   // Calculate next run time if cron expression changed
   let updateData = { ...body }
   if (body.cron_expression && body.cron_expression !== existingTask.cron_expression) {
-    updateData.next_run_at = calculateNextRunTime(body.cron_expression, body.timezone || existingTask.timezone || 'UTC')
+    const isOneTime = body.max_executions === 1;
+    updateData.next_run_at = calculateNextRunTime(body.cron_expression, body.timezone || existingTask.timezone || 'UTC', isOneTime)
   }
 
   const { data: task, error } = await supabase

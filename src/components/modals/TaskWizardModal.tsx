@@ -72,56 +72,115 @@ export function TaskWizardModal({
   const supabase = useSupabaseClient();
   const { user } = useAuth();
 
+  // Function to load existing task steps when editing
+  const loadExistingTaskSteps = async () => {
+    if (!editingTask?.id || !user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .rpc('get_task_steps_with_context', { p_task_id: editingTask.id });
+      
+      if (error) {
+        console.error('Failed to load task steps:', error);
+        return;
+      }
+      
+      const loadedSteps = (data || []).map((row: any) => ({
+        id: row.step_id || row.id,
+        task_id: editingTask.id,
+        step_order: row.step_order,
+        step_name: row.step_name,
+        instructions: row.instructions,
+        include_previous_context: row.include_previous_context || false,
+        context_data: row.context_data || {},
+        status: row.status || 'pending',
+        execution_result: row.execution_result || {},
+        execution_started_at: row.execution_started_at,
+        execution_completed_at: row.execution_completed_at,
+        error_message: row.error_message,
+        retry_count: row.retry_count || 0,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        // For existing steps, create a user-friendly display name
+        display_name: `Step ${row.step_order}`
+      }));
+      
+      console.log('Loaded task steps:', loadedSteps);
+      setTaskSteps(loadedSteps);
+      
+    } catch (err) {
+      console.error('Error loading task steps:', err);
+    }
+  };
+
   // Initialize form fields when editing a task
   useEffect(() => {
     if (editingTask) {
       console.log('Initializing form with task data:', editingTask);
       
-      setNewTaskTitle(editingTask.title || '');
+      // Use 'name' field from database, fallback to 'title' for backwards compatibility
+      setNewTaskTitle(editingTask.name || editingTask.title || '');
       
       // Set timezone if available
       if (editingTask.timezone) {
         setSelectedTimezone(editingTask.timezone);
       }
       
+      // Set target conversation if available
+      if (editingTask.conversation_id) {
+        setTargetConversationId(editingTask.conversation_id);
+      }
+      
+      // Load existing task steps
+      loadExistingTaskSteps();
+      
       // Determine schedule mode based on max_executions
       if (editingTask.max_executions === 1) {
         setScheduleMode('one_time');
+        
+        // Parse cron expression for time (since one-time tasks also use cron)
+        if (editingTask.cron_expression) {
+          const cronParts = editingTask.cron_expression.split(' ');
+          if (cronParts.length === 5) {
+            const [minute, hour] = cronParts;
+            const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+            setOneTimeTime(timeStr);
+          }
+        }
         
         // Parse start_date for one-time tasks
         if (editingTask.start_date) {
           const startDate = new Date(editingTask.start_date);
           const dateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
-          const timeStr = startDate.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
-          
           setOneTimeDate(dateStr);
-          setOneTimeTime(timeStr);
         }
       } else {
         setScheduleMode('recurring');
+        
+        // Parse cron expression for time
+        if (editingTask.cron_expression) {
+          const cronParts = editingTask.cron_expression.split(' ');
+          if (cronParts.length === 5) {
+            const [minute, hour] = cronParts;
+            const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+            setRecurringTime(timeStr);
+          }
+          // Set some defaults for interval
+          setEveryInterval(1);
+          setEveryUnit('day');
+        }
         
         // Parse dates for recurring tasks
         if (editingTask.start_date) {
           const startDate = new Date(editingTask.start_date);
           const dateStr = startDate.toISOString().split('T')[0];
-          const timeStr = startDate.toTimeString().split(' ')[0].substring(0, 5);
-          
           setRecurringStartDate(dateStr);
-          setRecurringTime(timeStr);
         }
         
         if (editingTask.end_date) {
           const endDate = new Date(editingTask.end_date);
           const endDateStr = endDate.toISOString().split('T')[0];
           setRecurringEndDate(endDateStr);
-        }
-        
-        // Try to parse cron expression for interval (basic parsing)
-        if (editingTask.cron_expression) {
-          // This is a simplified cron parser - you might want to enhance this
-          // For now, we'll set some defaults
-          setEveryInterval(1);
-          setEveryUnit('day');
         }
       }
     } else {
@@ -206,8 +265,8 @@ export function TaskWizardModal({
         throw new Error(error.message || `Failed to ${editingTask ? 'update' : 'create'} task`);
       }
 
-      // If using steps, save them to the database
-      if (usingSteps && result?.task_id && taskSteps.length > 0) {
+      // If using steps, save them to the database (only for new tasks, not updates)
+      if (usingSteps && result?.task_id && taskSteps.length > 0 && !editingTask) {
         try {
           for (const step of taskSteps) {
             const { error: stepError } = await supabase.rpc('create_task_step', {
@@ -224,10 +283,13 @@ export function TaskWizardModal({
             }
           }
           
-          toast.success(`Task ${editingTask ? 'updated' : 'created'} with ${taskSteps.length} steps successfully!`);
+          toast.success(`Task created with ${taskSteps.length} steps successfully!`);
         } catch (stepErr: any) {
-          toast.error(`Task ${editingTask ? 'updated' : 'created'} but failed to save steps: ${stepErr.message}`);
+          toast.error(`Task created but failed to save steps: ${stepErr.message}`);
         }
+      } else if (editingTask) {
+        // For task updates, steps are managed separately through StepManager
+        toast.success('Task updated successfully!');
       } else {
         toast.success(`Task ${editingTask ? 'updated' : 'created'} successfully!`);
       }
@@ -559,12 +621,13 @@ export function TaskWizardModal({
 
                 
                 <StepManager
+                  taskId={editingTask?.id} 
                   agentId={agentId}
                   agentName={agentData?.name}
                   initialSteps={taskSteps}
                   onStepsChange={setTaskSteps}
                   onValidationChange={setStepsValid}
-                  isEditing={false}
+                  isEditing={!!editingTask}
                   className="bg-card dark:bg-card rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm p-4"
                 />
                 
