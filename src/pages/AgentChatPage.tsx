@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import { useAgents } from '../hooks/useAgents';
 import { useConnections } from '@/integrations/_shared';
 import { AIState, ToolExecutionStatus } from '../components/AIThinkingIndicator';
@@ -48,6 +49,9 @@ export function AgentChatPage() {
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
   const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'identity' | 'behavior' | 'memory' | 'reasoning'>('identity');
+  
+  // Real-time message subscription
+  const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
   
   // File upload state
   const [uploading, setUploading] = useState(false);
@@ -775,6 +779,71 @@ export function AgentChatPage() {
 
 		fetchHistory();
 	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation]);
+
+  // Set up real-time message subscription
+  useEffect(() => {
+    if (!selectedConversationId || !agentId) {
+      // Clean up existing subscription
+      if (messageSubscription) {
+        console.log('Cleaning up message subscription');
+        supabase.removeChannel(messageSubscription);
+        setMessageSubscription(null);
+      }
+      return;
+    }
+
+    // Set up new subscription for this conversation
+    console.log(`Setting up real-time subscription for conversation: ${selectedConversationId}`);
+    
+    const channel = supabase
+      .channel(`chat-messages-${selectedConversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages_v2',
+          filter: `conversation_id=eq.${selectedConversationId}`,
+        },
+        (payload) => {
+          console.log('New message received via realtime:', payload);
+          const newMessage = payload.new as any;
+          
+          // Convert database message to frontend Message format
+          const message: Message = {
+            role: newMessage.role,
+            content: typeof newMessage.content === 'string' ? newMessage.content : newMessage.content?.text || '',
+            timestamp: new Date(newMessage.created_at),
+            userId: newMessage.sender_user_id,
+            agentId: newMessage.sender_agent_id,
+            id: newMessage.id,
+          };
+          
+          // Add to messages if not already present (avoid duplicates)
+          setMessages(prev => {
+            const exists = prev.some(msg => msg.id === message.id);
+            if (exists) return prev;
+            return [...prev, message].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          });
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`Successfully subscribed to messages for conversation ${selectedConversationId}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Message subscription error:', err);
+        }
+      });
+
+    setMessageSubscription(channel);
+
+    return () => {
+      if (channel) {
+        console.log(`Unsubscribing from messages for conversation ${selectedConversationId}`);
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [selectedConversationId, agentId, messageSubscription]);
 
   // Submit Message Handler - Enhanced with AI state tracking
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
