@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Plus, Clock, History, CheckCircle2, AlertCircle, Check, Edit2, Trash2 } from 'lucide-react';
+import { Calendar, Plus, Clock, History, CheckCircle2, AlertCircle, Check, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { TaskWizardModal } from '../TaskWizardModal';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,59 +28,6 @@ interface Task {
   name?: string; // Some tasks use 'name' instead of 'title'
 }
 
-// Component to display next run time with server time verification
-function NextRunTimeDisplay({ nextRunAt, isOneTime, supabase }: { nextRunAt: string; isOneTime: boolean; supabase: any }) {
-  const [timeText, setTimeText] = useState('Loading...');
-
-  useEffect(() => {
-    const calculateTimeDisplay = async () => {
-      try {
-        // Try to get server time for accuracy
-        const serverTime = await getServerTime(supabase);
-        const nextRun = new Date(nextRunAt);
-        const diffMs = nextRun.getTime() - serverTime.getTime();
-        
-        if (diffMs < 0) {
-          setTimeText('Overdue');
-          return;
-        }
-        
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        const diffHours = Math.floor(diffMinutes / 60);
-        const diffDays = Math.floor(diffHours / 24);
-        
-        if (diffMinutes < 1) setTimeText('Starting soon');
-        else if (diffMinutes < 60) setTimeText(`In ${diffMinutes}m`);
-        else if (diffHours < 24) setTimeText(`In ${diffHours}h ${diffMinutes % 60}m`);
-        else if (diffDays < 7) setTimeText(`In ${diffDays}d ${diffHours % 24}h`);
-        else {
-          setTimeText(nextRun.toLocaleDateString([], { 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }));
-        }
-      } catch (error) {
-        console.warn('Server time failed, using local time');
-        // Fallback to local browser time
-        const nextRun = new Date(nextRunAt);
-        const now = new Date(); 
-        const diffMs = nextRun.getTime() - now.getTime();
-        
-        if (diffMs < 0) {
-          setTimeText('Overdue');
-        } else {
-          setTimeText(formatNextRunTime(nextRunAt, isOneTime));
-        }
-      }
-    };
-    
-    calculateTimeDisplay();
-  }, [nextRunAt, isOneTime, supabase]);
-
-  return <span>Next: {timeText}</span>;
-}
 
 interface ScheduleTabProps {
   agentId: string;
@@ -190,6 +137,39 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
     }
   };
 
+  const refreshTaskSchedules = async () => {
+    // Refresh next_run_at for all tasks by triggering a no-op update
+    for (const task of tasks) {
+      if (task.cron_expression && task.task_type === 'scheduled') {
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          if (!session?.session?.access_token) continue;
+
+          // Trigger update to recalculate next_run_at
+          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-tasks`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'update',
+              task_id: task.id,
+              // Send existing values to trigger recalculation
+              cron_expression: task.cron_expression,
+              timezone: task.timezone || 'UTC'
+            })
+          });
+        } catch (error) {
+          console.error('Error refreshing task schedule:', task.id, error);
+        }
+      }
+    }
+    
+    // Reload tasks after refresh
+    setTimeout(() => loadTasks(), 1000);
+  };
+
   const handleEditTask = async (task: Task) => {
     try {
       // Fetch more detailed task information for editing
@@ -275,6 +255,16 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
             History
           </Button>
           <Button
+            onClick={refreshTaskSchedules}
+            size="sm"
+            variant="outline"
+            className="flex items-center gap-2"
+            title="Refresh next run times"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </Button>
+          <Button
             onClick={() => setShowTaskWizard(true)}
             size="sm"
             className="flex items-center gap-2"
@@ -331,22 +321,6 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                           </span>
                         </div>
                       )}
-                      {task.next_run_at && (() => {
-                        // For one-time tasks, don't show "Next:" if the time has passed
-                        if (task.max_executions === 1) {
-                          const nextRun = new Date(task.next_run_at);
-                          const now = new Date();
-                          if (nextRun.getTime() < now.getTime()) {
-                            return null; // Hide "Next:" for overdue one-time tasks
-                          }
-                        }
-                        return (
-                          <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
-                            <Calendar className="h-3 w-3" />
-                            <NextRunTimeDisplay nextRunAt={task.next_run_at} isOneTime={task.max_executions === 1} supabase={supabase} />
-                          </div>
-                        );
-                      })()}
                     </div>
                     <div className="flex items-center space-x-2 ml-4">
                       <Button

@@ -239,19 +239,28 @@ function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC', 
         console.log(`Minute interval detected: every ${intervalMinutes} minutes`);
         
         if (userTime) {
-          // Calculate next run based on user's specified start time
-          const [userHour, userMinute] = userTime.split(':').map(Number);
+          // For minute intervals, calculate next run from current time
           const now = new Date();
-          const nextRun = new Date(now);
-          nextRun.setHours(userHour, userMinute, 0, 0);
+          const [userHour, userMinute] = userTime.split(':').map(Number);
           
-          // If the time has passed today, schedule for next interval
-          if (nextRun <= now) {
-            nextRun.setTime(nextRun.getTime() + (intervalMinutes * 60 * 1000));
+          // Create the user's start time for today
+          const startTimeToday = new Date(now);
+          startTimeToday.setHours(userHour, userMinute, 0, 0);
+          
+          if (startTimeToday > now) {
+            // Start time hasn't occurred yet today - schedule for start time
+            console.log('Next run for minute interval (first run today):', startTimeToday.toISOString());
+            return startTimeToday.toISOString();
+          } else {
+            // Start time has passed - calculate next interval from now
+            const minutesSinceStart = Math.floor((now.getTime() - startTimeToday.getTime()) / (60 * 1000));
+            const intervalsElapsed = Math.floor(minutesSinceStart / intervalMinutes);
+            const nextInterval = (intervalsElapsed + 1) * intervalMinutes;
+            
+            const nextRun = new Date(startTimeToday.getTime() + (nextInterval * 60 * 1000));
+            console.log(`Next run for minute interval (${intervalsElapsed + 1} intervals from start):`, nextRun.toISOString());
+            return nextRun.toISOString();
           }
-          
-          console.log('Next run for minute interval with user time:', nextRun.toISOString());
-          return nextRun.toISOString();
         } else {
           // Fallback: calculate next run based on current time + interval
           const now = new Date();
