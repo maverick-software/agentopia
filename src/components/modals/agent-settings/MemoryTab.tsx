@@ -5,16 +5,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Loader2, 
   Check, 
   Database,
   Brain,
   Lightbulb,
-  MessageSquare
+  MessageSquare,
+  ChevronDown
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConnections } from '@/integrations/_shared/hooks/useConnections';
 import { toast } from 'react-hot-toast';
 import type { Datastore } from '@/types';
 
@@ -28,48 +31,34 @@ interface MemoryTabProps {
   onAgentUpdated?: (updatedData: any) => void;
 }
 
-const MEMORY_PREFERENCES = [
-  {
-    id: 'remember_preferences',
-    label: 'Remember your preferences',
-    description: 'Your communication style, work patterns, and personal preferences'
-  },
-  {
-    id: 'track_projects',
-    label: 'Keep track of ongoing projects',
-    description: 'Project status, deadlines, and collaborative work details'
-  },
-  {
-    id: 'learn_conversations',
-    label: 'Learn from our conversations',
-    description: 'Patterns, insights, and context from our chat history'
-  },
-  {
-    id: 'forget_sessions',
-    label: 'Forget after each session',
-    description: 'Start fresh each time without remembering previous conversations'
-  }
-];
 
 export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps) {
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { connections } = useConnections({ includeRevoked: false });
   
   // Data state
   const [availableDatastores, setAvailableDatastores] = useState<Datastore[]>([]);
-  const [connectedDatastores, setConnectedDatastores] = useState<string[]>([]);
-  const [memoryPreferences, setMemoryPreferences] = useState<string[]>(['remember_preferences', 'track_projects', 'learn_conversations']);
+  const [selectedDatastoreId, setSelectedDatastoreId] = useState<string | null>(null);
+  const [vectorMemoryEnabled, setVectorMemoryEnabled] = useState<boolean>(false);
   const [contextHistorySize, setContextHistorySize] = useState<number>(
     parseInt(localStorage.getItem(`agent_${agentId}_context_size`) || '25')
   );
   
   // UI state
   const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [loadingDatastores, setLoadingDatastores] = useState(true);
   const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
   const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
   const [graphEnabled, setGraphEnabled] = useState<boolean>(false);
+  
+  // Check if user has GetZep credentials available
+  const hasGetZepCredentials = connections.some(c => 
+    c.provider_name === 'getzep' && 
+    c.connection_status === 'active'
+  );
   
 
 
@@ -80,47 +69,62 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
     }
   }, [user]);
 
-  // Load agent settings
+  // Load agent settings from agentData prop (updated by parent)
   useEffect(() => {
-    const loadAgentSettings = async () => {
-      if (!agentId) return;
+    if (agentData?.metadata) {
+      const meta = agentData.metadata as Record<string, any>;
+      setAgentMetadata(meta);
+      const settings = (meta.settings || {}) as Record<string, any>;
+      setAgentSettings(settings);
+      setGraphEnabled(settings.use_account_graph === true);
+      
+      console.log('[MemoryTab] Loaded settings from agentData:', { settings, meta });
+    } else {
+      // Fallback for initial load if agentData doesn't have metadata
+      setAgentMetadata({});
+      setAgentSettings({});
+      setGraphEnabled(false);
+    }
+  }, [agentData?.metadata]);
+
+  // Initialize selected datastore from agent data or fetch if needed
+  useEffect(() => {
+    const loadDatastoreConnections = async () => {
+      if (!agentId || !user) return;
+      
       try {
-        const { data, error } = await supabase
-          .from('agents')
-          .select('metadata')
-          .eq('id', agentId)
-          .maybeSingle();
+        // Fetch current datastore connections for this agent
+        const { data: connections, error } = await supabase
+          .from('agent_datastores')
+          .select('*')
+          .eq('agent_id', agentId);
         
         if (error) {
-          console.warn('Error loading agent metadata:', error);
-          setAgentMetadata({});
-          setAgentSettings({});
-          setGraphEnabled(false);
+          console.warn('Error loading agent datastore connections:', error);
+          setSelectedDatastoreId(null);
+          setVectorMemoryEnabled(false);
           return;
         }
         
-        const meta = (data?.metadata || {}) as Record<string, any>;
-        setAgentMetadata(meta);
-        const settings = (meta.settings || {}) as Record<string, any>;
-        setAgentSettings(settings);
-        setGraphEnabled(settings.use_account_graph === true);
+        if (connections && connections.length > 0) {
+          // Get the first (and should be only) connected datastore
+          const firstConnection = connections[0];
+          setSelectedDatastoreId(firstConnection.datastore_id);
+          setVectorMemoryEnabled(true);
+        } else {
+          setSelectedDatastoreId(null);
+          setVectorMemoryEnabled(false);
+        }
       } catch (err) {
-        console.warn('Error in loadAgentSettings:', err);
-        setAgentMetadata({});
-        setAgentSettings({});
-        setGraphEnabled(false);
+        console.warn('Error in loadDatastoreConnections:', err);
+        setSelectedDatastoreId(null);
+        setVectorMemoryEnabled(false);
       }
     };
-    loadAgentSettings();
-  }, [agentId, supabase]);
-
-  // Initialize connected datastores from agent data
-  useEffect(() => {
-    if (agentData?.agent_datastores) {
-      const connected = agentData.agent_datastores.map(ad => ad.datastore_id);
-      setConnectedDatastores(connected);
-    }
-  }, [agentData]);
+    
+    // Load datastore connections when component mounts or agentId changes
+    loadDatastoreConnections();
+  }, [agentId, user, supabase]);
 
   const loadDatastores = async () => {
     if (!user) return;
@@ -131,6 +135,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         .from('datastores')
         .select('*')
         .eq('user_id', user.id)
+        .eq('type', 'pinecone') // Only load vector datastores (Pinecone)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -151,7 +156,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
     setLoading(true);
     
     try {
-      // Save datastore connections
+      // Save datastore connection (single datastore only)
       const { error: deleteError } = await supabase
         .from('agent_datastores')
         .delete()
@@ -159,16 +164,13 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
 
       if (deleteError) throw deleteError;
 
-      if (connectedDatastores.length > 0) {
-        const connections = connectedDatastores.map(datastoreId => ({
-          agent_id: agentId,
-          datastore_id: datastoreId,
-          user_id: user.id
-        }));
-
+      if (vectorMemoryEnabled && selectedDatastoreId) {
         const { error: insertError } = await supabase
           .from('agent_datastores')
-          .insert(connections);
+          .insert({
+            agent_id: agentId,
+            datastore_id: selectedDatastoreId
+          });
 
         if (insertError) throw insertError;
       }
@@ -178,19 +180,16 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         ...agentMetadata,
         settings: {
           ...agentSettings,
-          use_account_graph: graphEnabled,
-          memory_preferences: memoryPreferences,
+          use_account_graph: graphEnabled && hasGetZepCredentials, // Only save if credentials are available
           context_history_size: contextHistorySize
         }
       };
 
-      const { data, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('agents')
         .update({ metadata: updatedMetadata })
         .eq('id', agentId)
-        .eq('user_id', user.id)
-        .select()
-        .single();
+        .eq('user_id', user.id);
 
       if (updateError) throw updateError;
 
@@ -199,9 +198,15 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
 
       toast.success('Memory settings updated successfully! 🧠');
       
-      if (onAgentUpdated) {
-        onAgentUpdated(data);
-      }
+      // Show saved state for 2 seconds
+      setSaved(true);
+      setTimeout(() => {
+        setSaved(false);
+      }, 2000);
+      
+      // Don't call onAgentUpdated to avoid triggering unnecessary database updates
+      // The Memory tab manages its own state and we've already saved everything needed
+      // If we need to refresh parent data, it should be done through a separate refresh mechanism
       
     } catch (error: any) {
       console.error('Error updating memory settings:', error);
@@ -209,27 +214,23 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
     } finally {
       setLoading(false);
     }
-  }, [agentId, user, connectedDatastores, agentMetadata, agentSettings, graphEnabled, memoryPreferences, contextHistorySize, supabase, onAgentUpdated]);
+  }, [agentId, user, vectorMemoryEnabled, selectedDatastoreId, agentMetadata, agentSettings, graphEnabled, contextHistorySize, hasGetZepCredentials, supabase, onAgentUpdated]);
 
-  const getDatastoresByType = (type: string) => {
-    return availableDatastores.filter(ds => ds.type === type);
+
+  const handleVectorMemoryToggle = (enabled: boolean) => {
+    setVectorMemoryEnabled(enabled);
+    if (!enabled) {
+      setSelectedDatastoreId(null);
+    } else if (availableDatastores.length > 0 && !selectedDatastoreId) {
+      // Auto-select first datastore if none selected
+      setSelectedDatastoreId(availableDatastores[0].id);
+    }
   };
 
-  const handleDatastoreToggle = (datastoreId: string) => {
-    setConnectedDatastores(prev => 
-      prev.includes(datastoreId)
-        ? prev.filter(id => id !== datastoreId)
-        : [...prev, datastoreId]
-    );
+  const handleDatastoreSelection = (datastoreId: string) => {
+    setSelectedDatastoreId(datastoreId);
   };
 
-  const handleMemoryPreferenceToggle = (preferenceId: string) => {
-    setMemoryPreferences(prev => 
-      prev.includes(preferenceId)
-        ? prev.filter(id => id !== preferenceId)
-        : [...prev, preferenceId]
-    );
-  };
 
   return (
     <div className="space-y-4">
@@ -269,33 +270,18 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
             </p>
           </div>
 
-          <div className="space-y-4">
-            <Label className="text-base">Memory Preferences</Label>
-            {MEMORY_PREFERENCES.map((pref) => (
-              <div key={pref.id} className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-medium">{pref.label}</Label>
-                  <div className="text-xs text-muted-foreground">{pref.description}</div>
-                </div>
-                <Switch
-                  checked={memoryPreferences.includes(pref.id)}
-                  onCheckedChange={() => handleMemoryPreferenceToggle(pref.id)}
-                />
-              </div>
-            ))}
-          </div>
         </CardContent>
       </Card>
 
-      {/* Knowledge Sources */}
+      {/* Long Term Memory */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Database className="h-5 w-5" />
-            <span>Knowledge Sources</span>
+            <span>Long Term Memory</span>
           </CardTitle>
           <CardDescription>
-            Connect datastores to enhance your agent's knowledge
+            Connect datastores to enhance your agent's knowledge and memory
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -306,74 +292,94 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
             </div>
           ) : (
             <>
-              {/* Vector Datastores */}
+              {/* Vector Datastores - Episodic Memory */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium flex items-center space-x-2">
                   <Brain className="h-4 w-4" />
-                  <span>Vector Datastores (Semantic Search)</span>
+                  <span>Vector Datastores (Episodic Memory)</span>
                 </Label>
-                {getDatastoresByType('pinecone').length > 0 ? (
-                  <div className="space-y-2">
-                    {getDatastoresByType('pinecone').map((datastore) => (
-                      <div key={datastore.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <div className="font-medium text-sm">{datastore.name}</div>
-                          <div className="text-xs text-muted-foreground">{datastore.description}</div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Enable episodic memory to store and recall specific experiences, conversations, and contextual information. Select one vector datastore to use.
+                </div>
+                
+                {availableDatastores.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Enable/Disable Toggle */}
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Enable Episodic Memory</Label>
+                        <div className="text-xs text-muted-foreground">
+                          Store experiences and conversations for future recall
                         </div>
-                        <Switch
-                          checked={connectedDatastores.includes(datastore.id)}
-                          onCheckedChange={() => handleDatastoreToggle(datastore.id)}
-                        />
                       </div>
-                    ))}
+                      <Switch
+                        checked={vectorMemoryEnabled}
+                        onCheckedChange={handleVectorMemoryToggle}
+                      />
+                    </div>
+
+                    {/* Datastore Selection */}
+                    {vectorMemoryEnabled && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Select Vector Datastore</Label>
+                        <Select
+                          value={selectedDatastoreId || undefined}
+                          onValueChange={handleDatastoreSelection}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose a vector datastore..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableDatastores.map((datastore) => (
+                              <SelectItem key={datastore.id} value={datastore.id}>
+                                <div>
+                                  <div className="font-medium">{datastore.name}</div>
+                                  <div className="text-xs text-muted-foreground">{datastore.description}</div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedDatastoreId && (
+                          <div className="text-xs text-green-600 mt-1">
+                            ✓ Selected: {availableDatastores.find(d => d.id === selectedDatastoreId)?.name}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/50">
-                    No vector datastores available. Create one to enable semantic search.
+                    No vector datastores available. Create one to enable episodic memory.
                   </div>
                 )}
               </div>
 
-              {/* Knowledge Graph */}
+              {/* Account Knowledge Graph - Semantic Memory */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium flex items-center space-x-2">
                   <Lightbulb className="h-4 w-4" />
-                  <span>Knowledge Graph</span>
+                  <span>Knowledge Graph (Semantic Memory)</span>
                 </Label>
-                {getDatastoresByType('getzep').length > 0 ? (
-                  <div className="space-y-2">
-                    {getDatastoresByType('getzep').map((datastore) => (
-                      <div key={datastore.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <div className="font-medium text-sm">{datastore.name}</div>
-                          <div className="text-xs text-muted-foreground">{datastore.description}</div>
-                        </div>
-                        <Switch
-                          checked={connectedDatastores.includes(datastore.id)}
-                          onCheckedChange={() => handleDatastoreToggle(datastore.id)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/50">
-                    No knowledge graph datastores available.
-                  </div>
-                )}
-              </div>
-
-              {/* Account Graph Toggle */}
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-medium">Use Account Knowledge Graph</Label>
-                  <div className="text-xs text-muted-foreground">
-                    Enable access to your account-wide knowledge graph
-                  </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Enable semantic memory to access structured knowledge, concepts, and relationships from your account-wide knowledge graph.
                 </div>
-                <Switch
-                  checked={graphEnabled}
-                  onCheckedChange={setGraphEnabled}
-                />
+                <div className={`flex items-center justify-between p-3 border rounded-lg ${!hasGetZepCredentials ? 'opacity-50' : ''}`}>
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium">Enable Semantic Memory</Label>
+                    <div className="text-xs text-muted-foreground">
+                      {hasGetZepCredentials 
+                        ? "Access structured knowledge and concept relationships"
+                        : "GetZep credentials required. Configure in Integrations."
+                      }
+                    </div>
+                  </div>
+                  <Switch
+                    checked={graphEnabled && hasGetZepCredentials}
+                    onCheckedChange={hasGetZepCredentials ? setGraphEnabled : undefined}
+                    disabled={!hasGetZepCredentials}
+                  />
+                </div>
               </div>
             </>
           )}
@@ -384,11 +390,16 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
 
       {/* Save Button */}
       <div className="flex justify-end pt-4 border-t">
-        <Button onClick={handleSave} disabled={loading}>
+        <Button onClick={handleSave} disabled={loading || saved}>
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Saving...
+            </>
+          ) : saved ? (
+            <>
+              <Check className="h-4 w-4 mr-2 text-green-500" />
+              Saved!
             </>
           ) : (
             <>

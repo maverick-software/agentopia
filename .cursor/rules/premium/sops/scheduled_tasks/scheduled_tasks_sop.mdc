@@ -1,0 +1,817 @@
+# Agentopia Scheduled Tasks - Standard Operating Procedure (SOP)
+
+**Document Version:** 1.0  
+**Created:** September 4, 2025  
+**Last Updated:** September 4, 2025  
+**Classification:** Premium SOP  
+
+## 📋 Table of Contents
+
+1. [Overview](#overview)
+2. [System Architecture](#system-architecture)
+3. [Database Schema](#database-schema)
+4. [Edge Functions](#edge-functions)
+5. [PostgreSQL Integration](#postgresql-integration)
+6. [Task Lifecycle Management](#task-lifecycle-management)
+7. [Troubleshooting Guide](#troubleshooting-guide)
+8. [Maintenance Procedures](#maintenance-procedures)
+9. [Security Considerations](#security-considerations)
+10. [Performance Optimization](#performance-optimization)
+
+---
+
+## 1. Overview
+
+### Purpose
+This SOP provides comprehensive guidelines for managing Agentopia's scheduled task system, which enables automated execution of agent instructions at specified times and intervals using PostgreSQL's `pg_cron` extension.
+
+### Scope
+- Task creation and management
+- Automated scheduling via `pg_cron`
+- Multi-step workflow execution
+- Error handling and recovery
+- Performance monitoring and optimization
+
+### Key Features
+- **One-time and recurring tasks** with minute-level precision
+- **Multi-step workflows** with context passing between steps
+- **Timezone-aware scheduling** with IANA timezone support
+- **Automated execution** via PostgreSQL `pg_cron` and Supabase Edge Functions
+- **Real-time status tracking** and execution history
+
+---
+
+## 2. System Architecture
+
+### Core Components
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend UI   │    │  Edge Functions │    │   PostgreSQL    │
+│                 │    │                 │    │                 │
+│ TaskWizardModal │────│  agent-tasks    │────│  agent_tasks    │
+│ TaskListModal   │    │  task-executor  │    │  task_steps     │
+│ ScheduleTab     │    │                 │    │  pg_cron        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   Chat System   │
+                    │                 │
+                    │ Agent Execution │
+                    │ Context Passing │
+                    │ Result Handling │
+                    └─────────────────┘
+```
+
+### Data Flow
+1. **Task Creation**: User creates task via frontend wizard
+2. **Scheduling**: Task scheduled with `pg_cron` using cron expressions
+3. **Execution**: `pg_cron` triggers `task-executor` Edge Function
+4. **Processing**: Task instructions sent to agent via chat system
+5. **Result Handling**: Results sent to target conversation or new conversation
+
+---
+
+## 3. Database Schema
+
+### Primary Tables
+
+#### `agent_tasks`
+Main table storing scheduled task information.
+
+```sql
+CREATE TABLE agent_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    agent_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    task_type TEXT NOT NULL DEFAULT 'scheduled', -- 'scheduled' | 'event_based'
+    status TEXT NOT NULL DEFAULT 'active', -- 'active' | 'paused' | 'completed' | 'failed' | 'cancelled'
+    instructions TEXT NOT NULL,
+    selected_tools JSONB DEFAULT '[]'::jsonb,
+    cron_expression TEXT, -- Cron pattern with optional comments (e.g., "*/5 * * * * # time=19:15")
+    timezone TEXT NOT NULL DEFAULT 'UTC', -- IANA timezone identifier
+    next_run_at TIMESTAMPTZ, -- UTC timestamp for next execution
+    last_run_at TIMESTAMPTZ, -- UTC timestamp of last execution
+    event_trigger_type TEXT,
+    event_trigger_config JSONB DEFAULT '{}'::jsonb,
+    total_executions INTEGER NOT NULL DEFAULT 0,
+    successful_executions INTEGER NOT NULL DEFAULT 0,
+    failed_executions INTEGER NOT NULL DEFAULT 0,
+    max_executions INTEGER, -- NULL for unlimited, 1 for one-time tasks
+    start_date DATE, -- Task start date (user timezone)
+    end_date DATE, -- Optional task end date (user timezone)
+    conversation_id UUID, -- Target conversation for results
+    is_multi_step BOOLEAN DEFAULT false, -- Indicates multi-step workflow
+    step_count INTEGER DEFAULT 0, -- Number of steps in workflow
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by UUID
+);
+```
+
+#### `task_steps`
+Stores individual steps for multi-step workflows.
+
+```sql
+CREATE TABLE task_steps (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+    step_order INTEGER NOT NULL, -- Execution order (1, 2, 3...)
+    step_name TEXT NOT NULL,
+    instructions TEXT NOT NULL,
+    include_previous_context BOOLEAN NOT NULL DEFAULT false,
+    context_data JSONB DEFAULT '{}'::jsonb,
+    status task_step_status NOT NULL DEFAULT 'pending', -- 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+    execution_result JSONB DEFAULT '{}'::jsonb,
+    execution_started_at TIMESTAMPTZ,
+    execution_completed_at TIMESTAMPTZ,
+    execution_duration_ms INTEGER,
+    error_message TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    CONSTRAINT task_steps_step_order_positive CHECK (step_order > 0),
+    CONSTRAINT task_steps_retry_count_non_negative CHECK (retry_count >= 0),
+    CONSTRAINT unique_task_step_order UNIQUE (task_id, step_order)
+);
+```
+
+#### `agent_task_executions`
+Execution history and audit trail.
+
+```sql
+CREATE TABLE agent_task_executions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL,
+    agent_id UUID NOT NULL,
+    status TEXT NOT NULL, -- 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+    trigger_type TEXT NOT NULL, -- 'scheduled' | 'manual'
+    trigger_data JSONB DEFAULT '{}'::jsonb,
+    instructions_used TEXT NOT NULL,
+    tools_used JSONB DEFAULT '[]'::jsonb,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    duration_ms INTEGER,
+    output TEXT,
+    tool_outputs JSONB DEFAULT '[]'::jsonb,
+    error_message TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    conversation_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### Key Indexes
+
+```sql
+-- Performance indexes for common query patterns
+CREATE INDEX idx_agent_tasks_next_run ON agent_tasks(next_run_at) WHERE status = 'active';
+CREATE INDEX idx_agent_tasks_user_agent ON agent_tasks(user_id, agent_id);
+CREATE INDEX idx_agent_tasks_status ON agent_tasks(status);
+CREATE INDEX idx_task_steps_task_order ON task_steps(task_id, step_order);
+CREATE INDEX idx_task_steps_status ON task_steps(status);
+CREATE INDEX idx_task_executions_task_id ON agent_task_executions(task_id);
+```
+
+### Database Functions
+
+#### Task Step Management Functions
+
+```sql
+-- Create a new task step
+CREATE OR REPLACE FUNCTION create_task_step(
+    p_task_id UUID,
+    p_step_name TEXT,
+    p_instructions TEXT,
+    p_include_previous_context BOOLEAN DEFAULT false,
+    p_step_order INTEGER DEFAULT NULL
+) RETURNS UUID;
+
+-- Update existing task step
+CREATE OR REPLACE FUNCTION update_task_step(
+    p_step_id UUID,
+    p_step_name TEXT DEFAULT NULL,
+    p_instructions TEXT DEFAULT NULL,
+    p_include_previous_context BOOLEAN DEFAULT NULL
+) RETURNS BOOLEAN;
+
+-- Delete task step with reordering
+CREATE OR REPLACE FUNCTION delete_task_step(
+    p_step_id UUID
+) RETURNS BOOLEAN;
+
+-- Reorder task steps
+CREATE OR REPLACE FUNCTION reorder_task_steps(
+    p_task_id UUID,
+    p_step_order_map JSONB
+) RETURNS BOOLEAN;
+```
+
+---
+
+## 4. Edge Functions
+
+### `agent-tasks` Function
+**Location**: `supabase/functions/agent-tasks/index.ts`
+
+#### Responsibilities
+- CRUD operations for tasks and steps
+- Cron expression generation and validation
+- `pg_cron` scheduling integration
+- Next run time calculation using Croner library
+- Timezone handling and UTC conversion
+
+#### Key Methods
+
+```typescript
+// Schedule task with pg_cron
+async function scheduleTaskWithPgCron(
+    supabase: any, 
+    taskId: string, 
+    cronExpression: string, 
+    taskData: any
+): Promise<boolean>
+
+// Calculate next run time
+function calculateNextRunTime(
+    cronExpression: string, 
+    timezone: string = 'UTC', 
+    isOneTime: boolean = false
+): string | null
+
+// Convert timezone-aware cron to UTC
+function convertCronToUTC(
+    cronExpression: string, 
+    timezone: string = 'UTC'
+): string
+```
+
+#### Cron Expression Handling
+- **Comment Support**: Preserves user time intent with comments (e.g., `*/5 * * * * # time=19:15`)
+- **Timezone Conversion**: Converts user timezone to UTC for `pg_cron`
+- **Validation**: Ensures cron expressions are valid and safe
+
+### `task-executor` Function
+**Location**: `supabase/functions/task-executor/index.ts`
+
+#### Responsibilities
+- Automated task execution triggered by `pg_cron`
+- Manual task execution via "Run Now" functionality
+- Multi-step workflow processing
+- Context passing between steps
+- Status updates and execution tracking
+
+#### Execution Flow
+
+```typescript
+// Main execution handler
+async function executeSpecificTask(supabase: any, taskId: string, triggerType: string = 'scheduled') {
+    // 1. Load task and validate status
+    // 2. Check if multi-step or single-step
+    // 3. Execute steps sequentially
+    // 4. Handle context passing
+    // 5. Update task status and next_run_at
+    // 6. Create execution record
+}
+
+// Single step execution
+async function executeSingleStep(supabase: any, task: any, stepData: any, context?: string) {
+    // 1. Prepare instructions with optional context
+    // 2. Call chat system with agent instructions
+    // 3. Handle tool execution and results
+    // 4. Return execution result
+}
+```
+
+---
+
+## 5. PostgreSQL Integration
+
+### `pg_cron` Setup
+
+#### Extension Installation
+```sql
+-- Enable pg_cron extension (requires superuser)
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Grant usage to authenticated users
+GRANT USAGE ON SCHEMA cron TO authenticated;
+```
+
+#### Job Scheduling Pattern
+```sql
+-- Example pg_cron job creation
+SELECT cron.schedule(
+    'agentopia_task_550e8400_e29b_41d4_a716_446655440000', -- Unique job name
+    '*/5 * * * *', -- Cron expression (every 5 minutes)
+    $$
+    SELECT net.http_post(
+        url := 'https://project.supabase.co/functions/v1/task-executor',
+        headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer service_role_key'
+        ),
+        body := jsonb_build_object(
+            'action', 'execute_task',
+            'task_id', '550e8400-e29b-41d4-a716-446655440000',
+            'trigger_type', 'scheduled'
+        )
+    );
+    $$
+);
+```
+
+### `pg_net` Integration
+Uses `pg_net.http_post` to trigger Edge Functions from within PostgreSQL.
+
+#### Configuration
+```sql
+-- Ensure pg_net extension is available
+SELECT * FROM pg_available_extensions WHERE name = 'pg_net';
+
+-- Example HTTP POST usage
+SELECT net.http_post(
+    url := 'https://project.supabase.co/functions/v1/task-executor',
+    headers := '{"Content-Type": "application/json", "Authorization": "Bearer token"}'::jsonb,
+    body := '{"action": "execute_task", "task_id": "uuid"}'::jsonb
+);
+```
+
+---
+
+## 6. Task Lifecycle Management
+
+### Task Creation Process
+
+1. **Frontend Wizard**
+   - User completes 6-step wizard (type, schedule, recurrence, instructions, title, conversation)
+   - Form validation ensures required fields are complete
+   - Timezone auto-detection with manual override option
+
+2. **Backend Processing**
+   ```typescript
+   // agent-tasks Edge Function
+   POST /functions/v1/agent-tasks
+   {
+     "agent_id": "uuid",
+     "name": "Task Name",
+     "instructions": "Task instructions for agent",
+     "task_type": "scheduled",
+     "cron_expression": "*/5 * * * * # time=19:15",
+     "timezone": "America/Los_Angeles",
+     "start_date": "2025-09-04",
+     "end_date": "2025-09-06",
+     "max_executions": null // null for recurring, 1 for one-time
+   }
+   ```
+
+3. **Database Operations**
+   - Insert into `agent_tasks` table
+   - Calculate `next_run_at` in UTC
+   - Create `task_steps` if multi-step workflow
+   - Schedule with `pg_cron`
+
+### Task Execution Process
+
+1. **Trigger Event**
+   - `pg_cron` executes scheduled job
+   - HTTP POST to `task-executor` Edge Function
+   - Service role authentication
+
+2. **Task Processing**
+   ```typescript
+   // task-executor execution flow
+   1. Load task from database
+   2. Validate task is active and due
+   3. Check for multi-step vs single-step
+   4. Execute steps sequentially
+   5. Pass context between steps if configured
+   6. Update execution counters
+   7. Calculate next run time
+   8. Create execution record
+   ```
+
+3. **Agent Interaction**
+   - Instructions sent to agent via chat system
+   - Agent processes with available tools
+   - Results captured and stored
+   - Target conversation receives results
+
+### Status Management
+
+#### Task Statuses
+- **`active`**: Task is scheduled and will execute
+- **`paused`**: Task is temporarily disabled
+- **`completed`**: One-time task completed or max executions reached
+- **`failed`**: Task encountered unrecoverable error
+- **`cancelled`**: Task manually cancelled by user
+
+#### Step Statuses
+- **`pending`**: Step awaiting execution
+- **`running`**: Step currently executing
+- **`completed`**: Step executed successfully
+- **`failed`**: Step execution failed
+- **`skipped`**: Step skipped due to workflow logic
+
+---
+
+## 7. Troubleshooting Guide
+
+### Common Issues
+
+#### 1. Cron Expression Parsing Errors
+**Symptoms**: Tasks not scheduling, "Invalid cron expression" errors
+
+**Diagnosis**:
+```sql
+-- Check task cron expressions
+SELECT id, name, cron_expression, status, next_run_at 
+FROM agent_tasks 
+WHERE status = 'active' AND next_run_at IS NULL;
+```
+
+**Solutions**:
+- Verify cron expression format (5 fields: minute hour day month dayofweek)
+- Check for unsupported characters or ranges
+- Validate timezone-specific expressions
+- Test with Croner library in task-executor
+
+#### 2. pg_cron Jobs Not Executing
+**Symptoms**: Tasks scheduled but never execute
+
+**Diagnosis**:
+```sql
+-- Check pg_cron jobs
+SELECT jobname, schedule, active, jobid 
+FROM cron.job 
+WHERE jobname LIKE 'agentopia_task_%';
+
+-- Check pg_cron job run history
+SELECT jobname, runid, job_pid, database, username, command, status, return_message, start_time, end_time
+FROM cron.job_run_details 
+WHERE jobname LIKE 'agentopia_task_%'
+ORDER BY start_time DESC;
+```
+
+**Solutions**:
+- Verify pg_cron extension is enabled
+- Check job names don't contain invalid characters
+- Ensure service role key is valid in job definition
+- Validate Supabase URL in HTTP POST calls
+
+#### 3. Next Run Time Calculation Issues
+**Symptoms**: Incorrect "Next run at" display, tasks not executing at expected times
+
+**Diagnosis**:
+```typescript
+// Test Croner library calculation
+import Croner from 'https://esm.sh/croner@4';
+
+const cronExpression = "*/5 * * * *";
+const timezone = "America/Los_Angeles";
+const cronJob = new Croner(cronExpression, { timezone });
+const nextRun = cronJob.next();
+console.log('Next run:', nextRun.toISOString());
+```
+
+**Solutions**:
+- Strip comments from cron expressions before passing to Croner
+- Validate timezone identifiers are IANA-compliant
+- Handle edge cases for minute-based intervals
+- Ensure UTC conversion is correct
+
+#### 4. Multi-Step Context Passing Failures
+**Symptoms**: Steps execute but context not passed correctly
+
+**Diagnosis**:
+```sql
+-- Check step execution results
+SELECT ts.step_order, ts.step_name, ts.status, ts.execution_result, ts.context_data
+FROM task_steps ts
+JOIN agent_tasks at ON ts.task_id = at.id
+WHERE at.id = 'task-uuid'
+ORDER BY ts.step_order;
+```
+
+**Solutions**:
+- Verify `include_previous_context` is set to true
+- Check execution_result is properly formatted JSON
+- Ensure context data size doesn't exceed limits
+- Validate step ordering is correct
+
+### Error Monitoring
+
+#### Key Metrics to Monitor
+```sql
+-- Failed task executions in last 24 hours
+SELECT COUNT(*) as failed_executions
+FROM agent_task_executions
+WHERE status = 'failed' 
+AND created_at > NOW() - INTERVAL '24 hours';
+
+-- Tasks with no successful executions
+SELECT at.id, at.name, at.total_executions, at.successful_executions
+FROM agent_tasks at
+WHERE at.total_executions > 0 
+AND at.successful_executions = 0;
+
+-- Average execution duration by task
+SELECT at.name, AVG(ate.duration_ms) as avg_duration_ms
+FROM agent_tasks at
+JOIN agent_task_executions ate ON at.id = ate.task_id
+WHERE ate.completed_at IS NOT NULL
+GROUP BY at.id, at.name
+ORDER BY avg_duration_ms DESC;
+```
+
+---
+
+## 8. Maintenance Procedures
+
+### Daily Maintenance
+
+#### 1. Execution Status Review
+```sql
+-- Daily execution summary
+SELECT 
+    DATE(created_at) as execution_date,
+    COUNT(*) as total_executions,
+    COUNT(*) FILTER (WHERE status = 'completed') as successful,
+    COUNT(*) FILTER (WHERE status = 'failed') as failed,
+    AVG(duration_ms) as avg_duration_ms
+FROM agent_task_executions
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY DATE(created_at)
+ORDER BY execution_date DESC;
+```
+
+#### 2. Clean Up Old Execution Records
+```sql
+-- Archive executions older than 30 days
+DELETE FROM agent_task_executions
+WHERE created_at < NOW() - INTERVAL '30 days'
+AND status IN ('completed', 'failed');
+```
+
+### Weekly Maintenance
+
+#### 1. Performance Analysis
+```sql
+-- Identify slow-running tasks
+SELECT 
+    at.name,
+    COUNT(ate.id) as execution_count,
+    AVG(ate.duration_ms) as avg_duration,
+    MAX(ate.duration_ms) as max_duration,
+    MIN(ate.duration_ms) as min_duration
+FROM agent_tasks at
+JOIN agent_task_executions ate ON at.id = ate.task_id
+WHERE ate.created_at > NOW() - INTERVAL '7 days'
+GROUP BY at.id, at.name
+HAVING AVG(ate.duration_ms) > 30000 -- Tasks taking > 30 seconds
+ORDER BY avg_duration DESC;
+```
+
+#### 2. Orphaned Job Cleanup
+```sql
+-- Find pg_cron jobs without corresponding tasks
+SELECT cj.jobname, cj.schedule
+FROM cron.job cj
+WHERE cj.jobname LIKE 'agentopia_task_%'
+AND NOT EXISTS (
+    SELECT 1 FROM agent_tasks at
+    WHERE 'agentopia_task_' || REPLACE(at.id::text, '-', '_') = cj.jobname
+);
+
+-- Remove orphaned jobs (run with caution)
+SELECT cron.unschedule(jobname)
+FROM cron.job
+WHERE jobname LIKE 'agentopia_task_%'
+AND NOT EXISTS (
+    SELECT 1 FROM agent_tasks at
+    WHERE 'agentopia_task_' || REPLACE(at.id::text, '-', '_') = jobname
+);
+```
+
+### Monthly Maintenance
+
+#### 1. Database Optimization
+```sql
+-- Analyze table statistics
+ANALYZE agent_tasks;
+ANALYZE task_steps;
+ANALYZE agent_task_executions;
+
+-- Reindex if needed
+REINDEX INDEX idx_agent_tasks_next_run;
+REINDEX INDEX idx_task_steps_task_order;
+```
+
+#### 2. Capacity Planning
+```sql
+-- Growth metrics
+SELECT 
+    DATE_TRUNC('month', created_at) as month,
+    COUNT(*) as new_tasks,
+    SUM(total_executions) as total_executions
+FROM agent_tasks
+WHERE created_at > NOW() - INTERVAL '12 months'
+GROUP BY DATE_TRUNC('month', created_at)
+ORDER BY month;
+```
+
+---
+
+## 9. Security Considerations
+
+### Authentication & Authorization
+
+#### Row Level Security (RLS)
+```sql
+-- Users can only access their own tasks
+CREATE POLICY agent_tasks_user_access ON agent_tasks
+    FOR ALL TO authenticated
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
+
+-- Service role has full access for system operations
+CREATE POLICY agent_tasks_service_access ON agent_tasks
+    FOR ALL TO service_role
+    USING (true)
+    WITH CHECK (true);
+```
+
+#### Edge Function Security
+- **Service Role Authentication**: Task execution uses service role key
+- **Input Validation**: All user inputs validated and sanitized
+- **SQL Injection Prevention**: Parameterized queries and RPC functions
+- **Rate Limiting**: Prevent abuse through Supabase rate limits
+
+### Data Protection
+
+#### Sensitive Information Handling
+- **Instruction Content**: Task instructions may contain sensitive data
+- **Execution Results**: Agent responses stored in execution records
+- **Context Data**: Multi-step context may include confidential information
+
+#### Encryption at Rest
+- All data encrypted at rest via Supabase/PostgreSQL
+- Connection strings and API keys stored securely
+- Service role keys managed through environment variables
+
+### Access Control
+
+#### Principle of Least Privilege
+- Users can only manage their own tasks
+- Service role used only for system operations
+- Database functions validate user permissions
+
+#### Audit Trail
+```sql
+-- Complete execution audit trail
+SELECT 
+    ate.created_at,
+    at.name as task_name,
+    ag.name as agent_name,
+    ate.trigger_type,
+    ate.status,
+    ate.duration_ms,
+    CASE WHEN ate.error_message IS NOT NULL THEN 'ERROR' ELSE 'SUCCESS' END as result
+FROM agent_task_executions ate
+JOIN agent_tasks at ON ate.task_id = at.id
+JOIN agents ag ON ate.agent_id = ag.id
+WHERE at.user_id = auth.uid()
+ORDER BY ate.created_at DESC;
+```
+
+---
+
+## 10. Performance Optimization
+
+### Database Optimization
+
+#### Index Strategy
+```sql
+-- Critical indexes for task execution
+CREATE INDEX CONCURRENTLY idx_agent_tasks_next_run_active 
+ON agent_tasks(next_run_at) 
+WHERE status = 'active' AND next_run_at IS NOT NULL;
+
+-- Partial index for pending steps
+CREATE INDEX CONCURRENTLY idx_task_steps_pending_execution
+ON task_steps(task_id, step_order)
+WHERE status = 'pending';
+
+-- Composite index for execution queries
+CREATE INDEX CONCURRENTLY idx_task_executions_task_date
+ON agent_task_executions(task_id, created_at DESC);
+```
+
+#### Query Optimization
+```sql
+-- Efficient next run query
+SELECT id, agent_id, cron_expression, timezone, instructions
+FROM agent_tasks
+WHERE status = 'active'
+AND next_run_at <= NOW()
+AND (max_executions IS NULL OR total_executions < max_executions)
+ORDER BY next_run_at
+LIMIT 100;
+```
+
+### Edge Function Optimization
+
+#### Connection Pooling
+```typescript
+// Reuse Supabase client connections
+const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    {
+        db: {
+            schema: 'public',
+        },
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false
+        }
+    }
+);
+```
+
+#### Batch Processing
+```typescript
+// Process multiple due tasks in single function call
+async function processDueTasks(supabase: any) {
+    const { data: dueTasks } = await supabase
+        .from('agent_tasks')
+        .select('*')
+        .eq('status', 'active')
+        .lte('next_run_at', new Date().toISOString())
+        .limit(50);
+    
+    // Process tasks concurrently with controlled concurrency
+    const results = await Promise.allSettled(
+        dueTasks.map(task => executeSpecificTask(supabase, task.id, 'scheduled'))
+    );
+    
+    return results;
+}
+```
+
+### Monitoring & Alerting
+
+#### Key Performance Indicators (KPIs)
+- **Task Execution Success Rate**: > 95%
+- **Average Execution Duration**: < 30 seconds
+- **Queue Depth**: < 100 pending tasks
+- **Error Rate**: < 5% of total executions
+
+#### Monitoring Queries
+```sql
+-- Real-time execution metrics
+CREATE OR REPLACE VIEW task_execution_metrics AS
+SELECT 
+    COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour') as executions_last_hour,
+    COUNT(*) FILTER (WHERE status = 'completed' AND created_at > NOW() - INTERVAL '1 hour') as successful_last_hour,
+    COUNT(*) FILTER (WHERE status = 'failed' AND created_at > NOW() - INTERVAL '1 hour') as failed_last_hour,
+    AVG(duration_ms) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour') as avg_duration_last_hour,
+    COUNT(*) FILTER (WHERE status = 'running') as currently_running
+FROM agent_task_executions;
+```
+
+---
+
+## Conclusion
+
+This SOP provides comprehensive guidelines for managing Agentopia's scheduled task system. Regular adherence to these procedures ensures reliable, secure, and performant task execution.
+
+### Key Success Factors
+1. **Regular Monitoring**: Daily review of execution metrics
+2. **Proactive Maintenance**: Weekly cleanup and optimization
+3. **Security First**: Maintain RLS policies and audit trails
+4. **Performance Focus**: Monitor and optimize slow queries
+5. **Documentation**: Keep procedures updated with system changes
+
+### Support Resources
+- **Database Logs**: Monitor PostgreSQL logs for errors
+- **Edge Function Logs**: Review Supabase function logs
+- **pg_cron Status**: Check cron.job_run_details for execution history
+- **Performance Metrics**: Use provided monitoring queries
+
+For technical support or questions about this SOP, consult the development team or refer to the Agentopia documentation.
+
+---
+
+**Document Control**
+- **Author**: Agentopia Development Team
+- **Review Cycle**: Quarterly
+- **Next Review**: December 2025
+- **Classification**: Premium SOP

@@ -104,25 +104,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Skip state updates if it's the same user and just a token refresh
       if (prevUserId && newUserId && prevUserId === newUserId && _event === 'TOKEN_REFRESHED') {
         console.log('[AuthContext] Token refreshed but same user - SKIPPING state update to prevent re-renders');
+        // Ensure loading is false even for token refresh events
+        if (loading) {
+          console.log('[AuthContext] Setting loading = false for same-user TOKEN_REFRESHED event');
+          setLoading(false);
+        }
         return; // Don't update state if it's just a token refresh for the same user
       }
       
       // Also skip if event is SIGNED_IN but user hasn't changed
       if (prevUserId && newUserId && prevUserId === newUserId && _event === 'SIGNED_IN') {
         console.log('[AuthContext] SIGNED_IN event but same user - SKIPPING state update');
+        // Debug: Check if this is caused by visibility changes
+        if (document.hidden) {
+          console.log('[AuthContext] SIGNED_IN event triggered while document is hidden (tab switch)');
+        }
+        
+        // CRITICAL FIX: Even if we skip the state update, we need to ensure loading is false
+        // This prevents "Loading Session..." from getting stuck on visibility changes
+        if (loading) {
+          console.log('[AuthContext] Setting loading = false for same-user SIGNED_IN event');
+          setLoading(false);
+        }
         return;
       }
       
       console.log('[AuthContext] Auth state actually changed, updating user state');
       setUser(session?.user ?? null); 
-      // Set loading false *only* here, after auth state is confirmed by the listener
-      if (loading) { // Optional: Check to avoid redundant sets if listener fires multiple times quickly
-        console.log('[AuthContext] Setting loading = false inside onAuthStateChange');
-        setLoading(false); 
-      }
+      // Always set loading false when auth state changes, regardless of current loading state
+      console.log('[AuthContext] Setting loading = false inside onAuthStateChange');
+      setLoading(false);
     });
 
-    // Still attempt to get session early, but don't set loading state here
+    // Still attempt to get session early, and ensure loading gets set to false
     supabase.auth.getSession().then(({ data: { session } }) => {
         // Check if user state is still null from initial useState
         // AND session exists AND listener hasn't set user yet
@@ -130,7 +144,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('[AuthContext] Pre-setting user from initial getSession (listener might update again)');
             setUser(session.user); 
         }
-        // REMOVED: if(loading) setLoading(false); 
+        
+        // CRITICAL: Always set loading to false after getSession, as a fallback
+        // in case the auth listener doesn't fire or gets missed
+        console.log('[AuthContext] Setting loading = false from getSession fallback');
+        setLoading(false);
     });
 
     return () => {

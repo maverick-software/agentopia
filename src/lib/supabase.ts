@@ -12,8 +12,20 @@ if (!supabaseAnonKey) {
   throw new Error('VITE_SUPABASE_ANON_KEY is not defined in environment variables');
 }
 
+// Global singleton pattern that survives HMR in development
+declare global {
+  var __supabase_client__: any;
+}
+
 // Create a single instance of the Supabase client with optimized settings
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+let supabaseInstance = globalThis.__supabase_client__;
+
+if (!supabaseInstance) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔧 Creating new Supabase client instance');
+  }
+  
+  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -30,15 +42,34 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   realtime: {
     params: {
-      eventsPerSecond: 2
+      eventsPerSecond: 15, // Increased for better responsiveness
+      heartbeatIntervalMs: 20000, // More frequent heartbeat (20 seconds)
+      reconnectDelay: 1000, // Faster reconnect (1 second)
+      timeout: 15000, // Longer timeout for stability (15 seconds)
+      logger: (level, message, data) => {
+        // Only log errors to reduce noise
+        if (level === 'error') {
+          console.error('Supabase Realtime:', message, data);
+        }
+      }
     }
   },
-  // Increase timeout and add proper error handling
+      // Increase timeout and add proper error handling
   opts: {
-    timeout: 60000, // Increased to 60 seconds
+    timeout: 60000, // 60 seconds for regular API calls
     retries: 3
   }
-});
+  });
+  
+  // Store globally to survive HMR
+  globalThis.__supabase_client__ = supabaseInstance;
+} else {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔄 Reusing existing Supabase client instance');
+  }
+}
+
+export const supabase = supabaseInstance;
 
 // Admin client - for backend service-to-service communication
 let supabaseAdminClient: SupabaseClient | null = null;
@@ -61,6 +92,7 @@ export const getSupabaseAdmin = (): SupabaseClient => {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+      storageKey: 'agentopia-admin-token' // Separate storage key for admin client
     },
     // Add any other admin-specific options if needed
   });
@@ -162,6 +194,52 @@ export const isSupabaseConnected = async () => {
     });
     return false;
   }
+};
+
+// Utility function for robust subscription setup with better error handling
+export const createRobustSubscription = (
+  channelName: string,
+  config: {
+    table: string;
+    event: string;
+    schema?: string;
+    filter?: string;
+  },
+  onData: (payload: any) => void,
+  onStatus?: (status: string, error?: any) => void
+) => {
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: config.event as any,
+        schema: config.schema || 'public',
+        table: config.table,
+        ...(config.filter && { filter: config.filter }),
+      },
+      onData
+    )
+    .subscribe((status, err) => {
+      const errorMessage = err || (status === 'CHANNEL_ERROR' ? 'Connection lost' : undefined);
+      
+      // Only log in development to reduce console noise
+      if (process.env.NODE_ENV === 'development') {
+        if (status === 'SUBSCRIBED') {
+          console.log(`✅ Connected to ${channelName}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.warn(`🔄 ${channelName} connection interrupted, auto-reconnecting...`);
+        } else if (status === 'CLOSED') {
+          console.info(`📪 ${channelName} subscription closed`);
+        } else if (status === 'TIMED_OUT') {
+          console.warn(`⏱️ ${channelName} subscription timed out`);
+        }
+      }
+      
+      onStatus?.(status, errorMessage);
+    });
+    
+  return channel;
 };
 
 // Initialize connection check

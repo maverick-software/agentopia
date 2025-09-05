@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
-  X, 
   Clock, 
   CheckCircle2, 
   AlertCircle, 
   XCircle, 
   Calendar, 
-  User, 
   MessageSquare,
   ExternalLink,
   RefreshCw
@@ -184,23 +182,16 @@ export function TaskHistoryModal({ isOpen, onClose, agentId }: TaskHistoryModalP
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold">Task Execution History</DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+      <DialogContent className="sm:max-w-6xl max-h-[85vh] overflow-hidden flex flex-col border-0 bg-transparent p-0">
+        <DialogTitle className="sr-only">Task Execution History</DialogTitle>
+        
+        <div className="bg-background border rounded-lg shadow-lg p-6 flex flex-col h-full">
+          <div className="flex-shrink-0 mb-6">
+            <h2 className="text-xl font-semibold mb-2">Task Execution History</h2>
+            <p className="text-sm text-muted-foreground">
+              View the execution history of all scheduled tasks for this agent.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            View the execution history of all scheduled tasks for this agent.
-          </p>
-        </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
           {loading ? (
@@ -245,9 +236,6 @@ export function TaskHistoryModal({ isOpen, onClose, agentId }: TaskHistoryModalP
                           {getStatusBadge(execution.status)}
                         </div>
                         
-                        <p className="text-xs text-muted-foreground mb-2 truncate">
-                          {execution.task_description || 'No description'}
-                        </p>
                         
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span className="flex items-center">
@@ -275,9 +263,6 @@ export function TaskHistoryModal({ isOpen, onClose, agentId }: TaskHistoryModalP
                         <div className="flex items-start justify-between">
                           <div>
                             <h5 className="font-medium">{selectedExecution.task_name}</h5>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedExecution.task_description}
-                            </p>
                           </div>
                           {getStatusBadge(selectedExecution.status)}
                         </div>
@@ -368,6 +353,7 @@ export function TaskHistoryModal({ isOpen, onClose, agentId }: TaskHistoryModalP
               </div>
             </div>
           )}
+        </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -221,6 +221,10 @@ function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC', 
       actualCron = cronPart.trim();
       userTime = timePart.trim();
       console.log('Extracted user time from cron comment:', userTime);
+    } else if (cronExpression.includes(' # ')) {
+      // Handle other comment formats by stripping them
+      actualCron = cronExpression.split(' # ')[0].trim();
+      console.log('Stripped comment from cron:', actualCron, 'from:', cronExpression);
     }
     
     // Parse cron expression: minute hour day month dayOfWeek

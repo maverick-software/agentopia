@@ -42,7 +42,7 @@ interface ChatModalsProps {
   agentId: string;
   agent: Agent | null;
   currentProcessingDetails: any;
-  agentSettingsInitialTab: 'identity' | 'behavior' | 'memory' | 'reasoning';
+  agentSettingsInitialTab: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
   
   // Handlers
   onAgentUpdated: (updatedAgent: Agent) => void;

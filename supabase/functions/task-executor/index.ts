@@ -6,7 +6,14 @@ import Croner from 'https://esm.sh/croner@4'
 // Helper function to calculate next run time using croner
 function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC'): string | null {
   try {
-    const cronJob = new Croner(cronExpression, { timezone });
+    // Strip comments from cron expression (Croner doesn't support comments)
+    let cleanCron = cronExpression;
+    if (cronExpression.includes(' # ')) {
+      cleanCron = cronExpression.split(' # ')[0].trim();
+      console.log('Cleaned cron expression for Croner:', cleanCron, 'from:', cronExpression);
+    }
+    
+    const cronJob = new Croner(cleanCron, { timezone });
     const nextRun = (cronJob as any).nextRun ? (cronJob as any).nextRun() : (cronJob as any).next();
     return nextRun ? nextRun.toISOString() : null;
   } catch (error) {
@@ -304,14 +311,24 @@ async function executeSpecificTask(supabase: any, taskId: string, triggerType: s
   try {
     const result = await executeTask(supabase, task, triggerType, triggerData)
     
-    // Update task statistics
+    // Calculate next run time for scheduled tasks
+    const nextRun = task.task_type === 'scheduled' && task.cron_expression 
+      ? calculateNextRunTime(task.cron_expression, task.timezone)
+      : null;
+    
+    const newTotalExecutions = task.total_executions + 1;
+    const isOneTimeCompleted = task.max_executions === 1 && newTotalExecutions >= 1;
+    
+    // Update task statistics and next run time
     await supabase
       .from('agent_tasks')
       .update({
-        total_executions: task.total_executions + 1,
+        total_executions: newTotalExecutions,
         successful_executions: result.success ? task.successful_executions + 1 : task.successful_executions,
         failed_executions: result.success ? task.failed_executions : task.failed_executions + 1,
-        last_run_at: new Date().toISOString()
+        last_run_at: new Date().toISOString(),
+        next_run_at: isOneTimeCompleted ? null : nextRun,
+        status: isOneTimeCompleted ? 'completed' : task.status
       })
       .eq('id', task.id)
 

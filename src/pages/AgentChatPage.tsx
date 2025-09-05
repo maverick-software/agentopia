@@ -48,7 +48,7 @@ export function AgentChatPage() {
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
-  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'identity' | 'behavior' | 'memory' | 'reasoning'>('identity');
+  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team'>('general');
   
   // Real-time message subscription
   const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
@@ -836,9 +836,23 @@ export function AgentChatPage() {
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log(`Successfully subscribed to messages for conversation ${selectedConversationId}`);
+          // Only log successful subscription in development
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Connected to messages for conversation ${selectedConversationId}`);
+          }
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('Message subscription error:', err);
+          // Less noisy error logging - connection drops are normal
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('🔄 Message connection interrupted, auto-reconnecting...');
+          }
+        } else if (status === 'CLOSED') {
+          if (process.env.NODE_ENV === 'development') {
+            console.info('📪 Message subscription closed');
+          }
+        } else if (status === 'TIMED_OUT') {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⏱️ Message subscription timed out, reconnecting...');
+          }
         }
       });
 
@@ -850,7 +864,7 @@ export function AgentChatPage() {
         supabase.removeChannel(channel);
       }
     };
-  }, [selectedConversationId, agentId, messageSubscription]);
+  }, [selectedConversationId, agentId]);
 
   // Check for active task executions when conversation is opened
   useEffect(() => {

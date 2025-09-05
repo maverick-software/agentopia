@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, createRobustSubscription } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface TaskExecution {
@@ -55,38 +55,33 @@ export function useAgentTaskStatus(agentId: string | null): UseAgentTaskStatusRe
     // Initial fetch
     fetchRecentExecutions();
 
-    // Set up real-time subscription for task executions
-    const channel = supabase
-      .channel(`agent-task-executions-${agentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'agent_task_executions',
-          filter: `agent_id=eq.${agentId}`,
-        },
-        (payload) => {
-          console.log('Task execution change:', payload);
-          
-          if (payload.eventType === 'INSERT') {
-            const newExecution = payload.new as TaskExecution;
-            setTaskExecutions(prev => [newExecution, ...prev.slice(0, 9)]); // Keep last 10
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedExecution = payload.new as TaskExecution;
-            setTaskExecutions(prev => 
-              prev.map(exec => exec.id === updatedExecution.id ? updatedExecution : exec)
-            );
-          }
+    // Set up real-time subscription for task executions using robust utility
+    const channel = createRobustSubscription(
+      `agent-task-executions-${agentId}`,
+      {
+        table: 'agent_task_executions',
+        event: '*',
+        filter: `agent_id=eq.${agentId}`,
+      },
+      (payload) => {
+        console.log('Task execution change:', payload);
+        
+        if (payload.eventType === 'INSERT') {
+          const newExecution = payload.new as TaskExecution;
+          setTaskExecutions(prev => [newExecution, ...prev.slice(0, 9)]); // Keep last 10
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedExecution = payload.new as TaskExecution;
+          setTaskExecutions(prev => 
+            prev.map(exec => exec.id === updatedExecution.id ? updatedExecution : exec)
+          );
         }
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Subscribed to agent task executions for agent ${agentId}`);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Task execution subscription error:', err);
+      },
+      (status, error) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn(`Task subscription failed for agent ${agentId}, will retry automatically`);
         }
-      });
+      }
+    );
 
     setSubscription(channel);
 

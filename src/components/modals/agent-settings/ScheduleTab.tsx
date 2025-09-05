@@ -74,6 +74,17 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
 
       const data = await response.json();
       
+      // Debug: Log the first task to see what data we're getting
+      if (data.tasks && data.tasks.length > 0) {
+        console.log('Sample task data:', {
+          id: data.tasks[0].id,
+          name: data.tasks[0].name,
+          next_run_at: data.tasks[0].next_run_at,
+          cron_expression: data.tasks[0].cron_expression,
+          timezone: data.tasks[0].timezone
+        });
+      }
+      
       // Filter out completed, cancelled, or expired one-time tasks from Active Tasks
       const allTasks = data.tasks || [];
       const activeTasks = allTasks.filter((task: Task) => {
@@ -138,6 +149,8 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
   };
 
   const refreshTaskSchedules = async () => {
+    console.log('Refreshing task schedules for', tasks.length, 'tasks');
+    
     // Refresh next_run_at for all tasks by triggering a no-op update
     for (const task of tasks) {
       if (task.cron_expression && task.task_type === 'scheduled') {
@@ -145,8 +158,10 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
           const { data: session } = await supabase.auth.getSession();
           if (!session?.session?.access_token) continue;
 
+          console.log('Refreshing task:', task.id, 'with cron:', task.cron_expression);
+
           // Trigger update to recalculate next_run_at
-          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-tasks`, {
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-tasks`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${session.session.access_token}`,
@@ -160,12 +175,20 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
               timezone: task.timezone || 'UTC'
             })
           });
+
+          if (!response.ok) {
+            console.error('Failed to refresh task:', task.id, response.status);
+          } else {
+            const result = await response.json();
+            console.log('Refreshed task:', task.id, 'next_run_at:', result.task?.next_run_at);
+          }
         } catch (error) {
           console.error('Error refreshing task schedule:', task.id, error);
         }
       }
     }
     
+    console.log('Reloading tasks in 1 second...');
     // Reload tasks after refresh
     setTimeout(() => loadTasks(), 1000);
   };
@@ -312,7 +335,6 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                         {getStatusIcon(task)}
                         <h5 className="font-medium text-sm">{task.title || task.name}</h5>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
                       {(task.schedule_label || task.cron_expression || task.schedule) && (
                         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
@@ -321,6 +343,25 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                           </span>
                         </div>
                       )}
+                      <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
+                        <Calendar className="h-3 w-3" />
+                        <span>
+                          {task.next_run_at ? (() => {
+                            try {
+                              const nextRun = new Date(task.next_run_at);
+                              return `Next run at: ${nextRun.toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              })}`;
+                            } catch (error) {
+                              return `Next run: Invalid date (${task.next_run_at})`;
+                            }
+                          })() : `Next run: Not scheduled (${task.next_run_at === null ? 'null' : 'undefined'})`}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2 ml-4">
                       <Button
