@@ -205,7 +205,10 @@ async function executeScheduledTasks(supabase: any) {
       if (task.max_executions && task.total_executions >= task.max_executions) {
         await supabase
           .from('agent_tasks')
-          .update({ status: 'completed' })
+          .update({ 
+            status: 'completed',
+            next_run_at: null // Clear next run time for completed one-time tasks
+          })
           .eq('id', task.id)
         continue
       }
@@ -230,14 +233,18 @@ async function executeScheduledTasks(supabase: any) {
       const nextRun = calculateNextRunTime(task.cron_expression!, task.timezone)
       
       // Update task statistics and next run time
+      const newTotalExecutions = task.total_executions + 1;
+      const isOneTimeCompleted = task.max_executions === 1 && newTotalExecutions >= 1;
+      
       await supabase
         .from('agent_tasks')
         .update({
-          total_executions: task.total_executions + 1,
+          total_executions: newTotalExecutions,
           successful_executions: result.success ? task.successful_executions + 1 : task.successful_executions,
           failed_executions: result.success ? task.failed_executions : task.failed_executions + 1,
           last_run_at: now,
-          next_run_at: nextRun
+          next_run_at: isOneTimeCompleted ? null : nextRun,
+          status: isOneTimeCompleted ? 'completed' : task.status
         })
         .eq('id', task.id)
 
@@ -368,7 +375,10 @@ async function executeEventBasedTask(supabase: any, eventType: string, eventData
       if (task.max_executions && task.total_executions >= task.max_executions) {
         await supabase
           .from('agent_tasks')
-          .update({ status: 'completed' })
+          .update({ 
+            status: 'completed',
+            next_run_at: null // Clear next run time for completed one-time tasks
+          })
           .eq('id', task.id)
         continue
       }

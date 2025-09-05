@@ -102,9 +102,6 @@ export function StepCard({
                   <X className="h-3 w-3" />
                 </Button>
               </div>
-              <Badge className="text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-full px-3 py-1 ml-2">
-                Step {step.step_order}
-              </Badge>
             </div>
           </div>
         </CardHeader>
@@ -210,12 +207,7 @@ export function StepCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <GripVertical className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
-            <h4 className={cn(
-              "font-medium text-sm",
-              step.instructions === 'Click edit to add instructions for this step...' 
-                ? "text-muted-foreground italic" 
-                : "text-gray-900 dark:text-gray-100"
-            )}>
+            <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">
               {step.display_name || step.step_name}
             </h4>
           </div>
@@ -252,11 +244,6 @@ export function StepCard({
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>
-            
-            {/* Step badge - visible when not hovering */}
-            <Badge className="text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-full px-3 py-1 group-hover:opacity-0 transition-opacity">
-              Step {step.step_order}
-            </Badge>
           </div>
         </div>
       </CardHeader>
@@ -294,13 +281,6 @@ export function StepCard({
             <p className="text-xs text-gray-500 truncate">
               {step.instructions.substring(0, 100)}...
             </p>
-          )}
-          
-          {!isExpanded && step.instructions === 'Click edit to add instructions for this step...' && (
-            <div className="flex items-center space-x-2 text-xs text-muted-foreground bg-muted/50 rounded p-2 mt-2">
-              <Edit3 className="h-3 w-3" />
-              <span className="italic">Click edit to add instructions for this step...</span>
-            </div>
           )}
         </div>
         

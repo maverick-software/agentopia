@@ -51,6 +51,7 @@ export function StepEditor({
   // UI state
   const [showContextPreview, setShowContextPreview] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showGuidelinesHelp, setShowGuidelinesHelp] = useState(false);
   const [showContextHelp, setShowContextHelp] = useState(false);
@@ -81,6 +82,7 @@ export function StepEditor({
       });
     }
     setValidationErrors([]);
+    setShowValidationErrors(false);
   }, [step, isOpen]);
 
   // Form validation
@@ -114,6 +116,7 @@ export function StepEditor({
   const handleSave = useCallback(async () => {
     const errors = validateForm();
     setValidationErrors(errors);
+    setShowValidationErrors(true); // Only show errors when user tries to save
     
     if (errors.length > 0) {
       return;
@@ -136,17 +139,28 @@ export function StepEditor({
   // Handle cancel
   const handleCancel = useCallback(() => {
     setValidationErrors([]);
+    setShowValidationErrors(false);
     setShowContextPreview(false);
     onCancel();
   }, [onCancel]);
 
-  // Real-time validation
+  // Clear validation errors when user makes changes (with debounce)
   useEffect(() => {
-    if (formData.step_name || formData.instructions) {
-      const errors = validateForm();
-      setValidationErrors(errors);
+    if (showValidationErrors) {
+      const timer = setTimeout(() => {
+        // Only clear if user has made some progress on both fields
+        const hasStepName = formData.step_name.trim().length > 0;
+        const hasInstructions = formData.instructions.trim().length >= 5;
+        
+        if (hasStepName && hasInstructions) {
+          setShowValidationErrors(false);
+          setValidationErrors([]);
+        }
+      }, 1000); // 1 second delay to avoid flashing
+      
+      return () => clearTimeout(timer);
     }
-  }, [formData, validateForm]);
+  }, [formData.step_name, formData.instructions, showValidationErrors]);
 
   const isEditing = !!step;
   const canShowContextPreview = previousStepResult && formData.include_previous_context;
@@ -482,7 +496,7 @@ export function StepEditor({
                 
                 <Button
                   onClick={handleSave}
-                  disabled={validationErrors.length > 0 || isSaving}
+                  disabled={isSaving}
                   className="flex-1"
                 >
                   {isSaving ? (
@@ -534,19 +548,19 @@ export function StepEditor({
             </Card>
           )}
 
-          {/* Validation errors */}
-          {validationErrors.length > 0 && (
-            <Card className="border-destructive/50 bg-destructive/10 rounded-lg">
+          {/* Validation errors - only show after save attempt */}
+          {showValidationErrors && validationErrors.length > 0 && (
+            <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 rounded-lg">
               <CardContent className="p-4">
                 <div className="flex items-start space-x-2">
-                  <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                  <HelpCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-destructive mb-2">
-                      Please fix the following issues:
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                      Please complete the following:
                     </p>
                     <ul className="space-y-1">
                       {validationErrors.map((error, index) => (
-                        <li key={index} className="text-xs text-red-700 flex items-start">
+                        <li key={index} className="text-xs text-blue-700 dark:text-blue-300 flex items-start">
                           <span className="mr-2">•</span>
                           <span>{error}</span>
                         </li>

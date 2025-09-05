@@ -6,7 +6,9 @@ import { TaskWizardModal } from '../TaskWizardModal';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { parseCronExpression, formatNextRunTime, getServerTime } from '@/utils/cronUtils';
+import { formatTaskScheduleDisplay } from '@/lib/utils/taskUtils';
 import { useAgentTaskStatus } from '@/hooks/useAgentTaskStatus';
+import { TaskHistoryModal } from '../TaskHistoryModal';
 
 interface Task {
   id: string;
@@ -124,7 +126,31 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
       }
 
       const data = await response.json();
-      setTasks(data.tasks || []);
+      
+      // Filter out completed, cancelled, or expired one-time tasks from Active Tasks
+      const allTasks = data.tasks || [];
+      const activeTasks = allTasks.filter((task: Task) => {
+        // Include if status is active
+        if (task.status !== 'active') return false;
+        
+        // For one-time tasks (max_executions = 1), check if they should still be active
+        if (task.max_executions === 1) {
+          // If it has no next_run_at (already executed), exclude from active
+          if (!task.next_run_at) return false;
+          
+          // If next_run_at is in the past (overdue), exclude from active
+          const nextRun = new Date(task.next_run_at);
+          const now = new Date();
+          if (nextRun.getTime() < now.getTime()) {
+            // Task is overdue - should be in history, not active
+            return false;
+          }
+        }
+        
+        return true;
+      });
+      
+      setTasks(activeTasks);
     } catch (error) {
       console.error('Error loading tasks:', error);
     } finally {
@@ -301,22 +327,26 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
                         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
                           <span>
-                            {task.schedule_label || 
-                             (task.cron_expression ? 
-                               (task.max_executions === 1 ? 
-                                 `One-time at ${parseCronExpression(task.cron_expression, task.timezone).replace('Daily at ', '')}` : 
-                                 parseCronExpression(task.cron_expression, task.timezone)
-                               ) : null) ||
-                             task.schedule}
+                            {task.schedule_label || formatTaskScheduleDisplay(task) || task.schedule}
                           </span>
                         </div>
                       )}
-                      {task.next_run_at && (
-                        <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
-                          <Calendar className="h-3 w-3" />
-                          <NextRunTimeDisplay nextRunAt={task.next_run_at} isOneTime={task.max_executions === 1} supabase={supabase} />
-                        </div>
-                      )}
+                      {task.next_run_at && (() => {
+                        // For one-time tasks, don't show "Next:" if the time has passed
+                        if (task.max_executions === 1) {
+                          const nextRun = new Date(task.next_run_at);
+                          const now = new Date();
+                          if (nextRun.getTime() < now.getTime()) {
+                            return null; // Hide "Next:" for overdue one-time tasks
+                          }
+                        }
+                        return (
+                          <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400 mt-1">
+                            <Calendar className="h-3 w-3" />
+                            <NextRunTimeDisplay nextRunAt={task.next_run_at} isOneTime={task.max_executions === 1} supabase={supabase} />
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-center space-x-2 ml-4">
                       <Button
@@ -360,14 +390,14 @@ export function ScheduleTab({ agentId, agentData, onAgentUpdated }: ScheduleTabP
         />
       )}
 
-      {/* Task History Modal would be rendered here */}
-      {/* {showTaskHistory && (
+      {/* Task History Modal */}
+      {showTaskHistory && (
         <TaskHistoryModal
           isOpen={showTaskHistory}
           onClose={() => setShowTaskHistory(false)}
           agentId={agentId}
         />
-      )} */}
+      )}
     </div>
   );
 }

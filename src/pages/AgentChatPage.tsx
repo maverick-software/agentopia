@@ -809,6 +809,13 @@ export function AgentChatPage() {
           console.log('New message received via realtime:', payload);
           const newMessage = payload.new as any;
           
+          // If this is an assistant message, hide any thinking indicator
+          if (newMessage.role === 'assistant') {
+            setThinkingMessageIndex(null);
+            setShowAIIndicator(false);
+            setAiState('completed');
+          }
+          
           // Convert database message to frontend Message format
           const message: Message = {
             role: newMessage.role,
@@ -844,6 +851,63 @@ export function AgentChatPage() {
       }
     };
   }, [selectedConversationId, agentId, messageSubscription]);
+
+  // Check for active task executions when conversation is opened
+  useEffect(() => {
+    if (!selectedConversationId || !agent?.id) return;
+
+    const checkActiveExecution = async () => {
+      try {
+        // Check if there's an active task execution for this conversation
+        const { data: executions, error } = await supabase
+          .from('agent_task_executions')
+          .select('*')
+          .eq('agent_id', agent.id)
+          .eq('conversation_id', selectedConversationId)
+          .in('status', ['running', 'pending'])
+          .order('started_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.error('Error checking active executions:', error);
+          return;
+        }
+
+        if (executions && executions.length > 0) {
+          console.log('Found active task execution, showing thinking indicator');
+          
+          // Show thinking indicator for active execution
+          const thinkingMessage: Message = {
+            role: 'thinking',
+            content: 'Processing your request...',
+            timestamp: new Date(),
+            agentId: agent.id,
+            userId: user?.id,
+            metadata: { isCompleted: false },
+            id: `thinking-${Date.now()}`,
+          };
+          
+          setMessages(prev => {
+            // Don't add if already exists
+            const hasThinking = prev.some(msg => msg.role === 'thinking' && !msg.metadata?.isCompleted);
+            if (hasThinking) return prev;
+            
+            const newMessages = [...prev, thinkingMessage];
+            setThinkingMessageIndex(newMessages.length - 1);
+            return newMessages;
+          });
+          
+          setShowAIIndicator(true);
+          setAiState('generating_response');
+        }
+      } catch (error) {
+        console.error('Error checking active executions:', error);
+      }
+    };
+
+    // Check immediately when conversation opens
+    checkActiveExecution();
+  }, [selectedConversationId, agent?.id, user?.id]);
 
   // Submit Message Handler - Enhanced with AI state tracking
   const handleSubmit = useCallback(async (e: React.FormEvent) => {

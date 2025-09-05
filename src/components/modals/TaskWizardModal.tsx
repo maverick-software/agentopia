@@ -13,7 +13,9 @@ import {
   getSupportedTimezones, 
   formatTimezoneLabel, 
   toUtcIsoForTimezone, 
-  generateCronExpression, 
+  generateCronExpression,
+  generateOneTimeCronExpression,
+  parseCronForRecurring,
   getDefaultTimezone 
 } from '@/lib/utils/taskUtils';
 
@@ -157,17 +159,27 @@ export function TaskWizardModal({
       } else {
         setScheduleMode('recurring');
         
-        // Parse cron expression for time
+        // Parse cron expression for recurring tasks
         if (editingTask.cron_expression) {
-          const cronParts = editingTask.cron_expression.split(' ');
-          if (cronParts.length === 5) {
-            const [minute, hour] = cronParts;
-            const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-            setRecurringTime(timeStr);
+          const parsed = parseCronForRecurring(editingTask.cron_expression);
+          if (parsed) {
+            setRecurringTime(parsed.time);
+            setEveryInterval(parsed.interval);
+            setEveryUnit(parsed.unit);
+          } else {
+            // Fallback parsing for simple cases
+            const cronParts = editingTask.cron_expression.split(' ');
+            if (cronParts.length === 5) {
+              const [minute, hour] = cronParts;
+              if (!minute.includes('*') && !hour.includes('*')) {
+                const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+                setRecurringTime(timeStr);
+              }
+            }
+            // Default values if parsing fails
+            setEveryInterval(1);
+            setEveryUnit('day');
           }
-          // Set some defaults for interval
-          setEveryInterval(1);
-          setEveryUnit('day');
         }
         
         // Parse dates for recurring tasks
@@ -231,12 +243,12 @@ export function TaskWizardModal({
 
       if (scheduleMode === 'one_time') {
         taskData.start_date = oneTimeDate;
-        taskData.cron_expression = generateCronExpression('day', 1, oneTimeTime); // Simple cron for one-time
+        taskData.cron_expression = generateOneTimeCronExpression(oneTimeDate, oneTimeTime); // Date-specific cron for one-time
         taskData.max_executions = 1;
       } else {
         taskData.start_date = recurringStartDate;
         taskData.end_date = recurringEndDate || null;
-        taskData.cron_expression = generateCronExpression(everyUnit, everyInterval, recurringTime);
+        taskData.cron_expression = generateCronExpression(everyUnit, everyInterval, recurringTime); // Recurring cron
       }
 
       console.log('Sending task data:', taskData);

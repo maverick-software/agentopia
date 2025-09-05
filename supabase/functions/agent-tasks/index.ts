@@ -114,33 +114,49 @@ function convertCronToUTC(cronExpression: string, timezone: string = 'UTC'): str
       }
     };
     
-    switch (timezone) {
-      case 'America/Los_Angeles':
-      case 'America/Vancouver':
-        offsetHours = 7; // Currently in PDT (UTC-7) - September 2025
-        break;
-      case 'America/Denver':
-        offsetHours = isDST(timezone) ? 6 : 7; // MDT is UTC-6, MST is UTC-7
-        break;
-      case 'America/Phoenix':
-        offsetHours = 7; // Arizona doesn't observe DST
-        break;
-      case 'America/Chicago':
-        offsetHours = isDST() ? 5 : 6; // CDT is UTC-5, CST is UTC-6
-        break;
-      case 'America/New_York':
-        offsetHours = isDST() ? 4 : 5; // EDT is UTC-4, EST is UTC-5
-        break;
-      case 'UTC':
-      default:
-        offsetHours = 0;
-        break;
+    // Use dynamic timezone offset calculation instead of hardcoded values
+    try {
+      const testDate = new Date();
+      const utcTime = new Date(testDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const localTime = new Date(testDate.toLocaleString('en-US', { timeZone: timezone }));
+      const offsetMinutes = (localTime.getTime() - utcTime.getTime()) / (1000 * 60);
+      const rawOffsetHours = Math.round(offsetMinutes / 60);
+      
+      // To convert FROM local time TO UTC, we need to ADD the absolute offset
+      // PST is UTC-8, so rawOffsetHours will be -8, but we need +8 to convert 9AM PST to 5PM UTC
+      offsetHours = Math.abs(rawOffsetHours);
+      console.log(`Dynamic timezone offset for ${timezone}: raw=${rawOffsetHours}, using=${offsetHours} hours`);
+    } catch (error) {
+      console.error('Error calculating dynamic timezone offset, using fallback:', error);
+      // Fallback for common timezones if dynamic calculation fails
+      switch (timezone) {
+        case 'America/Los_Angeles':
+        case 'America/Vancouver':
+          offsetHours = isDST(timezone) ? 7 : 8; // PDT: UTC-7, PST: UTC-8
+          break;
+        case 'America/Denver':
+          offsetHours = isDST(timezone) ? 6 : 7; // MDT: UTC-6, MST: UTC-7
+          break;
+        case 'America/Phoenix':
+          offsetHours = 7; // MST: UTC-7, no DST
+          break;
+        case 'America/Chicago':
+          offsetHours = isDST(timezone) ? 5 : 6; // CDT: UTC-5, CST: UTC-6
+          break;
+        case 'America/New_York':
+          offsetHours = isDST(timezone) ? 4 : 5; // EDT: UTC-4, EST: UTC-5
+          break;
+        case 'UTC':
+        default:
+          offsetHours = 0;
+          break;
+      }
     }
     
     console.log(`Timezone ${timezone} offset: ${offsetHours} hours (DST: ${isDST()})`);
 
     // Convert to UTC time
-    let utcHour = Math.floor(cronHour + offsetHours); // Ensure integer hour
+    let utcHour = Math.floor(cronHour + offsetHours); // Add offset to convert FROM local TO UTC
     let utcDay = day;
 
     // Handle day rollover
