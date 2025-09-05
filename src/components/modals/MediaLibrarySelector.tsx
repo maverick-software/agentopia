@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import {
   Dialog,
   DialogContent,
@@ -194,21 +195,29 @@ export function MediaLibrarySelector({
       }
 
       const uploadData = await uploadResponse.json();
+      console.log('Upload data received:', uploadData);
+      
       if (!uploadData.success) {
         throw new Error(uploadData.error || 'Upload failed');
       }
 
-      // Upload file to storage
-      const formData = new FormData();
-      formData.append('file', uploadFile);
-      
-      const storageResponse = await fetch(uploadData.data.upload_url, {
-        method: 'POST',
-        body: formData
-      });
+      if (!uploadData.data?.storage_path || !uploadData.data?.bucket) {
+        console.error('Missing storage_path or bucket in response:', uploadData);
+        throw new Error('Storage path not provided by server');
+      }
 
-      if (!storageResponse.ok) {
-        throw new Error('Storage upload failed');
+      console.log('Storage path:', uploadData.data.storage_path, 'Bucket:', uploadData.data.bucket);
+
+      // Upload file to Supabase storage directly
+      const { error: storageError } = await supabase.storage
+        .from(uploadData.data.bucket)
+        .upload(uploadData.data.storage_path, uploadFile, {
+          contentType: uploadFile.type,
+          duplex: 'half'
+        });
+
+      if (storageError) {
+        throw new Error(`Storage upload failed: ${storageError.message}`);
       }
 
       // Process the document

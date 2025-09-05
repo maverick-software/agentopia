@@ -12,8 +12,7 @@ import {
   FileText,
   ExternalLink,
   BookOpen,
-  Settings2,
-  Hash
+  Settings2
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,7 +30,7 @@ interface MediaTabProps {
 interface AssignedMedia {
   id: string;
   media_id: string;
-  assignment_type: 'sop' | 'general_knowledge';
+  assignment_type: 'sop' | 'knowledge_base';
   media_library: {
     file_name: string;
     file_type: string;
@@ -50,13 +49,12 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
   const [assignedMedia, setAssignedMedia] = useState<AssignedMedia[]>([]);
   const [sopCount, setSopCount] = useState(0);
   const [generalKnowledgeCount, setGeneralKnowledgeCount] = useState(0);
-  const [totalTokens, setTotalTokens] = useState(0);
   
   // UI state
   const [loading, setLoading] = useState(false);
   const [loadingMedia, setLoadingMedia] = useState(true);
   const [showMediaLibrarySelector, setShowMediaLibrarySelector] = useState(false);
-  const [selectorType, setSelectorType] = useState<'sop' | 'general_knowledge'>('sop');
+  const [selectorType, setSelectorType] = useState<'sop' | 'knowledge_base'>('sop');
 
   // Load assigned media
   useEffect(() => {
@@ -92,28 +90,12 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
       const mediaData = data || [];
       setAssignedMedia(mediaData);
       
-      // Calculate counts and tokens
+      // Calculate counts
       const sopItems = mediaData.filter(m => m.assignment_type === 'sop');
-      const generalItems = mediaData.filter(m => m.assignment_type === 'general_knowledge');
+      const generalItems = mediaData.filter(m => m.assignment_type === 'knowledge_base');
       
       setSopCount(sopItems.length);
       setGeneralKnowledgeCount(generalItems.length);
-      
-      // Estimate tokens (rough calculation: 1 token ≈ 4 characters for text files)
-      const estimatedTokens = mediaData.reduce((total, item) => {
-        const fileSize = item.media_library?.file_size || 0;
-        const isTextFile = item.media_library?.file_type?.startsWith('text/') || 
-                          item.media_library?.file_name?.endsWith('.txt') ||
-                          item.media_library?.file_name?.endsWith('.md') ||
-                          item.media_library?.file_name?.endsWith('.pdf');
-        
-        if (isTextFile) {
-          return total + Math.ceil(fileSize / 4); // Rough token estimation
-        }
-        return total + Math.ceil(fileSize / 10); // Conservative estimate for other files
-      }, 0);
-      
-      setTotalTokens(estimatedTokens);
       
     } catch (error) {
       console.error('Error loading assigned media:', error);
@@ -123,7 +105,7 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
     }
   };
 
-  const handleAssignMedia = (type: 'sop' | 'general_knowledge') => {
+  const handleAssignMedia = (type: 'sop' | 'knowledge_base') => {
     setSelectorType(type);
     setShowMediaLibrarySelector(true);
   };
@@ -154,13 +136,8 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const formatTokenCount = (tokens: number) => {
-    if (tokens < 1000) return tokens.toString();
-    if (tokens < 1000000) return (tokens / 1000).toFixed(1) + 'K';
-    return (tokens / 1000000).toFixed(1) + 'M';
-  };
 
-  const getMediaByType = (type: 'sop' | 'general_knowledge') => {
+  const getMediaByType = (type: 'sop' | 'knowledge_base') => {
     return assignedMedia.filter(m => m.assignment_type === type);
   };
 
@@ -184,7 +161,7 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
       </div>
 
       {/* Media Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -204,18 +181,6 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
               <div>
                 <div className="text-2xl font-bold">{generalKnowledgeCount}</div>
                 <div className="text-xs text-muted-foreground">Knowledge Items</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Hash className="h-5 w-5 text-purple-600" />
-              <div>
-                <div className="text-2xl font-bold">{formatTokenCount(totalTokens)}</div>
-                <div className="text-xs text-muted-foreground">Est. Tokens</div>
               </div>
             </div>
           </CardContent>
@@ -311,7 +276,7 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleAssignMedia('general_knowledge')}
+              onClick={() => handleAssignMedia('knowledge_base')}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Knowledge
@@ -324,9 +289,9 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Loading knowledge items...
             </div>
-          ) : getMediaByType('general_knowledge').length > 0 ? (
+          ) : getMediaByType('knowledge_base').length > 0 ? (
             <div className="space-y-3">
-              {getMediaByType('general_knowledge').map((item) => (
+              {getMediaByType('knowledge_base').map((item) => (
                 <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center space-x-3">
                     <FileText className="h-5 w-5 text-muted-foreground" />
@@ -368,47 +333,18 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
         </CardContent>
       </Card>
 
-      {/* Token Usage Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Hash className="h-5 w-5" />
-            <span>Token Usage</span>
-          </CardTitle>
-          <CardDescription>
-            Estimated token consumption for assigned media
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Total Estimated Tokens:</span>
-              <span className="font-medium">{formatTokenCount(totalTokens)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>SOPs:</span>
-              <span>{sopCount} {sopCount === 1 ? 'document' : 'documents'}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Knowledge Items:</span>
-              <span>{generalKnowledgeCount} {generalKnowledgeCount === 1 ? 'document' : 'documents'}</span>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">
-            Token estimates are approximate. Actual usage may vary based on content processing and context inclusion.
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Media Library Selector Modal */}
       <MediaLibrarySelector
         isOpen={showMediaLibrarySelector}
         onClose={() => setShowMediaLibrarySelector(false)}
         agentId={agentId}
+        agentName={agentData?.name}
         assignmentType={selectorType}
-        onAssignmentComplete={() => {
+        onMediaAssigned={(assignedMedia) => {
           setShowMediaLibrarySelector(false);
           loadAssignedMedia();
+          toast.success(`Assigned ${assignedMedia.length} document${assignedMedia.length !== 1 ? 's' : ''} to agent`);
         }}
       />
     </div>
