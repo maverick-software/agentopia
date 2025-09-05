@@ -132,7 +132,7 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
 *   **🆕 Task Scheduling System:** Comprehensive automated task scheduling with one-time and recurring tasks, multi-step workflows, timezone support, and Edge Function execution
 *   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
-*   **🆕 Media Library System:** WordPress-style document and media management with centralized storage, agent training integration, MCP tool framework, and secure file handling with multi-format support
+*   **🆕 Media Library System:** Comprehensive WordPress-style document and media management with centralized storage, agent training integration, MCP tool framework, automated text extraction and processing, secure file handling with multi-format support, and intelligent document reprocessing capabilities
 *   **🆕 Advanced Reasoning System:** MCP-style iterative reasoning engine with inductive, deductive, and abductive reasoning capabilities, confidence tracking, critic system with reconsideration cycles, and ephemeral reasoning context integration
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
@@ -546,8 +546,10 @@ Located in `supabase/functions/`. These are serverless functions handling specif
 *   **🆕 `sendgrid-inbound`**: Processes inbound emails via SendGrid Inbound Parse webhook with smart routing and auto-reply capabilities.
 *   **🆕 `agent-tasks`**: Manages CRUD operations for agent task scheduling, including cron expression calculation, timezone handling, and next run time computation.
 *   **🆕 `task-executor`**: Executes scheduled and event-based tasks, triggered via pg_cron on a 5-minute interval for automated task processing.
-*   **🆕 `media-library-api`**: Comprehensive Media Library API handling file uploads, processing, signed URL generation, document management, and secure storage integration with user-scoped access control.
-*   **🆕 `media-library-mcp`**: MCP tool provider enabling agents to search, review, and interact with documents from the Media Library through specialized tools for document discovery and content analysis.
+*   **🆕 `media-library-api`**: Comprehensive Media Library API handling file uploads, automated text extraction and processing, document reprocessing, signed URL generation, document management, and secure storage integration with user-scoped access control.
+*   **🆕 `media-library-mcp`**: MCP tool provider enabling agents to search, review, and interact with documents from the Media Library through specialized tools for document discovery, content analysis, and intelligent document retrieval with UUID-based access.
+*   **🆕 `invalidate-agent-tool-cache`**: Manual tool cache invalidation endpoint for clearing agent tool schemas, enabling immediate updates when MCP tools or document assignments change.
+*   **🆕 `process-datastore-document`**: Document processing pipeline for text extraction, chunking, and preparation for RAG (Retrieval Augmented Generation) systems with vector embedding support.
 
 Also see database RPCs used by integrations UI:
 
@@ -1344,7 +1346,8 @@ media_categories: {
 
 **1. `media-library-api`** (`supabase/functions/media-library-api/index.ts`):
 - **File Upload Handling**: Direct Supabase storage integration with filename sanitization
-- **Document Processing**: Optional integration with existing document processing pipeline
+- **Document Processing**: Comprehensive text extraction pipeline with PDF parsing, DOCX support, and OCR capabilities
+- **Document Reprocessing**: Manual and automatic document reprocessing with UI controls and progress tracking
 - **Signed URL Generation**: Secure, server-side URL generation bypassing RLS
 - **CORS Support**: Proper cross-origin handling for frontend integration
 
@@ -1367,41 +1370,76 @@ media_categories: {
 - **Document Browser**: Browse and select existing library documents
 - **Upload Integration**: Upload new documents directly to library
 
-**3. `WhatIKnowModal.tsx`** - Enhanced agent knowledge modal:
-- **Media Integration**: Assign documents from library to agents
-- **Upload Workflow**: New documents automatically stored in media library
+**3. `MediaTab.tsx`** - Agent media management interface:
+- **Document Assignment**: Assign SOPs and knowledge base documents to agents
+- **Upload Integration**: Direct document upload with automatic processing
+- **Reprocess Controls**: Manual document reprocessing with visual feedback (spinning loader → check mark)
+- **Status Tracking**: Real-time processing status and chunk count display
 - **Knowledge Graph Options**: Submit documents to connected knowledge systems
 
 #### **MCP Tool Integration**
 
-The Media Library provides specialized MCP tools for agents:
+The Media Library provides specialized MCP tools for agents with intelligent UUID-based document access:
 
 ```typescript
 // Available MCP tools for agents
 const MEDIA_LIBRARY_TOOLS = {
-  search_documents: {
-    name: 'search_documents',
-    description: 'Search for documents in the media library',
-    parameters: {
-      query: { type: 'string', description: 'Search query' },
-      category: { type: 'string', description: 'Optional category filter' },
-      file_type: { type: 'string', description: 'Optional file type filter' }
-    }
-  },
-  
-  review_document: {
-    name: 'review_document',
-    description: 'Get detailed information about a specific document',
-    parameters: {
-      document_id: { type: 'string', description: 'Document ID to review' }
-    }
-  },
-  
   list_assigned_documents: {
     name: 'list_assigned_documents',
-    description: 'List all documents assigned to this agent',
-    parameters: {}
+    description: 'List all documents assigned to this agent for training or reference',
+    parameters: {
+      include_archived: { type: 'boolean', description: 'Include archived documents' },
+      assignment_type: { type: 'string', description: 'Filter by assignment type: sop, knowledge_base' }
+    },
+    // Returns document list with UUIDs for content retrieval
+    response_format: 'Returns document IDs (UUIDs) for use with get_document_content'
+  },
+  
+  get_document_content: {
+    name: 'get_document_content', 
+    description: 'Retrieve processed text content from a document for analysis',
+    parameters: {
+      document_id: { type: 'string', description: 'UUID of document (use id field from list_assigned_documents, not title/filename)' }
+    },
+    // Includes intelligent fallback for non-UUID inputs
+    features: ['UUID validation', 'Title/filename fallback resolution', 'LLM-friendly error messages']
+  },
+  
+  search_documents: {
+    name: 'search_documents',
+    description: 'Search for documents in the media library by content or metadata',
+    parameters: {
+      query: { type: 'string', description: 'Search query or keywords' },
+      category: { type: 'string', description: 'Optional category filter' },
+      file_type: { type: 'string', description: 'Optional file type filter (pdf, docx, etc.)' },
+      limit: { type: 'number', description: 'Maximum results (default: 10)' }
+    }
+  },
+  
+  get_document_summary: {
+    name: 'get_document_summary',
+    description: 'Get metadata and summary information about a document',
+    parameters: {
+      document_id: { type: 'string', description: 'UUID of document to summarize' }
+    }
+  },
+
+  find_related_documents: {
+    name: 'find_related_documents',
+    description: 'Find documents related to a specific topic or document',
+    parameters: {
+      topic: { type: 'string', description: 'Topic or concept to find related documents' },
+      reference_document_id: { type: 'string', description: 'Optional: UUID of reference document' }
+    }
   }
+};
+
+// Enhanced error handling and LLM guidance
+const ERROR_HANDLING_FEATURES = {
+  uuid_validation: 'Detects invalid UUID formats and provides helpful guidance',
+  fallback_resolution: 'Attempts to resolve document titles/filenames to UUIDs automatically',
+  llm_friendly_errors: 'Returns interactive questions instead of technical error messages',
+  retry_support: 'Enables automatic retry mechanisms for missing parameters'
 };
 ```
 
@@ -1764,10 +1802,12 @@ const assignedDocs = await agent.callTool("list_assigned_documents", {
 ```typescript
 // Document processing flow
 1. Upload → Validation → Storage → Database Record
-2. Optional Processing → Content Extraction → Chunking
-3. Agent Assignment → Training Data Integration
-4. Vector Embedding → Knowledge Graph Submission
-5. Status Updates → Completion Notification
+2. Automated Text Extraction → PDF/DOCX/Image OCR Processing
+3. Content Chunking → Overlapped Text Segmentation (1000 chars, 200 overlap)
+4. Agent Assignment → Training Data Integration  
+5. Vector Embedding → Knowledge Graph Submission
+6. Status Updates → Completion Notification with Chunk Count
+7. Reprocessing → Manual/Automatic Re-extraction and Re-chunking
 ```
 
 #### **Processing Status Tracking**
@@ -2674,15 +2714,18 @@ Located in `services/`. These are designed for persistent execution on a server 
     * **Comprehensive UI Management:** Intuitive connection interface with tool listing, refresh controls, and status indicators
     * **Protocol Compliance:** Full implementation of MCP 2024-11-05 specification with JSON-RPC 2.0 over Streamable HTTP
     * **Production-Ready Error Handling:** Robust connection validation, detailed error messages, and graceful degradation
-*   **🆕 Media Library & Document Ingestion System (August 2025):**
+*   **🆕 Media Library & Document Processing System (September 2025):**
     * **WordPress-Style Media Management:** Comprehensive document library with centralized storage, upload, and organization capabilities
-    * **Agent Training Integration:** Seamless document assignment to agents for enhanced knowledge and context
-    * **MCP Tool Framework:** Specialized tools enabling agents to search, review, and interact with library documents
-    * **Enterprise Security:** Private Supabase storage with RLS policies, signed URL generation, and user-scoped access control
-    * **Multi-Format Support:** PDF, Word, PowerPoint, images, audio, video with 50MB file size limits and type validation
-    * **Knowledge Graph Integration:** Optional submission to connected vector databases and knowledge graphs
-    * **Advanced UI/UX:** Drag-and-drop uploads, three-dot action menus, statistics dashboard, and blob-based downloads
-    * **Processing Pipeline:** Automated document processing with status tracking and comprehensive error handling
+    * **Automated Text Extraction:** Advanced PDF parsing with regex-based text extraction, DOCX support, and OCR capability planning
+    * **Intelligent Document Processing:** Content chunking with configurable size (1000 chars) and overlap (200 chars) for optimal RAG performance
+    * **Agent Training Integration:** Seamless document assignment to agents with automatic processing and knowledge integration
+    * **MCP Tool Framework:** Specialized agent tools for document search, content retrieval, and intelligent document interaction
+    * **Document Reprocessing System:** Manual and automatic document reprocessing with visual UI feedback (spinner → checkmark transitions)
+    * **Enterprise Security:** Private Supabase storage with RLS policies, signed URL generation, and authenticated file downloads
+    * **Multi-Format Support:** PDF, Word, PowerPoint, images, audio, video with comprehensive file type validation
+    * **Real-Time Status Tracking:** Processing status monitoring with chunk count reporting and error handling
+    * **Cache Invalidation System:** Manual tool cache clearing with UI controls for immediate agent tool updates
+    * **UUID-Based Document Access:** Secure document identification with fallback resolution for agent-friendly interactions
 
 ## Memory Systems & Knowledge Integration
 
@@ -3811,7 +3854,7 @@ while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
 *   **✅ Multi-Step Task Workflow System:** **COMPLETE & PRODUCTION-READY** - Revolutionary workflow automation platform with sequential task execution, context passing between steps, and sophisticated step management interface. Complete database schema with `task_steps` table, modular React components (StepManager, StepList, StepCard, StepEditor), PostgreSQL functions for CRUD operations, and seamless backward compatibility. Transforms simple scheduled tasks into powerful automation workflows.
 *   **✅ Enhanced Team Management System:** **COMPLETE & PRODUCTION-READY** - Modern team management workflow with modal-based creation, comprehensive team details with descriptions and member management, fixed edit functionality, and complete theme consistency. Includes proper TypeScript integration and modular component architecture.
 *   **✅ Zapier MCP Integration:** **COMPLETE & DEPLOYED** - Universal tool connectivity through Model Context Protocol allowing agents to access 8,000+ applications. Full implementation with dynamic tool discovery, seamless function calling integration, and comprehensive UI management. Metadata-based routing issue resolved for proper tool execution.
-*   **✅ Media Library & Document Ingestion System:** **COMPLETE & PRODUCTION-READY** - Comprehensive WordPress-style media management system with centralized document storage, agent training integration, and MCP tool framework. Features secure file handling, multi-format support, knowledge graph integration, and advanced UI with drag-and-drop uploads and blob-based downloads.
+*   **✅ Media Library & Document Processing System:** **COMPLETE & PRODUCTION-READY** - Comprehensive WordPress-style media management system with centralized document storage, automated text extraction and processing, agent training integration, and MCP tool framework. Features secure file handling, multi-format support, intelligent document reprocessing with visual UI feedback, knowledge graph integration, advanced UI with drag-and-drop uploads, cache invalidation controls, and UUID-based document access with fallback resolution.
 *   **MCP Management Interface (Phase 2.3.1):** **40% Complete** - Major progress on Multi-MCP Management Components:
     *   ✅ **Foundation Complete:** TypeScript interfaces, component architecture, DTMA API integration
     *   ✅ **MCPServerList Component:** Full server listing with search, filtering, status management (432 lines)
