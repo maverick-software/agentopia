@@ -74,16 +74,25 @@ export const generateCronExpression = (unit: string, interval: number, time: str
   
   switch (unit) {
     case 'minute':
-      return interval === 1 ? '* * * * *' : `*/${interval} * * * *`;
+      // For minute intervals, we'll store the time as a comment in the cron expression
+      // This allows us to preserve the user's intended start time
+      const minuteCron = interval === 1 ? '* * * * *' : `*/${interval} * * * *`;
+      // Store time as comment: "*/4 * * * * # time=17:06"
+      return `${minuteCron} # time=${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     case 'hour':
+      // Every X hours at the specified minute
       return interval === 1 ? `${minutes} * * * *` : `${minutes} */${interval} * * *`;
     case 'day':
+      // Every X days at the specified time
       return interval === 1 ? `${minutes} ${hours} * * *` : `${minutes} ${hours} */${interval} * *`;
     case 'week':
+      // Weekly on Sunday at the specified time
       return `${minutes} ${hours} * * 0`;
     case 'month':
+      // Monthly on the 1st at the specified time
       return `${minutes} ${hours} 1 * *`;
     case 'year':
+      // Yearly on Jan 1st at the specified time
       return `${minutes} ${hours} 1 1 *`;
     default:
       return `${minutes} ${hours} * * *`;
@@ -110,7 +119,17 @@ export const parseCronForRecurring = (cronExpression: string): {
   unit: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' 
 } | null => {
   try {
-    const parts = cronExpression.trim().split(' ');
+    // Check for time comment in cron expression: "*/4 * * * * # time=17:06"
+    let actualCron = cronExpression.trim();
+    let timeFromComment = '00:00';
+    
+    if (cronExpression.includes(' # time=')) {
+      const [cronPart, commentPart] = cronExpression.split(' # time=');
+      actualCron = cronPart.trim();
+      timeFromComment = commentPart.trim();
+    }
+    
+    const parts = actualCron.split(' ');
     if (parts.length !== 5) return null;
 
     const [minute, hour, day, month, dayOfWeek] = parts;
@@ -118,7 +137,8 @@ export const parseCronForRecurring = (cronExpression: string): {
     // Parse minute-based intervals: */5 * * * *
     if (minute.startsWith('*/') && hour === '*' && day === '*' && month === '*' && dayOfWeek === '*') {
       const interval = parseInt(minute.substring(2));
-      return { time: '00:00', interval, unit: 'minute' };
+      // Use time from comment if available, otherwise default
+      return { time: timeFromComment, interval, unit: 'minute' };
     }
 
     // Parse hour-based intervals: 30 */2 * * *
@@ -180,6 +200,7 @@ export const formatTaskScheduleDisplay = (task: {
   start_date?: string;
   end_date?: string;
   timezone?: string;
+  next_run_at?: string; // Use this to infer the intended time for minute intervals
 }): string => {
   if (!task.cron_expression) return 'No schedule';
 
@@ -188,11 +209,30 @@ export const formatTaskScheduleDisplay = (task: {
 
   if (isOneTime) {
     // One-time task display
-    const startDate = task.start_date ? new Date(task.start_date).toLocaleDateString('en-US', { 
-      month: '2-digit', 
-      day: '2-digit', 
-      year: '2-digit' 
-    }) : '';
+    const startDate = task.start_date ? (() => {
+      try {
+        // Parse date directly without timezone conversion
+        let dateStr = task.start_date;
+        
+        // Handle ISO string format: "2025-09-04T00:00:00+00:00" -> "2025-09-04"
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0];
+        }
+        
+        // Parse YYYY-MM-DD format directly
+        const [year, month, day] = dateStr.split('-').map(Number);
+        if (year && month && day) {
+          const shortYear = year.toString().slice(-2);
+          return `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}/${shortYear}`;
+        }
+        
+        console.error('Invalid start_date format:', task.start_date);
+        return 'Invalid Date';
+      } catch (error) {
+        console.error('Error parsing start_date:', task.start_date, error);
+        return 'Invalid Date';
+      }
+    })() : '';
     
     const parsed = parseCronForRecurring(task.cron_expression);
     const time = parsed?.time || '00:00';
@@ -207,22 +247,74 @@ export const formatTaskScheduleDisplay = (task: {
     const parsed = parseCronForRecurring(task.cron_expression);
     if (!parsed) return 'Recurring task';
 
-    const [hours, minutes] = parsed.time.split(':').map(Number);
+    let timeToDisplay = parsed.time;
+    
+    // For minute intervals, try to get the time from next_run_at since cron doesn't store it
+    if (parsed.unit === 'minute' && timeToDisplay === '00:00' && task.next_run_at) {
+      try {
+        const nextRunDate = new Date(task.next_run_at);
+        const hours = nextRunDate.getHours();
+        const minutes = nextRunDate.getMinutes();
+        timeToDisplay = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      } catch (error) {
+        console.error('Error parsing next_run_at for time display:', error);
+      }
+    }
+
+    const [hours, minutes] = timeToDisplay.split(':').map(Number);
     const period = hours >= 12 ? 'PM' : 'AM';
     const displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     const formattedTime = `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`;
 
-    const startDate = task.start_date ? new Date(task.start_date).toLocaleDateString('en-US', { 
-      month: '2-digit', 
-      day: '2-digit', 
-      year: '2-digit' 
-    }) : '';
+    const startDate = task.start_date ? (() => {
+      try {
+        // Parse date directly without timezone conversion
+        let dateStr = task.start_date;
+        
+        // Handle ISO string format: "2025-09-04T00:00:00+00:00" -> "2025-09-04"
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0];
+        }
+        
+        // Parse YYYY-MM-DD format directly
+        const [year, month, day] = dateStr.split('-').map(Number);
+        if (year && month && day) {
+          const shortYear = year.toString().slice(-2);
+          return `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}/${shortYear}`;
+        }
+        
+        console.error('Invalid start_date format:', task.start_date);
+        return 'Invalid Date';
+      } catch (error) {
+        console.error('Error parsing start_date:', task.start_date, error);
+        return 'Invalid Date';
+      }
+    })() : '';
     
-    const endDate = task.end_date ? new Date(task.end_date).toLocaleDateString('en-US', { 
-      month: '2-digit', 
-      day: '2-digit', 
-      year: '2-digit' 
-    }) : '';
+    const endDate = task.end_date ? (() => {
+      try {
+        // Parse date directly without timezone conversion
+        let dateStr = task.end_date;
+        
+        // Handle ISO string format: "2025-09-06T00:00:00+00:00" -> "2025-09-06"
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0];
+        }
+        
+        // Parse YYYY-MM-DD format directly
+        const [year, month, day] = dateStr.split('-').map(Number);
+        if (year && month && day) {
+          const shortYear = year.toString().slice(-2);
+          return `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}/${shortYear}`;
+        }
+        
+        console.error('Invalid end_date format:', task.end_date);
+        return 'Invalid Date';
+      } catch (error) {
+        console.error('Error parsing end_date:', task.end_date, error);
+        return 'Invalid Date';
+      }
+    })() : '';
 
     let intervalText = '';
     if (parsed.interval === 1) {
@@ -241,6 +333,7 @@ export const formatTaskScheduleDisplay = (task: {
       intervalText = `Every ${parsed.interval} ${unitName}${parsed.interval > 1 ? 's' : ''}`;
     }
 
+    // Show time for all intervals including minutes (since pg_cron can schedule first run at specific time)
     let display = `${intervalText} at ${formattedTime}`;
     if (startDate) display += `, starts ${startDate}`;
     if (endDate) display += `, ends ${endDate}`;

@@ -14,6 +14,13 @@ async function scheduleTaskWithPgCron(supabase: any, taskId: string, cronExpress
   try {
     console.log('Scheduling task with pg_cron:', taskId, cronExpression);
     
+    // Strip comments from cron expression for pg_cron (it doesn't support comments)
+    let cleanCron = cronExpression;
+    if (cronExpression.includes(' # ')) {
+      cleanCron = cronExpression.split(' # ')[0].trim();
+      console.log('Cleaned cron expression for pg_cron:', cleanCron);
+    }
+    
     // Create unique job name for this task
     const jobName = `agentopia_task_${taskId.replace(/-/g, '_')}`;
     
@@ -22,7 +29,7 @@ async function scheduleTaskWithPgCron(supabase: any, taskId: string, cronExpress
       sql: `
         SELECT cron.schedule(
           '${jobName}',
-          '${cronExpression}',
+          '${cleanCron}',
           $$
           SELECT net.http_post(
             url := 'https://${Deno.env.get('SUPABASE_URL')?.replace('https://', '')}/functions/v1/task-executor',
@@ -79,14 +86,31 @@ async function unscheduleTaskFromPgCron(supabase: any, taskId: string): Promise<
 // Convert timezone-aware cron expression to UTC cron expression
 function convertCronToUTC(cronExpression: string, timezone: string = 'UTC'): string {
   try {
+    // Preserve comments but work with clean cron for conversion
+    let comment = '';
+    let actualCron = cronExpression.trim();
+    
+    if (cronExpression.includes(' # ')) {
+      const [cronPart, commentPart] = cronExpression.split(' # ', 2);
+      actualCron = cronPart.trim();
+      comment = ' # ' + commentPart;
+    }
+    
     // Parse cron expression: minute hour day month dayOfWeek
-    const parts = cronExpression.trim().split(' ');
+    const parts = actualCron.split(' ');
     if (parts.length !== 5) {
-      console.error('Invalid cron expression format:', cronExpression);
+      console.error('Invalid cron expression format:', actualCron);
       return cronExpression; // Return original if invalid
     }
 
     const [minute, hour, day, month, dayOfWeek] = parts;
+    
+    // Handle minute intervals and other wildcard expressions - no conversion needed
+    if (minute.includes('*') || hour.includes('*')) {
+      console.log('Cron contains wildcards, no timezone conversion needed:', actualCron);
+      return cronExpression; // Return original with comments intact
+    }
+    
     const cronMinute = parseInt(minute);
     const cronHour = parseInt(hour);
 
@@ -188,14 +212,57 @@ function calculateNextRunTime(cronExpression: string, timezone: string = 'UTC', 
   try {
     console.log('Calculating next run time:', cronExpression, 'timezone:', timezone);
     
+    // Extract time from comment if present: "*/4 * * * * # time=17:06"
+    let actualCron = cronExpression.trim();
+    let userTime = null;
+    
+    if (cronExpression.includes(' # time=')) {
+      const [cronPart, timePart] = cronExpression.split(' # time=');
+      actualCron = cronPart.trim();
+      userTime = timePart.trim();
+      console.log('Extracted user time from cron comment:', userTime);
+    }
+    
     // Parse cron expression: minute hour day month dayOfWeek
-    const parts = cronExpression.trim().split(' ');
+    const parts = actualCron.split(' ');
     if (parts.length !== 5) {
-      console.error('Invalid cron expression format:', cronExpression);
+      console.error('Invalid cron expression format:', actualCron);
       return null;
     }
 
     const [minute, hour, day, month, dayOfWeek] = parts;
+    
+    // Handle minute intervals like */4 * * * *
+    if (minute.startsWith('*/') && hour === '*' && day === '*' && month === '*' && dayOfWeek === '*') {
+      const intervalMinutes = parseInt(minute.substring(2));
+      if (!isNaN(intervalMinutes)) {
+        console.log(`Minute interval detected: every ${intervalMinutes} minutes`);
+        
+        if (userTime) {
+          // Calculate next run based on user's specified start time
+          const [userHour, userMinute] = userTime.split(':').map(Number);
+          const now = new Date();
+          const nextRun = new Date(now);
+          nextRun.setHours(userHour, userMinute, 0, 0);
+          
+          // If the time has passed today, schedule for next interval
+          if (nextRun <= now) {
+            nextRun.setTime(nextRun.getTime() + (intervalMinutes * 60 * 1000));
+          }
+          
+          console.log('Next run for minute interval with user time:', nextRun.toISOString());
+          return nextRun.toISOString();
+        } else {
+          // Fallback: calculate next run based on current time + interval
+          const now = new Date();
+          const nextRun = new Date(now.getTime() + (intervalMinutes * 60 * 1000));
+          console.log('Next run for minute interval (fallback):', nextRun.toISOString());
+          return nextRun.toISOString();
+        }
+      }
+    }
+    
+    // Handle regular time-based cron expressions
     const cronMinute = parseInt(minute);
     const cronHour = parseInt(hour);
 
