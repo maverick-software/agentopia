@@ -12,7 +12,8 @@ import {
   FileText,
   ExternalLink,
   BookOpen,
-  Settings2
+  Settings2,
+  RefreshCw
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +56,8 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
   const [loadingMedia, setLoadingMedia] = useState(true);
   const [showMediaLibrarySelector, setShowMediaLibrarySelector] = useState(false);
   const [selectorType, setSelectorType] = useState<'sop' | 'knowledge_base'>('sop');
+  const [reprocessingIds, setReprocessingIds] = useState<Set<string>>(new Set());
+  const [successIds, setSuccessIds] = useState<Set<string>>(new Set());
 
   // Load assigned media
   useEffect(() => {
@@ -125,6 +128,48 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
     } catch (error) {
       console.error('Error removing media:', error);
       toast.error('Failed to remove media');
+    }
+  };
+
+  const handleReprocessDocument = async (mediaId: string, fileName: string) => {
+    try {
+      setReprocessingIds(prev => new Set([...prev, mediaId]));
+      
+      const { data, error } = await supabase.functions.invoke('media-library-api', {
+        body: {
+          action: 'process',
+          document_id: mediaId
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        // Show success state
+        setSuccessIds(prev => new Set([...prev, mediaId]));
+        toast.success(`Document reprocessed successfully! ${data.data?.chunk_count || 0} chunks created.`);
+        await loadAssignedMedia(); // Reload to update any processing status
+        
+        // Clear success state after 2 seconds
+        setTimeout(() => {
+          setSuccessIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(mediaId);
+            return newSet;
+          });
+        }, 2000);
+      } else {
+        throw new Error(data?.error || 'Reprocessing failed');
+      }
+    } catch (error: any) {
+      console.error('Error reprocessing document:', error);
+      toast.error(`Failed to reprocess "${fileName}": ${error.message}`);
+    } finally {
+      setReprocessingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(mediaId);
+        return newSet;
+      });
     }
   };
 
@@ -241,6 +286,30 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleReprocessDocument(item.media_id, item.media_library?.file_name || 'Unknown')}
+                      disabled={reprocessingIds.has(item.media_id) || successIds.has(item.media_id)}
+                      className={
+                        successIds.has(item.media_id) 
+                          ? "text-green-600 hover:text-green-700" 
+                          : "text-blue-600 hover:text-blue-700"
+                      }
+                      title={
+                        successIds.has(item.media_id) 
+                          ? "Document reprocessed successfully!" 
+                          : "Reprocess document to extract text content"
+                      }
+                    >
+                      {reprocessingIds.has(item.media_id) ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : successIds.has(item.media_id) ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleRemoveMedia(item.id)}
                       className="text-red-600 hover:text-red-700"
                     >
@@ -311,6 +380,30 @@ export function MediaTab({ agentId, agentData, onAgentUpdated }: MediaTabProps) 
                     <Badge variant="secondary" className="bg-green-100 text-green-700">
                       Knowledge
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleReprocessDocument(item.media_id, item.media_library?.file_name || 'Unknown')}
+                      disabled={reprocessingIds.has(item.media_id) || successIds.has(item.media_id)}
+                      className={
+                        successIds.has(item.media_id) 
+                          ? "text-green-600 hover:text-green-700" 
+                          : "text-blue-600 hover:text-blue-700"
+                      }
+                      title={
+                        successIds.has(item.media_id) 
+                          ? "Document reprocessed successfully!" 
+                          : "Reprocess document to extract text content"
+                      }
+                    >
+                      {reprocessingIds.has(item.media_id) ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : successIds.has(item.media_id) ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"

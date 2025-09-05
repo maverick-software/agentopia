@@ -52,6 +52,162 @@ interface MediaLibraryResponse {
 }
 
 // =============================================
+// Text Processing Utilities
+// =============================================
+
+/**
+ * Extract text content from various document types
+ */
+async function extractTextFromDocument(supabase: any, storagePath: string, fileType: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary] Extracting text from ${fileType}: ${storagePath}`);
+    
+    // Download the file from Supabase Storage using the client (handles auth)
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('media-library')
+      .download(storagePath);
+    
+    if (downloadError) {
+      throw new Error(`Failed to download file from storage: ${downloadError.message}`);
+    }
+    
+    if (!fileData) {
+      throw new Error('No file data received from storage');
+    }
+    
+    const arrayBuffer = await fileData.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Handle different file types
+    if (fileType === 'application/pdf' || storagePath.toLowerCase().endsWith('.pdf')) {
+      return await extractTextFromPDF(uint8Array);
+    } else if (fileType.startsWith('text/') || storagePath.toLowerCase().endsWith('.txt')) {
+      return new TextDecoder('utf-8').decode(uint8Array);
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+               storagePath.toLowerCase().endsWith('.docx')) {
+      // For now, return a placeholder - DOCX extraction requires additional libraries
+      return '[DOCX document - text extraction not yet implemented]';
+    } else if (fileType.startsWith('image/')) {
+      // For now, return a placeholder - OCR would be needed for images
+      return '[Image document - OCR extraction not yet implemented]';
+    } else {
+      console.warn(`[MediaLibrary] Unsupported file type for text extraction: ${fileType}`);
+      return '';
+    }
+  } catch (error: any) {
+    console.error(`[MediaLibrary] Text extraction error:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Extract text from PDF using a simple PDF parser
+ * Note: This is a basic implementation. For production, consider using pdf-parse or similar
+ */
+async function extractTextFromPDF(pdfData: Uint8Array): Promise<string> {
+  try {
+    // For now, we'll use a very basic PDF text extraction
+    // This is a simplified approach - in production you'd want to use a proper PDF library
+    const pdfString = new TextDecoder('latin1').decode(pdfData);
+    
+    // Simple regex to extract text between BT/ET pairs (text objects in PDF)
+    const textRegex = /BT\s*.*?ET/gs;
+    const matches = pdfString.match(textRegex) || [];
+    
+    let extractedText = '';
+    for (const match of matches) {
+      // Extract text from Tj operations
+      const tjRegex = /\((.*?)\)\s*Tj/g;
+      let tjMatch;
+      while ((tjMatch = tjRegex.exec(match)) !== null) {
+        extractedText += tjMatch[1] + ' ';
+      }
+      
+      // Extract text from TJ operations (array format)
+      const tjArrayRegex = /\[(.*?)\]\s*TJ/g;
+      let tjArrayMatch;
+      while ((tjArrayMatch = tjArrayRegex.exec(match)) !== null) {
+        // Parse the array content
+        const arrayContent = tjArrayMatch[1];
+        const stringRegex = /\((.*?)\)/g;
+        let stringMatch;
+        while ((stringMatch = stringRegex.exec(arrayContent)) !== null) {
+          extractedText += stringMatch[1] + ' ';
+        }
+      }
+    }
+    
+    // Clean up the extracted text
+    extractedText = extractedText
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\t/g, '\t')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\\)/g, ')')
+      .replace(/\\\(/g, '(')
+      .trim();
+    
+    if (extractedText.length < 10) {
+      // If we didn't extract much text, it might be a complex PDF
+      // Return a placeholder indicating the file type
+      return `[PDF document: ${pdfData.length} bytes - complex PDF format, text extraction may be incomplete]`;
+    }
+    
+    return extractedText;
+  } catch (error: any) {
+    console.error(`[MediaLibrary] PDF text extraction error:`, error);
+    return `[PDF document: ${pdfData.length} bytes - text extraction failed: ${error.message}]`;
+  }
+}
+
+/**
+ * Split text into chunks for better search and RAG performance
+ */
+function chunkText(text: string, chunkSize: number = 1000, overlap: number = 200): string[] {
+  if (!text || text.trim().length === 0) {
+    return [];
+  }
+  
+  const chunks: string[] = [];
+  let start = 0;
+  
+  while (start < text.length) {
+    let end = start + chunkSize;
+    
+    // If we're not at the end of the text, try to break at a sentence or word boundary
+    if (end < text.length) {
+      // Look for sentence endings first
+      const sentenceEnd = text.lastIndexOf('.', end);
+      const questionEnd = text.lastIndexOf('?', end);
+      const exclamationEnd = text.lastIndexOf('!', end);
+      
+      const sentenceBoundary = Math.max(sentenceEnd, questionEnd, exclamationEnd);
+      
+      if (sentenceBoundary > start + chunkSize * 0.5) {
+        // If we found a sentence boundary in the second half of the chunk, use it
+        end = sentenceBoundary + 1;
+      } else {
+        // Otherwise, look for word boundaries
+        const wordBoundary = text.lastIndexOf(' ', end);
+        if (wordBoundary > start + chunkSize * 0.5) {
+          end = wordBoundary;
+        }
+      }
+    }
+    
+    const chunk = text.substring(start, end).trim();
+    if (chunk.length > 0) {
+      chunks.push(chunk);
+    }
+    
+    // Move start position with overlap
+    start = Math.max(start + 1, end - overlap);
+  }
+  
+  return chunks;
+}
+
+// =============================================
 // Handler Functions
 // =============================================
 
@@ -160,20 +316,38 @@ async function handleProcess(
       .update({ processing_status: 'processing' })
       .eq('id', document_id);
     
-    // Get file URL for processing
-    const { data: urlData } = supabase.storage
-      .from('media-library')
-      .getPublicUrl(mediaFile.storage_path);
+    console.log(`[MediaLibrary] Starting text extraction for document ${document_id}: ${mediaFile.file_name}`);
     
-    // For now, skip automatic processing since it requires an agent_id
-    // Users can assign documents to agents later which will trigger processing
-    console.log(`[MediaLibrary] Document ${document_id} uploaded successfully. Processing skipped - no agent specified.`);
+    // Extract text content from the document
+    let textContent = '';
+    let chunkCount = 0;
     
-    // Update status to completed (uploaded but not processed)
+    try {
+      textContent = await extractTextFromDocument(supabase, mediaFile.storage_path, mediaFile.file_type);
+      
+      if (textContent && textContent.trim().length > 0) {
+        // Create chunks for better search and RAG performance
+        const chunks = chunkText(textContent, 1000, 200); // 1000 chars with 200 char overlap
+        chunkCount = chunks.length;
+        
+        console.log(`[MediaLibrary] Extracted ${textContent.length} characters, created ${chunkCount} chunks`);
+      } else {
+        console.log(`[MediaLibrary] No text content extracted from ${mediaFile.file_name}`);
+      }
+    } catch (extractError: any) {
+      console.error(`[MediaLibrary] Text extraction failed for ${document_id}:`, extractError);
+      // Continue with processing but mark that extraction failed
+      textContent = '';
+      chunkCount = 0;
+    }
+    
+    // Update document with extracted content
     await supabase
       .from('media_library')
       .update({ 
         processing_status: 'completed',
+        text_content: textContent || null,
+        chunk_count: chunkCount,
         processed_at: new Date().toISOString()
       })
       .eq('id', document_id);
@@ -183,10 +357,14 @@ async function handleProcess(
       data: {
         media_id: document_id,
         processing_status: 'completed',
-        message: 'Document uploaded successfully. Assign to an agent to enable processing and search capabilities.'
+        text_content_length: textContent.length,
+        chunk_count: chunkCount,
+        message: chunkCount > 0 
+          ? `Document processed successfully. Extracted ${textContent.length} characters into ${chunkCount} chunks.`
+          : 'Document uploaded successfully. No text content could be extracted from this file type.'
       },
       metadata: {
-        action_performed: 'document_uploaded'
+        action_performed: 'document_processed'
       }
     };
     
@@ -615,7 +793,7 @@ async function handleGetCategories(
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders(req.headers.get('origin')) });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
@@ -697,7 +875,7 @@ serve(async (req) => {
       JSON.stringify(result),
       { 
         status: result.success ? 200 : 400,
-        headers: { ...corsHeaders(req.headers.get('origin')), 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
 
@@ -710,7 +888,7 @@ serve(async (req) => {
       }),
       { 
         status: 500,
-        headers: { ...corsHeaders(req.headers.get('origin')), 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
   }

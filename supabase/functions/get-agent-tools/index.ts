@@ -294,7 +294,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Parse request
-    const { agent_id, user_id } = await req.json();
+    const { agent_id, user_id, force_refresh = false } = await req.json();
     
     if (!agent_id || !user_id) {
       return new Response(
@@ -304,6 +304,10 @@ serve(async (req) => {
         }),
         { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
       );
+    }
+
+    if (force_refresh) {
+      console.log(`[GetAgentTools] Force refresh requested for agent ${agent_id}`);
     }
 
     console.log(`[GetAgentTools] Fetching tools for agent ${agent_id}, user ${user_id}`);

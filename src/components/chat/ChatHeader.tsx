@@ -1,5 +1,5 @@
-import React from 'react';
-import { ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Settings, Plug, Sliders } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Settings, Plug, Sliders, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -8,6 +8,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { supabase } from '../../lib/supabase';
+import { toast } from 'react-hot-toast';
 import type { Database } from '../../types/database.types';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
@@ -40,6 +42,41 @@ export function ChatHeader({
   onShowAgentSettings
 }: ChatHeaderProps) {
   const navigate = useNavigate();
+  const [clearingCache, setClearingCache] = useState(false);
+
+  const handleClearCache = async () => {
+    if (!agent?.user_id) {
+      toast.error('Unable to clear cache: missing user information');
+      return;
+    }
+
+    setClearingCache(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('invalidate-agent-tool-cache', {
+        body: {
+          agent_id: agentId,
+          user_id: agent.user_id
+        }
+      });
+
+      if (error) {
+        console.error('Cache clear error:', error);
+        toast.error('Failed to clear tool cache');
+        return;
+      }
+
+      if (data?.success) {
+        toast.success(`Tool cache cleared! (${data.tools_count} tools refreshed)`);
+      } else {
+        toast.error(data?.error || 'Failed to clear cache');
+      }
+    } catch (error: any) {
+      console.error('Cache clear error:', error);
+      toast.error('Failed to clear tool cache');
+    } finally {
+      setClearingCache(false);
+    }
+  };
 
   return (
     <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
@@ -95,6 +132,16 @@ export function ChatHeader({
       </div>
 
       <div className="flex items-center space-x-2">
+        {/* Cache Clear Button */}
+        <button
+          onClick={handleClearCache}
+          disabled={clearingCache}
+          className="p-1.5 hover:bg-accent rounded-lg transition-colors disabled:opacity-50"
+          title="Clear tool cache (refreshes agent tools and schemas)"
+        >
+          <RefreshCw className={`h-4 w-4 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
+        </button>
+        
         {/* Agent Actions Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
