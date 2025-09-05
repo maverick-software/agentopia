@@ -58,7 +58,7 @@ async function handleSearchDocuments(
     
     // Use the database function for search
     const { data: searchResults, error: searchError } = await supabase
-      .rpc('search_agent_documents', {
+      .rpc('search_media_documents_for_agent', {
         p_agent_id: agentId,
         p_user_id: userId,
         p_query: query,
@@ -99,9 +99,18 @@ async function handleSearchDocuments(
     
   } catch (error: any) {
     console.error('[MediaLibrary MCP] Search documents error:', error);
+    
+    // Provide helpful MCP error messages for the LLM to retry
+    let helpfulError = error.message;
+    if (error.message.includes('Missing required parameter: query')) {
+      helpfulError = 'Question: What would you like me to search for in your documents? Please provide a search query or topic.';
+    } else if (error.message.includes('Could not find the function')) {
+      helpfulError = 'I apologize, but there seems to be an issue with the document search system. Please try again in a moment, or try listing your documents first with "list my assigned documents".';
+    }
+    
     return {
       success: false,
-      error: error.message,
+      error: helpfulError,
       metadata: {
         tool_name: 'search_documents',
         execution_time_ms: Date.now() - startTime
@@ -119,15 +128,106 @@ async function handleGetDocumentContent(
   const startTime = Date.now();
   
   try {
-    const { document_id, include_metadata = true } = params;
+    let { document_id, include_metadata = true } = params;
     
     if (!document_id) {
       throw new Error('Missing required parameter: document_id');
     }
     
+    // Check if document_id is a UUID, if not, try to find by title/filename
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(document_id)) {
+      // Special case: if it's just a number, it's probably from the numbered list
+      if (/^\d+$/.test(document_id.trim())) {
+        throw new Error(`Document ID "${document_id}" appears to be a list number. Please use the actual document UUID from the "id" field in list_assigned_documents, not the list number. For example, use "f048957a-f417-48eb-bb5a-d5a5043e23df" instead of "2".`);
+      }
+      
+      console.log(`[MediaLibrary MCP] document_id "${document_id}" is not a UUID, attempting to find by title/filename`);
+      
+      // Try to find the document by title or filename
+      // First try exact matches, then partial matches
+      let { data: documents, error: searchError } = await supabase
+        .from('media_library')
+        .select('id, file_name, display_name')
+        .eq('user_id', userId)
+        .eq('is_archived', false);
+      
+      if (searchError) throw searchError;
+      
+      console.log(`[MediaLibrary MCP] Found ${documents?.length || 0} total documents for user ${userId}`);
+      
+      // Filter documents manually for better matching
+      const matchingDocs = documents?.filter(doc => {
+        const searchTerm = document_id.toLowerCase().trim();
+        const fileName = (doc.file_name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const displayName = (doc.display_name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        
+        // For short search terms (like numbers), require more specific matching
+        if (searchTerm.length <= 2) {
+          // Only match if it's a word boundary or exact filename match
+          const wordBoundaryRegex = new RegExp(`\\b${searchTerm}\\b`, 'i');
+          const matches = wordBoundaryRegex.test(fileName) || wordBoundaryRegex.test(displayName);
+          
+          if (matches) {
+            console.log(`[MediaLibrary MCP] Found matching document (word boundary): "${doc.file_name}" (display: "${doc.display_name}")`);
+          }
+          return matches;
+        } else {
+          // For longer terms, use substring matching
+          const matches = fileName.includes(searchTerm) || 
+                         displayName.includes(searchTerm) ||
+                         fileName.replace(/\.pdf$/i, '').includes(searchTerm) ||
+                         displayName.replace(/\.pdf$/i, '').includes(searchTerm);
+          
+          if (matches) {
+            console.log(`[MediaLibrary MCP] Found matching document: "${doc.file_name}" (display: "${doc.display_name}")`);
+          }
+          
+          return matches;
+        }
+      }) || [];
+      
+      documents = matchingDocs;
+      
+      if (!documents || documents.length === 0) {
+        // Get all documents for debugging
+        const { data: allDocs } = await supabase
+          .from('media_library')
+          .select('file_name, display_name')
+          .eq('user_id', userId)
+          .eq('is_archived', false);
+        
+        console.log(`[MediaLibrary MCP] No documents found matching "${document_id}". Available documents:`, 
+          allDocs?.map(d => `"${d.file_name}" (display: "${d.display_name}")`) || []);
+        throw new Error(`Document not found with title/filename containing "${document_id}". Please use the document UUID from list_assigned_documents instead.`);
+      }
+      
+      if (documents.length > 1) {
+        const matchedDocs = documents.map(d => `"${d.file_name}"`).join(', ');
+        throw new Error(`Multiple documents found matching "${document_id}": ${matchedDocs}. Please use the specific document UUID from the "id" field in list_assigned_documents for precise identification.`);
+      }
+      
+      // Check if this document is actually assigned to the agent
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('agent_media_assignments')
+        .select('media_id')
+        .eq('agent_id', agentId)
+        .eq('media_id', documents[0].id)
+        .eq('is_active', true)
+        .single();
+      
+      if (assignmentError || !assignment) {
+        throw new Error(`Document "${document_id}" is not assigned to this agent. Please check your assigned documents.`);
+      }
+      
+      // Use the found UUID
+      document_id = documents[0].id;
+      console.log(`[MediaLibrary MCP] Resolved "${params.document_id}" to UUID: ${document_id}`);
+    }
+    
     // Use the database function to get content
     const { data: documentContent, error: contentError } = await supabase
-      .rpc('get_agent_document_content', {
+      .rpc('get_media_document_content_for_agent', {
         p_agent_id: agentId,
         p_user_id: userId,
         p_document_id: document_id,
@@ -154,9 +254,22 @@ async function handleGetDocumentContent(
     
   } catch (error: any) {
     console.error('[MediaLibrary MCP] Get document content error:', error);
+    
+    // Provide helpful MCP error messages for the LLM to retry
+    let helpfulError = error.message;
+    if (error.message.includes('invalid input syntax for type uuid')) {
+      helpfulError = 'I need the document ID (UUID) to retrieve the content, not the document name. Please use the "id" field from the document list. For example, if you want to read "Every Citizen Armed Media Kit.pdf", use its ID like "f048957a-f417-48eb-bb5a-d5a5043e23df" instead of the filename.';
+    } else if (error.message.includes('Missing required parameter: document_id')) {
+      helpfulError = 'Question: Which document would you like me to retrieve? Please specify the document name or ID. You can first use "list my assigned documents" to see available documents.';
+    } else if (error.message.includes('Document not found or not assigned')) {
+      helpfulError = 'I cannot find that document in your assigned documents. Please check the document name or use "list my assigned documents" to see what documents are available to you.';
+    } else if (error.message.includes('Could not find the function')) {
+      helpfulError = 'I apologize, but there seems to be an issue with the document retrieval system. Please try again in a moment, or try listing your documents first.';
+    }
+    
     return {
       success: false,
-      error: error.message,
+      error: helpfulError,
       metadata: {
         tool_name: 'get_document_content',
         execution_time_ms: Date.now() - startTime
@@ -177,9 +290,9 @@ async function handleListAssignedDocuments(
     const { 
       category, 
       assignment_type, 
-      include_archived = false,
-      sort_by = 'created_at',
-      sort_order = 'desc'
+      include_inactive = false,
+      limit = 100,
+      offset = 0
     } = params;
     
     // Use the database function to list documents
@@ -189,22 +302,42 @@ async function handleListAssignedDocuments(
         p_user_id: userId,
         p_category: category,
         p_assignment_type: assignment_type,
-        p_include_archived: include_archived,
-        p_sort_by: sort_by,
-        p_sort_order: sort_order
+        p_include_inactive: include_inactive,
+        p_limit: limit,
+        p_offset: offset
       });
     
     if (listError) throw listError;
     
-    const documents = documentsData?.documents || [];
-    const totalCount = documentsData?.total_count || 0;
+    // The database function returns an array of documents directly, not an object
+    const documents = documentsData || [];
+    const totalCount = documents.length;
+    
+    // Format documents for MCP response
+    const formattedDocuments = documents.map((doc: any) => ({
+      id: doc.document_id,
+      title: doc.display_name || doc.file_name,
+      file_name: doc.file_name,
+      file_type: doc.file_type,
+      file_size: doc.file_size,
+      category: doc.category,
+      assignment_type: doc.assignment_type,
+      processing_status: doc.processing_status,
+      tags: doc.tags,
+      description: doc.description,
+      chunk_count: doc.chunk_count,
+      assigned_at: doc.assigned_at,
+      last_accessed_at: doc.last_accessed_at,
+      access_count: doc.access_count,
+      is_active: doc.is_active
+    }));
     
     return {
       success: true,
       data: {
         total_count: totalCount,
-        documents: documents,
-        summary: `Agent has ${totalCount} assigned document(s)${category ? ` in category "${category}"` : ''}${assignment_type ? ` of type "${assignment_type}"` : ''}`
+        documents: formattedDocuments,
+        summary: `Agent has ${totalCount} assigned document(s)${category ? ` in category "${category}"` : ''}${assignment_type ? ` of type "${assignment_type}"` : ''}. To read a document's content, use the 'id' field (UUID) from the document list, not the title or filename.`
       },
       metadata: {
         tool_name: 'list_assigned_documents',
@@ -215,9 +348,18 @@ async function handleListAssignedDocuments(
     
   } catch (error: any) {
     console.error('[MediaLibrary MCP] List assigned documents error:', error);
+    
+    // Provide helpful MCP error messages for the LLM to retry
+    let helpfulError = error.message;
+    if (error.message.includes('Could not find the function')) {
+      helpfulError = 'I apologize, but there seems to be an issue with the document listing system. This might be a temporary issue - please try again in a moment.';
+    } else if (error.message.includes('parameters')) {
+      helpfulError = 'I encountered an issue with the document listing. Please try asking "show me my documents" or "what documents do I have access to?"';
+    }
+    
     return {
       success: false,
-      error: error.message,
+      error: helpfulError,
       metadata: {
         tool_name: 'list_assigned_documents',
         execution_time_ms: Date.now() - startTime
@@ -243,7 +385,7 @@ async function handleGetDocumentSummary(
     
     // First, get the document content
     const { data: documentContent, error: contentError } = await supabase
-      .rpc('get_agent_document_content', {
+      .rpc('get_media_document_content_for_agent', {
         p_agent_id: agentId,
         p_user_id: userId,
         p_document_id: document_id,
@@ -347,7 +489,7 @@ async function handleFindRelatedDocuments(
     if (reference_document_id) {
       // Get reference document content to find similar documents
       const { data: refDoc, error: refError } = await supabase
-        .rpc('get_agent_document_content', {
+        .rpc('get_media_document_content_for_agent', {
           p_agent_id: agentId,
           p_user_id: userId,
           p_document_id: reference_document_id,
@@ -366,7 +508,7 @@ async function handleFindRelatedDocuments(
     
     // Search for related documents
     const { data: relatedResults, error: searchError } = await supabase
-      .rpc('search_agent_documents', {
+      .rpc('search_media_documents_for_agent', {
         p_agent_id: agentId,
         p_user_id: userId,
         p_query: searchQuery,
@@ -506,219 +648,3 @@ serve(async (req) => {
     );
   }
 });
-
-// =============================================
-// Helper Functions (shared with media-library-api)
-// =============================================
-
-async function handleGetDocumentContent(
-  supabase: any,
-  agentId: string,
-  userId: string,
-  params: any
-): Promise<MCPToolResponse> {
-  const startTime = Date.now();
-  
-  try {
-    const { document_id, include_metadata = true } = params;
-    
-    if (!document_id) {
-      throw new Error('Missing required parameter: document_id');
-    }
-    
-    // Use the database function to get content
-    const { data: documentContent, error: contentError } = await supabase
-      .rpc('get_agent_document_content', {
-        p_agent_id: agentId,
-        p_user_id: userId,
-        p_document_id: document_id,
-        p_include_metadata: include_metadata
-      });
-    
-    if (contentError) throw contentError;
-    
-    if (!documentContent) {
-      throw new Error('Document not found or not assigned to this agent');
-    }
-    
-    return {
-      success: true,
-      data: {
-        document: documentContent,
-        summary: `Retrieved full content for: ${documentContent.display_name || documentContent.file_name}`
-      },
-      metadata: {
-        tool_name: 'get_document_content',
-        execution_time_ms: Date.now() - startTime
-      }
-    };
-    
-  } catch (error: any) {
-    console.error('[MediaLibrary MCP] Get document content error:', error);
-    return {
-      success: false,
-      error: error.message,
-      metadata: {
-        tool_name: 'get_document_content',
-        execution_time_ms: Date.now() - startTime
-      }
-    };
-  }
-}
-
-async function handleListAssignedDocuments(
-  supabase: any,
-  agentId: string,
-  userId: string,
-  params: any
-): Promise<MCPToolResponse> {
-  const startTime = Date.now();
-  
-  try {
-    const { 
-      category, 
-      assignment_type, 
-      include_archived = false,
-      sort_by = 'created_at',
-      sort_order = 'desc'
-    } = params;
-    
-    // Use the database function to list documents
-    const { data: documentsData, error: listError } = await supabase
-      .rpc('list_agent_assigned_documents', {
-        p_agent_id: agentId,
-        p_user_id: userId,
-        p_category: category,
-        p_assignment_type: assignment_type,
-        p_include_archived: include_archived,
-        p_sort_by: sort_by,
-        p_sort_order: sort_order
-      });
-    
-    if (listError) throw listError;
-    
-    const documents = documentsData?.documents || [];
-    const totalCount = documentsData?.total_count || 0;
-    
-    return {
-      success: true,
-      data: {
-        total_count: totalCount,
-        documents: documents,
-        summary: `Agent has ${totalCount} assigned document(s)${category ? ` in category "${category}"` : ''}${assignment_type ? ` of type "${assignment_type}"` : ''}`
-      },
-      metadata: {
-        tool_name: 'list_assigned_documents',
-        execution_time_ms: Date.now() - startTime,
-        results_count: totalCount
-      }
-    };
-    
-  } catch (error: any) {
-    console.error('[MediaLibrary MCP] List assigned documents error:', error);
-    return {
-      success: false,
-      error: error.message,
-      metadata: {
-        tool_name: 'list_assigned_documents',
-        execution_time_ms: Date.now() - startTime
-      }
-    };
-  }
-}
-
-async function handleGetDocumentSummary(
-  supabase: any,
-  agentId: string,
-  userId: string,
-  params: any
-): Promise<MCPToolResponse> {
-  const startTime = Date.now();
-  
-  try {
-    const { document_id, summary_type = 'brief', max_length = 200 } = params;
-    
-    if (!document_id) {
-      throw new Error('Missing required parameter: document_id');
-    }
-    
-    // First, get the document content
-    const { data: documentContent, error: contentError } = await supabase
-      .rpc('get_agent_document_content', {
-        p_agent_id: agentId,
-        p_user_id: userId,
-        p_document_id: document_id,
-        p_include_metadata: true
-      });
-    
-    if (contentError) throw contentError;
-    
-    if (!documentContent) {
-      throw new Error('Document not found or not assigned to this agent');
-    }
-    
-    // Generate summary based on type
-    let summary: string;
-    const textContent = documentContent.text_content || '';
-    
-    switch (summary_type) {
-      case 'brief':
-        summary = textContent.length > max_length 
-          ? textContent.substring(0, max_length) + '...'
-          : textContent;
-        break;
-        
-      case 'key_points':
-        // Extract first few sentences as key points
-        const sentences = textContent.split(/[.!?]+/).filter(s => s.trim().length > 10);
-        summary = sentences.slice(0, 3).join('. ') + (sentences.length > 3 ? '...' : '');
-        break;
-        
-      case 'executive':
-        // Executive summary - first paragraph
-        const paragraphs = textContent.split('\n\n').filter(p => p.trim().length > 0);
-        summary = paragraphs[0] || textContent.substring(0, max_length) + '...';
-        break;
-        
-      case 'detailed':
-      default:
-        summary = textContent.length > max_length * 2 
-          ? textContent.substring(0, max_length * 2) + '...'
-          : textContent;
-        break;
-    }
-    
-    return {
-      success: true,
-      data: {
-        document_id: document_id,
-        document_name: documentContent.display_name || documentContent.file_name,
-        summary_type: summary_type,
-        summary: summary,
-        original_length: textContent.length,
-        summary_length: summary.length,
-        document_metadata: {
-          category: documentContent.category,
-          file_type: documentContent.file_type,
-          created_at: documentContent.created_at,
-          assignment_type: documentContent.assignment_info?.assignment_type
-        }
-      },
-      metadata: {
-        tool_name: 'get_document_summary',
-        execution_time_ms: Date.now() - startTime
-      }
-    };
-    
-  } catch (error: any) {
-    console.error('[MediaLibrary MCP] Get document summary error:', error);
-    return {
-      success: false,
-      error: error.message,
-      metadata: {
-        tool_name: 'get_document_summary',
-        execution_time_ms: Date.now() - startTime
-      }
-    };
-  }
-}

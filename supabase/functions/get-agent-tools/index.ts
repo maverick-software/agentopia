@@ -504,6 +504,116 @@ serve(async (req) => {
       providersProcessed.add(provider.display_name);
     }
 
+    // =============================================
+    // STEP 2: Add Internal Tools (Media Library MCP Tools)
+    // =============================================
+    
+    console.log(`[GetAgentTools] Checking for internal tools (Media Library)...`);
+    
+    // Check if agent has any assigned media documents
+    const { data: assignedMedia, error: mediaError } = await supabase
+      .from('agent_media_assignments')
+      .select('id')
+      .eq('agent_id', agent_id)
+      .eq('user_id', user_id)
+      .eq('is_active', true)
+      .limit(1);
+    
+    if (!mediaError && assignedMedia && assignedMedia.length > 0) {
+      console.log(`[GetAgentTools] Agent has ${assignedMedia.length} assigned documents, adding Media Library MCP tools`);
+      
+      // Add Media Library MCP tools
+      const mediaLibraryTools = [
+        {
+          name: 'search_documents',
+          description: 'Search through your assigned documents using semantic or keyword search. Returns document IDs (UUIDs) that can be used with get_document_content',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              query: { type: 'string', description: 'Search query to find relevant documents' },
+              search_type: { type: 'string', enum: ['semantic', 'keyword', 'exact'], description: 'Type of search to perform' },
+              category: { type: 'string', description: 'Filter by document category (optional)' },
+              limit: { type: 'number', description: 'Maximum number of results to return (default: 10)' }
+            },
+            required: ['query']
+          },
+          status: 'active' as const,
+          provider_name: 'Media Library',
+          connection_name: 'Internal'
+        },
+        {
+          name: 'get_document_content',
+          description: 'Retrieve the full content of a specific assigned document',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              document_id: { type: 'string', description: 'UUID of the document to retrieve (use the "id" field from list_assigned_documents, not the title or filename)' },
+              include_metadata: { type: 'boolean', description: 'Include document metadata (default: true)' }
+            },
+            required: ['document_id']
+          },
+          status: 'active' as const,
+          provider_name: 'Media Library',
+          connection_name: 'Internal'
+        },
+        {
+          name: 'list_assigned_documents',
+          description: 'List all documents assigned to you. Returns document IDs (UUIDs) that can be used with get_document_content',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              category: { type: 'string', description: 'Filter by document category (optional)' },
+              assignment_type: { type: 'string', enum: ['training_data', 'reference', 'sop', 'knowledge_base'], description: 'Filter by assignment type (optional)' },
+              include_archived: { type: 'boolean', description: 'Include archived documents (default: false)' }
+            },
+            required: []
+          },
+          status: 'active' as const,
+          provider_name: 'Media Library',
+          connection_name: 'Internal'
+        },
+        {
+          name: 'get_document_summary',
+          description: 'Get AI-generated summary of a specific document',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              document_id: { type: 'string', description: 'UUID of the document to summarize (use the "id" field from list_assigned_documents, not the title or filename)' },
+              summary_type: { type: 'string', enum: ['brief', 'detailed'], description: 'Type of summary (default: brief)' }
+            },
+            required: ['document_id']
+          },
+          status: 'active' as const,
+          provider_name: 'Media Library',
+          connection_name: 'Internal'
+        },
+        {
+          name: 'find_related_documents',
+          description: 'Find documents related to a topic or another document. Returns document IDs (UUIDs) that can be used with get_document_content',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              topic: { type: 'string', description: 'Topic or query to find related documents for' },
+              reference_document_id: { type: 'string', description: 'UUID of document to find related documents for (use the "id" field from list_assigned_documents, optional)' },
+              limit: { type: 'number', description: 'Maximum number of results to return (default: 5)' }
+            },
+            required: []
+          },
+          status: 'active' as const,
+          provider_name: 'Media Library',
+          connection_name: 'Internal'
+        }
+      ];
+      
+      // Add media library tools to the main tools array
+      tools.push(...mediaLibraryTools);
+      providersProcessed.add('Media Library');
+      
+      console.log(`[GetAgentTools] Added ${mediaLibraryTools.length} Media Library MCP tools`);
+    } else {
+      console.log(`[GetAgentTools] No assigned documents found, skipping Media Library MCP tools`);
+    }
+
     console.log(`[GetAgentTools] Retrieved ${tools.length} tools from ${providersProcessed.size} providers`);
     console.log(`[GetAgentTools] Providers: ${Array.from(providersProcessed).join(', ')}`);
     console.log(`[GetAgentTools] Tools: ${tools.map(t => t.name).join(', ')}`);
