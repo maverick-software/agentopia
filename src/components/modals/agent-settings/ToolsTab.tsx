@@ -140,7 +140,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   const handleToggle = async (tool: keyof ToolSettings, enabled: boolean) => {
     if (enabled) {
       // Check if credentials exist for this tool
-      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation';
+      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing';
       const availableCredentials = getAvailableCredentials(toolType);
       
       if (availableCredentials.length === 0) {
@@ -150,13 +150,54 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       }
     }
     
+    // Update local state immediately
     setSettings(prev => ({ ...prev, [tool]: enabled }));
-    setHasChanges(true);
     
     if (!enabled) {
       // Clear selected credential when disabling
-      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation';
+      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing';
       setSelectedCredentials(prev => ({ ...prev, [toolType]: '' }));
+    }
+
+    // Save to database immediately
+    try {
+      const updatedSettings = { ...agentSettings, [tool]: enabled };
+      const updatedMetadata = {
+        ...agentMetadata,
+        settings: updatedSettings
+      };
+
+      const { error } = await supabase
+        .from('agents')
+        .update({ metadata: updatedMetadata })
+        .eq('id', agentId)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setAgentSettings(updatedSettings);
+      setAgentMetadata(updatedMetadata);
+      
+      // Show brief success feedback
+      const toolName = tool.replace('_enabled', '').replace('_', ' ');
+      toast.success(`${toolName} ${enabled ? 'enabled' : 'disabled'}`, {
+        duration: 2000
+      });
+
+      // Notify parent component
+      if (onAgentUpdated) {
+        onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+      }
+    } catch (error: any) {
+      console.error('Error updating tool setting:', error);
+      // Revert local state on error
+      setSettings(prev => ({ ...prev, [tool]: !enabled }));
+      if (!enabled) {
+        const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing';
+        setSelectedCredentials(prev => ({ ...prev, [toolType]: selectedCredentials[toolType] }));
+      }
+      toast.error(`Failed to ${enabled ? 'enable' : 'disable'} ${tool.replace('_enabled', '').replace('_', ' ')}`);
     }
   };
 
@@ -181,7 +222,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
     }
   };
 
-  const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation') => {
+  const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing') => {
     const providers = providerConfigs[toolType] || [];
     
     // Load existing credentials
@@ -426,9 +467,39 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
                         <Label className="text-sm font-medium">Select Credentials</Label>
                         <Select
                           value={selectedCredentials[tool.toolType] || ''}
-                          onValueChange={(value) => {
+                          onValueChange={async (value) => {
                             setSelectedCredentials(prev => ({ ...prev, [tool.toolType]: value }));
-                            setHasChanges(true);
+                            
+                            // Save credential selection immediately
+                            try {
+                              const updatedSettings = { ...agentSettings, [`${tool.toolType}_credential`]: value };
+                              const updatedMetadata = {
+                                ...agentMetadata,
+                                settings: updatedSettings
+                              };
+
+                              const { error } = await supabase
+                                .from('agents')
+                                .update({ metadata: updatedMetadata })
+                                .eq('id', agentId)
+                                .eq('user_id', user?.id);
+
+                              if (error) throw error;
+
+                              setAgentSettings(updatedSettings);
+                              setAgentMetadata(updatedMetadata);
+                              
+                              toast.success(`Credentials updated for ${tool.name}`, { duration: 2000 });
+
+                              if (onAgentUpdated) {
+                                onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+                              }
+                            } catch (error: any) {
+                              console.error('Error updating credentials:', error);
+                              // Revert on error
+                              setSelectedCredentials(prev => ({ ...prev, [tool.toolType]: selectedCredentials[tool.toolType] || '' }));
+                              toast.error(`Failed to update credentials for ${tool.name}`);
+                            }
                           }}
                         >
                           <SelectTrigger className="w-full max-w-sm">

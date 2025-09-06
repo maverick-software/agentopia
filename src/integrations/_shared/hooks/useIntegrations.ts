@@ -107,7 +107,7 @@ export function useIntegrationCategories() {
   return { categories, loading, error, refetch: fetchCategories };
 }
 
-// Hook for fetching integrations by category
+// Hook for fetching integrations by category - now uses oauth_providers
 export function useIntegrationsByCategory(categoryId?: string) {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,64 +119,49 @@ export function useIntegrationsByCategory(categoryId?: string) {
         setLoading(true);
         setError(null);
 
-        if (categoryId) {
-          // Try using the custom function first
-          const { data: functionData, error: functionError } = await supabase.rpc(
-            'get_integrations_by_category',
-            { p_category_id: categoryId }
-          );
+        console.log('[useIntegrationsByCategory] Now using oauth_providers table instead of integrations');
 
-          if (functionData && !functionError) {
-            // Successfully got data from database function
-            setIntegrations(functionData);
-            return;
-          }
+        // Fetch from oauth_providers table and transform to Integration format
+        const { data: oauthProviders, error: queryError } = await supabase
+          .from('oauth_providers')
+          .select('*')
+          .eq('is_enabled', true)
+          .order('name');
 
-          // If function doesn't exist, try basic table query
-          const { data, error: queryError } = await supabase
-            .from('integrations')
-            .select('*')
-            .eq('category_id', categoryId)
-            .eq('is_active', true)
-            .order('display_order')
-            .order('name');
-
-          if (queryError) {
-            // If table doesn't exist, return dummy data
-            if (queryError.code === '42P01') {
-              console.log('Integrations table not found, using dummy data');
-              setIntegrations(getDummyIntegrations(categoryId));
-            } else {
-              throw queryError;
-            }
-          } else {
-            // Successfully got data from basic query
-            setIntegrations(data || []);
-          }
-        } else {
-          // Fetch all integrations when no categoryId is provided
-          const { data, error: queryError } = await supabase
-            .from('integrations')
-            .select('*')
-            .eq('is_active', true)
-            .order('display_order')
-            .order('name');
-
-          if (queryError) {
-            // If table doesn't exist, return dummy data
-            if (queryError.code === '42P01') {
-              console.log('Integrations table not found, using dummy data');
-              setIntegrations(getAllDummyIntegrations());
-            } else {
-              throw queryError;
-            }
-          } else {
-            // Successfully got data from basic query
-            setIntegrations(data || []);
-          }
+        if (queryError) {
+          console.error('Error fetching oauth_providers:', queryError);
+          // Fallback to dummy data
+          setIntegrations(categoryId ? getDummyIntegrations(categoryId) : getAllDummyIntegrations());
+          return;
         }
+
+        // Transform oauth_providers to Integration format
+        const transformedIntegrations: Integration[] = (oauthProviders || []).map((provider, index) => {
+          // Determine category based on provider name
+          const category = getProviderCategory(provider.name);
+          
+          // Skip if filtering by category and this provider doesn't match
+          if (categoryId && category.id !== categoryId) {
+            return null;
+          }
+
+          return {
+            id: provider.id,
+            category_id: category.id,
+            name: provider.display_name,
+            description: getProviderDescription(provider.name),
+            icon_name: getProviderIcon(provider.name),
+            status: provider.is_enabled ? 'available' : 'coming_soon',
+            agent_classification: 'tool',
+            is_popular: isPopularProvider(provider.name),
+            documentation_url: getProviderDocumentationUrl(provider.name),
+            display_order: index + 1
+          } as Integration;
+        }).filter(Boolean) as Integration[];
+
+        setIntegrations(transformedIntegrations);
       } catch (err) {
-        console.error('Error fetching integrations:', err);
+        console.error('Error fetching integrations from oauth_providers:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch integrations');
         // Return dummy data as fallback
         setIntegrations(categoryId ? getDummyIntegrations(categoryId) : getAllDummyIntegrations());
@@ -191,7 +176,7 @@ export function useIntegrationsByCategory(categoryId?: string) {
   return { integrations, loading, error };
 }
 
-// Hook for fetching integrations by agent classification (tool or channel)
+// Hook for fetching integrations by agent classification (tool or channel) - now uses oauth_providers
 export function useIntegrationsByClassification(classification: 'tool' | 'channel') {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,25 +188,50 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
         setLoading(true);
         setError(null);
 
-        // Query integrations by agent classification
-        const { data, error: queryError } = await supabase
-          .from('integrations')
+        console.log('[useIntegrationsByClassification] Now using oauth_providers table instead of integrations');
+
+        // Fetch from oauth_providers table and transform to Integration format
+        const { data: oauthProviders, error: queryError } = await supabase
+          .from('oauth_providers')
           .select('*')
-          .eq('agent_classification', classification)
-          .eq('is_active', true)
-          .order('display_order')
+          .eq('is_enabled', true)
           .order('name');
 
         if (queryError) {
-          throw queryError;
-        } else {
-          // Successfully got data from basic query
-          setIntegrations(data || []);
+          console.error('Error fetching oauth_providers for classification:', queryError);
+          setIntegrations(getDummyIntegrationsByClassification(classification));
+          return;
         }
-              } catch (err) {
-        console.error('Error fetching integrations by classification:', err);
+
+        // Transform oauth_providers to Integration format and filter by classification
+        const transformedIntegrations: Integration[] = (oauthProviders || []).map((provider, index) => {
+          const category = getProviderCategory(provider.name);
+          const providerClassification = getProviderClassification(provider.name);
+          
+          // Skip if this provider doesn't match the requested classification
+          if (providerClassification !== classification) {
+            return null;
+          }
+
+          return {
+            id: provider.id,
+            category_id: category.id,
+            name: provider.display_name,
+            description: getProviderDescription(provider.name),
+            icon_name: getProviderIcon(provider.name),
+            status: provider.is_enabled ? 'available' : 'coming_soon',
+            agent_classification: providerClassification,
+            is_popular: isPopularProvider(provider.name),
+            documentation_url: getProviderDocumentationUrl(provider.name),
+            display_order: index + 1
+          } as Integration;
+        }).filter(Boolean) as Integration[];
+
+        setIntegrations(transformedIntegrations);
+      } catch (err) {
+        console.error('Error fetching integrations by classification from oauth_providers:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch integrations');
-        setIntegrations([]);
+        setIntegrations(getDummyIntegrationsByClassification(classification));
       } finally {
         setLoading(false);
       }
@@ -261,17 +271,16 @@ export function useIntegrationStats() {
           return;
         }
 
-        // If function doesn't exist, try to get basic stats
+        // If function doesn't exist, try to get basic stats from oauth_providers
         const { data: categoriesData } = await supabase
           .from('integration_categories')
           .select('*')
           .eq('is_active', true);
 
         const { data: integrationsData } = await supabase
-          .from('integrations')
+          .from('oauth_providers')
           .select('*')
-          .eq('is_active', true)
-          .eq('status', 'available');
+          .eq('is_enabled', true);
 
         const { data: userIntegrationsData } = await supabase
           .from('user_integrations')
@@ -825,4 +834,101 @@ function getDummyIntegrations(categoryId: string): Integration[] {
   };
 
   return allIntegrations[categoryId] || [];
+}
+
+// Helper functions to map oauth_providers to integration metadata
+function getProviderCategory(providerName: string): { id: string; name: string } {
+  const categoryMap: Record<string, { id: string; name: string }> = {
+    'gmail': { id: 'messaging', name: 'Messaging & Communication' },
+    'smtp': { id: 'messaging', name: 'Messaging & Communication' },
+    'sendgrid': { id: 'messaging', name: 'Messaging & Communication' },
+    'mailgun': { id: 'messaging', name: 'Messaging & Communication' },
+    'serper_api': { id: 'api', name: 'API Integrations' },
+    'serpapi': { id: 'api', name: 'API Integrations' },
+    'brave_search': { id: 'api', name: 'API Integrations' },
+    'ocr_space': { id: 'api', name: 'API Integrations' },
+    'pinecone': { id: 'database', name: 'Database Connectors' },
+    'getzep': { id: 'database', name: 'Database Connectors' },
+    'digitalocean': { id: 'cloud', name: 'Cloud Services' },
+    'discord': { id: 'messaging', name: 'Messaging & Communication' },
+    'zapier': { id: 'automation', name: 'Automation & Workflows' }
+  };
+  
+  return categoryMap[providerName] || { id: 'api', name: 'API Integrations' };
+}
+
+function getProviderDescription(providerName: string): string {
+  const descriptionMap: Record<string, string> = {
+    'gmail': 'Send, receive, and manage Gmail emails with comprehensive tools for email automation',
+    'smtp': 'Send emails through SMTP servers with custom configurations and templates',
+    'sendgrid': 'Professional email delivery service with advanced analytics and templates',
+    'mailgun': 'Powerful email API for sending, receiving and tracking emails programmatically',
+    'serper_api': 'Google Search API with fast, reliable results. Perfect for web search, news, images, and location-based queries. Offers 1000 free searches per month.',
+    'serpapi': 'Comprehensive search API supporting Google, Bing, Yahoo and Baidu. Advanced features include device simulation and multiple search engines.',
+    'brave_search': 'Privacy-focused search API from Brave. No tracking, independent index, and high monthly quota. Perfect for privacy-conscious applications.',
+    'ocr_space': 'Extract text from images and PDFs using OCR technology. Perfect for processing scanned documents and image-based content.',
+    'pinecone': 'Vector database for AI applications with fast similarity search and real-time updates',
+    'getzep': 'Memory store for AI assistants with conversation history and semantic search',
+    'digitalocean': 'Cloud infrastructure platform for deploying and scaling applications',
+    'discord': 'Interact with Discord servers and manage bot communications',
+    'zapier': 'Connect with Zapier workflows to automate tasks across thousands of apps'
+  };
+  
+  return descriptionMap[providerName] || `Integration for ${providerName}`;
+}
+
+function getProviderIcon(providerName: string): string {
+  const iconMap: Record<string, string> = {
+    'gmail': 'Mail',
+    'smtp': 'Mail',
+    'sendgrid': 'Mail',
+    'mailgun': 'Mail',
+    'serper_api': 'Search',
+    'serpapi': 'Search',
+    'brave_search': 'Search',
+    'ocr_space': 'ScanText',
+    'pinecone': 'Database',
+    'getzep': 'Database',
+    'digitalocean': 'Cloud',
+    'discord': 'MessageSquare',
+    'zapier': 'Zap'
+  };
+  
+  return iconMap[providerName] || 'Globe';
+}
+
+function isPopularProvider(providerName: string): boolean {
+  const popularProviders = ['gmail', 'serper_api', 'brave_search', 'serpapi', 'discord', 'zapier'];
+  return popularProviders.includes(providerName);
+}
+
+function getProviderDocumentationUrl(providerName: string): string | undefined {
+  const docMap: Record<string, string> = {
+    'gmail': 'https://developers.google.com/gmail/api',
+    'serper_api': 'https://serper.dev/api-key',
+    'serpapi': 'https://serpapi.com/search-api',
+    'brave_search': 'https://api.search.brave.com/app/documentation',
+    'ocr_space': 'https://ocr.space/ocrapi',
+    'sendgrid': 'https://docs.sendgrid.com/',
+    'mailgun': 'https://documentation.mailgun.com/',
+    'pinecone': 'https://docs.pinecone.io/',
+    'getzep': 'https://docs.getzep.com/',
+    'digitalocean': 'https://docs.digitalocean.com/reference/api/',
+    'discord': 'https://discord.com/developers/docs',
+    'zapier': 'https://zapier.com/developer'
+  };
+  
+  return docMap[providerName];
+}
+
+function getProviderClassification(providerName: string): 'tool' | 'channel' {
+  // Channel integrations are primarily for communication/messaging
+  const channelProviders = ['gmail', 'smtp', 'sendgrid', 'mailgun', 'discord'];
+  
+  if (channelProviders.includes(providerName)) {
+    return 'channel';
+  }
+  
+  // Everything else is considered a tool
+  return 'tool';
 } 
