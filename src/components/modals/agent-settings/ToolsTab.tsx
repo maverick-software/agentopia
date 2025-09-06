@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Settings,
   Plus,
-  Key
+  Key,
+  ScanText
 } from 'lucide-react';
 
 interface ToolsTabProps {
@@ -34,11 +35,12 @@ interface ToolSettings {
   voice_enabled: boolean;
   web_search_enabled: boolean;
   document_creation_enabled: boolean;
+  ocr_processing_enabled: boolean;
 }
 
 interface CredentialModalState {
   isOpen: boolean;
-  toolType: 'voice' | 'web_search' | 'document_creation' | null;
+  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | null;
   selectedProvider: string;
   availableProviders: any[];
   availableCredentials: any[];
@@ -56,12 +58,14 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   const [settings, setSettings] = useState<ToolSettings>({
     voice_enabled: false,
     web_search_enabled: false,
-    document_creation_enabled: false
+    document_creation_enabled: false,
+    ocr_processing_enabled: false
   });
   const [selectedCredentials, setSelectedCredentials] = useState<{
     web_search?: string;
     voice?: string;
     document_creation?: string;
+    ocr_processing?: string;
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -92,19 +96,30 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       setSettings({
         voice_enabled: toolSettings.voice_enabled || false,
         web_search_enabled: toolSettings.web_search_enabled || false,
-        document_creation_enabled: toolSettings.document_creation_enabled || false
+        document_creation_enabled: toolSettings.document_creation_enabled || false,
+        ocr_processing_enabled: toolSettings.ocr_processing_enabled || false
       });
       
       setSelectedCredentials({
         web_search: toolSettings.web_search_credential || '',
         voice: toolSettings.voice_credential || '',
-        document_creation: toolSettings.document_creation_credential || ''
+        document_creation: toolSettings.document_creation_credential || '',
+        ocr_processing: toolSettings.ocr_processing_credential || ''
       });
     }
   }, [agentData]);
 
   // Provider configurations
   const providerConfigs: Record<string, ProviderConfig[]> = {
+    ocr_processing: [
+      {
+        id: 'ocr_space',
+        name: 'OCR.Space API',
+        description: 'Extract text from PDFs and images with high accuracy OCR',
+        requiresApiKey: true,
+        requiresOAuth: false
+      }
+    ],
     voice: [
       { id: 'elevenlabs', name: 'ElevenLabs', description: 'High-quality AI voice synthesis', requiresApiKey: true, requiresOAuth: false },
       { id: 'openai_tts', name: 'OpenAI TTS', description: 'OpenAI text-to-speech', requiresApiKey: true, requiresOAuth: false },
@@ -300,7 +315,8 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
     const providerNames = {
       'web_search': ['serper_api', 'serpapi', 'brave_search'],
       'voice': ['elevenlabs'],
-      'document_creation': ['google_docs', 'microsoft_office', 'notion']
+      'document_creation': ['google_docs', 'microsoft_office', 'notion'],
+      'ocr_processing': ['ocr_space']
     };
     
     return connections.filter(c => 
@@ -339,6 +355,16 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       requiresApi: 'Document API',
       availableCredentials: getAvailableCredentials('document_creation'),
       toolType: 'document_creation' as const
+    },
+    {
+      id: 'ocr_processing_enabled' as keyof ToolSettings,
+      name: 'Read Documents',
+      description: 'Enable text extraction from PDFs and images',
+      icon: ScanText,
+      enabled: settings.ocr_processing_enabled,
+      requiresApi: 'OCR API (OCR.Space)',
+      availableCredentials: getAvailableCredentials('ocr_processing'),
+      toolType: 'ocr_processing' as const
     }
   ];
 

@@ -2,7 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { VaultService } from '@/integrations/_shared';
 import { toast } from 'react-hot-toast';
-import { SEARCH_PROVIDERS } from './toolConstants';
+import { SEARCH_PROVIDERS, OCR_PROVIDERS } from './toolConstants';
 
 interface ToolSetupHandlersProps {
   agentId: string;
@@ -96,9 +96,12 @@ export function useToolSetupHandlers({
       await refetchIntegrationPermissions();
 
       // Get the tool name
-      const providerInfo = SEARCH_PROVIDERS.find(p => p.id === modalState.selectedProvider);
+      const providerInfo = SEARCH_PROVIDERS.find(p => p.id === modalState.selectedProvider) || 
+                           OCR_PROVIDERS.find(p => p.id === modalState.selectedProvider);
       const toolName = toolId === 'web_search' 
         ? `Web Search (${providerInfo?.name || modalState.selectedProvider})`
+        : toolId === 'ocr_processing'
+        ? `OCR Processing (${providerInfo?.name || modalState.selectedProvider})`
         : modalState.selectedProvider;
 
       toast.success(`${toolName} connected successfully! 🎉`);

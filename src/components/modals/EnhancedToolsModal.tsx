@@ -285,6 +285,17 @@ export function EnhancedToolsModal({
     }
   ];
 
+  // OCR providers for document processing
+  const OCR_PROVIDERS = [
+    { 
+      id: 'ocr_space', 
+      name: 'OCR.Space API', 
+      setupUrl: 'https://ocr.space/ocrapi', 
+      rateLimit: '500 requests/month free',
+      description: 'Extract text from PDFs and images with high accuracy OCR'
+    }
+  ];
+
   // Tool categories for API key setup
   const TOOL_CATEGORIES = [
     {
@@ -294,6 +305,18 @@ export function EnhancedToolsModal({
         { 
           id: 'web_search', 
           name: 'Web Search', 
+          setupUrl: null, // Multiple providers
+          rateLimit: 'Varies by provider'
+        }
+      ]
+    },
+    {
+      id: 'document_processing',
+      name: 'Document Processing',
+      tools: [
+        { 
+          id: 'ocr_processing', 
+          name: 'OCR Processing', 
           setupUrl: null, // Multiple providers
           rateLimit: 'Varies by provider'
         }
@@ -394,10 +417,13 @@ export function EnhancedToolsModal({
       // Refresh agent permissions to show the new connection
       await refetchIntegrationPermissions();
 
-      // Get the tool name - for web search, show provider name; for others use the tool name
-      const providerInfo = SEARCH_PROVIDERS.find(p => p.id === selectedProvider);
+      // Get the tool name - for web search and OCR, show provider name; for others use the tool name
+      const providerInfo = SEARCH_PROVIDERS.find(p => p.id === selectedProvider) || 
+                           OCR_PROVIDERS.find(p => p.id === selectedProvider);
       const toolName = toolId === 'web_search' 
         ? `Web Search (${providerInfo?.name || selectedProvider})`
+        : toolId === 'ocr_processing'
+        ? `OCR Processing (${providerInfo?.name || selectedProvider})`
         : (TOOL_CATEGORIES.flatMap(cat => cat.tools).find(tool => tool.id === selectedProvider)?.name || selectedProvider);
 
       toast.success(`${toolName} connected successfully! 🎉`);
@@ -853,7 +879,125 @@ export function EnhancedToolsModal({
       );
     }
 
-    // Fallback for other tool types (non-web search)
+    // For OCR Processing integration, show provider selection
+    if (tool.id === 'ocr_processing') {
+      return (
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <FileText className="h-5 w-5 text-green-500" />
+              <span>OCR Processing Setup</span>
+            </CardTitle>
+            <CardDescription>
+              Choose an OCR provider and enter your API key to enable text extraction from PDFs and images.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="ocr_provider_select">
+                OCR Provider
+              </Label>
+              <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Choose your OCR provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {OCR_PROVIDERS.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      <div className="flex flex-col text-left">
+                        <span className="font-medium">{provider.name}</span>
+                        <span className="text-xs text-muted-foreground">{provider.rateLimit}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedProvider && (
+              <>
+                <div>
+                  <Label htmlFor="connection_name">
+                    Connection Name (Optional)
+                  </Label>
+                  <Input
+                    id="connection_name"
+                    value={connectionName}
+                    onChange={(e) => setConnectionName(e.target.value)}
+                    placeholder={`My ${OCR_PROVIDERS.find(p => p.id === selectedProvider)?.name} Connection`}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="api_key">
+                    API Key
+                  </Label>
+                  <Input
+                    id="api_key"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your API key"
+                    className="mt-1"
+                  />
+                </div>
+
+                {OCR_PROVIDERS.find(p => p.id === selectedProvider) && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <div className="space-y-2">
+                        <p><strong>Provider:</strong> {OCR_PROVIDERS.find(p => p.id === selectedProvider)?.description}</p>
+                        <p><strong>Rate Limit:</strong> {OCR_PROVIDERS.find(p => p.id === selectedProvider)?.rateLimit}</p>
+                        <p>
+                          <Button variant="link" className="p-0 h-auto" asChild>
+                            <a 
+                              href={OCR_PROVIDERS.find(p => p.id === selectedProvider)?.setupUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              Get API Key <ExternalLink className="h-3 w-3 ml-1" />
+                            </a>
+                          </Button>
+                        </p>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button
+                  onClick={() => handleApiKeySetup(tool.id)}
+                  disabled={!apiKey || connectingService === tool.id}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:opacity-90 text-white"
+                >
+                  {connectingService === tool.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Connecting OCR Processing...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Connect OCR Processing
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Fallback for other tool types (non-web search, non-OCR)
     const availableProviders = TOOL_CATEGORIES
       .find(cat => cat.id === 'research')?.tools || [];
 

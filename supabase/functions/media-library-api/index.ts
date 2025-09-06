@@ -9,6 +9,57 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { corsHeaders } from '../_shared/cors.ts';
 
+/**
+ * Get OCR.Space API key from vault-stored credentials
+ */
+async function getOCRApiKey(userId?: string): Promise<string | null> {
+  if (!userId) return null;
+  
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Get OCR.Space connection for user
+    const { data: connection, error: connectionError } = await supabase
+      .from('user_integration_credentials')
+      .select(`
+        vault_access_token_id,
+        oauth_providers!inner(name)
+      `)
+      .eq('user_id', userId)
+      .eq('credential_type', 'api_key')
+      .eq('connection_status', 'active')
+      .eq('oauth_providers.name', 'ocr_space')
+      .single();
+    
+    if (connectionError || !connection) {
+      console.log('[MediaLibrary] No active OCR.Space connection found for user');
+      return null;
+    }
+    
+    if (!connection.vault_access_token_id) {
+      console.log('[MediaLibrary] OCR.Space connection has no vault token');
+      return null;
+    }
+    
+    // Decrypt API key from vault
+    const { data: apiKey, error: vaultError } = await supabase
+      .rpc('vault_decrypt', { vault_id: connection.vault_access_token_id });
+    
+    if (vaultError || !apiKey) {
+      console.error('[MediaLibrary] Failed to decrypt OCR API key:', vaultError);
+      return null;
+    }
+    
+    return apiKey;
+    
+  } catch (error) {
+    console.error('[MediaLibrary] Error retrieving OCR API key:', error);
+    return null;
+  }
+}
+
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -58,7 +109,7 @@ interface MediaLibraryResponse {
 /**
  * Extract text content from various document types
  */
-async function extractTextFromDocument(supabase: any, storagePath: string, fileType: string): Promise<string> {
+async function extractTextFromDocument(supabase: any, storagePath: string, fileType: string, userId?: string): Promise<string> {
   try {
     console.log(`[MediaLibrary] Extracting text from ${fileType}: ${storagePath}`);
     
@@ -80,7 +131,7 @@ async function extractTextFromDocument(supabase: any, storagePath: string, fileT
     
     // Handle different file types
     if (fileType === 'application/pdf' || storagePath.toLowerCase().endsWith('.pdf')) {
-      return await extractTextFromPDF(uint8Array);
+      return await extractTextFromPDF(uint8Array, userId);
     } else if (fileType.startsWith('text/') || storagePath.toLowerCase().endsWith('.txt')) {
       return new TextDecoder('utf-8').decode(uint8Array);
     } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
@@ -88,8 +139,7 @@ async function extractTextFromDocument(supabase: any, storagePath: string, fileT
       // For now, return a placeholder - DOCX extraction requires additional libraries
       return '[DOCX document - text extraction not yet implemented]';
     } else if (fileType.startsWith('image/')) {
-      // For now, return a placeholder - OCR would be needed for images
-      return '[Image document - OCR extraction not yet implemented]';
+      return await extractTextFromImage(uint8Array, fileType, userId);
     } else {
       console.warn(`[MediaLibrary] Unsupported file type for text extraction: ${fileType}`);
       return '';
@@ -101,20 +151,239 @@ async function extractTextFromDocument(supabase: any, storagePath: string, fileT
 }
 
 /**
+ * Extract text from image files using OCR
+ */
+async function extractTextFromImage(imageData: Uint8Array, fileType: string, userId?: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary] Starting OCR processing for ${fileType} image (${imageData.length} bytes)`);
+    
+    // Try web OCR first
+    const ocrResult = await performWebOCROnImage(imageData, fileType, userId);
+    if (ocrResult && ocrResult.length > 10) {
+      console.log(`[MediaLibrary] OCR extraction successful: ${ocrResult.length} characters`);
+      return ocrResult;
+    }
+    
+    // If OCR fails or returns minimal content, provide informative message
+    return `[${fileType} image: ${imageData.length} bytes - OCR processing attempted. ${ocrResult ? `Extracted ${ocrResult.length} characters: "${ocrResult.substring(0, 100)}..."` : 'No text detected or OCR service unavailable.'}]`;
+    
+  } catch (error: any) {
+    console.error(`[MediaLibrary] Image text extraction error:`, error);
+    return `[${fileType} image: ${imageData.length} bytes - OCR processing failed: ${error.message}]`;
+  }
+}
+
+/**
+ * Use web OCR service for image files
+ */
+async function performWebOCROnImage(imageData: Uint8Array, fileType: string, userId?: string): Promise<string | null> {
+  try {
+    const ocrApiKey = await getOCRApiKey(userId);
+    if (!ocrApiKey) {
+      console.log('[MediaLibrary] OCR.Space API key not configured, skipping image OCR');
+      return null;
+    }
+    
+    // Convert image to base64
+    const base64Data = btoa(String.fromCharCode(...imageData));
+    const mimeType = fileType || 'image/jpeg';
+    
+    const formData = new FormData();
+    formData.append('base64Image', `data:${mimeType};base64,${base64Data}`);
+    formData.append('language', 'eng');
+    formData.append('detectOrientation', 'true');
+    formData.append('scale', 'true');
+    formData.append('OCREngine', '2');
+    
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: {
+        'apikey': ocrApiKey
+      },
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`OCR API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.IsErroredOnProcessing) {
+      throw new Error(`OCR processing error: ${result.ErrorMessage}`);
+    }
+    
+    let extractedText = '';
+    if (result.ParsedResults && result.ParsedResults.length > 0) {
+      for (const page of result.ParsedResults) {
+        if (page.ParsedText) {
+          extractedText += page.ParsedText + '\n';
+        }
+      }
+    }
+    
+    return extractedText.trim() || null;
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary] Image OCR failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Perform OCR extraction on PDF data
+ * Converts PDF to images and uses OCR to extract text from image-based PDFs
+ */
+async function performOCRExtraction(pdfData: Uint8Array, userId?: string): Promise<string> {
+  try {
+    // For image-based PDFs, we need to:
+    // 1. Convert PDF pages to images
+    // 2. Perform OCR on each image
+    // 3. Combine the text results
+    
+    console.log(`[MediaLibrary] Starting OCR processing for ${pdfData.length} byte PDF`);
+    
+    // Option 1: Use a free OCR API service
+    const ocrResult = await performWebOCR(pdfData, userId);
+    if (ocrResult) {
+      return ocrResult;
+    }
+    
+    // Option 2: Basic image text detection (fallback)
+    const basicResult = await performBasicImageTextExtraction(pdfData);
+    if (basicResult) {
+      return basicResult;
+    }
+    
+    throw new Error('No OCR methods available');
+    
+  } catch (error: any) {
+    console.error(`[MediaLibrary] OCR extraction failed:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Use a web-based OCR service to extract text from PDF
+ */
+async function performWebOCR(pdfData: Uint8Array, userId?: string): Promise<string | null> {
+  try {
+    // Get OCR.Space API key from vault-stored credentials
+    const ocrApiKey = await getOCRApiKey(userId);
+    if (!ocrApiKey) {
+      console.log('[MediaLibrary] OCR.Space API key not configured, skipping web OCR');
+      return null;
+    }
+    
+    // Convert PDF to base64 for API
+    const base64Data = btoa(String.fromCharCode(...pdfData));
+    
+    const formData = new FormData();
+    formData.append('base64Image', `data:application/pdf;base64,${base64Data}`);
+    formData.append('language', 'eng');
+    formData.append('detectOrientation', 'true');
+    formData.append('scale', 'true');
+    formData.append('OCREngine', '2');
+    formData.append('filetype', 'PDF');
+    
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: {
+        'apikey': ocrApiKey
+      },
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`OCR API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.IsErroredOnProcessing) {
+      throw new Error(`OCR processing error: ${result.ErrorMessage}`);
+    }
+    
+    let extractedText = '';
+    if (result.ParsedResults && result.ParsedResults.length > 0) {
+      for (const page of result.ParsedResults) {
+        if (page.ParsedText) {
+          extractedText += page.ParsedText + '\n\n';
+        }
+      }
+    }
+    
+    return extractedText.trim() || null;
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary] Web OCR failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Basic image text extraction as fallback
+ * Looks for embedded images in PDF and attempts basic text recognition
+ */
+async function performBasicImageTextExtraction(pdfData: Uint8Array): Promise<string | null> {
+  try {
+    // This is a very basic approach - look for text patterns that might indicate
+    // the PDF contains readable text even if it's image-based
+    const pdfString = new TextDecoder('latin1').decode(pdfData);
+    
+    // Look for font references and text positioning that might indicate text content
+    const fontRegex = /\/Font\s+<<[^>]*>>/g;
+    const fontMatches = pdfString.match(fontRegex) || [];
+    
+    if (fontMatches.length > 0) {
+      console.log(`[MediaLibrary] Found ${fontMatches.length} font references, PDF likely contains extractable text`);
+      
+      // Try to find any readable text sequences near font definitions
+      let extractedText = '';
+      
+      // Look for text that appears after font definitions
+      for (const fontMatch of fontMatches) {
+        const fontIndex = pdfString.indexOf(fontMatch);
+        const textAfterFont = pdfString.substring(fontIndex, fontIndex + 1000);
+        
+        // Extract any readable sequences
+        const readableRegex = /[A-Za-z][A-Za-z0-9\s.,!?;:\-()'"]{10,}/g;
+        const readableMatches = textAfterFont.match(readableRegex) || [];
+        
+        for (const readable of readableMatches) {
+          if (!readable.includes('/') && !readable.includes('<<') && !readable.includes('>>')) {
+            extractedText += readable + ' ';
+          }
+        }
+      }
+      
+      if (extractedText.trim().length > 20) {
+        return extractedText.trim();
+      }
+    }
+    
+    return null;
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary] Basic image text extraction failed:', error);
+    return null;
+  }
+}
+
+/**
  * Extract text from PDF using a simple PDF parser
  * Note: This is a basic implementation. For production, consider using pdf-parse or similar
  */
-async function extractTextFromPDF(pdfData: Uint8Array): Promise<string> {
+async function extractTextFromPDF(pdfData: Uint8Array, userId?: string): Promise<string> {
   try {
-    // For now, we'll use a very basic PDF text extraction
-    // This is a simplified approach - in production you'd want to use a proper PDF library
+    // Enhanced PDF text extraction with multiple strategies
     const pdfString = new TextDecoder('latin1').decode(pdfData);
+    let extractedText = '';
     
-    // Simple regex to extract text between BT/ET pairs (text objects in PDF)
+    // Strategy 1: Extract text between BT/ET pairs (text objects in PDF)
     const textRegex = /BT\s*.*?ET/gs;
     const matches = pdfString.match(textRegex) || [];
     
-    let extractedText = '';
     for (const match of matches) {
       // Extract text from Tj operations
       const tjRegex = /\((.*?)\)\s*Tj/g;
@@ -137,22 +406,91 @@ async function extractTextFromPDF(pdfData: Uint8Array): Promise<string> {
       }
     }
     
+    // Strategy 2: Extract text from stream objects (for compressed/encoded content)
+    if (extractedText.length < 50) {
+      const streamRegex = /stream\s*(.*?)\s*endstream/gs;
+      const streamMatches = pdfString.match(streamRegex) || [];
+      
+      for (const streamMatch of streamMatches) {
+        // Look for readable text patterns in streams
+        const readableTextRegex = /[A-Za-z0-9\s.,!?;:\-()]{10,}/g;
+        const readableMatches = streamMatch.match(readableTextRegex) || [];
+        
+        for (const readable of readableMatches) {
+          // Filter out obvious binary data
+          if (readable.length > 10 && readable.match(/[a-zA-Z]/g)?.length > readable.length * 0.3) {
+            extractedText += readable + ' ';
+          }
+        }
+      }
+    }
+    
+    // Strategy 3: Look for plain text content (uncompressed)
+    if (extractedText.length < 50) {
+      // Find sequences of readable text that might be content
+      const plainTextRegex = /[A-Za-z][A-Za-z0-9\s.,!?;:\-()'"]{20,}/g;
+      const plainMatches = pdfString.match(plainTextRegex) || [];
+      
+      for (const plainMatch of plainMatches) {
+        // Filter out PDF commands and metadata
+        if (!plainMatch.includes('obj') && 
+            !plainMatch.includes('endobj') && 
+            !plainMatch.includes('stream') &&
+            !plainMatch.includes('/Type') &&
+            !plainMatch.includes('/Filter') &&
+            plainMatch.match(/[a-zA-Z]/g)?.length > plainMatch.length * 0.5) {
+          extractedText += plainMatch + '\n';
+        }
+      }
+    }
+    
     // Clean up the extracted text
     extractedText = extractedText
       .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
+      .replace(/\\r/g, '\r') 
       .replace(/\\t/g, '\t')
       .replace(/\\\\/g, '\\')
       .replace(/\\\)/g, ')')
       .replace(/\\\(/g, '(')
+      .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
     
-    if (extractedText.length < 10) {
-      // If we didn't extract much text, it might be a complex PDF
-      // Return a placeholder indicating the file type
-      return `[PDF document: ${pdfData.length} bytes - complex PDF format, text extraction may be incomplete]`;
+    // If we still don't have enough text, try to extract any readable content
+    if (extractedText.length < 50) {
+      console.log(`[MediaLibrary] Basic extraction yielded ${extractedText.length} chars, trying fallback extraction`);
+      
+      // Last resort: extract any sequences that look like words
+      const wordRegex = /[A-Za-z]{3,}(?:\s+[A-Za-z]{3,}){2,}/g;
+      const wordMatches = pdfString.match(wordRegex) || [];
+      
+      const fallbackText = wordMatches
+        .filter(match => match.length > 10)
+        .slice(0, 20) // Limit to first 20 matches to avoid too much noise
+        .join(' ');
+      
+      if (fallbackText.length > extractedText.length) {
+        extractedText = fallbackText;
+      }
     }
     
+    // Final check - if we still have very little text, try OCR processing
+    if (extractedText.length < 20) {
+      console.log(`[MediaLibrary] Text extraction yielded minimal content (${extractedText.length} chars), attempting OCR processing`);
+      
+      try {
+        const ocrText = await performOCRExtraction(pdfData, userId);
+        if (ocrText && ocrText.length > extractedText.length) {
+          console.log(`[MediaLibrary] OCR extraction successful: ${ocrText.length} characters`);
+          return ocrText;
+        }
+      } catch (ocrError) {
+        console.log(`[MediaLibrary] OCR processing failed:`, ocrError);
+      }
+      
+      return `[PDF document: ${pdfData.length} bytes - This appears to be an image-based PDF. OCR processing attempted but may require specialized processing. Extracted ${extractedText.length} characters via text extraction.]`;
+    }
+    
+    console.log(`[MediaLibrary] Successfully extracted ${extractedText.length} characters from PDF`);
     return extractedText;
   } catch (error: any) {
     console.error(`[MediaLibrary] PDF text extraction error:`, error);
@@ -323,7 +661,7 @@ async function handleProcess(
     let chunkCount = 0;
     
     try {
-      textContent = await extractTextFromDocument(supabase, mediaFile.storage_path, mediaFile.file_type);
+      textContent = await extractTextFromDocument(supabase, mediaFile.storage_path, mediaFile.file_type, userId);
       
       if (textContent && textContent.trim().length > 0) {
         // Create chunks for better search and RAG performance

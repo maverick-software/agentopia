@@ -162,22 +162,40 @@ async function handleGetDocumentContent(
         const fileName = (doc.file_name || '').toLowerCase().replace(/\s+/g, ' ').trim();
         const displayName = (doc.display_name || '').toLowerCase().replace(/\s+/g, ' ').trim();
         
+        // Normalize search term and filenames for better matching
+        // Convert hyphens and underscores to spaces for comparison
+        let normalizedSearchTerm = searchTerm.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        const normalizedFileName = fileName.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        const normalizedDisplayName = displayName.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        // Special handling for "UUID_OF_*" patterns - extract the meaningful part
+        if (normalizedSearchTerm.startsWith('uuid of ') || normalizedSearchTerm.startsWith('uuid_of_')) {
+          normalizedSearchTerm = normalizedSearchTerm.replace(/^uuid[\s_]*of[\s_]*/, '');
+          console.log(`[MediaLibrary MCP] Extracted meaningful search term: "${normalizedSearchTerm}" from UUID_OF pattern`);
+        }
+        
+        console.log(`[MediaLibrary MCP] Comparing "${normalizedSearchTerm}" with "${normalizedFileName}"`);
+        
         // For short search terms (like numbers), require more specific matching
-        if (searchTerm.length <= 2) {
+        if (normalizedSearchTerm.length <= 2) {
           // Only match if it's a word boundary or exact filename match
-          const wordBoundaryRegex = new RegExp(`\\b${searchTerm}\\b`, 'i');
-          const matches = wordBoundaryRegex.test(fileName) || wordBoundaryRegex.test(displayName);
+          const wordBoundaryRegex = new RegExp(`\\b${normalizedSearchTerm}\\b`, 'i');
+          const matches = wordBoundaryRegex.test(normalizedFileName) || wordBoundaryRegex.test(normalizedDisplayName);
           
           if (matches) {
             console.log(`[MediaLibrary MCP] Found matching document (word boundary): "${doc.file_name}" (display: "${doc.display_name}")`);
           }
           return matches;
         } else {
-          // For longer terms, use substring matching
-          const matches = fileName.includes(searchTerm) || 
-                         displayName.includes(searchTerm) ||
-                         fileName.replace(/\.pdf$/i, '').includes(searchTerm) ||
-                         displayName.replace(/\.pdf$/i, '').includes(searchTerm);
+          // For longer terms, use substring matching with multiple strategies
+          const matches = normalizedFileName.includes(normalizedSearchTerm) || 
+                         normalizedDisplayName.includes(normalizedSearchTerm) ||
+                         normalizedFileName.replace(/\.pdf$/i, '').includes(normalizedSearchTerm) ||
+                         normalizedDisplayName.replace(/\.pdf$/i, '').includes(normalizedSearchTerm) ||
+                         // Also try partial word matching
+                         normalizedSearchTerm.split(' ').every(word => 
+                           word.length > 2 && (normalizedFileName.includes(word) || normalizedDisplayName.includes(word))
+                         );
           
           if (matches) {
             console.log(`[MediaLibrary MCP] Found matching document: "${doc.file_name}" (display: "${doc.display_name}")`);
