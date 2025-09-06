@@ -28,20 +28,19 @@ import {
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 
-interface Integration {
+interface OAuthProvider {
   id: string;
   name: string;
-  description: string;
-  icon_name: string;
-  status: 'available' | 'beta' | 'coming_soon' | 'deprecated';
-  agent_classification: 'tool' | 'channel';
-  is_popular: boolean;
-  documentation_url: string | null;
-  configuration_schema: Record<string, any>;
-  display_order: number;
-  is_active: boolean;
-  category_id: string;
-  category_name?: string;
+  display_name: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  revoke_endpoint: string | null;
+  discovery_endpoint: string | null;
+  scopes_supported: string[];
+  pkce_required: boolean;
+  client_credentials_location: string;
+  is_enabled: boolean;
+  configuration_metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
@@ -56,10 +55,8 @@ interface IntegrationCategory {
 }
 
 const statusOptions = [
-  { value: 'available', label: 'Available', color: 'bg-green-500' },
-  { value: 'beta', label: 'Beta', color: 'bg-blue-500' },
-  { value: 'coming_soon', label: 'Coming Soon', color: 'bg-yellow-500' },
-  { value: 'deprecated', label: 'Deprecated', color: 'bg-red-500' }
+  { value: true, label: 'Enabled', color: 'bg-green-500' },
+  { value: false, label: 'Disabled', color: 'bg-red-500' }
 ];
 
 const iconOptions = [
@@ -74,214 +71,189 @@ const iconOptions = [
 ];
 
 export function AdminIntegrationManagement() {
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [categories, setCategories] = useState<IntegrationCategory[]>([]);
+  const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [classificationFilter, setClassificationFilter] = useState('all');
   
   // Dialog states
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<OAuthProvider | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
-    icon_name: 'Globe',
-    status: 'available' as 'available' | 'beta' | 'coming_soon' | 'deprecated',
-    agent_classification: 'tool' as 'tool' | 'channel',
-    is_popular: false,
-    documentation_url: '',
-    configuration_schema: '{}',
-    display_order: 0,
-    is_active: true,
-    category_id: ''
+    display_name: '',
+    authorization_endpoint: '',
+    token_endpoint: '',
+    revoke_endpoint: '',
+    discovery_endpoint: '',
+    scopes_supported: '[]',
+    pkce_required: true,
+    client_credentials_location: 'header',
+    is_enabled: true,
+    configuration_metadata: '{}'
   });
   
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchIntegrations();
-    fetchCategories();
+    fetchProviders();
   }, []);
 
-  const fetchIntegrations = async () => {
+  const fetchProviders = async () => {
     try {
+      console.log('[AdminIntegrationManagement] Now using oauth_providers table instead of integrations');
+      
       const { data, error } = await supabase
-        .from('integrations')
-        .select(`
-          *,
-          integration_categories(name)
-        `)
-        .order('display_order', { ascending: true });
+        .from('oauth_providers')
+        .select('*')
+        .order('name', { ascending: true });
 
       if (error) throw error;
 
-      const formattedData = data.map(item => ({
-        ...item,
-        category_name: item.integration_categories?.name || 'Unknown'
-      }));
-
-      setIntegrations(formattedData);
+      setProviders(data || []);
     } catch (error) {
-      console.error('Error fetching integrations:', error);
-      toast.error('Failed to load integrations');
+      console.error('Error fetching oauth providers:', error);
+      toast.error('Failed to load OAuth providers');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('integration_categories')
-        .select('*')
-        .order('display_order', { ascending: true });
-
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      toast.error('Failed to load categories');
-    }
-  };
+  // Categories removed - OAuth providers don't use categories
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.category_id) {
-      toast.error('Name and category are required');
+    if (!formData.name.trim() || !formData.display_name.trim()) {
+      toast.error('Name and display name are required');
       return;
     }
 
     try {
       setSaving(true);
       
-      let configSchema = {};
-      if (formData.configuration_schema.trim()) {
+      let scopesSupported = [];
+      if (formData.scopes_supported.trim()) {
         try {
-          configSchema = JSON.parse(formData.configuration_schema);
+          scopesSupported = JSON.parse(formData.scopes_supported);
         } catch (error) {
-          toast.error('Invalid JSON in configuration schema');
+          toast.error('Invalid JSON in scopes supported');
           return;
         }
       }
 
-      const integrationData = {
+      let configMetadata = {};
+      if (formData.configuration_metadata.trim()) {
+        try {
+          configMetadata = JSON.parse(formData.configuration_metadata);
+        } catch (error) {
+          toast.error('Invalid JSON in configuration metadata');
+          return;
+        }
+      }
+
+      const providerData = {
         ...formData,
-        configuration_schema: configSchema,
-        documentation_url: formData.documentation_url || null
+        scopes_supported: scopesSupported,
+        configuration_metadata: configMetadata,
+        revoke_endpoint: formData.revoke_endpoint || null,
+        discovery_endpoint: formData.discovery_endpoint || null
       };
 
       let result;
-      if (selectedIntegration) {
-        // Update existing integration using admin edge function
-        const { data: functionResult, error: functionError } = await supabase.functions.invoke(
-          'admin-update-integration',
-          {
-            body: {
-              integrationId: selectedIntegration.id,
-              updateData: integrationData
-            }
-          }
-        );
-        
-        if (functionError) throw functionError;
-        if (!functionResult?.success) throw new Error(functionResult?.error || 'Update failed');
-        
-        result = { data: [functionResult.data] };
-      } else {
-        // Create new integration
+      if (selectedProvider) {
+        // Update existing provider
         result = await supabase
-          .from('integrations')
-          .insert([integrationData])
+          .from('oauth_providers')
+          .update(providerData)
+          .eq('id', selectedProvider.id)
           .select()
           .single();
-          
-        if (result.error) throw result.error;
+      } else {
+        // Create new provider
+        result = await supabase
+          .from('oauth_providers')
+          .insert([providerData])
+          .select()
+          .single();
       }
+          
+      if (result.error) throw result.error;
 
-      toast.success(selectedIntegration ? 'Integration updated successfully' : 'Integration created successfully');
+      toast.success(selectedProvider ? 'OAuth provider updated successfully' : 'OAuth provider created successfully');
       setIsAddDialogOpen(false);
       setIsEditDialogOpen(false);
       resetForm();
-      fetchIntegrations();
+      fetchProviders();
     } catch (error) {
-      console.error('Error saving integration:', error);
-      toast.error('Failed to save integration');
+      console.error('Error saving OAuth provider:', error);
+      toast.error('Failed to save OAuth provider');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEdit = (integration: Integration) => {
-    setSelectedIntegration(integration);
+  const handleEdit = (provider: OAuthProvider) => {
+    setSelectedProvider(provider);
     setFormData({
-      name: integration.name,
-      description: integration.description,
-      icon_name: integration.icon_name,
-      status: integration.status,
-      agent_classification: integration.agent_classification,
-      is_popular: integration.is_popular,
-      documentation_url: integration.documentation_url || '',
-      configuration_schema: JSON.stringify(integration.configuration_schema, null, 2),
-      display_order: integration.display_order,
-      is_active: integration.is_active,
-      category_id: integration.category_id
+      name: provider.name,
+      display_name: provider.display_name,
+      authorization_endpoint: provider.authorization_endpoint,
+      token_endpoint: provider.token_endpoint,
+      revoke_endpoint: provider.revoke_endpoint || '',
+      discovery_endpoint: provider.discovery_endpoint || '',
+      scopes_supported: JSON.stringify(provider.scopes_supported, null, 2),
+      pkce_required: provider.pkce_required,
+      client_credentials_location: provider.client_credentials_location,
+      is_enabled: provider.is_enabled,
+      configuration_metadata: JSON.stringify(provider.configuration_metadata, null, 2)
     });
     setIsEditDialogOpen(true);
   };
 
   const handleDelete = async () => {
-    if (!selectedIntegration) return;
+    if (!selectedProvider) return;
 
     try {
-      // Delete integration using admin edge function
-      const { data: functionResult, error: functionError } = await supabase.functions.invoke(
-        'admin-update-integration',
-        {
-          body: {
-            integrationId: selectedIntegration.id,
-            operation: 'delete'
-          }
-        }
-      );
+      const { error } = await supabase
+        .from('oauth_providers')
+        .delete()
+        .eq('id', selectedProvider.id);
       
-      if (functionError) throw functionError;
-      if (!functionResult?.success) throw new Error(functionResult?.error || 'Delete failed');
+      if (error) throw error;
 
-      toast.success('Integration deleted successfully');
+      toast.success('OAuth provider deleted successfully');
       setIsDeleteDialogOpen(false);
-      setSelectedIntegration(null);
-      fetchIntegrations();
+      setSelectedProvider(null);
+      fetchProviders();
     } catch (error) {
-      console.error('Error deleting integration:', error);
-      toast.error('Failed to delete integration');
+      console.error('Error deleting OAuth provider:', error);
+      toast.error('Failed to delete OAuth provider');
     }
   };
 
   const resetForm = () => {
     setFormData({
       name: '',
-      description: '',
-      icon_name: 'Globe',
-      status: 'available' as 'available' | 'beta' | 'coming_soon' | 'deprecated',
-      agent_classification: 'tool' as 'tool' | 'channel',
-      is_popular: false,
-      documentation_url: '',
-      configuration_schema: '{}',
-      display_order: 0,
-      is_active: true,
-      category_id: ''
+      display_name: '',
+      authorization_endpoint: '',
+      token_endpoint: '',
+      revoke_endpoint: '',
+      discovery_endpoint: '',
+      scopes_supported: '[]',
+      pkce_required: true,
+      client_credentials_location: 'header',
+      is_enabled: true,
+      configuration_metadata: '{}'
     });
-    setSelectedIntegration(null);
+    setSelectedProvider(null);
   };
 
-  const getStatusBadge = (status: string) => {
-    const option = statusOptions.find(opt => opt.value === status);
+  const getStatusBadge = (isEnabled: boolean) => {
+    const option = statusOptions.find(opt => opt.value === isEnabled);
     return (
       <Badge className={`${option?.color}/20 text-white border-${option?.color}/30`}>
         {option?.label}
@@ -294,19 +266,20 @@ export function AdminIntegrationManagement() {
     return <IconComponent className="h-4 w-4" />;
   };
 
-  const filteredIntegrations = integrations.filter(integration => {
-    const matchesSearch = integration.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         integration.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || integration.status === statusFilter;
-    const matchesClassification = classificationFilter === 'all' || integration.agent_classification === classificationFilter;
+  const filteredProviders = providers.filter(provider => {
+    const matchesSearch = provider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         provider.display_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || 
+                         (statusFilter === 'enabled' && provider.is_enabled) ||
+                         (statusFilter === 'disabled' && !provider.is_enabled);
     
-    return matchesSearch && matchesStatus && matchesClassification;
+    return matchesSearch && matchesStatus;
   });
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading integrations...</div>
+        <div className="text-gray-400">Loading OAuth providers...</div>
       </div>
     );
   }
@@ -316,157 +289,144 @@ export function AdminIntegrationManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Integration Management</h1>
-          <p className="text-gray-400">Manage integration definitions and categories</p>
+          <h1 className="text-2xl font-bold text-white">OAuth Provider Management</h1>
+          <p className="text-gray-400">Manage OAuth provider configurations and endpoints</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Integration
+              Add OAuth Provider
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Add New Integration</DialogTitle>
+              <DialogTitle>Add New OAuth Provider</DialogTitle>
               <DialogDescription>
-                Create a new integration definition for users to connect to.
+                Create a new OAuth provider configuration for user authentication.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="name">Name</Label>
+                  <Label htmlFor="name">Provider Name</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g., gmail, serper_api"
                     required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="category">Category</Label>
-                  <Select value={formData.category_id} onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map(category => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="icon">Icon</Label>
-                  <Select value={formData.icon_name} onValueChange={(value) => setFormData(prev => ({ ...prev, icon_name: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {iconOptions.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <div className="flex items-center gap-2">
-                            <option.icon className="h-4 w-4" />
-                            {option.label}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select value={formData.status} onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="classification">Classification</Label>
-                  <Select value={formData.agent_classification} onValueChange={(value: any) => setFormData(prev => ({ ...prev, agent_classification: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tool">Tool</SelectItem>
-                      <SelectItem value="channel">Channel</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="display_name">Display Name</Label>
+                  <Input
+                    id="display_name"
+                    value={formData.display_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
+                    placeholder="e.g., Gmail, Serper API"
+                    required
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="documentation_url">Documentation URL</Label>
+                  <Label htmlFor="authorization_endpoint">Authorization Endpoint</Label>
                   <Input
-                    id="documentation_url"
-                    type="url"
-                    value={formData.documentation_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, documentation_url: e.target.value }))}
+                    id="authorization_endpoint"
+                    value={formData.authorization_endpoint}
+                    onChange={(e) => setFormData(prev => ({ ...prev, authorization_endpoint: e.target.value }))}
+                    placeholder="https://accounts.google.com/o/oauth2/auth"
+                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="display_order">Display Order</Label>
+                  <Label htmlFor="token_endpoint">Token Endpoint</Label>
                   <Input
-                    id="display_order"
-                    type="number"
-                    value={formData.display_order}
-                    onChange={(e) => setFormData(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
+                    id="token_endpoint"
+                    value={formData.token_endpoint}
+                    onChange={(e) => setFormData(prev => ({ ...prev, token_endpoint: e.target.value }))}
+                    placeholder="https://oauth2.googleapis.com/token"
+                    required
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="revoke_endpoint">Revoke Endpoint (Optional)</Label>
+                  <Input
+                    id="revoke_endpoint"
+                    value={formData.revoke_endpoint}
+                    onChange={(e) => setFormData(prev => ({ ...prev, revoke_endpoint: e.target.value }))}
+                    placeholder="https://oauth2.googleapis.com/revoke"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="discovery_endpoint">Discovery Endpoint (Optional)</Label>
+                  <Input
+                    id="discovery_endpoint"
+                    value={formData.discovery_endpoint}
+                    onChange={(e) => setFormData(prev => ({ ...prev, discovery_endpoint: e.target.value }))}
+                    placeholder="https://accounts.google.com/.well-known/openid_configuration"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="client_credentials_location">Client Credentials Location</Label>
+                  <Select value={formData.client_credentials_location} onValueChange={(value) => setFormData(prev => ({ ...prev, client_credentials_location: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="header">Header</SelectItem>
+                      <SelectItem value="body">Body</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center space-x-2 pt-6">
+                  <Switch
+                    id="pkce_required"
+                    checked={formData.pkce_required}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, pkce_required: checked }))}
+                  />
+                  <Label htmlFor="pkce_required">PKCE Required</Label>
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
                 <div className="flex items-center space-x-2">
                   <Switch
-                    id="is_popular"
-                    checked={formData.is_popular}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_popular: checked }))}
+                    id="is_enabled"
+                    checked={formData.is_enabled}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_enabled: checked }))}
                   />
-                  <Label htmlFor="is_popular">Popular</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="is_active"
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
-                  />
-                  <Label htmlFor="is_active">Active</Label>
+                  <Label htmlFor="is_enabled">Enabled</Label>
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="configuration_schema">Configuration Schema (JSON)</Label>
+                <Label htmlFor="scopes_supported">Scopes Supported (JSON Array)</Label>
                 <Textarea
-                  id="configuration_schema"
-                  value={formData.configuration_schema}
-                  onChange={(e) => setFormData(prev => ({ ...prev, configuration_schema: e.target.value }))}
+                  id="scopes_supported"
+                  value={formData.scopes_supported}
+                  onChange={(e) => setFormData(prev => ({ ...prev, scopes_supported: e.target.value }))}
+                  rows={3}
+                  placeholder='["openid", "email", "profile"]'
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="configuration_metadata">Configuration Metadata (JSON)</Label>
+                <Textarea
+                  id="configuration_metadata"
+                  value={formData.configuration_metadata}
+                  onChange={(e) => setFormData(prev => ({ ...prev, configuration_metadata: e.target.value }))}
                   rows={4}
-                  placeholder='{"api_key": {"type": "string", "required": true}}'
+                  placeholder='{"provider_type": "oauth", "requires_api_key": false}'
                 />
               </div>
 
@@ -475,7 +435,7 @@ export function AdminIntegrationManagement() {
                   Cancel
                 </Button>
                 <Button type="submit" disabled={saving}>
-                  {saving ? 'Creating...' : 'Create Integration'}
+                  {saving ? 'Creating...' : 'Create OAuth Provider'}
                 </Button>
               </DialogFooter>
             </form>
@@ -500,55 +460,39 @@ export function AdminIntegrationManagement() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            {statusOptions.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={classificationFilter} onValueChange={setClassificationFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Classifications</SelectItem>
-            <SelectItem value="tool">Tools</SelectItem>
-            <SelectItem value="channel">Channels</SelectItem>
+            <SelectItem value="enabled">Enabled</SelectItem>
+            <SelectItem value="disabled">Disabled</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Integrations Table */}
+      {/* OAuth Providers Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Integrations ({filteredIntegrations.length})</CardTitle>
+          <CardTitle>OAuth Providers ({filteredProviders.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredIntegrations.map(integration => (
+            {filteredProviders.map(provider => (
               <div
-                key={integration.id}
+                key={provider.id}
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50/5"
               >
                 <div className="flex items-center gap-4">
                   <div className="p-2 bg-gray-800 rounded">
-                    {getIcon(integration.icon_name)}
+                    <Shield className="h-4 w-4" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-white">{integration.name}</h3>
-                      {getStatusBadge(integration.status)}
-                      <Badge variant={integration.agent_classification === 'tool' ? 'default' : 'secondary'}>
-                        {integration.agent_classification}
+                      <h3 className="font-medium text-white">{provider.display_name}</h3>
+                      {getStatusBadge(provider.is_enabled)}
+                      <Badge variant="outline">
+                        {provider.pkce_required ? 'PKCE' : 'No PKCE'}
                       </Badge>
-                      {integration.is_popular && (
-                        <Badge variant="outline">Popular</Badge>
-                      )}
                     </div>
-                    <p className="text-sm text-gray-400">{integration.description}</p>
+                    <p className="text-sm text-gray-400">Provider: {provider.name}</p>
                     <p className="text-xs text-gray-500">
-                      Category: {integration.category_name} • Order: {integration.display_order}
+                      Scopes: {provider.scopes_supported.length} • Credentials: {provider.client_credentials_location}
                     </p>
                   </div>
                 </div>
@@ -556,7 +500,7 @@ export function AdminIntegrationManagement() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleEdit(integration)}
+                    onClick={() => handleEdit(provider)}
                   >
                     <Edit2 className="h-4 w-4" />
                   </Button>
@@ -564,7 +508,7 @@ export function AdminIntegrationManagement() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setSelectedIntegration(integration);
+                      setSelectedProvider(provider);
                       setIsDeleteDialogOpen(true);
                     }}
                   >
@@ -573,9 +517,9 @@ export function AdminIntegrationManagement() {
                 </div>
               </div>
             ))}
-            {filteredIntegrations.length === 0 && (
+            {filteredProviders.length === 0 && (
               <div className="text-center py-8 text-gray-400">
-                No integrations found matching your criteria.
+                No OAuth providers found matching your criteria.
               </div>
             )}
           </div>
@@ -586,48 +530,57 @@ export function AdminIntegrationManagement() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Integration</DialogTitle>
+            <DialogTitle>Edit OAuth Provider</DialogTitle>
             <DialogDescription>
-              Update the integration definition.
+              Update the OAuth provider configuration.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Same form fields as Add dialog */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit_name">Name</Label>
+                <Label htmlFor="edit_name">Provider Name</Label>
                 <Input
                   id="edit_name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., gmail, serper_api"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="edit_category">Category</Label>
-                <Select value={formData.category_id} onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="edit_display_name">Display Name</Label>
+                <Input
+                  id="edit_display_name"
+                  value={formData.display_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
+                  placeholder="e.g., Gmail, Serper API"
+                  required
+                />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="edit_description">Description</Label>
-              <Textarea
-                id="edit_description"
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                rows={2}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_authorization_endpoint">Authorization Endpoint</Label>
+                <Input
+                  id="edit_authorization_endpoint"
+                  value={formData.authorization_endpoint}
+                  onChange={(e) => setFormData(prev => ({ ...prev, authorization_endpoint: e.target.value }))}
+                  placeholder="https://accounts.google.com/o/oauth2/auth"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_token_endpoint">Token Endpoint</Label>
+                <Input
+                  id="edit_token_endpoint"
+                  value={formData.token_endpoint}
+                  onChange={(e) => setFormData(prev => ({ ...prev, token_endpoint: e.target.value }))}
+                  placeholder="https://oauth2.googleapis.com/token"
+                  required
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -734,7 +687,7 @@ export function AdminIntegrationManagement() {
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? 'Updating...' : 'Update Integration'}
+                {saving ? 'Updating...' : 'Update OAuth Provider'}
               </Button>
             </DialogFooter>
           </form>
@@ -745,9 +698,9 @@ export function AdminIntegrationManagement() {
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Integration</DialogTitle>
+            <DialogTitle>Delete OAuth Provider</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{selectedIntegration?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{selectedProvider?.display_name}"? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
