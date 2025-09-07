@@ -61,7 +61,7 @@ export function DigitalOceanSetupModal({
     try {
       // Get DigitalOcean OAuth provider
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'digitalocean')
         .single();

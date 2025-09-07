@@ -1,7 +1,7 @@
 -- Add Mailgun OAuth Provider
 -- This fixes the "Could not find the 'provider_name' column" error
 
-INSERT INTO oauth_providers (
+INSERT INTO service_providers (
     name,
     display_name,
     authorization_endpoint,

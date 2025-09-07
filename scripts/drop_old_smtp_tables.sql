@@ -63,7 +63,7 @@ SELECT
 FROM agent_integration_permissions aip
 JOIN agents a ON a.id = aip.agent_id
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE op.name = 'smtp'
   AND aip.is_active = true
 LIMIT 5;

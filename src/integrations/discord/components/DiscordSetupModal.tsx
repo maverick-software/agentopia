@@ -73,7 +73,7 @@ export function DiscordSetupModal({
     try {
       // Get Discord OAuth provider
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'discord')
         .single();

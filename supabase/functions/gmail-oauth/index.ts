@@ -163,7 +163,7 @@ serve(async (req) => {
     console.log('OAuth tokens securely stored in vault.');
 
     const { data: oauthProvider, error: providerError } = await supabase
-      .from('oauth_providers')
+      .from('service_providers')
       .select('id')
       .eq('name', 'gmail')
       .single()

@@ -48,7 +48,7 @@ export function useWebSearchConnection() {
         .from('user_integration_credentials')
         .select(`
           *,
-          oauth_providers(
+          service_providers(
             name,
             display_name
           )
@@ -63,15 +63,15 @@ export function useWebSearchConnection() {
       // Filter for web search providers and format the connections
       const formattedConnections = (data || [])
         .filter((conn: any) => 
-          conn.oauth_providers && 
-          ['serper_api', 'serpapi', 'brave_search'].includes(conn.oauth_providers.name)
+          conn.service_providers && 
+          ['serper_api', 'serpapi', 'brave_search'].includes(conn.service_providers.name)
         )
         .map((conn: any) => ({
           id: conn.id,
           user_id: conn.user_id,
           oauth_provider_id: conn.oauth_provider_id,
-          provider_name: conn.oauth_providers.name,
-          provider_display_name: conn.oauth_providers.display_name,
+          provider_name: conn.service_providers.name,
+          provider_display_name: conn.service_providers.display_name,
           external_username: conn.external_username,
           is_active: conn.connection_status === 'active',
           created_at: conn.created_at,
@@ -125,7 +125,7 @@ export function useAgentWebSearchPermissions(agentId?: string) {
           user_integration_credentials(
             external_username,
             oauth_provider_id,
-            oauth_providers(name, display_name)
+            service_providers(name, display_name)
           )
         `)
         .eq('agent_id', agentId)
@@ -134,8 +134,8 @@ export function useAgentWebSearchPermissions(agentId?: string) {
       // Filter on client-side for web search providers
       const filteredData = (data || []).filter((permission: any) => 
         permission.user_integration_credentials && 
-        permission.user_integration_credentials.oauth_providers && 
-        ['serper_api', 'serpapi', 'brave_search'].includes(permission.user_integration_credentials.oauth_providers.name)
+        permission.user_integration_credentials.service_providers && 
+        ['serper_api', 'serpapi', 'brave_search'].includes(permission.user_integration_credentials.service_providers.name)
       );
 
       if (fetchError) {

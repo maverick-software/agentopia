@@ -116,7 +116,7 @@ export function useMailgunIntegration() {
 
       // Get or create OAuth provider entry
       let { data: provider, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'mailgun')
         .single();
@@ -124,7 +124,7 @@ export function useMailgunIntegration() {
       if (providerError && providerError.code === 'PGRST116') {
         // Provider doesn't exist, create it
         const { data: newProvider, error: createError } = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .insert({
             name: 'mailgun',
             display_name: 'Mailgun Email Service',

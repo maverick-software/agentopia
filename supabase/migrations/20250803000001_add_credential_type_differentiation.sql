@@ -17,7 +17,7 @@ ADD COLUMN "credential_type" "public"."connection_credential_type_enum" DEFAULT 
 UPDATE "public"."user_oauth_connections" 
 SET "credential_type" = 'api_key'::connection_credential_type_enum
 WHERE "oauth_provider_id" IN (
-    SELECT id FROM "public"."oauth_providers" 
+    SELECT id FROM "public"."service_providers" 
     WHERE name IN ('serper_api', 'serpapi', 'brave_search', 'serper', 'serp_api')
 );
 
@@ -25,7 +25,7 @@ WHERE "oauth_provider_id" IN (
 UPDATE "public"."user_oauth_connections" 
 SET "credential_type" = 'oauth'::connection_credential_type_enum
 WHERE "oauth_provider_id" IN (
-    SELECT id FROM "public"."oauth_providers" 
+    SELECT id FROM "public"."service_providers" 
     WHERE name IN ('google', 'gmail', 'github', 'microsoft', 'slack', 'discord')
 );
 
@@ -108,7 +108,7 @@ BEGIN
         uoc.created_at,
         uoc.updated_at
     FROM user_oauth_connections uoc
-    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    INNER JOIN service_providers op ON op.id = uoc.oauth_provider_id
     WHERE uoc.user_id = p_user_id
     ORDER BY uoc.created_at DESC;
 END;

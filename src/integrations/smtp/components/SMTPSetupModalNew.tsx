@@ -96,7 +96,7 @@ export function SMTPSetupModal({
     try {
       // Get SMTP OAuth provider
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'smtp')
         .single();

@@ -37,8 +37,8 @@ export async function fetchUserConnections(
   const results: UnifiedConnection[] = (data || []).map((row: any) => ({
     connection_id: row.connection_id || row.credential_id,
     user_id: row.user_id,
-    provider_name: row.provider_name || row.oauth_providers?.name,
-    provider_display_name: row.provider_display_name || row.oauth_providers?.display_name,
+    provider_name: row.provider_name || row.service_providers?.name,
+    provider_display_name: row.provider_display_name || row.service_providers?.display_name,
     external_username: row.external_username ?? null,
     connection_name: row.connection_name ?? null,
     credential_type: row.credential_type,

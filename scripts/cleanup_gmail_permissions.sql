@@ -14,7 +14,7 @@ SELECT
 FROM agent_integration_permissions aip
 JOIN agents a ON a.id = aip.agent_id
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE op.name = 'gmail';
 
 -- Step 2: Check which agents have SMTP permissions (should be preserved)
@@ -28,7 +28,7 @@ SELECT
 FROM agent_integration_permissions aip
 JOIN agents a ON a.id = aip.agent_id
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE op.name IN ('smtp', 'sendgrid', 'mailgun');
 
 -- Step 3: DELETE all Gmail agent permissions (CRITICAL SECURITY STEP)
@@ -38,7 +38,7 @@ WHERE op.name IN ('smtp', 'sendgrid', 'mailgun');
 -- WHERE connection_id IN (
 --     SELECT uic.id 
 --     FROM user_integration_credentials uic
---     JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+--     JOIN service_providers op ON op.id = uic.oauth_provider_id
 --     WHERE op.name = 'gmail'
 -- );
 
@@ -47,7 +47,7 @@ WHERE op.name IN ('smtp', 'sendgrid', 'mailgun');
 -- 
 -- DELETE FROM user_integration_credentials 
 -- WHERE oauth_provider_id IN (
---     SELECT id FROM oauth_providers WHERE name = 'gmail'
+--     SELECT id FROM service_providers WHERE name = 'gmail'
 -- );
 
 SELECT 'CLEANUP COMMANDS READY - UNCOMMENT TO EXECUTE' as note;

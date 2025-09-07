@@ -42,11 +42,11 @@ async function checkAngelaPermissions() {
           connection_name,
           vault_access_token_id,
           connection_status,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', angela.id)
-      .eq('user_integration_credentials.oauth_providers.name', 'gmail');
+      .eq('user_integration_credentials.service_providers.name', 'gmail');
 
     console.log('📋 Gmail Integration Permissions:');
     if (permError || !permissions || permissions.length === 0) {
@@ -74,10 +74,10 @@ async function checkAngelaPermissions() {
         connection_status,
         credential_type,
         created_at,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('user_id', angela.user_id)
-      .eq('oauth_providers.name', 'gmail');
+      .eq('service_providers.name', 'gmail');
 
     console.log('📧 Gmail Credentials (User Level):');
     if (credsError || !gmailCreds || gmailCreds.length === 0) {
@@ -127,11 +127,11 @@ async function checkAngelaPermissions() {
         is_active,
         user_integration_credentials!inner(
           connection_name,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', angela.id)
-      .in('user_integration_credentials.oauth_providers.name', ['smtp', 'sendgrid', 'mailgun']);
+      .in('user_integration_credentials.service_providers.name', ['smtp', 'sendgrid', 'mailgun']);
 
     console.log('📤 Email (SMTP/SendGrid/Mailgun) Permissions:');
     if (smtpError || !smtpPerms || smtpPerms.length === 0) {
@@ -139,7 +139,7 @@ async function checkAngelaPermissions() {
     } else {
       console.log(`   ✅ Found ${smtpPerms.length} email permissions:`);
       smtpPerms.forEach(perm => {
-        const provider = perm.user_integration_credentials?.oauth_providers?.name;
+        const provider = perm.user_integration_credentials?.service_providers?.name;
         const connection = perm.user_integration_credentials?.connection_name;
         console.log(`   - Provider: ${provider}, Connection: ${connection}, Active: ${perm.is_active}`);
       });

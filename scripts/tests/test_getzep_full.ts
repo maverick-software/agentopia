@@ -15,7 +15,7 @@ async function main() {
   // Step 1: Verify GetZep connection exists
   console.log('\n1. Checking GetZep connection...');
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id')
     .eq('name', 'getzep')
     .single();

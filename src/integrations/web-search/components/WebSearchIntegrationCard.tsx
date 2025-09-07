@@ -82,7 +82,7 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
   const loadProviders = async () => {
     try {
       const { data, error } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('name, display_name, configuration')
         .in('name', ['serper', 'serpapi', 'brave_search'])
         .eq('is_enabled', true);
@@ -115,17 +115,17 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
           id,
           is_active,
           created_at,
-          oauth_providers!inner(name, display_name)
+          service_providers!inner(name, display_name)
         `)
         .eq('user_id', user.id)
-        .in('oauth_providers.name', ['serper', 'serpapi', 'brave_search']);
+        .in('service_providers.name', ['serper', 'serpapi', 'brave_search']);
 
       if (error) throw error;
 
       const webSearchConnections = data?.map((conn: any) => ({
         id: conn.id,
-        provider_name: conn.oauth_providers.name,
-        provider_display_name: conn.oauth_providers.display_name,
+        provider_name: conn.service_providers.name,
+        provider_display_name: conn.service_providers.display_name,
         is_active: conn.is_active,
         created_at: conn.created_at,
       })) || [];
@@ -151,7 +151,7 @@ export function WebSearchIntegrationCard({ className }: WebSearchIntegrationCard
 
       // Get provider configuration
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', selectedProvider)
         .single();

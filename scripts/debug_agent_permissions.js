@@ -41,7 +41,7 @@ async function debugAgentPermissions(agentId, userId) {
     // 2. Check OAuth providers
     console.log('\n=== OAuth Providers ===');
     const { data: providers, error: provError } = await supabase
-      .from('oauth_providers')
+      .from('service_providers')
       .select('*')
       .eq('name', 'gmail');
     
@@ -60,10 +60,10 @@ async function debugAgentPermissions(agentId, userId) {
       .from('user_oauth_connections')
       .select(`
         *,
-        oauth_providers!inner(*)
+        service_providers!inner(*)
       `)
       .eq('user_id', targetUserId)
-      .eq('oauth_providers.name', 'gmail');
+      .eq('service_providers.name', 'gmail');
     
     if (connError) {
       console.error('❌ Error fetching connections:', connError);
@@ -109,12 +109,12 @@ async function debugAgentPermissions(agentId, userId) {
         is_active,
         user_oauth_connections!inner(
           oauth_provider_id,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', agentId)
       .eq('user_oauth_connections.user_id', targetUserId)
-      .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+      .eq('user_oauth_connections.service_providers.name', 'gmail')
       .eq('is_active', true)
       .single();
     

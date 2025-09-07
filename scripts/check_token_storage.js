@@ -25,7 +25,7 @@ async function checkTokenStorage() {
       .from('user_oauth_connections')
       .select('*')
       .eq('user_id', USER_ID)
-      .eq('oauth_provider_id', (await supabase.from('oauth_providers').select('id').eq('name', 'gmail').single()).data.id)
+      .eq('oauth_provider_id', (await supabase.from('service_providers').select('id').eq('name', 'gmail').single()).data.id)
       .single();
 
     if (error) {

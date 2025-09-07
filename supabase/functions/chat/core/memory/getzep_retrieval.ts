@@ -35,7 +35,7 @@ export async function searchGetZepKnowledgeGraph(
 
     // Get the user's GetZep connection
     const { data: provider } = await supabase
-      .from('oauth_providers')
+      .from('service_providers')
       .select('id')
       .eq('name', 'getzep')
       .single();

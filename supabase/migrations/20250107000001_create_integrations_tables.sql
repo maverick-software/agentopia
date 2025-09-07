@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS integrations (
     is_popular BOOLEAN DEFAULT FALSE,
     documentation_url TEXT,
     configuration_schema JSONB DEFAULT '{}', -- JSON schema for configuration
-    required_oauth_provider_id UUID REFERENCES oauth_providers(id) ON DELETE SET NULL,
+    required_oauth_provider_id UUID REFERENCES service_providers(id) ON DELETE SET NULL,
     required_tool_catalog_id UUID REFERENCES tool_catalog(id) ON DELETE SET NULL,
     display_order INTEGER DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,

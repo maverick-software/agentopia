@@ -24,7 +24,7 @@ async function testFixedGetZepAuth() {
   
   // Update the connection to use the working API key
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id')
     .eq('name', 'getzep')
     .single();

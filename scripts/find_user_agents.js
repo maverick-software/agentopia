@@ -91,10 +91,10 @@ async function checkUserAgents(userId) {
     .from('user_oauth_connections')
     .select(`
       *,
-      oauth_providers!inner(name)
+      service_providers!inner(name)
     `)
     .eq('user_id', userId)
-    .eq('oauth_providers.name', 'gmail');
+    .eq('service_providers.name', 'gmail');
   
   console.log(`Found ${connections?.length || 0} Gmail connection(s):`);
   connections?.forEach(conn => {

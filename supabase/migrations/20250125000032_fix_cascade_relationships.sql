@@ -83,7 +83,7 @@ BEGIN
         -- Log the revocation
         RAISE NOTICE 'Credential revoked for user % provider %: %', 
             NEW.user_id, 
-            (SELECT name FROM oauth_providers WHERE id = NEW.oauth_provider_id),
+            (SELECT name FROM service_providers WHERE id = NEW.oauth_provider_id),
             NEW.connection_name;
         
         -- The CASCADE DELETE will automatically remove agent_oauth_permissions
@@ -156,9 +156,9 @@ CREATE TRIGGER agent_deletion_cascade_trigger
     EXECUTE FUNCTION handle_agent_deletion_cascade();
 
 -- Trigger for integration deletion
-DROP TRIGGER IF EXISTS integration_deletion_cascade_trigger ON oauth_providers;
+DROP TRIGGER IF EXISTS integration_deletion_cascade_trigger ON service_providers;
 CREATE TRIGGER integration_deletion_cascade_trigger
-    AFTER DELETE ON oauth_providers
+    AFTER DELETE ON service_providers
     FOR EACH ROW
     EXECUTE FUNCTION handle_integration_deletion_cascade();
 
@@ -183,7 +183,7 @@ BEGIN
         COALESCE(uic.connection_status, 'no_credential') as credential_status,
         (aop.id IS NOT NULL) as permission_granted,
         COALESCE(aop.is_active, false) as permission_active
-    FROM oauth_providers op
+    FROM service_providers op
     LEFT JOIN user_integration_credentials uic ON (
         uic.oauth_provider_id = op.id 
         AND uic.user_id = p_user_id

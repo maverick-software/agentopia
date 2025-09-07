@@ -179,7 +179,7 @@ export function EmailRelaySetupModal({
 
       // Get OAuth provider for the selected email provider
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', formData.selected_provider)
         .single();

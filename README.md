@@ -1116,7 +1116,7 @@ Agentopia implements a sophisticated tool use system that allows agents to perfo
 
 Key tables involved in the tool use infrastructure:
 
-* **`oauth_providers`**: Stores OAuth provider configurations (e.g., Gmail, Slack)
+* **`service_providers`**: Stores OAuth provider configurations (e.g., Gmail, Slack)
 * **`user_oauth_connections`**: Links users to their OAuth connections with encrypted tokens
 * **`agent_integration_permissions`**: Controls which agents have access to which OAuth scopes
   * `agent_id`: The agent granted permissions
@@ -2200,14 +2200,14 @@ Agentopia provides comprehensive visibility into tool executions:
 
 2. **Tools not appearing in chat**:
    - Ensure the OAuth connection is active in `user_oauth_connections`
-   - Verify the `oauth_providers` table has the correct provider entry
+   - Verify the `service_providers` table has the correct provider entry
    - Check chat function logs for tool availability count
 
 ### Extending the System
 
 To add new tool providers:
 
-1. Add provider to `oauth_providers` table
+1. Add provider to `service_providers` table
 2. Implement OAuth flow in `supabase/functions/[provider]-oauth`
 3. Define tools in `function_calling.ts` following the `GMAIL_MCP_TOOLS` pattern
 4. Add execution logic in `FunctionCallingManager`

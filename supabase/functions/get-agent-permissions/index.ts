@@ -123,7 +123,7 @@ serve(async (req) => {
           connection_status,
           user_id,
           oauth_provider_id,
-          oauth_providers!inner (
+          service_providers!inner (
             name,
             display_name
           )
@@ -153,11 +153,11 @@ serve(async (req) => {
       agent_id: item.agent_id,
       connection_id: item.user_integration_credentials.id,
       connection_name: item.user_integration_credentials.connection_name || 
-                      `${item.user_integration_credentials.oauth_providers.display_name} Connection`,
+                      `${item.user_integration_credentials.service_providers.display_name} Connection`,
       external_username: item.user_integration_credentials.external_username,
-      provider_name: item.user_integration_credentials.oauth_providers.name,
-      provider_display_name: item.user_integration_credentials.oauth_providers.display_name,
-      integration_name: item.user_integration_credentials.oauth_providers.display_name,
+      provider_name: item.user_integration_credentials.service_providers.name,
+      provider_display_name: item.user_integration_credentials.service_providers.display_name,
+      integration_name: item.user_integration_credentials.service_providers.display_name,
       allowed_scopes: item.allowed_scopes || [],
       is_active: item.is_active,
       permission_level: item.permission_level || 'custom',

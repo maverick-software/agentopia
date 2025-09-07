@@ -54,11 +54,11 @@ async function checkRecentAgents() {
             *,
             user_oauth_connections!inner(
               external_username,
-              oauth_providers!inner(name)
+              service_providers!inner(name)
             )
           `)
           .eq('agent_id', agent.id)
-          .eq('user_oauth_connections.oauth_providers.name', 'gmail');
+          .eq('user_oauth_connections.service_providers.name', 'gmail');
         
         if (permissions && permissions.length > 0) {
           console.log(`   Gmail Permissions: ✅ Found`);

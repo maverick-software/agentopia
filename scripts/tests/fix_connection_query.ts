@@ -35,7 +35,7 @@ async function fixConnectionQuery() {
   
   console.log('\n2️⃣ Checking GetZep provider...');
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('*')
     .eq('name', 'getzep')
     .single();

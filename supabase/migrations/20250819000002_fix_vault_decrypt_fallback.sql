@@ -52,7 +52,7 @@ BEGIN
         FROM user_oauth_connections
         WHERE vault_access_token_id = vault_id
         AND oauth_provider_id IN (
-            SELECT id FROM oauth_providers WHERE name = 'getzep'
+            SELECT id FROM service_providers WHERE name = 'getzep'
         )
         LIMIT 1;
         

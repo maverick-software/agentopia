@@ -331,7 +331,7 @@ serve(async (req) => {
       .from('user_integration_credentials')
       .select(`
         *,
-        oauth_providers!inner(name, display_name)
+        service_providers!inner(name, display_name)
       `)
       .eq('user_id', user.id)
       .eq('credential_type', 'api_key');
@@ -343,8 +343,8 @@ serve(async (req) => {
 
     // Filter for web search providers
     const webSearchConnections = (connections || []).filter(c => 
-      c.oauth_providers && 
-      ['serper_api', 'serpapi', 'brave_search'].includes(c.oauth_providers.name) &&
+      c.service_providers && 
+      ['serper_api', 'serpapi', 'brave_search'].includes(c.service_providers.name) &&
       c.connection_status === 'active'
     );
 
@@ -362,7 +362,7 @@ serve(async (req) => {
     let lastError: Error | null = null;
 
     for (const providerName of preferredProviders) {
-      const connection = webSearchConnections.find(c => c.oauth_providers.name === providerName);
+      const connection = webSearchConnections.find(c => c.service_providers.name === providerName);
       if (!connection) continue;
 
       const provider = searchProviders[providerName];

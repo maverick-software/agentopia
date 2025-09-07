@@ -2,7 +2,7 @@
 -- This migration adds a unified "Email Relay" integration that supports SMTP, SendGrid, and Mailgun
 
 -- First, ensure we have the necessary OAuth providers for email services
-INSERT INTO oauth_providers (name, display_name, authorization_endpoint, token_endpoint, revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required, client_credentials_location, is_enabled, configuration_metadata, created_at, updated_at)
+INSERT INTO service_providers (name, display_name, authorization_endpoint, token_endpoint, revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required, client_credentials_location, is_enabled, configuration_metadata, created_at, updated_at)
 VALUES 
   -- SMTP provider (for SMTP server configurations)
   ('smtp', 'SMTP Server', '', '', NULL, NULL, '["send_email"]'::jsonb, false, 'header', true, '{"description": "Connect to any SMTP server", "setup_type": "smtp_config"}'::jsonb, NOW(), NOW()),
@@ -39,9 +39,9 @@ BEGIN
   SELECT id INTO email_category_id FROM integration_categories WHERE name = 'Email Services';
   
   -- Get provider IDs
-  SELECT id INTO smtp_provider_id FROM oauth_providers WHERE name = 'smtp';
-  SELECT id INTO sendgrid_provider_id FROM oauth_providers WHERE name = 'sendgrid'; 
-  SELECT id INTO mailgun_provider_id FROM oauth_providers WHERE name = 'mailgun';
+  SELECT id INTO smtp_provider_id FROM service_providers WHERE name = 'smtp';
+  SELECT id INTO sendgrid_provider_id FROM service_providers WHERE name = 'sendgrid'; 
+  SELECT id INTO mailgun_provider_id FROM service_providers WHERE name = 'mailgun';
 
   -- Add Email Relay integration
   INSERT INTO integrations (

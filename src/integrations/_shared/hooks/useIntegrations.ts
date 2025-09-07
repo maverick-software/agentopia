@@ -107,7 +107,7 @@ export function useIntegrationCategories() {
   return { categories, loading, error, refetch: fetchCategories };
 }
 
-// Hook for fetching integrations by category - now uses oauth_providers
+// Hook for fetching integrations by category - now uses service_providers
 export function useIntegrationsByCategory(categoryId?: string) {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,23 +119,23 @@ export function useIntegrationsByCategory(categoryId?: string) {
         setLoading(true);
         setError(null);
 
-        console.log('[useIntegrationsByCategory] Now using oauth_providers table instead of integrations');
+        console.log('[useIntegrationsByCategory] Now using service_providers table instead of integrations');
 
-        // Fetch from oauth_providers table and transform to Integration format
+        // Fetch from service_providers table and transform to Integration format
         const { data: oauthProviders, error: queryError } = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .select('*')
           .eq('is_enabled', true)
           .order('name');
 
         if (queryError) {
-          console.error('Error fetching oauth_providers:', queryError);
+          console.error('Error fetching service_providers:', queryError);
           // Fallback to dummy data
           setIntegrations(categoryId ? getDummyIntegrations(categoryId) : getAllDummyIntegrations());
           return;
         }
 
-        // Transform oauth_providers to Integration format
+        // Transform service_providers to Integration format
         const transformedIntegrations: Integration[] = (oauthProviders || []).map((provider, index) => {
           // Determine category based on provider name
           const category = getProviderCategory(provider.name);
@@ -161,7 +161,7 @@ export function useIntegrationsByCategory(categoryId?: string) {
 
         setIntegrations(transformedIntegrations);
       } catch (err) {
-        console.error('Error fetching integrations from oauth_providers:', err);
+        console.error('Error fetching integrations from service_providers:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch integrations');
         // Return dummy data as fallback
         setIntegrations(categoryId ? getDummyIntegrations(categoryId) : getAllDummyIntegrations());
@@ -176,7 +176,7 @@ export function useIntegrationsByCategory(categoryId?: string) {
   return { integrations, loading, error };
 }
 
-// Hook for fetching integrations by agent classification (tool or channel) - now uses oauth_providers
+// Hook for fetching integrations by agent classification (tool or channel) - now uses service_providers
 export function useIntegrationsByClassification(classification: 'tool' | 'channel') {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,22 +188,22 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
         setLoading(true);
         setError(null);
 
-        console.log('[useIntegrationsByClassification] Now using oauth_providers table instead of integrations');
+        console.log('[useIntegrationsByClassification] Now using service_providers table instead of integrations');
 
-        // Fetch from oauth_providers table and transform to Integration format
+        // Fetch from service_providers table and transform to Integration format
         const { data: oauthProviders, error: queryError } = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .select('*')
           .eq('is_enabled', true)
           .order('name');
 
         if (queryError) {
-          console.error('Error fetching oauth_providers for classification:', queryError);
+          console.error('Error fetching service_providers for classification:', queryError);
           setIntegrations(getDummyIntegrationsByClassification(classification));
           return;
         }
 
-        // Transform oauth_providers to Integration format and filter by classification
+        // Transform service_providers to Integration format and filter by classification
         const transformedIntegrations: Integration[] = (oauthProviders || []).map((provider, index) => {
           const category = getProviderCategory(provider.name);
           const providerClassification = getProviderClassification(provider.name);
@@ -229,7 +229,7 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
 
         setIntegrations(transformedIntegrations);
       } catch (err) {
-        console.error('Error fetching integrations by classification from oauth_providers:', err);
+        console.error('Error fetching integrations by classification from service_providers:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch integrations');
         setIntegrations(getDummyIntegrationsByClassification(classification));
       } finally {
@@ -271,14 +271,14 @@ export function useIntegrationStats() {
           return;
         }
 
-        // If function doesn't exist, try to get basic stats from oauth_providers
+        // If function doesn't exist, try to get basic stats from service_providers
         const { data: categoriesData } = await supabase
           .from('integration_categories')
           .select('*')
           .eq('is_active', true);
 
         const { data: integrationsData } = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .select('*')
           .eq('is_enabled', true);
 
@@ -836,7 +836,7 @@ function getDummyIntegrations(categoryId: string): Integration[] {
   return allIntegrations[categoryId] || [];
 }
 
-// Helper functions to map oauth_providers to integration metadata
+// Helper functions to map service_providers to integration metadata
 function getProviderCategory(providerName: string): { id: string; name: string } {
   const categoryMap: Record<string, { id: string; name: string }> = {
     'gmail': { id: 'messaging', name: 'Messaging & Communication' },

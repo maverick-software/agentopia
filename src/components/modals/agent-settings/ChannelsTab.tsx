@@ -187,11 +187,11 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         .from('user_integration_credentials')
         .select(`
           *,
-          oauth_providers!inner(name, display_name)
+          service_providers!inner(name, display_name)
         `)
         .eq('user_id', user?.id)
         .in('connection_status', ['active', 'connected'])
-        .in('oauth_providers.name', ['smtp', 'sendgrid', 'mailgun', 'gmail']);
+        .in('service_providers.name', ['smtp', 'sendgrid', 'mailgun', 'gmail']);
 
       if (error) {
         console.error('Error loading email credentials:', error);
@@ -288,7 +288,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         .from('user_integration_credentials')
         .select(`
           *,
-          oauth_providers!inner(name, display_name)
+          service_providers!inner(name, display_name)
         `)
         .eq('id', credentialId)
         .single();
@@ -297,7 +297,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         throw new Error('Could not fetch credential details');
       }
 
-      const providerName = credential.oauth_providers.name;
+      const providerName = credential.service_providers.name;
       const oauthScopes = credential.scopes_granted || [];
       
       // Map OAuth scopes to agent capabilities
@@ -446,10 +446,10 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       
       const { data: credentials } = await supabase
         .from('user_integration_credentials')
-        .select('oauth_providers!inner(name)')
+        .select('service_providers!inner(name)')
         .eq('user_id', user?.id)
         .in('connection_status', ['active', 'connected'])
-        .in('oauth_providers.name', providers);
+        .in('service_providers.name', providers);
 
       return (credentials?.length || 0) > 0;
     } catch (error) {
@@ -653,10 +653,10 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
                         <Mail className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <div className="font-medium text-sm">
-                            {cred.connection_name || cred.oauth_providers?.display_name || 'Email Account'}
+                            {cred.connection_name || cred.service_providers?.display_name || 'Email Account'}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {cred.oauth_providers?.display_name || cred.oauth_providers?.name || 'Unknown Provider'}
+                            {cred.service_providers?.display_name || cred.service_providers?.name || 'Unknown Provider'}
                             {cred.external_username && ` • ${cred.external_username}`}
                             {cred.connection_status && ` • ${cred.connection_status}`}
                           </div>

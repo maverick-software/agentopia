@@ -5,7 +5,7 @@ BEGIN;
 UPDATE user_oauth_connections c
 SET scopes_granted = '["email_read","email_send"]'::jsonb,
     updated_at = NOW()
-FROM oauth_providers p
+FROM service_providers p
 WHERE c.oauth_provider_id = p.id
   AND LOWER(p.name) = 'gmail'
   AND (c.scopes_granted IS NULL OR c.scopes_granted = '[]'::jsonb);
@@ -14,7 +14,7 @@ WHERE c.oauth_provider_id = p.id
 UPDATE user_oauth_connections c
 SET scopes_granted = '["email_send"]'::jsonb,
     updated_at = NOW()
-FROM oauth_providers p
+FROM service_providers p
 WHERE c.oauth_provider_id = p.id
   AND LOWER(p.name) = 'sendgrid'
   AND (c.scopes_granted IS NULL OR c.scopes_granted = '[]'::jsonb);
@@ -23,7 +23,7 @@ WHERE c.oauth_provider_id = p.id
 UPDATE user_oauth_connections c
 SET scopes_granted = '["email_send"]'::jsonb,
     updated_at = NOW()
-FROM oauth_providers p
+FROM service_providers p
 WHERE c.oauth_provider_id = p.id
   AND LOWER(p.name) = 'mailgun'
   AND (c.scopes_granted IS NULL OR c.scopes_granted = '[]'::jsonb);
@@ -32,7 +32,7 @@ WHERE c.oauth_provider_id = p.id
 UPDATE user_oauth_connections c
 SET scopes_granted = '["web_search","news_search","image_search"]'::jsonb,
     updated_at = NOW()
-FROM oauth_providers p
+FROM service_providers p
 WHERE c.oauth_provider_id = p.id
   AND LOWER(p.name) IN ('serper api','serper','serpapi','brave search api','brave')
   AND (c.scopes_granted IS NULL OR c.scopes_granted = '[]'::jsonb);

@@ -28,9 +28,9 @@ DECLARE
     mailgun_provider_id UUID;
 BEGIN
     -- Get oauth provider IDs using actual names from your data
-    SELECT id INTO smtp_provider_id FROM oauth_providers WHERE name = 'smtp';
-    SELECT id INTO sendgrid_provider_id FROM oauth_providers WHERE name = 'sendgrid';
-    SELECT id INTO mailgun_provider_id FROM oauth_providers WHERE name = 'mailgun';
+    SELECT id INTO smtp_provider_id FROM service_providers WHERE name = 'smtp';
+    SELECT id INTO sendgrid_provider_id FROM service_providers WHERE name = 'sendgrid';
+    SELECT id INTO mailgun_provider_id FROM service_providers WHERE name = 'mailgun';
     
     -- Reactivate SMTP integration (using actual ID from your data)
     UPDATE integrations 
@@ -101,7 +101,7 @@ END $$;
 -- Fix Gmail integration (link to gmail oauth provider)
 UPDATE integrations 
 SET 
-    required_oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail'),
+    required_oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail'),
     updated_at = NOW()
 WHERE id = '774353a7-7ad2-468d-aba4-3e3bc0f7b0fe' -- Gmail ID from your data
   AND required_oauth_provider_id IS NULL;
@@ -109,7 +109,7 @@ WHERE id = '774353a7-7ad2-468d-aba4-3e3bc0f7b0fe' -- Gmail ID from your data
 -- Fix Web Search integration (link to serper_api oauth provider as primary)
 UPDATE integrations 
 SET 
-    required_oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'serper_api'),
+    required_oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'serper_api'),
     updated_at = NOW()
 WHERE id = 'bae4c9c4-a91f-45d3-8f68-6b48ff61adc4' -- Web Search ID from your data
   AND required_oauth_provider_id IS NULL;
@@ -117,7 +117,7 @@ WHERE id = 'bae4c9c4-a91f-45d3-8f68-6b48ff61adc4' -- Web Search ID from your dat
 -- Fix Slack integration (link to slack oauth provider)
 UPDATE integrations 
 SET 
-    required_oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'slack'),
+    required_oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'slack'),
     updated_at = NOW()
 WHERE id = 'e190feb2-f705-457e-a98e-84ea1f493667' -- Slack ID from your data
   AND required_oauth_provider_id IS NULL;
@@ -135,7 +135,7 @@ WHERE id IN (
     SELECT aip.id
     FROM agent_integration_permissions aip
     JOIN user_integration_credentials uic ON aip.user_oauth_connection_id = uic.id
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE op.name = 'smtp'
       AND aip.is_active = true
       AND (aip.allowed_scopes IS NULL OR aip.allowed_scopes = '[]'::jsonb)
@@ -150,7 +150,7 @@ WHERE id IN (
     SELECT aip.id
     FROM agent_integration_permissions aip
     JOIN user_integration_credentials uic ON aip.user_oauth_connection_id = uic.id
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE op.name = 'sendgrid'
       AND aip.is_active = true
       AND (aip.allowed_scopes IS NULL OR aip.allowed_scopes = '[]'::jsonb)
@@ -165,7 +165,7 @@ WHERE id IN (
     SELECT aip.id
     FROM agent_integration_permissions aip
     JOIN user_integration_credentials uic ON aip.user_oauth_connection_id = uic.id
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE op.name = 'mailgun'
       AND aip.is_active = true
       AND (aip.allowed_scopes IS NULL OR aip.allowed_scopes = '[]'::jsonb)
@@ -211,7 +211,7 @@ BEGIN
     SELECT COUNT(*) INTO fixed_permissions_count
     FROM agent_integration_permissions aip
     JOIN user_integration_credentials uic ON aip.user_oauth_connection_id = uic.id
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE op.name IN ('smtp', 'sendgrid', 'mailgun')
       AND aip.is_active = true
       AND aip.allowed_scopes IS NOT NULL

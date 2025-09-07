@@ -48,7 +48,7 @@ async function testAngelaTools() {
           connection_name,
           credential_type,
           connection_status,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', angela.id)
@@ -63,7 +63,7 @@ async function testAngelaTools() {
       console.log('   ⚠️  No active permissions found');
     } else {
       permissions.forEach(perm => {
-        const provider = perm.user_integration_credentials?.oauth_providers?.name;
+        const provider = perm.user_integration_credentials?.service_providers?.name;
         const connection = perm.user_integration_credentials?.connection_name;
         const status = perm.user_integration_credentials?.connection_status;
         
@@ -83,7 +83,7 @@ async function testAngelaTools() {
     
     // Check for Gmail
     const gmailPerms = permissions?.filter(p => 
-      p.user_integration_credentials?.oauth_providers?.name === 'gmail'
+      p.user_integration_credentials?.service_providers?.name === 'gmail'
     );
     if (gmailPerms?.length > 0) {
       expectedTools.push('gmail_send_email', 'gmail_read_emails', 'gmail_search_emails', 'gmail_email_actions');
@@ -94,7 +94,7 @@ async function testAngelaTools() {
     
     // Check for SMTP
     const smtpPerms = permissions?.filter(p => 
-      p.user_integration_credentials?.oauth_providers?.name === 'smtp'
+      p.user_integration_credentials?.service_providers?.name === 'smtp'
     );
     if (smtpPerms?.length > 0) {
       expectedTools.push('smtp_send_email', 'smtp_test_connection');
@@ -103,7 +103,7 @@ async function testAngelaTools() {
     
     // Check for SendGrid
     const sendgridPerms = permissions?.filter(p => 
-      p.user_integration_credentials?.oauth_providers?.name === 'sendgrid'
+      p.user_integration_credentials?.service_providers?.name === 'sendgrid'
     );
     if (sendgridPerms?.length > 0) {
       expectedTools.push('sendgrid_send_email');
@@ -112,7 +112,7 @@ async function testAngelaTools() {
     
     // Check for Mailgun
     const mailgunPerms = permissions?.filter(p => 
-      p.user_integration_credentials?.oauth_providers?.name === 'mailgun'
+      p.user_integration_credentials?.service_providers?.name === 'mailgun'
     );
     if (mailgunPerms?.length > 0) {
       expectedTools.push('mailgun_send_email', 'mailgun_validate_email');
@@ -130,10 +130,10 @@ async function testAngelaTools() {
         connection_name,
         external_username,
         connection_status,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('user_id', angela.user_id)
-      .eq('oauth_providers.name', 'gmail');
+      .eq('service_providers.name', 'gmail');
 
     if (gmailCreds && gmailCreds.length > 0) {
       console.log(`   ⚠️  WARNING: Found ${gmailCreds.length} Gmail credential(s) for user`);

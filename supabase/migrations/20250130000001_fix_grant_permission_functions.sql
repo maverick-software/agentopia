@@ -124,7 +124,7 @@ BEGIN
     SELECT aip.allowed_scopes INTO v_allowed_scopes
     FROM agent_integration_permissions aip
     JOIN user_integration_credentials uic ON aip.user_oauth_connection_id = uic.id
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE aip.agent_id = p_agent_id 
     AND uic.user_id = p_user_id
     AND op.name = 'gmail'
@@ -170,7 +170,7 @@ BEGIN
     FROM user_integration_credentials uic
     LEFT JOIN gmail_configurations gc ON gc.user_oauth_connection_id = uic.id
     WHERE uic.user_id = p_user_id 
-    AND uic.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND uic.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     AND uic.connection_status = 'active';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -211,7 +211,7 @@ BEGIN
         uic.created_at,
         uic.updated_at
     FROM user_integration_credentials uic
-    LEFT JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    LEFT JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE uic.user_id = COALESCE(p_user_id, auth.uid())
     AND uic.connection_status != 'revoked'
     ORDER BY uic.created_at DESC;

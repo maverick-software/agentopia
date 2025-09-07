@@ -27,7 +27,7 @@ async function ensureAccountGraph(supabase: SupabaseClient): Promise<{ accountGr
   const { data: conn, error: connErr } = await supabase
     .from('user_oauth_connections')
     .select('id, user_id, oauth_provider_id')
-    .eq('oauth_provider_id', (await supabase.from('oauth_providers').select('id').eq('name', 'getzep').single()).data?.id)
+    .eq('oauth_provider_id', (await supabase.from('service_providers').select('id').eq('name', 'getzep').single()).data?.id)
     .eq('connection_status', 'active')
     .limit(1)
     .maybeSingle();

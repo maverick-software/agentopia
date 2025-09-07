@@ -124,12 +124,12 @@ export class GmailProvider implements ToolProvider {
           user_integration_credentials!inner(
             oauth_provider_id,
             credential_type,
-            oauth_providers!inner(name)
+            service_providers!inner(name)
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_integration_credentials.user_id', userId)
-        .eq('user_integration_credentials.oauth_providers.name', 'gmail')
+        .eq('user_integration_credentials.service_providers.name', 'gmail')
         .eq('user_integration_credentials.credential_type', 'oauth')
         .eq('is_active', true)
         .limit(5);

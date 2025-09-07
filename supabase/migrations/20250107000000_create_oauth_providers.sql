@@ -1,7 +1,7 @@
 -- Create OAuth providers table
 -- This table stores configuration for OAuth providers like Gmail, GitHub, etc.
 
-CREATE TABLE IF NOT EXISTS oauth_providers (
+CREATE TABLE IF NOT EXISTS service_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT UNIQUE NOT NULL,
     display_name TEXT NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS oauth_providers (
 CREATE TABLE IF NOT EXISTS user_oauth_connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL, -- References auth.users
-    oauth_provider_id UUID NOT NULL REFERENCES oauth_providers(id) ON DELETE CASCADE,
+    oauth_provider_id UUID NOT NULL REFERENCES service_providers(id) ON DELETE CASCADE,
     external_user_id TEXT,
     external_username TEXT,
     scopes_granted JSONB DEFAULT '[]'::jsonb,
@@ -36,23 +36,23 @@ CREATE TABLE IF NOT EXISTS user_oauth_connections (
 );
 
 -- Create indexes
-CREATE INDEX IF NOT EXISTS idx_oauth_providers_name ON oauth_providers(name);
+CREATE INDEX IF NOT EXISTS idx_service_providers_name ON service_providers(name);
 CREATE INDEX IF NOT EXISTS idx_user_oauth_connections_user_id ON user_oauth_connections(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_oauth_connections_provider ON user_oauth_connections(oauth_provider_id);
 CREATE INDEX IF NOT EXISTS idx_user_oauth_connections_status ON user_oauth_connections(connection_status);
 
 -- Enable RLS
-ALTER TABLE oauth_providers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_oauth_connections ENABLE ROW LEVEL SECURITY;
 
 -- OAuth providers policies
 CREATE POLICY "OAuth providers are readable by authenticated users"
-    ON oauth_providers FOR SELECT
+    ON service_providers FOR SELECT
     TO authenticated
     USING (is_enabled = true);
 
 CREATE POLICY "Only service role can modify OAuth providers"
-    ON oauth_providers FOR ALL
+    ON service_providers FOR ALL
     TO service_role
     USING (true);
 
@@ -78,7 +78,7 @@ CREATE POLICY "Users can delete their own OAuth connections"
     USING (user_id = auth.uid());
 
 -- Create updated_at triggers
-CREATE OR REPLACE FUNCTION update_oauth_providers_updated_at()
+CREATE OR REPLACE FUNCTION update_service_providers_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = now();
@@ -86,10 +86,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_oauth_providers_updated_at
-    BEFORE UPDATE ON oauth_providers
+CREATE TRIGGER update_service_providers_updated_at
+    BEFORE UPDATE ON service_providers
     FOR EACH ROW
-    EXECUTE FUNCTION update_oauth_providers_updated_at();
+    EXECUTE FUNCTION update_service_providers_updated_at();
 
 CREATE OR REPLACE FUNCTION update_user_oauth_connections_updated_at()
 RETURNS TRIGGER AS $$
@@ -105,5 +105,5 @@ CREATE TRIGGER update_user_oauth_connections_updated_at
     EXECUTE FUNCTION update_user_oauth_connections_updated_at();
 
 -- Grant permissions
-GRANT SELECT ON oauth_providers TO anon, authenticated;
+GRANT SELECT ON service_providers TO anon, authenticated;
 GRANT ALL ON user_oauth_connections TO authenticated; 

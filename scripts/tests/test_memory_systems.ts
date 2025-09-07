@@ -16,7 +16,7 @@ async function testMemorySystems() {
   // Test 1: Check GetZep Connection
   console.log('\n1️⃣ Testing GetZep Connection...');
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id')
     .eq('name', 'getzep')
     .single();
@@ -102,7 +102,7 @@ async function testMemorySystems() {
   // Test 3: Check Pinecone Connection
   console.log('\n3️⃣ Testing Pinecone (Episodic Memory)...');
   const { data: pineconeProvider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id')
     .eq('name', 'pinecone')
     .single();

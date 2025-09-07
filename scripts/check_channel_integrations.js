@@ -36,10 +36,10 @@ async function checkChannelIntegrations() {
       }
     }
     
-    // 2. Check oauth_providers table
+    // 2. Check service_providers table
     console.log('\n=== OAuth Providers ===\n');
     const { data: providers, error: provError } = await supabase
-      .from('oauth_providers')
+      .from('service_providers')
       .select('*');
     
     if (provError) {
@@ -59,7 +59,7 @@ async function checkChannelIntegrations() {
     console.log('\n=== Name Matching Analysis ===\n');
     console.log('The AgentIntegrationsManager component tries to match:');
     console.log('  permission.connection.provider_name with integration.name');
-    console.log('\nIf Gmail is stored as "gmail" in oauth_providers.name');
+    console.log('\nIf Gmail is stored as "gmail" in service_providers.name');
     console.log('but as "Gmail" in integrations.name, they won\'t match!');
     
   } catch (error) {

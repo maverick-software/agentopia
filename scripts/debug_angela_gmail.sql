@@ -35,7 +35,7 @@ SELECT
     op.display_name as provider_display,
     uic.created_at
 FROM user_integration_credentials uic
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE uic.id IN (
     SELECT aip.connection_id 
     FROM agent_integration_permissions aip
@@ -57,7 +57,7 @@ SELECT
     'THIS SHOULD BE EMPTY!' as should_be_empty
 FROM agent_integration_permissions aip
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE aip.agent_id IN (SELECT id FROM agents WHERE name ILIKE '%angela%')
   AND op.name = 'gmail'  -- This is the exact query from function logic
   AND uic.credential_type = 'oauth'
@@ -74,7 +74,7 @@ SELECT
     'THIS SHOULD SHOW RESULTS!' as should_show_results
 FROM agent_integration_permissions aip
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE aip.agent_id IN (SELECT id FROM agents WHERE name ILIKE '%angela%')
   AND op.name IN ('smtp', 'sendgrid', 'mailgun')
   AND aip.is_active = true;
@@ -89,7 +89,7 @@ WHERE name ILIKE '%angela%';
 SELECT 'STEP 7: USER OAUTH PROVIDERS' as debug_step;
 SELECT DISTINCT op.name as provider_name
 FROM user_integration_credentials uic
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE uic.user_id IN (
     SELECT user_id FROM agents WHERE name ILIKE '%angela%'
 );

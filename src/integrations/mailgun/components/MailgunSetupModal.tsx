@@ -66,7 +66,7 @@ export function MailgunSetupModal({
     try {
       // Get Mailgun OAuth provider
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'mailgun')
         .single();

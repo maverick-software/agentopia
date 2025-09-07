@@ -48,13 +48,13 @@ export function useDigitalOceanConnection() {
         .from('user_integration_credentials')
         .select(`
           *,
-          oauth_providers!inner (
+          service_providers!inner (
             name,
             display_name
           )
         `)
         .eq('user_id', user.id)
-        .eq('oauth_providers.name', 'digitalocean')
+        .eq('service_providers.name', 'digitalocean')
         .eq('connection_status', 'active')
         .order('created_at', { ascending: false });
 
@@ -64,8 +64,8 @@ export function useDigitalOceanConnection() {
         id: conn.id,
         user_id: conn.user_id,
         oauth_provider_id: conn.oauth_provider_id,
-        provider_name: conn.oauth_providers.name,
-        provider_display_name: conn.oauth_providers.display_name,
+        provider_name: conn.service_providers.name,
+        provider_display_name: conn.service_providers.display_name,
         external_username: conn.external_username || conn.connection_name,
         is_active: conn.connection_status === 'active',
         created_at: conn.created_at,
@@ -123,7 +123,7 @@ export function useAgentDigitalOceanPermissions(agentId?: string) {
             id,
             connection_name,
             external_username,
-            oauth_providers!inner (
+            service_providers!inner (
               name,
               display_name
             )
@@ -131,7 +131,7 @@ export function useAgentDigitalOceanPermissions(agentId?: string) {
         `)
         .eq('agent_id', agentId)
         .eq('is_active', true)
-        .eq('user_integration_credentials.oauth_providers.name', 'digitalocean')
+        .eq('user_integration_credentials.service_providers.name', 'digitalocean')
         .order('granted_at', { ascending: false });
 
       if (fetchError) throw fetchError;

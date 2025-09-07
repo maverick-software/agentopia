@@ -510,7 +510,7 @@ CREATE OR REPLACE FUNCTION "public"."get_agent_integration_permissions"("p_agent
         aop.granted_by_user_id
     FROM agent_oauth_permissions aop
     INNER JOIN user_oauth_connections uoc ON uoc.id = aop.user_oauth_connection_id
-    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    INNER JOIN service_providers op ON op.id = uoc.oauth_provider_id
     WHERE aop.agent_id = p_agent_id
     AND uoc.user_id = auth.uid()
     AND aop.is_active = true
@@ -542,7 +542,7 @@ CREATE OR REPLACE FUNCTION "public"."get_agent_oauth_permissions"("p_agent_id" "
     aop.last_used_at
   FROM agent_oauth_permissions aop
   JOIN user_oauth_connections uoc ON aop.user_oauth_connection_id = uoc.id
-  JOIN oauth_providers op ON uoc.oauth_provider_id = op.id
+  JOIN service_providers op ON uoc.oauth_provider_id = op.id
   WHERE aop.agent_id = p_agent_id
     AND aop.is_active = true
     AND uoc.connection_status = 'active'
@@ -641,7 +641,7 @@ CREATE OR REPLACE FUNCTION "public"."get_gmail_connection_by_id"("p_connection_i
     FROM user_oauth_connections
     WHERE id = p_connection_id
     AND user_id = auth.uid()
-    AND oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail');
+    AND oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail');
 $$;
 
 
@@ -663,7 +663,7 @@ CREATE OR REPLACE FUNCTION "public"."get_gmail_connection_with_tokens"("p_user_i
         '{}'::jsonb as configuration
     FROM user_oauth_connections uoc
     WHERE uoc.user_id = p_user_id
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     AND uoc.connection_status = 'active'
     LIMIT 1;
 $$;
@@ -690,7 +690,7 @@ BEGIN
     SELECT aop.allowed_scopes INTO v_allowed_scopes
     FROM agent_oauth_permissions aop
     JOIN user_oauth_connections uoc ON uoc.id = aop.user_oauth_connection_id
-    JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    JOIN service_providers op ON op.id = uoc.oauth_provider_id
     WHERE aop.agent_id = p_agent_id
     AND uoc.user_id = p_user_id
     AND op.name = 'gmail'
@@ -1092,7 +1092,7 @@ CREATE OR REPLACE FUNCTION "public"."get_user_gmail_connections"("p_user_id" "uu
         created_at
     FROM user_oauth_connections
     WHERE user_id = COALESCE(p_user_id, auth.uid())
-    AND oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     ORDER BY created_at DESC;
 $$;
 
@@ -1226,7 +1226,7 @@ BEGIN
         uoc.created_at,
         uoc.updated_at
     FROM user_oauth_connections uoc
-    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    INNER JOIN service_providers op ON op.id = uoc.oauth_provider_id
     WHERE uoc.user_id = p_user_id
     ORDER BY uoc.created_at DESC;
 END;
@@ -2466,7 +2466,7 @@ $$;
 ALTER FUNCTION "public"."update_memory_access"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."update_oauth_providers_updated_at"() RETURNS "trigger"
+CREATE OR REPLACE FUNCTION "public"."update_service_providers_updated_at"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
@@ -2476,7 +2476,7 @@ END;
 $$;
 
 
-ALTER FUNCTION "public"."update_oauth_providers_updated_at"() OWNER TO "postgres";
+ALTER FUNCTION "public"."update_service_providers_updated_at"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_sendgrid_updated_at"() RETURNS "trigger"
@@ -2640,7 +2640,7 @@ BEGIN
     WHERE aop.agent_id = p_agent_id
     AND uoc.user_id = p_user_id
     AND aop.is_active = true
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail');
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail');
     
     -- Check if agent has permissions
     IF v_allowed_scopes IS NULL THEN
@@ -3703,7 +3703,7 @@ CREATE TABLE IF NOT EXISTS "public"."message_versions" (
 ALTER TABLE "public"."message_versions" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."oauth_providers" (
+CREATE TABLE IF NOT EXISTS "public"."service_providers" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
     "display_name" "text" NOT NULL,
@@ -3721,10 +3721,10 @@ CREATE TABLE IF NOT EXISTS "public"."oauth_providers" (
 );
 
 
-ALTER TABLE "public"."oauth_providers" OWNER TO "postgres";
+ALTER TABLE "public"."service_providers" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."oauth_providers" IS 'Unified provider table supporting both OAuth providers (like Gmail) and API key providers (like web search APIs). API key providers use this table for consistency but store keys differently.';
+COMMENT ON TABLE "public"."service_providers" IS 'Unified provider table supporting both OAuth providers (like Gmail) and API key providers (like web search APIs). API key providers use this table for consistency but store keys differently.';
 
 
 
@@ -4725,13 +4725,13 @@ ALTER TABLE ONLY "public"."message_versions"
 
 
 
-ALTER TABLE ONLY "public"."oauth_providers"
-    ADD CONSTRAINT "oauth_providers_name_key" UNIQUE ("name");
+ALTER TABLE ONLY "public"."service_providers"
+    ADD CONSTRAINT "service_providers_name_key" UNIQUE ("name");
 
 
 
-ALTER TABLE ONLY "public"."oauth_providers"
-    ADD CONSTRAINT "oauth_providers_pkey" PRIMARY KEY ("id");
+ALTER TABLE ONLY "public"."service_providers"
+    ADD CONSTRAINT "service_providers_pkey" PRIMARY KEY ("id");
 
 
 
@@ -5441,11 +5441,11 @@ CREATE INDEX "idx_messages_session" ON "public"."chat_messages_v2" USING "btree"
 
 
 
-CREATE INDEX "idx_oauth_providers_enabled" ON "public"."oauth_providers" USING "btree" ("name") WHERE ("is_enabled" = true);
+CREATE INDEX "idx_service_providers_enabled" ON "public"."service_providers" USING "btree" ("name") WHERE ("is_enabled" = true);
 
 
 
-CREATE INDEX "idx_oauth_providers_name" ON "public"."oauth_providers" USING "btree" ("name");
+CREATE INDEX "idx_service_providers_name" ON "public"."service_providers" USING "btree" ("name");
 
 
 
@@ -5809,7 +5809,7 @@ CREATE OR REPLACE TRIGGER "update_mailgun_routes_updated_at" BEFORE UPDATE ON "p
 
 
 
-CREATE OR REPLACE TRIGGER "update_oauth_providers_updated_at" BEFORE UPDATE ON "public"."oauth_providers" FOR EACH ROW EXECUTE FUNCTION "public"."update_oauth_providers_updated_at"();
+CREATE OR REPLACE TRIGGER "update_service_providers_updated_at" BEFORE UPDATE ON "public"."service_providers" FOR EACH ROW EXECUTE FUNCTION "public"."update_service_providers_updated_at"();
 
 
 
@@ -6270,7 +6270,7 @@ ALTER TABLE ONLY "public"."user_integrations"
 
 
 ALTER TABLE ONLY "public"."user_oauth_connections"
-    ADD CONSTRAINT "user_oauth_connections_oauth_provider_id_fkey" FOREIGN KEY ("oauth_provider_id") REFERENCES "public"."oauth_providers"("id") ON DELETE CASCADE;
+    ADD CONSTRAINT "user_oauth_connections_oauth_provider_id_fkey" FOREIGN KEY ("oauth_provider_id") REFERENCES "public"."service_providers"("id") ON DELETE CASCADE;
 
 
 
@@ -6602,7 +6602,7 @@ CREATE POLICY "Allow workspace owner to delete messages" ON "public"."chat_messa
 
 
 
-CREATE POLICY "Anyone can view enabled OAuth providers" ON "public"."oauth_providers" FOR SELECT USING (("is_enabled" = true));
+CREATE POLICY "Anyone can view enabled OAuth providers" ON "public"."service_providers" FOR SELECT USING (("is_enabled" = true));
 
 
 
@@ -6626,11 +6626,11 @@ CREATE POLICY "Integrations are readable by everyone" ON "public"."integrations"
 
 
 
-CREATE POLICY "OAuth providers are readable by authenticated users" ON "public"."oauth_providers" FOR SELECT TO "authenticated" USING (("is_enabled" = true));
+CREATE POLICY "OAuth providers are readable by authenticated users" ON "public"."service_providers" FOR SELECT TO "authenticated" USING (("is_enabled" = true));
 
 
 
-CREATE POLICY "Only service role can modify OAuth providers" ON "public"."oauth_providers" TO "service_role" USING (true);
+CREATE POLICY "Only service role can modify OAuth providers" ON "public"."service_providers" TO "service_role" USING (true);
 
 
 
@@ -7206,7 +7206,7 @@ ALTER TABLE "public"."memory_consolidations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."message_versions" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."oauth_providers" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."service_providers" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."organization_api_keys" ENABLE ROW LEVEL SECURITY;
@@ -8598,9 +8598,9 @@ GRANT ALL ON FUNCTION "public"."update_memory_access"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."update_oauth_providers_updated_at"() TO "anon";
-GRANT ALL ON FUNCTION "public"."update_oauth_providers_updated_at"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."update_oauth_providers_updated_at"() TO "service_role";
+GRANT ALL ON FUNCTION "public"."update_service_providers_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_service_providers_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_service_providers_updated_at"() TO "service_role";
 
 
 
@@ -9075,9 +9075,9 @@ GRANT ALL ON TABLE "public"."message_versions" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."oauth_providers" TO "anon";
-GRANT ALL ON TABLE "public"."oauth_providers" TO "authenticated";
-GRANT ALL ON TABLE "public"."oauth_providers" TO "service_role";
+GRANT ALL ON TABLE "public"."service_providers" TO "anon";
+GRANT ALL ON TABLE "public"."service_providers" TO "authenticated";
+GRANT ALL ON TABLE "public"."service_providers" TO "service_role";
 
 
 

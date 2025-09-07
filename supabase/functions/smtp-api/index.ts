@@ -521,10 +521,10 @@ async function handleSendEmail(
           encrypted_access_token,
           external_username,
           connection_metadata,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         `)
         .eq('user_id', userId)
-        .eq('oauth_providers.name', 'smtp')
+        .eq('service_providers.name', 'smtp')
         .eq('connection_status', 'active')
         .limit(1)
         .single();

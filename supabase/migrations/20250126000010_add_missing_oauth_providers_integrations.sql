@@ -2,7 +2,7 @@
 -- Purpose: Enable Discord and DigitalOcean integrations to appear in UI modals and pages
 
 -- 1. Add Discord OAuth Provider (missing but integration exists)
-INSERT INTO oauth_providers (
+INSERT INTO service_providers (
     name,
     display_name,
     authorization_endpoint,
@@ -36,7 +36,7 @@ ON CONFLICT (name) DO UPDATE SET
     updated_at = NOW();
 
 -- 2. Add DigitalOcean OAuth Provider (missing - actually API key provider)
-INSERT INTO oauth_providers (
+INSERT INTO service_providers (
     name,
     display_name,
     authorization_endpoint,
@@ -81,7 +81,7 @@ BEGIN
 
     -- Get DigitalOcean OAuth provider ID
     SELECT id INTO digitalocean_oauth_id
-    FROM oauth_providers
+    FROM service_providers
     WHERE name = 'digitalocean'
     LIMIT 1;
 
@@ -139,7 +139,7 @@ DECLARE
 BEGIN
     -- Get Discord OAuth provider ID
     SELECT id INTO discord_oauth_id
-    FROM oauth_providers
+    FROM service_providers
     WHERE name = 'discord'
     LIMIT 1;
 

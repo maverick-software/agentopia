@@ -276,7 +276,7 @@ export class DigitalOceanMCPToolsService {
         .select('allowed_scopes, is_active')
         .eq('agent_id', agentId)
         .eq('user_integration_credentials.user_id', userId)
-        .eq('user_integration_credentials.oauth_providers.name', 'digitalocean')
+        .eq('user_integration_credentials.service_providers.name', 'digitalocean')
         .eq('is_active', true)
         .single();
 
@@ -304,7 +304,7 @@ export class DigitalOceanMCPToolsService {
         .from('user_integration_credentials')
         .select('vault_access_token_id')
         .eq('user_id', userId)
-        .eq('oauth_providers.name', 'digitalocean')
+        .eq('service_providers.name', 'digitalocean')
         .eq('connection_status', 'active')
         .single();
 

@@ -72,13 +72,13 @@ export class SMTPMCPToolsService {
           user_integration_credentials!inner(
             oauth_provider_id,
             connection_metadata,
-            oauth_providers!inner(name)
+            service_providers!inner(name)
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_integration_credentials.user_id', userId)
         .eq('is_active', true)
-        .in('user_integration_credentials.oauth_providers.name', ['smtp', 'sendgrid', 'mailgun']);
+        .in('user_integration_credentials.service_providers.name', ['smtp', 'sendgrid', 'mailgun']);
 
       if (!permissions || permissions.length === 0) {
         return [];

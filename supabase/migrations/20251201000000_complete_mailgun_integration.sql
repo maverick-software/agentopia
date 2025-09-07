@@ -12,7 +12,7 @@ WITH category_and_provider AS (
     ic.id as category_id,
     op.id as provider_id
   FROM integration_categories ic
-  CROSS JOIN oauth_providers op
+  CROSS JOIN service_providers op
   WHERE ic.name = 'Messaging & Communication'
   AND op.name = 'mailgun'
 )

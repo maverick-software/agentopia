@@ -22,7 +22,7 @@ async function updateWorkingGetZepKey() {
   
   console.log('1️⃣ Finding the GetZep connection...');
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id, name')
     .eq('name', 'getzep')
     .single();

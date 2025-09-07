@@ -4,7 +4,7 @@ SELECT
     display_name, 
     scopes_supported,
     jsonb_array_length(scopes_supported) as scope_count
-FROM oauth_providers 
+FROM service_providers 
 WHERE name = 'gmail';
 
 -- Check user Gmail credentials and vault token IDs
@@ -19,7 +19,7 @@ SELECT
     uic.credential_type,
     op.name as provider_name
 FROM user_integration_credentials uic
-JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+JOIN service_providers op ON uic.oauth_provider_id = op.id
 WHERE op.name = 'gmail'
 ORDER BY uic.created_at DESC;
 
@@ -38,7 +38,7 @@ SELECT
         ELSE 'Missing Refresh Token ID'
     END as refresh_token_status
 FROM user_integration_credentials uic
-JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+JOIN service_providers op ON uic.oauth_provider_id = op.id
 WHERE op.name = 'gmail';
 
 -- Check agent permissions for Gmail
@@ -50,5 +50,5 @@ SELECT
     op.name as provider_name
 FROM agent_integration_permissions aip
 JOIN user_integration_credentials uic ON aip.credential_id = uic.id
-JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+JOIN service_providers op ON uic.oauth_provider_id = op.id
 WHERE op.name = 'gmail';

@@ -81,17 +81,17 @@ export class MCPToolRegistry {
         is_active,
         user_integration_credentials!inner(
           oauth_provider_id,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', agentId)
       .eq('user_integration_credentials.user_id', userId)
       .eq('is_active', true)
-      .in('user_integration_credentials.oauth_providers.name', ['gmail', 'smtp', 'sendgrid', 'mailgun']);
+      .in('user_integration_credentials.service_providers.name', ['gmail', 'smtp', 'sendgrid', 'mailgun']);
 
     // Process email permissions
     for (const permission of emailPermissions || []) {
-      const providerName = permission.user_integration_credentials?.oauth_providers?.name;
+      const providerName = permission.user_integration_credentials?.service_providers?.name;
       
       if (providerName === 'gmail') {
         // Only add Gmail tools if agent has Gmail permissions

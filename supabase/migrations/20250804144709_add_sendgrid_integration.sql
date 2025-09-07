@@ -111,7 +111,7 @@ INSERT INTO integrations (
     updated_at = NOW();
 
 -- Update the SendGrid OAuth provider to link with the integration
-UPDATE oauth_providers 
+UPDATE service_providers 
 SET configuration_metadata = jsonb_set(
     COALESCE(configuration_metadata, '{}'::jsonb),
     '{integration_id}',

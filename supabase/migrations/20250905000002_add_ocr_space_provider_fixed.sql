@@ -1,8 +1,8 @@
--- Add OCR.Space provider to oauth_providers and service_providers tables
+-- Add OCR.Space provider to service_providers and service_providers tables
 -- This version properly handles both tables and foreign key constraints
 
--- Step 1: Add to oauth_providers table
-INSERT INTO "public"."oauth_providers" (
+-- Step 1: Add to service_providers table
+INSERT INTO "public"."service_providers" (
   "name", 
   "display_name", 
   "authorization_endpoint", 
@@ -54,7 +54,7 @@ END $$;
 DO $$
 BEGIN
   -- The integrations table has a different schema than expected.
-  -- OCR will work through oauth_providers and service_providers tables.
+  -- OCR will work through service_providers and service_providers tables.
   RAISE NOTICE 'Skipping integrations table - schema mismatch with display_name column';
 END $$;
 
@@ -62,16 +62,16 @@ END $$;
 DO $$
 BEGIN
   -- The integration_capabilities table has a foreign key that references 'integrations' table, 
-  -- not 'oauth_providers'. Since we're adding to oauth_providers, we can't add capabilities.
+  -- not 'service_providers'. Since we're adding to service_providers, we can't add capabilities.
   -- This is fine - the OCR functionality will work without the capabilities entries.
-  RAISE NOTICE 'Skipping integration_capabilities - table references integrations, not oauth_providers';
+  RAISE NOTICE 'Skipping integration_capabilities - table references integrations, not service_providers';
 END $$;
 
 -- Step 5: Success message
 DO $$
 BEGIN
   RAISE NOTICE '✅ OCR.Space provider added successfully';
-  RAISE NOTICE '📊 Added to oauth_providers table';
+  RAISE NOTICE '📊 Added to service_providers table';
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'service_providers') THEN
     RAISE NOTICE '📊 Added to service_providers table';
   END IF;

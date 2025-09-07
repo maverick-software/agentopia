@@ -143,7 +143,7 @@ BEGIN
                 c.created_at,
                 c.updated_at
             FROM user_integration_credentials c
-            JOIN oauth_providers p ON c.oauth_provider_id = p.id
+            JOIN service_providers p ON c.oauth_provider_id = p.id
             WHERE c.user_id = p_user_id
             ORDER BY c.created_at DESC;
         END;

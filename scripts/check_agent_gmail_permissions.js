@@ -42,10 +42,10 @@ async function checkAgentGmailPermissions(agentId) {
         external_username,
         connection_status,
         oauth_provider_id,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('user_id', agent.user_id)
-      .eq('oauth_providers.name', 'gmail');
+      .eq('service_providers.name', 'gmail');
     
     if (connError) {
       console.error('❌ Error fetching connections:', connError);

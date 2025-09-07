@@ -38,7 +38,7 @@ AS $$
         '{}'::jsonb as configuration
     FROM user_oauth_connections uoc
     WHERE uoc.user_id = p_user_id
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     AND uoc.connection_status = 'active'
     LIMIT 1;
 $$;

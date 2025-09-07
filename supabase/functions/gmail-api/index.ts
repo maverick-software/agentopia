@@ -120,12 +120,12 @@ serve(async (req) => {
         permission_level,
         user_integration_credentials!inner(
           connection_status,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', agent_id)
       .eq('user_integration_credentials.user_id', user_id)
-      .eq('user_integration_credentials.oauth_providers.name', 'gmail');
+      .eq('user_integration_credentials.service_providers.name', 'gmail');
 
     console.log('[gmail-api] Debug - Agent Gmail permissions:', debugPermissions);
 
@@ -136,7 +136,7 @@ serve(async (req) => {
     // Get user's Gmail access token from integration credentials
     // First get the Gmail provider ID
     const { data: gmailProvider, error: providerError } = await supabaseServiceRole
-      .from('oauth_providers')
+      .from('service_providers')
       .select('id')
       .eq('name', 'gmail')
       .single();

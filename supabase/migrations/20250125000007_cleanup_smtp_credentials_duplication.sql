@@ -5,7 +5,7 @@
 -- (This should already be done by the previous migration, but let's be safe)
 UPDATE smtp_configurations 
 SET connection_id = uoc.id
-FROM user_oauth_connections uoc, oauth_providers op
+FROM user_oauth_connections uoc, service_providers op
 WHERE smtp_configurations.user_id = uoc.user_id 
   AND uoc.oauth_provider_id = op.id
   AND op.name = 'smtp'
@@ -47,7 +47,7 @@ DECLARE
 BEGIN
   -- Get SMTP provider ID
   SELECT id INTO v_oauth_provider_id 
-  FROM oauth_providers 
+  FROM service_providers 
   WHERE name = 'smtp';
   
   IF v_oauth_provider_id IS NULL THEN

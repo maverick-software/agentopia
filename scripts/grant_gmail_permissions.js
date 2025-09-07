@@ -40,11 +40,11 @@ async function grantGmailPermissions() {
       .select(`
         id,
         connection_name,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('id', GMAIL_CREDENTIAL_ID)
       .eq('user_id', USER_ID)
-      .eq('oauth_providers.name', 'gmail')
+      .eq('service_providers.name', 'gmail')
       .single();
 
     if (credError || !credential) {
@@ -93,7 +93,7 @@ async function grantGmailPermissions() {
         is_active,
         user_integration_credentials!inner(
           connection_name,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', AGENT_ID)

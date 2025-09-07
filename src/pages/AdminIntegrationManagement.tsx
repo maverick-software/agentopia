@@ -105,10 +105,10 @@ export function AdminIntegrationManagement() {
 
   const fetchProviders = async () => {
     try {
-      console.log('[AdminIntegrationManagement] Now using oauth_providers table instead of integrations');
+      console.log('[AdminIntegrationManagement] Now using service_providers table instead of integrations');
       
       const { data, error } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('*')
         .order('name', { ascending: true });
 
@@ -167,7 +167,7 @@ export function AdminIntegrationManagement() {
       if (selectedProvider) {
         // Update existing provider
         result = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .update(providerData)
           .eq('id', selectedProvider.id)
           .select()
@@ -175,7 +175,7 @@ export function AdminIntegrationManagement() {
       } else {
         // Create new provider
         result = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .insert([providerData])
           .select()
           .single();
@@ -219,7 +219,7 @@ export function AdminIntegrationManagement() {
 
     try {
       const { error } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .delete()
         .eq('id', selectedProvider.id);
       

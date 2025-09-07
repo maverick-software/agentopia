@@ -55,7 +55,7 @@ AS $$
         created_at
     FROM user_oauth_connections
     WHERE user_id = COALESCE(p_user_id, auth.uid())
-    AND oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     ORDER BY created_at DESC;
 $$;
 
@@ -92,7 +92,7 @@ AS $$
     FROM user_oauth_connections
     WHERE id = p_connection_id
     AND user_id = auth.uid()
-    AND oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail');
+    AND oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail');
 $$;
 
 -- Grant execute permissions
@@ -131,7 +131,7 @@ AS $$
         uoc.created_at,
         uoc.updated_at
     FROM user_oauth_connections uoc
-    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    INNER JOIN service_providers op ON op.id = uoc.oauth_provider_id
     WHERE uoc.user_id = COALESCE(p_user_id, auth.uid())
     ORDER BY uoc.created_at DESC;
 $$;

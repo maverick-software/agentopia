@@ -45,12 +45,12 @@ async function checkAgentPermissions() {
           connection_name,
           oauth_provider_id,
           credential_type,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', AGENT_ID)
       .eq('user_integration_credentials.user_id', USER_ID)
-      .eq('user_integration_credentials.oauth_providers.name', 'gmail')
+      .eq('user_integration_credentials.service_providers.name', 'gmail')
       .eq('user_integration_credentials.credential_type', 'oauth')
       .eq('is_active', true);
 
@@ -80,12 +80,12 @@ async function checkAgentPermissions() {
           connection_name,
           oauth_provider_id,
           credential_type,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', AGENT_ID)
       .eq('user_integration_credentials.user_id', USER_ID)
-      .eq('user_integration_credentials.oauth_providers.name', 'smtp')
+      .eq('user_integration_credentials.service_providers.name', 'smtp')
       .eq('user_integration_credentials.credential_type', 'api_key')
       .eq('is_active', true);
 
@@ -110,7 +110,7 @@ async function checkAgentPermissions() {
         id,
         connection_name,
         credential_type,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('user_id', USER_ID);
 
@@ -121,7 +121,7 @@ async function checkAgentPermissions() {
     } else {
       console.log('✅ User integration credentials:');
       allCreds.forEach(cred => {
-        console.log(`  - Provider: ${cred.oauth_providers?.name}`);
+        console.log(`  - Provider: ${cred.service_providers?.name}`);
         console.log(`  - Name: ${cred.connection_name}`);
         console.log(`  - Type: ${cred.credential_type}`);
         console.log(`  - ID: ${cred.id}`);
@@ -139,7 +139,7 @@ async function checkAgentPermissions() {
         user_integration_credentials!inner(
           id,
           connection_name,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', AGENT_ID);
@@ -151,7 +151,7 @@ async function checkAgentPermissions() {
     } else {
       console.log('✅ All agent permissions:');
       allPerms.forEach(perm => {
-        console.log(`  - Provider: ${perm.user_integration_credentials?.oauth_providers?.name}`);
+        console.log(`  - Provider: ${perm.user_integration_credentials?.service_providers?.name}`);
         console.log(`  - Connection: ${perm.user_integration_credentials?.connection_name}`);
         console.log(`  - Scopes: ${JSON.stringify(perm.allowed_scopes)}`);
         console.log(`  - Active: ${perm.is_active}`);

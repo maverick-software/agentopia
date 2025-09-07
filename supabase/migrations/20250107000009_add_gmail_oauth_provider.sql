@@ -1,5 +1,5 @@
 -- Add Gmail OAuth provider entry
-INSERT INTO oauth_providers (id, name, display_name, authorization_endpoint, token_endpoint, scopes_supported, discovery_endpoint)
+INSERT INTO service_providers (id, name, display_name, authorization_endpoint, token_endpoint, scopes_supported, discovery_endpoint)
 VALUES (
     gen_random_uuid(),
     'gmail',

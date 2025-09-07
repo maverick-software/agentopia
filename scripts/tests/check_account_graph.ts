@@ -40,7 +40,7 @@ async function checkAccountGraph() {
       .select('*')
       .eq('user_id', user.id)
       .eq('oauth_provider_id', (await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'getzep')
         .single()).data?.id)

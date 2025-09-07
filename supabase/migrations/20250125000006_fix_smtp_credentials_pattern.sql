@@ -2,7 +2,7 @@
 -- This migration aligns SMTP with SendGrid/Mailgun pattern
 
 -- Step 1: Add SMTP as an oauth provider (even though it's not OAuth)
-INSERT INTO oauth_providers (name, display_name, authorization_endpoint, token_endpoint, scopes_supported, is_enabled)
+INSERT INTO service_providers (name, display_name, authorization_endpoint, token_endpoint, scopes_supported, is_enabled)
 VALUES (
   'smtp',
   'SMTP Server',
@@ -27,11 +27,11 @@ DECLARE
 BEGIN
   -- Get SMTP provider ID
   SELECT id INTO oauth_provider_id 
-  FROM oauth_providers 
+  FROM service_providers 
   WHERE name = 'smtp';
   
   IF oauth_provider_id IS NULL THEN
-    RAISE EXCEPTION 'SMTP provider not found in oauth_providers';
+    RAISE EXCEPTION 'SMTP provider not found in service_providers';
   END IF;
   
   -- Migrate each existing SMTP configuration
@@ -88,7 +88,7 @@ ADD COLUMN IF NOT EXISTS connection_id UUID REFERENCES user_oauth_connections(id
 -- Step 5: Update existing configurations with connection_id
 UPDATE smtp_configurations 
 SET connection_id = uoc.id
-FROM user_oauth_connections uoc, oauth_providers op
+FROM user_oauth_connections uoc, service_providers op
 WHERE smtp_configurations.user_id = uoc.user_id 
   AND uoc.oauth_provider_id = op.id
   AND op.name = 'smtp'
@@ -123,7 +123,7 @@ DECLARE
 BEGIN
   -- Get SMTP provider ID
   SELECT id INTO v_oauth_provider_id 
-  FROM oauth_providers 
+  FROM service_providers 
   WHERE name = 'smtp';
   
   IF v_oauth_provider_id IS NULL THEN

@@ -9,7 +9,7 @@ SET scopes_granted = (
     ELSE c.scopes_granted
   END
 ), updated_at = NOW()
-FROM oauth_providers p
+FROM service_providers p
 WHERE c.oauth_provider_id = p.id
   AND LOWER(p.name) = 'pinecone';
 

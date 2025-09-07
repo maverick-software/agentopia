@@ -28,7 +28,7 @@ async function diagnoseRefreshToken() {
       .from('user_oauth_connections')
       .select(`
         *,
-        oauth_providers!inner(name, display_name)
+        service_providers!inner(name, display_name)
       `)
       .eq('id', connectionId)
       .eq('user_id', userId)
@@ -41,7 +41,7 @@ async function diagnoseRefreshToken() {
 
     console.log('📊 Connection Details:');
     console.log(`   ID: ${connection.id}`);
-    console.log(`   Provider: ${connection.oauth_providers.display_name}`);
+    console.log(`   Provider: ${connection.service_providers.display_name}`);
     console.log(`   Status: ${connection.connection_status}`);
     console.log(`   External User: ${connection.external_username}`);
     console.log(`   Created: ${new Date(connection.created_at).toLocaleString()}`);

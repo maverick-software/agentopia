@@ -1,8 +1,8 @@
 -- Migration to unify web search with OAuth system
 -- This allows web search API keys to be treated the same as OAuth tokens
 
--- Add web search providers to oauth_providers table
-INSERT INTO oauth_providers (
+-- Add web search providers to service_providers table
+INSERT INTO service_providers (
   name,
   display_name,
   authorization_endpoint,
@@ -44,9 +44,9 @@ ON CONFLICT (name) DO UPDATE SET
   updated_at = NOW();
 
 -- Comment explaining the approach
-COMMENT ON TABLE oauth_providers IS 'Unified provider table supporting both OAuth providers (like Gmail) and API key providers (like web search APIs). API key providers use this table for consistency but store keys differently.';
+COMMENT ON TABLE service_providers IS 'Unified provider table supporting both OAuth providers (like Gmail) and API key providers (like web search APIs). API key providers use this table for consistency but store keys differently.';
 
 -- Add indices for better performance
-CREATE INDEX IF NOT EXISTS idx_oauth_providers_name ON oauth_providers(name);
+CREATE INDEX IF NOT EXISTS idx_service_providers_name ON service_providers(name);
 CREATE INDEX IF NOT EXISTS idx_user_oauth_connections_provider_user ON user_oauth_connections(oauth_provider_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_agent_oauth_permissions_agent_connection ON agent_oauth_permissions(agent_id, user_oauth_connection_id);

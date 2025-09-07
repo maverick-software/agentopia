@@ -17,7 +17,7 @@ SELECT
     op.name as provider_name
 FROM agent_integration_permissions aip
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id  
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE aip.agent_id IN (SELECT id FROM agents WHERE name ILIKE '%angela%')
   AND op.name = 'gmail';
 
@@ -33,7 +33,7 @@ SELECT
     uic.created_at,
     op.name as provider_name
 FROM user_integration_credentials uic
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE uic.user_id IN (SELECT user_id FROM agents WHERE name ILIKE '%angela%')
   AND op.name = 'gmail';
 
@@ -47,6 +47,6 @@ SELECT
     op.name as provider_name
 FROM agent_integration_permissions aip
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE aip.agent_id IN (SELECT id FROM agents WHERE name ILIKE '%angela%')
   AND op.name IN ('smtp', 'sendgrid', 'mailgun');

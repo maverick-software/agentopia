@@ -326,7 +326,7 @@ serve(async (req) => {
           credential_type,
           connection_status,
           token_expires_at,
-          oauth_providers!inner(
+          service_providers!inner(
             id,
             name,
             display_name
@@ -394,7 +394,7 @@ serve(async (req) => {
     const providersProcessed = new Set<string>();
 
     for (const permission of authorizedTools) {
-      const provider = permission.user_integration_credentials.oauth_providers;
+      const provider = permission.user_integration_credentials.service_providers;
       const credential = permission.user_integration_credentials;
       const allowedScopes = permission.allowed_scopes || [];
       const providerName = provider.name;

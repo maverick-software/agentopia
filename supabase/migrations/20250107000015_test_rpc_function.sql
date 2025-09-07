@@ -37,7 +37,7 @@ AS $$
         '{}'::jsonb AS configuration
     FROM user_oauth_connections
     WHERE user_id = COALESCE(p_user_id, auth.uid())
-    AND oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     AND connection_status = 'active'
     LIMIT 1;
 $$;

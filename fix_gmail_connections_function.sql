@@ -24,7 +24,7 @@ BEGIN
         '{}'::jsonb AS configuration,
         uic.created_at
     FROM user_integration_credentials uic
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE uic.user_id = COALESCE(p_user_id, auth.uid())
     AND op.name = 'gmail'
     AND uic.connection_status = 'active'

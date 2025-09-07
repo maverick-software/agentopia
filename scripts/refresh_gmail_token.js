@@ -27,7 +27,7 @@ async function refreshGmailToken() {
       .from('user_oauth_connections')
       .select(`
         *,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('user_id', userId)
       .single();
@@ -74,7 +74,7 @@ async function refreshGmailToken() {
       .from('user_oauth_connections')
       .select('token_expires_at')
       .eq('user_id', userId)
-      .eq('oauth_providers!inner(name)', 'gmail')
+      .eq('service_providers!inner(name)', 'gmail')
       .single();
 
     if (!updateError && updated) {

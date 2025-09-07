@@ -358,7 +358,7 @@ export function EnhancedToolsModal({
     try {
       // Get provider configuration
       const { data: providerData, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', selectedProvider)
         .single();
@@ -1126,7 +1126,7 @@ export function EnhancedToolsModal({
       try {
         // Get DigitalOcean OAuth provider
         const { data: providerData, error: providerError } = await supabase
-          .from('oauth_providers')
+          .from('service_providers')
           .select('id')
           .eq('name', 'digitalocean')
           .single();

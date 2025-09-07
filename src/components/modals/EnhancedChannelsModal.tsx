@@ -217,7 +217,7 @@ export function EnhancedChannelsModal({
       if (!mailgunDomain.trim()) { setError('Domain is required'); return; }
 
       const { data: mgProvider, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'mailgun')
         .single();
@@ -387,7 +387,7 @@ export function EnhancedChannelsModal({
       
       // Resolve provider id and create connection record
       const { data: sgProvider, error: providerError } = await supabase
-        .from('oauth_providers')
+        .from('service_providers')
         .select('id')
         .eq('name', 'sendgrid')
         .single();

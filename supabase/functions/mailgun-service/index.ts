@@ -136,10 +136,10 @@ async function getMailgunConfig(supabase: any, userId: string): Promise<MailgunC
       .select(`
         vault_access_token_id,
         connection_status,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('id', config.user_oauth_connection_id)
-      .eq('oauth_providers.name', 'mailgun')
+      .eq('service_providers.name', 'mailgun')
       .eq('connection_status', 'connected')
       .single();
 

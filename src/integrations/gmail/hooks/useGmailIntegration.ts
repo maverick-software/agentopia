@@ -354,7 +354,7 @@ export function useAgentGmailPermissions(agentId?: string) {
           user_integration_credentials(
             external_username,
             oauth_provider_id,
-            oauth_providers(name)
+            service_providers(name)
           )
         `)
         .eq('agent_id', agentId)
@@ -363,8 +363,8 @@ export function useAgentGmailPermissions(agentId?: string) {
       // Filter on client-side for Gmail provider
       const filteredData = (data || []).filter((permission: any) => 
         permission.user_integration_credentials && 
-        permission.user_integration_credentials.oauth_providers && 
-        permission.user_integration_credentials.oauth_providers.name === 'gmail'
+        permission.user_integration_credentials.service_providers && 
+        permission.user_integration_credentials.service_providers.name === 'gmail'
       );
 
       if (fetchError) {

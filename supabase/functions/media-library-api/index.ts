@@ -25,12 +25,12 @@ async function getOCRApiKey(userId?: string): Promise<string | null> {
       .from('user_integration_credentials')
       .select(`
         vault_access_token_id,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       `)
       .eq('user_id', userId)
       .eq('credential_type', 'api_key')
       .eq('connection_status', 'active')
-      .eq('oauth_providers.name', 'ocr_space')
+      .eq('service_providers.name', 'ocr_space')
       .single();
     
     if (connectionError || !connection) {

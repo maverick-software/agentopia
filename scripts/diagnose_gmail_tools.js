@@ -64,12 +64,12 @@ async function diagnoseGmailTools(agentId, userId) {
         is_active,
         user_oauth_connections!inner(
           oauth_provider_id,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', agentId)
       .eq('user_oauth_connections.user_id', userId)
-      .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+      .eq('user_oauth_connections.service_providers.name', 'gmail')
       .eq('is_active', true)
       .single();
     
@@ -201,7 +201,7 @@ async function debugQueryConditions(agentId, userId) {
         id,
         user_id,
         oauth_provider_id,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       )
     `)
     .eq('agent_id', agentId)
@@ -209,7 +209,7 @@ async function debugQueryConditions(agentId, userId) {
   
   console.log(`\n4. With provider join: ${step4?.length || 0} found`);
   step4?.forEach(p => {
-    console.log(`   - Provider: ${p.user_oauth_connections?.oauth_providers?.name}`);
+    console.log(`   - Provider: ${p.user_oauth_connections?.service_providers?.name}`);
   });
   
   // 5. Check Gmail filter
@@ -221,12 +221,12 @@ async function debugQueryConditions(agentId, userId) {
         id,
         user_id,
         oauth_provider_id,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       )
     `)
     .eq('agent_id', agentId)
     .eq('user_oauth_connections.user_id', userId)
-    .eq('user_oauth_connections.oauth_providers.name', 'gmail');
+    .eq('user_oauth_connections.service_providers.name', 'gmail');
   
   console.log(`\n5. Gmail permissions only: ${step5?.length || 0} found`);
   
@@ -244,12 +244,12 @@ async function debugQueryConditions(agentId, userId) {
         id,
         user_id,
         oauth_provider_id,
-        oauth_providers!inner(name)
+        service_providers!inner(name)
       )
     `)
     .eq('agent_id', agentId)
     .eq('user_oauth_connections.user_id', userId)
-    .eq('user_oauth_connections.oauth_providers.name', 'gmail')
+    .eq('user_oauth_connections.service_providers.name', 'gmail')
     .eq('is_active', true);
   
   console.log(`\n6. Active Gmail permissions: ${step6?.length || 0} found`);

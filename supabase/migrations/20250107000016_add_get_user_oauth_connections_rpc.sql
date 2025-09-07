@@ -32,7 +32,7 @@ AS $$
         uoc.created_at,
         uoc.updated_at
     FROM user_oauth_connections uoc
-    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
+    INNER JOIN service_providers op ON op.id = uoc.oauth_provider_id
     WHERE uoc.user_id = COALESCE(p_user_id, auth.uid())
     ORDER BY uoc.created_at DESC;
 $$;

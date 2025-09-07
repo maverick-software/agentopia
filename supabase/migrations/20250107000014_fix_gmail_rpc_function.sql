@@ -29,7 +29,7 @@ BEGIN
     FROM user_oauth_connections uoc
     LEFT JOIN gmail_configurations gc ON gc.user_oauth_connection_id = uoc.id
     WHERE uoc.user_id = COALESCE(p_user_id, auth.uid())
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     AND uoc.connection_status = 'active';
 END;
 $$;

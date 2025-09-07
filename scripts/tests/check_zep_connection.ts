@@ -11,7 +11,7 @@ async function main() {
 
   // Get GetZep provider ID
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id')
     .eq('name', 'getzep')
     .single();

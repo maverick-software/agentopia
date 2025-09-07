@@ -47,12 +47,12 @@ export class SMTPProvider implements ToolProvider {
             connection_name,
             oauth_provider_id,
             credential_type,
-            oauth_providers!inner(name)
+            service_providers!inner(name)
           )
         `)
         .eq('agent_id', agentId)
         .eq('user_integration_credentials.user_id', userId)
-        .eq('user_integration_credentials.oauth_providers.name', 'smtp')
+        .eq('user_integration_credentials.service_providers.name', 'smtp')
         .eq('user_integration_credentials.credential_type', 'api_key')
         .eq('is_active', true)
         .limit(5);

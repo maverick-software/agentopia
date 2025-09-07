@@ -2,12 +2,12 @@
 -- Date: January 7, 2025
 -- Purpose: Add Gmail OAuth provider and agent-specific credential management
 
--- Add Gmail OAuth provider to existing oauth_providers table
+-- Add Gmail OAuth provider to existing service_providers table
 DO $$
 BEGIN
     -- Check if Gmail provider already exists
-    IF NOT EXISTS (SELECT 1 FROM oauth_providers WHERE name = 'gmail') THEN
-        INSERT INTO oauth_providers (
+    IF NOT EXISTS (SELECT 1 FROM service_providers WHERE name = 'gmail') THEN
+        INSERT INTO service_providers (
             name, 
             display_name, 
             authorization_url, 
@@ -162,7 +162,7 @@ BEGIN
                     "auto_mark_as_read": false
                 }
             }'::jsonb,
-            (SELECT id FROM oauth_providers WHERE name = 'gmail')
+            (SELECT id FROM service_providers WHERE name = 'gmail')
         );
     END IF;
 END $$;
@@ -257,7 +257,7 @@ BEGIN
     FROM user_oauth_connections uoc
     LEFT JOIN gmail_configurations gc ON gc.user_oauth_connection_id = uoc.id
     WHERE uoc.user_id = p_user_id 
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail')
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail')
     AND uoc.connection_status = 'active';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -279,7 +279,7 @@ BEGIN
     WHERE aop.agent_id = p_agent_id
     AND uoc.user_id = p_user_id
     AND aop.is_active = true
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail');
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail');
     
     -- Check if agent has permissions
     IF v_granted_scopes IS NULL THEN
@@ -318,7 +318,7 @@ BEGIN
     SELECT uoc.id INTO v_connection_id
     FROM user_oauth_connections uoc
     WHERE uoc.user_id = p_user_id
-    AND uoc.oauth_provider_id = (SELECT id FROM oauth_providers WHERE name = 'gmail');
+    AND uoc.oauth_provider_id = (SELECT id FROM service_providers WHERE name = 'gmail');
     
     -- Insert operation log
     INSERT INTO gmail_operation_logs (

@@ -69,7 +69,7 @@ async function testAgentPermissions(agentId) {
           connection_name,
           external_username,
           connection_status,
-          oauth_providers!inner(
+          service_providers!inner(
             name,
             display_name
           )
@@ -86,7 +86,7 @@ async function testAgentPermissions(agentId) {
         console.log('\nRaw permissions:');
         rawPerms.forEach(perm => {
           const conn = perm.user_oauth_connections;
-          const provider = conn?.oauth_providers;
+          const provider = conn?.service_providers;
           console.log(`  - ${provider?.display_name || provider?.name || 'Unknown'}`);
           console.log(`    Connection Status: ${conn?.connection_status}`);
           console.log(`    Username: ${conn?.external_username}`);

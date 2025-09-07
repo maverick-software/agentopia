@@ -20,7 +20,7 @@ async function testCredentialFlow() {
   // Step 1: Get the user's GetZep connection from credentials
   console.log('\n1️⃣ Checking user_oauth_connections...');
   const { data: provider } = await supabase
-    .from('oauth_providers')
+    .from('service_providers')
     .select('id, name')
     .eq('name', 'getzep')
     .single();

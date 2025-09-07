@@ -1,7 +1,7 @@
 -- Add Mailgun OAuth Provider
--- This creates the oauth_providers entry needed for Mailgun integration
+-- This creates the service_providers entry needed for Mailgun integration
 
-INSERT INTO oauth_providers (
+INSERT INTO service_providers (
     name,
     display_name,
     authorization_endpoint,

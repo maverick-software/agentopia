@@ -46,7 +46,7 @@ export interface ProviderPermission {
     connection_name?: string;
     oauth_provider_id?: string;
     credential_type?: string;
-    oauth_providers?: {
+    service_providers?: {
       name?: string;
     };
   };

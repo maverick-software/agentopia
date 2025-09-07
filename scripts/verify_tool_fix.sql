@@ -19,7 +19,7 @@ SELECT
 FROM agent_integration_permissions aip
 JOIN agents a ON a.id = aip.agent_id
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE a.name ILIKE '%angela%'
   AND aip.is_active = true
 ORDER BY op.name;
@@ -41,7 +41,7 @@ SELECT
 FROM agent_integration_permissions aip
 JOIN agents a ON a.id = aip.agent_id
 JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE a.name ILIKE '%angela%'
   AND aip.is_active = true;
 
@@ -65,7 +65,7 @@ SELECT
         ELSE '✅ Angela has no access'
     END as angela_access
 FROM user_integration_credentials uic
-JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+JOIN service_providers op ON op.id = uic.oauth_provider_id
 JOIN auth.users u ON u.id = uic.user_id
 WHERE op.name = 'gmail'
   AND uic.user_id IN (
@@ -93,7 +93,7 @@ SELECT
 FROM agents a
 LEFT JOIN agent_integration_permissions aip ON aip.agent_id = a.id AND aip.is_active = true
 LEFT JOIN user_integration_credentials uic ON uic.id = aip.connection_id
-LEFT JOIN oauth_providers op ON op.id = uic.oauth_provider_id
+LEFT JOIN service_providers op ON op.id = uic.oauth_provider_id
 WHERE a.is_active = true
 GROUP BY a.id, a.name
 ORDER BY a.name;

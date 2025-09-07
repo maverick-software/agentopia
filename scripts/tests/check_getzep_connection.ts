@@ -18,13 +18,13 @@ async function checkConnections() {
   try {
     // Get GetZep provider ID
     const { data: provider } = await supabase
-      .from('oauth_providers')
+      .from('service_providers')
       .select('id')
       .eq('name', 'getzep')
       .single();
 
     if (!provider) {
-      console.log('❌ GetZep provider not found in oauth_providers table');
+      console.log('❌ GetZep provider not found in service_providers table');
       return;
     }
 

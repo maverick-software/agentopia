@@ -504,11 +504,11 @@ BEGIN
     END IF;
 END $$;
 
--- Add SendGrid to oauth_providers table (as API key type)
+-- Add SendGrid to service_providers table (as API key type)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM oauth_providers WHERE name = 'sendgrid') THEN
-        INSERT INTO oauth_providers (
+    IF NOT EXISTS (SELECT 1 FROM service_providers WHERE name = 'sendgrid') THEN
+        INSERT INTO service_providers (
             name, 
             display_name, 
             authorization_endpoint, 

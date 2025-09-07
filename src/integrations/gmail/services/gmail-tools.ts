@@ -250,7 +250,7 @@ export class GmailMCPToolsService {
           is_active,
           user_integration_credentials(
             oauth_provider_id,
-            oauth_providers(name)
+            service_providers(name)
           )
         `)
         .eq('agent_id', agentId)
@@ -260,8 +260,8 @@ export class GmailMCPToolsService {
       // Filter for Gmail provider on client-side
       const gmailPermissions = (permissions || []).filter((permission: any) => 
         permission.user_integration_credentials && 
-        permission.user_integration_credentials.oauth_providers && 
-        permission.user_integration_credentials.oauth_providers.name === 'gmail'
+        permission.user_integration_credentials.service_providers && 
+        permission.user_integration_credentials.service_providers.name === 'gmail'
       );
 
       const gmailPermission = gmailPermissions.length > 0 ? gmailPermissions[0] : null;

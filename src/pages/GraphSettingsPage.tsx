@@ -43,9 +43,9 @@ export function GraphSettingsPage() {
         if (!g && user?.id) {
           const { data: conns } = await supabase
             .from('user_integration_credentials')
-            .select('id, connection_metadata, connection_status, oauth_providers:oauth_provider_id ( name )')
+            .select('id, connection_metadata, connection_status, service_providers:oauth_provider_id ( name )')
             .eq('user_id', user.id);
-          const getzep = (conns || []).find((c: any) => (c?.oauth_providers?.name || '').toLowerCase() === 'getzep' && c.connection_status === 'active');
+          const getzep = (conns || []).find((c: any) => (c?.service_providers?.name || '').toLowerCase() === 'getzep' && c.connection_status === 'active');
           if (getzep) {
             const settings: any = {};
             if (getzep.connection_metadata?.project_id) settings.project_id = getzep.connection_metadata.project_id;

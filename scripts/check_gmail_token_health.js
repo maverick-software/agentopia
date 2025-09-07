@@ -31,9 +31,9 @@ async function checkGmailTokenHealth() {
         connection_status,
         last_token_refresh,
         created_at,
-        oauth_providers!inner(name, display_name)
+        service_providers!inner(name, display_name)
       `)
-      .eq('oauth_providers.name', 'gmail');
+      .eq('service_providers.name', 'gmail');
 
     if (connError) {
       console.error('❌ Error fetching Gmail connections:', connError);

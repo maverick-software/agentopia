@@ -14,8 +14,8 @@ DECLARE
     rec RECORD;
 BEGIN
     -- Get provider IDs
-    SELECT id INTO gmail_provider_id FROM oauth_providers WHERE name = 'gmail';
-    SELECT id INTO serper_provider_id FROM oauth_providers WHERE name = 'serper_api';
+    SELECT id INTO gmail_provider_id FROM service_providers WHERE name = 'gmail';
+    SELECT id INTO serper_provider_id FROM service_providers WHERE name = 'serper_api';
     
     RAISE NOTICE '🔍 Gmail Provider ID: %', gmail_provider_id;
     RAISE NOTICE '🔍 Serper API Provider ID: %', serper_provider_id;
@@ -77,7 +77,7 @@ DECLARE
     gmail_provider_id UUID;
     remaining_corruption INTEGER;
 BEGIN
-    SELECT id INTO gmail_provider_id FROM oauth_providers WHERE name = 'gmail';
+    SELECT id INTO gmail_provider_id FROM service_providers WHERE name = 'gmail';
     
     SELECT COUNT(*) INTO remaining_corruption
     FROM user_integration_credentials 
@@ -102,11 +102,11 @@ DECLARE
     corrected_count INTEGER;
     rec RECORD;
 BEGIN
-    SELECT id INTO serper_provider_id FROM oauth_providers WHERE name = 'serper_api';
+    SELECT id INTO serper_provider_id FROM service_providers WHERE name = 'serper_api';
     
     SELECT COUNT(*) INTO corrected_count
     FROM user_integration_credentials uic
-    JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+    JOIN service_providers op ON uic.oauth_provider_id = op.id
     WHERE op.name = 'serper_api'
     AND (
         uic.connection_name ILIKE '%serper%' OR 
@@ -121,7 +121,7 @@ BEGIN
         FOR rec IN 
             SELECT uic.id, uic.connection_name, uic.external_username, op.display_name
             FROM user_integration_credentials uic
-            JOIN oauth_providers op ON uic.oauth_provider_id = op.id
+            JOIN service_providers op ON uic.oauth_provider_id = op.id
             WHERE op.name = 'serper_api'
             AND (
                 uic.connection_name ILIKE '%serper%' OR 
