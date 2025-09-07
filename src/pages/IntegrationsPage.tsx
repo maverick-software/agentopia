@@ -156,6 +156,12 @@ export function IntegrationsPage() {
         return 'digitalocean';
       case 'Discord':
         return 'discord';
+      case 'Microsoft Teams':
+        return 'microsoft-teams';
+      case 'Microsoft Outlook':
+        return 'microsoft-outlook';
+      case 'Microsoft OneDrive':
+        return 'microsoft-onedrive';
       default:
         return null;
     }

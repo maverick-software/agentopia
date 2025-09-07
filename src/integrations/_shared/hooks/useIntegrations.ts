@@ -135,19 +135,28 @@ export function useIntegrationsByCategory(categoryId?: string) {
           return;
         }
 
+        // Get all categories for mapping
+        const { data: categoriesData } = await supabase
+          .from('integration_categories')
+          .select('id, name')
+          .eq('is_active', true);
+
+        const categoryMap = new Map(categoriesData?.map(cat => [cat.name, cat.id]) || []);
+
         // Transform service_providers to Integration format
         const transformedIntegrations: Integration[] = (oauthProviders || []).map((provider, index) => {
           // Determine category based on provider name
-          const category = getProviderCategory(provider.name);
+          const categoryName = getProviderCategoryName(provider.name);
+          const actualCategoryId = categoryMap.get(categoryName);
           
           // Skip if filtering by category and this provider doesn't match
-          if (categoryId && category.id !== categoryId) {
+          if (categoryId && actualCategoryId !== categoryId) {
             return null;
           }
 
           return {
             id: provider.id,
-            category_id: category.id,
+            category_id: actualCategoryId || categoryMap.get('API Integrations') || 'unknown',
             name: provider.display_name,
             description: getProviderDescription(provider.name),
             icon_name: getProviderIcon(provider.name),
@@ -203,9 +212,18 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
           return;
         }
 
+        // Get all categories for mapping
+        const { data: categoriesData } = await supabase
+          .from('integration_categories')
+          .select('id, name')
+          .eq('is_active', true);
+
+        const categoryMap = new Map(categoriesData?.map(cat => [cat.name, cat.id]) || []);
+
         // Transform service_providers to Integration format and filter by classification
         const transformedIntegrations: Integration[] = (oauthProviders || []).map((provider, index) => {
-          const category = getProviderCategory(provider.name);
+          const categoryName = getProviderCategoryName(provider.name);
+          const actualCategoryId = categoryMap.get(categoryName);
           const providerClassification = getProviderClassification(provider.name);
           
           // Skip if this provider doesn't match the requested classification
@@ -215,7 +233,7 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
 
           return {
             id: provider.id,
-            category_id: category.id,
+            category_id: actualCategoryId || categoryMap.get('API Integrations') || 'unknown',
             name: provider.display_name,
             description: getProviderDescription(provider.name),
             icon_name: getProviderIcon(provider.name),
@@ -837,24 +855,33 @@ function getDummyIntegrations(categoryId: string): Integration[] {
 }
 
 // Helper functions to map service_providers to integration metadata
-function getProviderCategory(providerName: string): { id: string; name: string } {
-  const categoryMap: Record<string, { id: string; name: string }> = {
-    'gmail': { id: 'messaging', name: 'Messaging & Communication' },
-    'smtp': { id: 'messaging', name: 'Messaging & Communication' },
-    'sendgrid': { id: 'messaging', name: 'Messaging & Communication' },
-    'mailgun': { id: 'messaging', name: 'Messaging & Communication' },
-    'serper_api': { id: 'api', name: 'API Integrations' },
-    'serpapi': { id: 'api', name: 'API Integrations' },
-    'brave_search': { id: 'api', name: 'API Integrations' },
-    'ocr_space': { id: 'api', name: 'API Integrations' },
-    'pinecone': { id: 'database', name: 'Database Connectors' },
-    'getzep': { id: 'database', name: 'Database Connectors' },
-    'digitalocean': { id: 'cloud', name: 'Cloud Services' },
-    'discord': { id: 'messaging', name: 'Messaging & Communication' },
-    'zapier': { id: 'automation', name: 'Automation & Workflows' }
+function getProviderCategoryName(providerName: string): string {
+  const categoryMap: Record<string, string> = {
+    'gmail': 'Messaging & Communication',
+    'smtp': 'Messaging & Communication',
+    'sendgrid': 'Messaging & Communication',
+    'mailgun': 'Messaging & Communication',
+    'serper_api': 'API Integrations',
+    'serpapi': 'API Integrations',
+    'brave_search': 'API Integrations',
+    'ocr_space': 'API Integrations',
+    'pinecone': 'Database Connectors',
+    'getzep': 'Database Connectors',
+    'digitalocean': 'Cloud Services',
+    'discord': 'Messaging & Communication',
+    'zapier': 'Automation & Workflows',
+    'microsoft-teams': 'Communication',
+    'microsoft-outlook': 'Productivity',
+    'microsoft-onedrive': 'Storage'
   };
   
-  return categoryMap[providerName] || { id: 'api', name: 'API Integrations' };
+  return categoryMap[providerName] || 'API Integrations';
+}
+
+// Legacy function for backward compatibility
+function getProviderCategory(providerName: string): { id: string; name: string } {
+  const categoryName = getProviderCategoryName(providerName);
+  return { id: categoryName.toLowerCase().replace(/\s+/g, '_'), name: categoryName };
 }
 
 function getProviderDescription(providerName: string): string {
@@ -871,7 +898,10 @@ function getProviderDescription(providerName: string): string {
     'getzep': 'Memory store for AI assistants with conversation history and semantic search',
     'digitalocean': 'Cloud infrastructure platform for deploying and scaling applications',
     'discord': 'Interact with Discord servers and manage bot communications',
-    'zapier': 'Connect with Zapier workflows to automate tasks across thousands of apps'
+    'zapier': 'Connect with Zapier workflows to automate tasks across thousands of apps',
+    'microsoft-teams': 'Send messages, create meetings, and collaborate in Microsoft Teams channels and chats',
+    'microsoft-outlook': 'Send emails, manage calendar events, and access contacts in Microsoft Outlook',
+    'microsoft-onedrive': 'Upload, download, share, and manage files in Microsoft OneDrive'
   };
   
   return descriptionMap[providerName] || `Integration for ${providerName}`;
@@ -891,14 +921,17 @@ function getProviderIcon(providerName: string): string {
     'getzep': 'Database',
     'digitalocean': 'Cloud',
     'discord': 'MessageSquare',
-    'zapier': 'Zap'
+    'zapier': 'Zap',
+    'microsoft-teams': 'MessageSquare',
+    'microsoft-outlook': 'Mail',
+    'microsoft-onedrive': 'Cloud'
   };
   
   return iconMap[providerName] || 'Globe';
 }
 
 function isPopularProvider(providerName: string): boolean {
-  const popularProviders = ['gmail', 'serper_api', 'brave_search', 'serpapi', 'discord', 'zapier'];
+  const popularProviders = ['gmail', 'serper_api', 'brave_search', 'serpapi', 'discord', 'zapier', 'microsoft-teams', 'microsoft-outlook', 'microsoft-onedrive'];
   return popularProviders.includes(providerName);
 }
 
@@ -915,7 +948,10 @@ function getProviderDocumentationUrl(providerName: string): string | undefined {
     'getzep': 'https://docs.getzep.com/',
     'digitalocean': 'https://docs.digitalocean.com/reference/api/',
     'discord': 'https://discord.com/developers/docs',
-    'zapier': 'https://zapier.com/developer'
+    'zapier': 'https://zapier.com/developer',
+    'microsoft-teams': 'https://docs.microsoft.com/en-us/graph/api/resources/teams-api-overview',
+    'microsoft-outlook': 'https://docs.microsoft.com/en-us/graph/api/resources/mail-api-overview',
+    'microsoft-onedrive': 'https://docs.microsoft.com/en-us/graph/api/resources/onedrive'
   };
   
   return docMap[providerName];
@@ -923,7 +959,7 @@ function getProviderDocumentationUrl(providerName: string): string | undefined {
 
 function getProviderClassification(providerName: string): 'tool' | 'channel' {
   // Channel integrations are primarily for communication/messaging
-  const channelProviders = ['gmail', 'smtp', 'sendgrid', 'mailgun', 'discord'];
+  const channelProviders = ['gmail', 'smtp', 'sendgrid', 'mailgun', 'discord', 'microsoft-teams', 'microsoft-outlook'];
   
   if (channelProviders.includes(providerName)) {
     return 'channel';
