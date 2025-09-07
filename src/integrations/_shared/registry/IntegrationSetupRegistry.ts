@@ -7,6 +7,11 @@ import { SendGridSetupModal } from '../../sendgrid/components/SendGridSetupModal
 import { MailgunSetupModal } from '../../mailgun/components/MailgunSetupModal';
 import { SMTPSetupModal } from '../../smtp/components/SMTPSetupModal';
 import { EmailRelaySetupModal } from '../../email-relay/components/EmailRelaySetupModal';
+import { PineconeSetupModal } from '../../pinecone/components/PineconeSetupModal';
+import { GetZepSetupModal } from '../../getzep/components/GetZepSetupModal';
+import { SerperAPISetupModal } from '../../serper-api/components/SerperAPISetupModal';
+import { SerpAPISetupModal } from '../../serpapi/components/SerpAPISetupModal';
+import { BraveSearchSetupModal } from '../../brave-search/components/BraveSearchSetupModal';
 
 /**
  * Registry of all integration setup components
@@ -119,6 +124,71 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
       { key: 'custom_from', label: 'Custom from addresses and names' },
       { key: 'reply_to', label: 'Reply-to email configuration' },
       { key: 'secure_credentials', label: 'Secure credential management' }
+    ]
+  },
+
+  // Pinecone - Vector database for AI memory
+  'Pinecone': {
+    component: PineconeSetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['vector_search', 'vector_upsert', 'vector_delete', 'index_stats'],
+    capabilities: [
+      { key: 'vector_search', label: 'Store and retrieve vector embeddings' },
+      { key: 'semantic_search', label: 'Semantic similarity search' },
+      { key: 'memory_storage', label: 'Long-term memory storage' },
+      { key: 'context_aware', label: 'Context-aware responses' }
+    ]
+  },
+
+  // GetZep - Knowledge graph for AI memory
+  'GetZep': {
+    component: GetZepSetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['memory_read', 'memory_write', 'session_management', 'knowledge_graph'],
+    capabilities: [
+      { key: 'knowledge_graph', label: 'Knowledge graph memory storage' },
+      { key: 'concept_extraction', label: 'Semantic concept extraction' },
+      { key: 'relationship_mapping', label: 'Relationship mapping' },
+      { key: 'context_reasoning', label: 'Context-aware reasoning' }
+    ]
+  },
+
+  // Serper API - Fast Google search results
+  'Serper API': {
+    component: SerperAPISetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['web_search', 'news_search', 'image_search', 'local_search'],
+    capabilities: [
+      { key: 'web_search', label: 'Fast Google web search' },
+      { key: 'news_search', label: 'News search and monitoring' },
+      { key: 'image_search', label: 'Image search capabilities' },
+      { key: 'local_search', label: 'Local business search' }
+    ]
+  },
+
+  // SerpAPI - Comprehensive search engine results
+  'SerpAPI': {
+    component: SerpAPISetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['web_search', 'news_search', 'image_search', 'video_search', 'shopping_search'],
+    capabilities: [
+      { key: 'multi_engine_search', label: 'Multi-engine web search' },
+      { key: 'news_search', label: 'News and article search' },
+      { key: 'media_search', label: 'Image and video search' },
+      { key: 'shopping_search', label: 'Shopping and product search' }
+    ]
+  },
+
+  // Brave Search API - Privacy-focused search
+  'Brave Search API': {
+    component: BraveSearchSetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['web_search', 'news_search', 'image_search'],
+    capabilities: [
+      { key: 'privacy_search', label: 'Privacy-focused web search' },
+      { key: 'news_search', label: 'News search without tracking' },
+      { key: 'image_search', label: 'Image search capabilities' },
+      { key: 'independent_results', label: 'Independent search results' }
     ]
   }
 };

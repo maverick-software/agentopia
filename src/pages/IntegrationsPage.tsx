@@ -210,7 +210,7 @@ export function IntegrationsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           {[...Array(6)].map((_, i) => (
             <Card key={i} className="bg-card border-border animate-pulse">
               <CardHeader className="pb-3">
@@ -278,8 +278,8 @@ export function IntegrationsPage() {
           </TabsList>
 
           <TabsContent value={selectedCategory} className="space-y-4">
-            {/* Integration Cards Grid */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Integration Cards Grid - Responsive: 1 col mobile, 2 cols tablet, 3 cols desktop */}
+            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
               {filteredIntegrations.map((integration) => {
                 const IconComponent = getIconComponent(integration.icon_name || 'Settings');
                 const isConnected = isIntegrationConnected(integration.name);
@@ -290,7 +290,7 @@ export function IntegrationsPage() {
                 return (
                   <Card 
                     key={integration.id} 
-                    className={`bg-card border-border transition-colors w-full h-[240px] flex flex-col ${
+                    className={`bg-card border-border transition-colors w-full min-h-[240px] flex flex-col ${
                       isComingSoon ? 'opacity-60' : 'hover:border-muted-foreground'
                     }`}
                   >
@@ -321,18 +321,16 @@ export function IntegrationsPage() {
                       </div>
                     </div>
                     
-                    {/* Description - Fixed Height: 54px for up to 3 lines */}
-                    <div className="px-6 h-[54px] flex-shrink-0">
+                    {/* Description - Flexible height with max 3 lines */}
+                    <div className="px-6 pb-4 flex-shrink-0">
                       <p 
-                        className={`text-sm leading-[18px] overflow-hidden ${
+                        className={`text-sm leading-relaxed overflow-hidden ${
                           isComingSoon ? 'text-muted-foreground/50' : 'text-muted-foreground'
                         }`} 
                         style={{ 
-                          height: '54px',
                           display: '-webkit-box',
                           WebkitLineClamp: 3,
-                          WebkitBoxOrient: 'vertical',
-                          lineHeight: '18px'
+                          WebkitBoxOrient: 'vertical'
                         }}
                       >
                         {integration.description || 'Integration description not yet available.'}

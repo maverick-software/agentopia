@@ -134,6 +134,7 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   **🆕 Zapier MCP Integration:** Universal tool connectivity allowing agents to access 8,000+ apps through Zapier's Model Context Protocol servers
 *   **🆕 Media Library System:** Comprehensive WordPress-style document and media management with centralized storage, agent training integration, MCP tool framework, automated text extraction and processing, secure file handling with multi-format support, and intelligent document reprocessing capabilities
 *   **🆕 Advanced Reasoning System:** MCP-style iterative reasoning engine with inductive, deductive, and abductive reasoning capabilities, confidence tracking, critic system with reconsideration cycles, and ephemeral reasoning context integration
+*   **🆕 Database Architecture Modernization (January 2025):** Complete migration from `oauth_providers` to `service_providers` table with semantic naming for all integration providers (OAuth + API key), removal of redundant `integrations` table, and frontend refactoring to use `service_providers` directly with helper functions for metadata management
 *   **Workspace Collaboration:**
     *   Create/Manage Workspaces
     *   Manage Workspace Members (Users, Agents, Teams)
@@ -440,7 +441,7 @@ For detailed implementation guidance, see the comprehensive documentation in `do
 
 ## Database Schema
 
-Uses PostgreSQL managed by Supabase. Key tables include `users`, `agents`, `teams`, `team_members`, `workspaces`, `workspace_members`, `chat_channels`, `chat_messages`, `datastores`, `agent_datastores`, `mcp_configurations`, `mcp_servers`.
+Uses PostgreSQL managed by Supabase. Key tables include `users`, `agents`, `teams`, `team_members`, `workspaces`, `workspace_members`, `chat_channels`, `chat_messages`, `datastores`, `agent_datastores`, `mcp_configurations`, `mcp_servers`, `service_providers`, `user_integration_credentials`.
 
 *   **Relationships:** Workspaces link members (users, agents, teams). Channels belong to workspaces. Messages belong to channels. Agents can be linked to datastores and MCP configurations.
 *   **RLS:** Row Level Security is enforced on most tables to control data access based on user roles and workspace membership.
@@ -451,6 +452,11 @@ Uses PostgreSQL managed by Supabase. Key tables include `users`, `agents`, `team
     - **Tool Naming:** Uses specific tool names (e.g., `smtp_send_email`, `gmail_send_email`) for proper routing
     - **UI Integration:** Frontend components fetch capabilities via database queries, fallback to hardcoded only on error
     - **RLS:** Readable by everyone; managed per integration
+*   **🔄 Service Providers Architecture (January 2025):** Unified provider management system
+    - **`service_providers` table:** Replaces deprecated `oauth_providers` table with semantic naming for all integration providers (OAuth + API key providers)
+    - **Removed `integrations` table:** Eliminated redundant table in favor of direct `service_providers` usage
+    - **Frontend Integration:** All UI components now query `service_providers` directly with helper functions for metadata (category, description, icons)
+    - **Admin Management:** `AdminIntegrationManagement` page manages `service_providers` table with OAuth-specific fields and configuration
 
 ## 🔧 Integration Capabilities System (Database-Driven)
 
@@ -555,7 +561,9 @@ Also see database RPCs used by integrations UI:
 
 - `grant_agent_integration_permission(p_agent_id uuid, p_connection_id uuid, p_allowed_scopes text[], p_permission_level text)`
 - `revoke_agent_integration_permission(p_permission_id uuid)`
-- `get_agent_integration_permissions(p_agent_id uuid)` — returns provider_name, external_username, allowed_scopes, is_active for the agent’s authorized connections
+- `get_agent_integration_permissions(p_agent_id uuid)` — returns provider_name, external_username, allowed_scopes, is_active for the agent's authorized connections
+
+**Note:** These RPCs now work with the `service_providers` and `user_integration_credentials` tables instead of the deprecated `oauth_providers` and `user_oauth_connections` tables.
 
 ## 🔐 Centralized Secure Secrets Management (Enterprise-Grade)
 
@@ -624,7 +632,7 @@ const secretValue = await vaultService.getSecret(secretId);
 CREATE TABLE user_integration_credentials (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  oauth_provider_id uuid NOT NULL,
+  service_provider_id uuid NOT NULL,  -- References service_providers table
   credential_type 'oauth' | 'api_key' NOT NULL,
   
   -- SECURE STORAGE: Only vault UUIDs stored
@@ -1116,12 +1124,12 @@ Agentopia implements a sophisticated tool use system that allows agents to perfo
 
 Key tables involved in the tool use infrastructure:
 
-* **`service_providers`**: Stores OAuth provider configurations (e.g., Gmail, Slack)
-* **`user_oauth_connections`**: Links users to their OAuth connections with encrypted tokens
-* **`agent_integration_permissions`**: Controls which agents have access to which OAuth scopes
+* **`service_providers`**: Stores service provider configurations (OAuth + API key providers like Gmail, Slack, Serper API, etc.)
+* **`user_integration_credentials`**: Links users to their integration credentials with encrypted tokens (replaces deprecated `user_oauth_connections`)
+* **`agent_integration_permissions`**: Controls which agents have access to which service provider scopes
   * `agent_id`: The agent granted permissions
-  * `user_oauth_connection_id`: The OAuth connection to use
-  * `allowed_scopes`: JSONB array of granted OAuth scopes (e.g., `["https://www.googleapis.com/auth/gmail.send"]`)
+  * `user_integration_credentials_id`: The integration credential to use
+  * `allowed_scopes`: JSONB array of granted scopes (e.g., `["https://www.googleapis.com/auth/gmail.send"]`)
   * `is_active`: Whether the permission grant is currently active
 
 ### RPC Functions

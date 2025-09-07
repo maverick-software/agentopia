@@ -209,7 +209,7 @@ export function DiscordSetupModal({
                     
                     <p><strong>6.</strong> Set the Interaction Endpoint URL to:</p>
                     <code className="bg-muted px-2 py-1 rounded text-sm">
-                      {process.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler
+                      {import.meta.env.VITE_SUPABASE_URL}/functions/v1/discord-interaction-handler
                     </code>
                   </div>
                 </div>
