@@ -106,7 +106,7 @@ serve(async (req) => {
 
     // Now fetch the permissions with proper joins
     const { data: permissions, error: permissionsError } = await supabase
-      .from('agent_integration_permissions')  // Updated table name
+      .from('agent_integration_permissions')
       .select(`
         id,
         agent_id,
@@ -116,17 +116,13 @@ serve(async (req) => {
         permission_level,
         granted_at,
         granted_by_user_id,
-        user_integration_credentials!inner (
+        user_integration_credentials!agent_integration_permissions_user_oauth_connection_id_fkey (
           id,
           connection_name,
           external_username,
           connection_status,
           user_id,
-          oauth_provider_id,
-          service_providers!inner (
-            name,
-            display_name
-          )
+          oauth_provider_id
         )
       `)
       .eq('agent_id', agent_id)
@@ -147,23 +143,53 @@ serve(async (req) => {
 
     console.log('Raw permissions data:', permissions)
     
+    // Get unique service provider IDs to fetch their details
+    const serviceProviderIds = [...new Set((permissions || []).map((item: any) => 
+      item.user_integration_credentials?.oauth_provider_id
+    ).filter(Boolean))]
+    
+    // Fetch service provider details
+    const { data: serviceProviders, error: spError } = await supabase
+      .from('service_providers')
+      .select('id, name, display_name')
+      .in('id', serviceProviderIds)
+    
+    if (spError) {
+      console.error('Error fetching service providers:', spError)
+    }
+    
+    // Create a map for quick lookup
+    const serviceProviderMap = new Map()
+    if (serviceProviders) {
+      serviceProviders.forEach((sp: any) => {
+        serviceProviderMap.set(sp.id, sp)
+      })
+    }
+    
     // Format the response to match expected structure
-    const formattedPermissions = (permissions || []).map((item: any) => ({
-      permission_id: item.id,
-      agent_id: item.agent_id,
-      connection_id: item.user_integration_credentials.id,
-      connection_name: item.user_integration_credentials.connection_name || 
-                      `${item.user_integration_credentials.service_providers.display_name} Connection`,
-      external_username: item.user_integration_credentials.external_username,
-      provider_name: item.user_integration_credentials.service_providers.name,
-      provider_display_name: item.user_integration_credentials.service_providers.display_name,
-      integration_name: item.user_integration_credentials.service_providers.display_name,
-      allowed_scopes: item.allowed_scopes || [],
-      is_active: item.is_active,
-      permission_level: item.permission_level || 'custom',
-      granted_at: item.granted_at,
-      granted_by_user_id: item.granted_by_user_id
-    }))
+    const formattedPermissions = (permissions || []).map((item: any) => {
+      const serviceProvider = serviceProviderMap.get(item.user_integration_credentials?.oauth_provider_id) || {
+        name: 'unknown',
+        display_name: 'Unknown Provider'
+      }
+      
+      return {
+        permission_id: item.id,
+        agent_id: item.agent_id,
+        connection_id: item.user_integration_credentials.id,
+        connection_name: item.user_integration_credentials.connection_name || 
+                        `${serviceProvider.display_name} Connection`,
+        external_username: item.user_integration_credentials.external_username,
+        provider_name: serviceProvider.name,
+        provider_display_name: serviceProvider.display_name,
+        integration_name: serviceProvider.display_name,
+        allowed_scopes: item.allowed_scopes || [],
+        is_active: item.is_active,
+        permission_level: item.permission_level || 'custom',
+        granted_at: item.granted_at,
+        granted_by_user_id: item.granted_by_user_id
+      }
+    })
 
     console.log('Returning formatted permissions, count:', formattedPermissions.length)
     
