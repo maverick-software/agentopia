@@ -3,6 +3,20 @@
  */
 
 /**
+ * Normalizes a scope name to a valid OpenAI tool name
+ * OpenAI requires tool names to match pattern: ^[a-zA-Z0-9_-]+$
+ */
+function normalizeToolName(scope: string): string {
+  // Remove URLs and convert to valid tool name
+  return scope
+    .replace(/^https?:\/\/[^\/]+\//, '') // Remove URL prefix
+    .replace(/[^a-zA-Z0-9_-]/g, '_')     // Replace invalid chars with underscore
+    .replace(/_+/g, '_')                 // Collapse multiple underscores
+    .replace(/^_|_$/g, '')               // Remove leading/trailing underscores
+    .toLowerCase();
+}
+
+/**
  * Maps OAuth scopes to integration capabilities for different providers
  */
 export function mapScopeToCapability(scope: string, providerName: string): string[] {
@@ -32,19 +46,27 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
   // Microsoft OneDrive scope mappings
   if (providerName === 'microsoft-onedrive') {
     const onedriveMappings: Record<string, string[]> = {
-      'files.read': ['list_files', 'download_file', 'search_files'],
-      'files.write': ['upload_file', 'list_files', 'download_file', 'search_files'],
-      'sites.read': ['list_files', 'search_files'],
-      'sites.write': ['upload_file', 'list_files', 'download_file', 'search_files'],
-      'Files.Read': ['list_files', 'download_file', 'search_files'],
-      'Files.ReadWrite': ['upload_file', 'list_files', 'download_file', 'search_files'],
-      'Files.Read.All': ['list_files', 'download_file', 'search_files'],
-      'Files.ReadWrite.All': ['upload_file', 'list_files', 'download_file', 'search_files', 'share_file'],
-      'Sites.Read.All': ['list_files', 'search_files'],
-      'Sites.ReadWrite.All': ['upload_file', 'list_files', 'download_file', 'search_files', 'share_file'],
-      'User.Read': ['read_profile']
+      'files.read': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'files.write': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'sites.read': ['onedrive_list_files', 'onedrive_search_files'],
+      'sites.write': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'Files.Read': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'Files.ReadWrite': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'Files.Read.All': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'Files.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
+      'Sites.Read.All': ['onedrive_list_files', 'onedrive_search_files'],
+      'Sites.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
+      'User.Read': ['onedrive_get_user_info'],
+      // Full URL scopes (these are what's actually being passed)
+      'https://graph.microsoft.com/Files.Read': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'https://graph.microsoft.com/Files.ReadWrite': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'https://graph.microsoft.com/Files.Read.All': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
+      'https://graph.microsoft.com/Files.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
+      'https://graph.microsoft.com/Sites.Read.All': ['onedrive_list_files', 'onedrive_search_files'],
+      'https://graph.microsoft.com/Sites.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
+      'https://graph.microsoft.com/User.Read': ['onedrive_get_user_info']
     };
-    return onedriveMappings[scope] || [scope];
+    return onedriveMappings[scope] || [normalizeToolName(scope)];
   }
 
   // Serper API scope mappings
@@ -73,8 +95,8 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
     return internalMappings[scope] || [scope];
   }
   
-  // Default: return the scope as-is
-  return [scope];
+  // Default: normalize the scope name to be OpenAI-compatible
+  return [normalizeToolName(scope)];
 }
 
 /**

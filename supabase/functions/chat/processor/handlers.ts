@@ -349,7 +349,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
     }
 
     // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
-    const authToken = (context as any)?.options?.auth?.token || '';
+    const authToken = (context as any)?.request_options?.auth?.token || '';
     console.log(`[FunctionCalling] Auth token available: ${!!authToken}`);
     const fcm = new FunctionCallingManager(this.supabase as any, authToken);
     const availableTools = (context.agent_id && context.user_id)
@@ -389,10 +389,31 @@ Remember: ALWAYS use blank lines between elements for readability!`
         const formattedTools = normalized.map((fn) => ({ type: 'function', function: fn }));
         console.log('[DEBUG] Router fallback - Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
         
-        completion = await this.openai.chat.completions.create({
-          model: 'gpt-4', messages: msgs, temperature: 0.7, max_tokens: 1200,
-          tools: formattedTools, tool_choice: 'auto'
-        });
+        try {
+          completion = await this.openai.chat.completions.create({
+            model: 'gpt-4', messages: msgs, temperature: 0.7, max_tokens: 1200,
+            tools: formattedTools, tool_choice: 'auto'
+          });
+        } catch (toolError: any) {
+          // Handle tool validation errors gracefully
+          if (toolError?.error?.param?.includes('tools') || toolError?.message?.includes('tools')) {
+            console.warn('[TextMessageHandler] Router fallback tool validation failed, falling back to no-tools mode:', toolError.message);
+            
+            // Retry without tools
+            completion = await this.openai.chat.completions.create({
+              model: 'gpt-4', messages: msgs, temperature: 0.7, max_tokens: 1200
+              // No tools parameter - graceful degradation
+            });
+            
+            // Add a note about limited capabilities
+            if (completion.choices?.[0]?.message?.content) {
+              completion.choices[0].message.content += '\n\n*Note: Some advanced features are temporarily unavailable due to a technical issue.*';
+            }
+          } else {
+            // Re-throw non-tool errors
+            throw toolError;
+          }
+        }
       } else {
         const resolved = await router.resolveAgent(context.agent_id).catch(() => null);
         effectiveModel = resolved?.prefs?.model || effectiveModel;
@@ -418,14 +439,38 @@ Remember: ALWAYS use blank lines between elements for readability!`
       const formattedTools = normalized.map((fn) => ({ type: 'function', function: fn }));
       console.log('[DEBUG] Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
       
-      completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: msgs,
-        temperature: 0.7,
-        max_tokens: 1200,
-        tools: formattedTools,
-        tool_choice: 'auto',
-      });
+      try {
+        completion = await this.openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: msgs,
+          temperature: 0.7,
+          max_tokens: 1200,
+          tools: formattedTools,
+          tool_choice: 'auto',
+        });
+      } catch (toolError: any) {
+        // Handle tool validation errors gracefully
+        if (toolError?.error?.param?.includes('tools') || toolError?.message?.includes('tools')) {
+          console.warn('[TextMessageHandler] Tool validation failed, falling back to no-tools mode:', toolError.message);
+          
+          // Retry without tools
+          completion = await this.openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: msgs,
+            temperature: 0.7,
+            max_tokens: 1200,
+            // No tools parameter - graceful degradation
+          });
+          
+          // Add a note about limited capabilities
+          if (completion.choices?.[0]?.message?.content) {
+            completion.choices[0].message.content += '\n\n*Note: Some advanced features are temporarily unavailable due to a technical issue.*';
+          }
+        } else {
+          // Re-throw non-tool errors
+          throw toolError;
+        }
+      }
     }
 
     // Handle tool calls (Act → Observe → Reflect)

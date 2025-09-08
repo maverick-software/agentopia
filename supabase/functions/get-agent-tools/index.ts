@@ -20,8 +20,7 @@ import { generateParametersForCapability } from './tool-generator.ts';
 import { 
   getAgentPermissions, 
   getServiceProviders, 
-  hasAgentDocuments, 
-  hasAgentMediaAssignments 
+  hasAgentDocuments
 } from './database-service.ts';
 
 serve(async (req) => {
@@ -157,13 +156,9 @@ serve(async (req) => {
     
     let hasDocuments = false;
     try {
-      hasDocuments = await hasAgentDocuments(agent_id);
-      if (!hasDocuments) {
-        // Fallback to check agent_media_assignments table
-        hasDocuments = await hasAgentMediaAssignments(agent_id);
-      }
+      hasDocuments = await hasAgentDocuments(agent_id, user_id);
     } catch (error) {
-      console.warn(`[GetAgentTools] Error checking for agent documents:`, error);
+      console.warn(`[GetAgentTools] Error checking for agent media assignments:`, error);
     }
 
     if (hasDocuments) {

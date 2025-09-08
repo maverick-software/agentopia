@@ -71,41 +71,25 @@ export async function getServiceProviders(providerIds: string[]) {
 }
 
 /**
- * Checks if agent has assigned documents for Media Library tools
+ * Checks if agent has assigned media for Media Library tools
  */
-export async function hasAgentDocuments(agentId: string): Promise<boolean> {
-  console.log(`[DatabaseService] Checking for agent documents for agent ${agentId}`);
-
-  const { data: documents, error } = await supabase
-    .from('agent_documents')
-    .select('document_id')
-    .eq('agent_id', agentId)
-    .limit(1);
-  
-  if (error) {
-    console.error('[DatabaseService] Error checking agent documents:', error);
-    return false;
-  }
-
-  return documents && documents.length > 0;
-}
-
-/**
- * Alternative method to check agent media assignments (if agent_documents doesn't exist)
- */
-export async function hasAgentMediaAssignments(agentId: string): Promise<boolean> {
-  console.log(`[DatabaseService] Checking for agent media assignments for agent ${agentId}`);
+export async function hasAgentDocuments(agentId: string, userId: string): Promise<boolean> {
+  console.log(`[DatabaseService] Checking for agent media assignments for agent ${agentId}, user ${userId}`);
 
   const { data: assignments, error } = await supabase
     .from('agent_media_assignments')
     .select('id')
     .eq('agent_id', agentId)
+    .eq('user_id', userId)
+    .eq('is_active', true)
     .limit(1);
   
   if (error) {
-    console.warn('[DatabaseService] Error checking agent media assignments (this may be expected):', error);
+    console.error('[DatabaseService] Error checking agent media assignments:', error);
     return false;
   }
 
+  console.log(`[DatabaseService] Found ${assignments?.length || 0} active media assignments`);
   return assignments && assignments.length > 0;
 }
+

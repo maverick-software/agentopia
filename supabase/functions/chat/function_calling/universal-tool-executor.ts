@@ -155,6 +155,28 @@ const TOOL_ROUTING_MAP: Record<string, {
     })
   },
   
+  // OneDrive tools
+  'onedrive_': {
+    edgeFunction: 'microsoft-onedrive-api',
+    actionMapping: (toolName: string) => {
+      const actionMap: Record<string, string> = {
+        'onedrive_list_files': 'list_files',
+        'onedrive_download_file': 'download_file',
+        'onedrive_upload_file': 'upload_file',
+        'onedrive_search_files': 'search_files',
+        'onedrive_share_file': 'share_file',
+        'onedrive_get_user_info': 'get_user_info'
+      };
+      return actionMap[toolName] || 'list_files';
+    },
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: context.toolName.replace('onedrive_', ''),
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
   // Scrape tools
   'scrape_': {
     edgeFunction: 'web-search-api',

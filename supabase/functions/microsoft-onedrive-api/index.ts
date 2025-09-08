@@ -126,7 +126,7 @@ serve(async (req) => {
       .from('agent_integration_permissions')
       .select(`
         allowed_scopes,
-        user_integration_credentials!inner(
+        user_integration_credentials!agent_integration_permissions_user_oauth_connection_id_fkey(
           oauth_provider_id,
           service_providers!inner(name)
         )
@@ -135,11 +135,15 @@ serve(async (req) => {
       .eq('user_integration_credentials.user_id', user_id)
       .eq('user_integration_credentials.service_providers.name', 'microsoft-onedrive')
       .eq('is_active', true)
-      .single()
 
-    if (permissionError || !permissionData) {
+    if (permissionError || !permissionData || permissionData.length === 0) {
+      console.error('[microsoft-onedrive-api] Permission query error:', permissionError)
+      console.log('[microsoft-onedrive-api] Permission data:', permissionData)
       throw new Error(`No Microsoft OneDrive permissions found for agent: ${permissionError?.message || 'None'}`)
     }
+
+    // Use the first permission record if multiple exist
+    const permission = Array.isArray(permissionData) ? permissionData[0] : permissionData
 
     // Get user's Microsoft OneDrive access token from integration credentials
     const { data: onedriveProvider, error: providerError } = await supabaseServiceRole

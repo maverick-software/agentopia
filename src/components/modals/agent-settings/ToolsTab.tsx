@@ -204,10 +204,10 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   const checkExistingCredentials = async (toolType: string): Promise<boolean> => {
     try {
       const { data, error } = await supabase
-        .from('user_integrations')
+        .from('user_integration_credentials')
         .select('id')
         .eq('user_id', user?.id)
-        .eq('connection_status', 'connected')
+        .eq('connection_status', 'active')
         .ilike('connection_name', `%${toolType}%`)
         .limit(1);
 
@@ -223,12 +223,42 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   };
 
   const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing') => {
-    const providers = providerConfigs[toolType] || [];
+    // Get provider names for this tool type
+    const configProviders = providerConfigs[toolType] || [];
+    const providerNames = configProviders.map(p => p.id);
+    
+    // Fetch actual service providers from database
+    let providers: ProviderConfig[] = [];
+    try {
+      const { data: serviceProviders, error: providersError } = await supabase
+        .from('service_providers')
+        .select('id, name, display_name')
+        .in('name', providerNames)
+        .eq('is_enabled', true);
+      
+      if (providersError) throw providersError;
+      
+      // Map database providers to UI config format
+      providers = (serviceProviders || []).map(sp => {
+        const config = configProviders.find(cp => cp.id === sp.name);
+        return {
+          id: sp.id, // Use actual UUID from database
+          name: sp.display_name || sp.name,
+          description: config?.description || '',
+          requiresApiKey: config?.requiresApiKey || false,
+          requiresOAuth: config?.requiresOAuth || false
+        };
+      });
+    } catch (error) {
+      console.error('Error loading service providers:', error);
+      // Fallback to hardcoded configs if database query fails
+      providers = configProviders;
+    }
     
     // Load existing credentials
     try {
       const { data: credentials, error } = await supabase
-        .from('user_integrations')
+        .from('user_integration_credentials')
         .select('*')
         .eq('user_id', user?.id)
         .ilike('connection_name', `%${toolType}%`);
@@ -280,16 +310,22 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
 
       const credentialData = {
         user_id: user.id,
-        integration_id: '00000000-0000-0000-0000-000000000001', // Placeholder UUID
+        oauth_provider_id: provider.id, // Use the actual service provider UUID
+        external_user_id: `api_key_${Date.now()}`, // Required field - generate unique ID for API keys
+        external_username: provider.name || null,
         connection_name: `${credentialModal.toolType}_${provider.id}`,
-        connection_status: 'connected' as const,
-        configuration,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        connection_status: 'active' as const,
+        credential_type: 'api_key' as const,
+        scopes_granted: provider.requiresApiKey ? ['api_access'] : [],
+        vault_access_token_id: provider.requiresApiKey ? newApiKey : null, // Store API key in vault field temporarily
+        vault_refresh_token_id: null,
+        token_expires_at: null,
+        connection_metadata: configuration // Correct column name
+        // created_at and updated_at have defaults, don't set explicitly
       };
 
       const { error } = await supabase
-        .from('user_integrations')
+        .from('user_integration_credentials')
         .insert(credentialData);
 
       if (error) throw error;
