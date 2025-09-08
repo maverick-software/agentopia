@@ -248,6 +248,17 @@ const TOOL_ROUTING_MAP: Record<string, {
     })
   },
   
+  'reprocess_document': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'reprocess_document',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'reprocess_document',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
   // Advanced Reasoning tools (MCP-based)
   'reasoning_': {
     edgeFunction: 'advanced-reasoning',

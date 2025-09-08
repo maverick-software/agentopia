@@ -169,7 +169,8 @@ serve(async (req) => {
         'get_document_content', 
         'list_assigned_documents',
         'get_document_summary',
-        'find_related_documents'
+        'find_related_documents',
+        'reprocess_document'
       ];
 
       console.log(`[GetAgentTools] Tools: ${mediaLibraryTools.join(', ')}`);

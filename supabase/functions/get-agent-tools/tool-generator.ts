@@ -247,6 +247,18 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+  if (toolName.includes('reprocess_document')) {
+    return {
+      ...baseSchema,
+      properties: {
+        document_id: { type: 'string', description: 'UUID of the document to reprocess (use the "id" field from list_assigned_documents)' },
+        document_name: { type: 'string', description: 'Name of the document to reprocess (alternative to document_id)' },
+        force_ocr: { type: 'boolean', description: 'Force OCR processing even if document appears to have good content', default: false }
+      },
+      required: []
+    };
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,

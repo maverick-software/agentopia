@@ -577,6 +577,141 @@ async function handleFindRelatedDocuments(
   }
 }
 
+async function handleReprocessDocument(
+  supabase: any,
+  agentId: string,
+  userId: string,
+  params: any
+): Promise<MCPToolResponse> {
+  const startTime = Date.now();
+  
+  try {
+    const { document_id, force_ocr = false } = params;
+    
+    if (!document_id) {
+      throw new Error('Missing required parameter: document_id');
+    }
+    
+    // Verify the document exists and is assigned to the agent
+    const { data: documentContent, error: contentError } = await supabase
+      .rpc('get_media_document_content_for_agent', {
+        p_agent_id: agentId,
+        p_user_id: userId,
+        p_document_id: document_id,
+        p_include_metadata: true
+      });
+    
+    if (contentError) throw contentError;
+    
+    if (!documentContent) {
+      throw new Error('Document not found or not assigned to this agent');
+    }
+    
+    // Check if the document content appears corrupted or needs OCR
+    const currentContent = documentContent.text_content || '';
+    const fileType = documentContent.file_type || '';
+    const fileName = documentContent.display_name || documentContent.file_name || 'Unknown';
+    
+    // Smart detection of documents that need reprocessing
+    const isLikelyCorrupted = currentContent.length < 50 || 
+                             currentContent.includes('encoded') || 
+                             currentContent.includes('corrupted') ||
+                             currentContent.includes('binary') ||
+                             currentContent.includes('error');
+    
+    const isPdfOrImage = fileType.includes('pdf') || fileType.includes('image');
+    const needsReprocessing = isLikelyCorrupted || force_ocr;
+    
+    if (!needsReprocessing && !force_ocr) {
+      const suggestion = isPdfOrImage && currentContent.length < 200 
+        ? ' If this PDF or image should have more text content, you can force reprocessing with OCR by saying "reprocess [document] with OCR".'
+        : '';
+        
+      return {
+        success: true,
+        data: {
+          document_id: document_id,
+          document_name: fileName,
+          message: `"${fileName}" appears to have good content (${currentContent.length} characters). ${suggestion}`,
+          current_content_length: currentContent.length,
+          file_type: fileType,
+          content_preview: currentContent.substring(0, 200) + (currentContent.length > 200 ? '...' : '')
+        },
+        metadata: {
+          tool_name: 'reprocess_document',
+          execution_time_ms: Date.now() - startTime
+        }
+      };
+    }
+    
+    console.log(`[MediaLibrary MCP] Triggering reprocessing for document ${document_id}`);
+    
+    // Create Supabase client with service role for calling media-library-api
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Call the media-library-api to reprocess the document
+    const { data: reprocessResult, error: reprocessError } = await serviceSupabase.functions.invoke('media-library-api', {
+      body: {
+        action: 'process',
+        document_id: document_id,
+        user_id: userId,
+        force_reprocess: true,
+        force_ocr: force_ocr
+      }
+    });
+    
+    if (reprocessError) {
+      throw new Error(`Document reprocessing failed: ${reprocessError.message}`);
+    }
+    
+    const successMessage = force_ocr 
+      ? `Successfully reprocessed "${fileName}" with OCR. The document should now have better text extraction, especially if it contained images or scanned content.`
+      : `Successfully reprocessed "${fileName}". The document content has been refreshed and should now be more accessible.`;
+    
+    return {
+      success: true,
+      data: {
+        document_id: document_id,
+        document_name: fileName,
+        message: successMessage,
+        previous_content_length: currentContent.length,
+        file_type: fileType,
+        reprocessing_type: force_ocr ? 'OCR-enhanced' : 'standard',
+        next_steps: 'You can now try reading the document content again or searching within it. The updated content should be available immediately.',
+        reprocess_result: reprocessResult
+      },
+      metadata: {
+        tool_name: 'reprocess_document',
+        execution_time_ms: Date.now() - startTime
+      }
+    };
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary MCP] Reprocess document error:', error);
+    
+    // Provide intelligent MCP error messages with actionable guidance
+    let helpfulError = error.message;
+    if (error.message.includes('Missing required parameter: document_id')) {
+      helpfulError = 'I need to know which document to reprocess. Please tell me the document name or ID, or ask me to "list my assigned documents" to see what\'s available. You can also say "reprocess the document about [topic]" and I\'ll find it.';
+    } else if (error.message.includes('Document not found or not assigned')) {
+      helpfulError = 'That document isn\'t in your assigned documents or doesn\'t exist. Let me "list your assigned documents" to show what\'s available, or you can upload a new document first.';
+    } else if (error.message.includes('reprocessing failed')) {
+      helpfulError = 'The document reprocessing encountered an issue. This might be due to OCR service limits or the document format. Try again in a few minutes, or let me check if there are alternative OCR services configured.';
+    }
+    
+    return {
+      success: false,
+      error: helpfulError,
+      metadata: {
+        tool_name: 'reprocess_document',
+        execution_time_ms: Date.now() - startTime
+      }
+    };
+  }
+}
+
 // =============================================
 // Main Handler
 // =============================================
@@ -639,9 +774,13 @@ serve(async (req) => {
       case 'find_related_documents':
         result = await handleFindRelatedDocuments(supabase, agent_id, user_id, params);
         break;
+        
+      case 'reprocess_document':
+        result = await handleReprocessDocument(supabase, agent_id, user_id, params);
+        break;
 
       default:
-        throw new Error(`Unknown MCP tool action: ${action}`);
+        throw new Error(`Unknown MCP tool action: ${action}. Available actions: search_documents, get_document_content, list_assigned_documents, get_document_summary, find_related_documents, reprocess_document`);
     }
 
     return new Response(
