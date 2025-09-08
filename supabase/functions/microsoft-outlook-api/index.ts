@@ -1,454 +1,396 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface OutlookApiRequest {
-  action: 'send_email' | 'read_emails' | 'create_event' | 'read_events'
-  params: {
-    to?: string[]
-    cc?: string[]
-    bcc?: string[]
-    subject?: string
-    body?: string
-    body_type?: 'text' | 'html'
-    importance?: 'low' | 'normal' | 'high'
-    folder?: string
-    limit?: number
-    search?: string
-    unread_only?: boolean
-    start?: string
-    end?: string
-    location?: string
-    attendees?: string[]
-    is_online_meeting?: boolean
-    start_date?: string
-    end_date?: string
-  }
-  agent_id: string
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  scope: string;
+  token_type: string;
+}
+
+interface UserProfile {
+  id: string;
+  displayName: string;
+  mail: string;
+  userPrincipalName: string;
 }
 
 serve(async (req) => {
-  // Handle CORS
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    console.log(`[microsoft-outlook-api] Raw request method: ${req.method}`)
-    console.log(`[microsoft-outlook-api] Raw request headers:`, Object.fromEntries(req.headers.entries()))
+    // Initialize Supabase client with service role key
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
-    let requestBody: OutlookApiRequest
-    try {
-      const rawText = await req.text()
-      console.log(`[microsoft-outlook-api] Raw request body:`, rawText)
-      
-      if (!rawText || rawText.trim() === '') {
-        throw new Error('Request body is empty')
+    const supabaseServiceRole = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
       }
-      
-      requestBody = JSON.parse(rawText)
-      console.log(`[microsoft-outlook-api] Parsed request body:`, JSON.stringify(requestBody, null, 2))
-    } catch (parseError) {
-      console.error(`[microsoft-outlook-api] JSON parse error:`, parseError)
-      throw new Error(`Failed to parse request body: ${parseError.message}`)
-    }
-    
-    const { action, params, agent_id } = requestBody
-    console.log('Microsoft Outlook API request:', { action, agent_id })
-    console.log('Params received:', JSON.stringify(params, null, 2))
-
-    // Validate required parameters
-    if (!action || !params || !agent_id) {
-      console.error('Missing parameters:', { action: !!action, params: !!params, agent_id: !!agent_id })
-      
-      if (!action) {
-        throw new Error('Question: What Outlook action would you like me to perform? Please specify send_email, read_emails, create_event, or read_events.')
-      }
-      if (!agent_id) {
-        throw new Error('Missing agent context. Please retry with proper agent identification.')
-      }
-      if (!params) {
-        throw new Error('Question: What Outlook details would you like me to use? Please provide the required parameters for the action.')
-      }
-      
-      throw new Error('Please provide the required Outlook parameters: action, details, and agent context.')
-    }
-
-    // Create Supabase clients
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-    const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-    // Get user ID from auth header
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
-      throw new Error('Missing authorization header')
-    }
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-
-    if (userError || !user) {
-      throw new Error('Invalid or expired token')
-    }
-
-    const user_id = user.id
-    console.log(`[microsoft-outlook-api] Processing request for user: ${user_id}, agent: ${agent_id}`)
-
-    // Validate agent permissions
-    const { data: permissionData, error: permissionError } = await supabaseServiceRole
-      .from('agent_integration_permissions')
-      .select(`
-        allowed_scopes,
-        user_integration_credentials!inner(
-          oauth_provider_id,
-          service_providers!inner(name)
-        )
-      `)
-      .eq('agent_id', agent_id)
-      .eq('user_integration_credentials.user_id', user_id)
-      .eq('user_integration_credentials.service_providers.name', 'microsoft-outlook')
-      .eq('is_active', true)
-      .single()
-
-    if (permissionError || !permissionData) {
-      throw new Error(`No Microsoft Outlook permissions found for agent: ${permissionError?.message || 'None'}`)
-    }
-
-    // Get user's Microsoft Outlook access token from integration credentials
-    const { data: outlookProvider, error: providerError } = await supabaseServiceRole
-      .from('service_providers')
-      .select('id')
-      .eq('name', 'microsoft-outlook')
-      .single()
-
-    if (providerError || !outlookProvider) {
-      throw new Error(`Microsoft Outlook OAuth provider not found: ${providerError?.message || 'Not found'}`)
-    }
-
-    const { data: connection, error: connectionError } = await supabaseServiceRole
-      .from('user_integration_credentials')
-      .select('vault_access_token_id, vault_refresh_token_id, token_expires_at, connection_status, created_at, updated_at')
-      .eq('user_id', user_id)
-      .eq('oauth_provider_id', outlookProvider.id)
-      .eq('connection_status', 'active')
-      .single()
-
-    console.log('[microsoft-outlook-api] Connection query result:', {
-      connection,
-      connectionError,
-      user_id: user_id,
-      outlook_provider_id: outlookProvider.id
     })
 
-    if (connectionError || !connection) {
-      const { data: allConnections } = await supabaseServiceRole
-        .from('user_integration_credentials')
-        .select('id, connection_status, oauth_provider_id, created_at, updated_at')
-        .eq('user_id', user_id)
+    const { action, ...params } = await req.json()
+
+    // Skip validation for exchange_code action
+    if (action !== 'exchange_code') {
+      // Validate required parameters for other actions
+      const { agent_id, user_id } = params
       
-      console.log('[microsoft-outlook-api] All user connections:', allConnections)
-      
-      throw new Error(`No active Microsoft Outlook connection found: ${connectionError?.message || 'Not found'}`)
+      if (!agent_id || !user_id) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Missing agent context. Please retry with proper agent identification.' 
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
     }
-
-    let accessToken: string
-    
-    // Check if token is expired and refresh if needed
-    if (connection.token_expires_at && new Date(connection.token_expires_at) <= new Date()) {
-      console.log('[microsoft-outlook-api] Access token expired, attempting refresh...')
-      
-      // Get refresh token from vault
-      const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole
-        .from('vault.secrets')
-        .select('secret')
-        .eq('id', connection.vault_refresh_token_id)
-        .single()
-
-      if (refreshTokenError || !refreshTokenData) {
-        throw new Error(`Failed to get refresh token: ${refreshTokenError?.message || 'Not found'}`)
-      }
-
-      // Refresh the access token using Microsoft Graph API
-      const refreshResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: refreshTokenData.secret,
-          client_id: Deno.env.get('MICROSOFT_CLIENT_ID')!,
-          client_secret: Deno.env.get('MICROSOFT_CLIENT_SECRET')!,
-        }),
-      })
-
-      if (!refreshResponse.ok) {
-        throw new Error(`Failed to refresh Microsoft Outlook token: ${refreshResponse.statusText}`)
-      }
-
-      const refreshData = await refreshResponse.json()
-      accessToken = refreshData.access_token
-
-      // Update the access token in vault
-      await supabaseServiceRole
-        .from('vault.secrets')
-        .update({ secret: accessToken })
-        .eq('id', connection.vault_access_token_id)
-
-      // Update token expiry
-      const newExpiryTime = new Date(Date.now() + refreshData.expires_in * 1000).toISOString()
-      await supabaseServiceRole
-        .from('user_integration_credentials')
-        .update({ token_expires_at: newExpiryTime })
-        .eq('user_id', user_id)
-        .eq('oauth_provider_id', outlookProvider.id)
-
-      console.log('[microsoft-outlook-api] Token refreshed successfully')
-    } else {
-      // Get current access token from vault
-      const { data: tokenData, error: tokenError } = await supabaseServiceRole
-        .from('vault.secrets')
-        .select('secret')
-        .eq('id', connection.vault_access_token_id)
-        .single()
-
-      if (tokenError || !tokenData) {
-        throw new Error(`Failed to get access token: ${tokenError?.message || 'Not found'}`)
-      }
-
-      accessToken = tokenData.secret
-    }
-
-    // Execute the requested action
-    let result: any
 
     switch (action) {
+      case 'exchange_code':
+        return await exchangeOAuthCode(supabaseServiceRole, params)
+      
+      case 'refresh_token':
+        return await refreshAccessToken(supabaseServiceRole, params)
+      
       case 'send_email':
-        result = await sendOutlookEmail(accessToken, params)
-        break
-      case 'read_emails':
-        result = await readOutlookEmails(accessToken, params)
-        break
-      case 'create_event':
-        result = await createOutlookEvent(accessToken, params)
-        break
-      case 'read_events':
-        result = await readOutlookEvents(accessToken, params)
-        break
+        return await sendEmail(supabaseServiceRole, params)
+      
+      case 'get_emails':
+        return await getEmails(supabaseServiceRole, params)
+      
+      case 'create_calendar_event':
+        return await createCalendarEvent(supabaseServiceRole, params)
+      
+      case 'get_calendar_events':
+        return await getCalendarEvents(supabaseServiceRole, params)
+      
+      case 'get_contacts':
+        return await getContacts(supabaseServiceRole, params)
+      
       default:
-        throw new Error(`Unsupported action: ${action}`)
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid action' }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
     }
-
-    // Log the operation
-    await supabaseServiceRole
-      .from('tool_execution_logs')
-      .insert({
-        user_id: user_id,
-        agent_id: agent_id,
-        tool_name: 'microsoft_outlook_api',
-        operation_type: action,
-        operation_params: params,
-        operation_result: result,
-        status: 'success',
-        execution_time_ms: Date.now() - parseInt(req.headers.get('x-request-start') || '0')
-      })
-
-    return new Response(
-      JSON.stringify({ success: true, data: result }),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    )
-
   } catch (error) {
     console.error('[microsoft-outlook-api] Error:', error)
-    
     return new Response(
       JSON.stringify({ 
-        error: error.message,
-        success: false 
+        success: false, 
+        error: error.message || 'Internal server error' 
       }),
       { 
-        status: 400, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     )
   }
 })
 
-// Helper functions for Microsoft Outlook API operations
-async function sendOutlookEmail(accessToken: string, params: any) {
-  const { to, cc, bcc, subject, body, body_type = 'text', importance = 'normal' } = params
+async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
+  const { code, code_verifier, user_id, redirect_uri } = params
 
-  if (!to || !to.length || !subject || !body) {
-    throw new Error('To, subject, and body are required')
+  if (!code || !code_verifier || !user_id || !redirect_uri) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Missing required parameters' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 
-  const emailBody = {
-    message: {
-      subject: subject,
-      body: {
-        contentType: body_type,
-        content: body
+  try {
+    // Get service provider configuration
+    const { data: provider, error: providerError } = await supabaseServiceRole
+      .from('service_providers')
+      .select('*')
+      .eq('name', 'microsoft-outlook')
+      .single()
+
+    if (providerError || !provider) {
+      console.error('Provider fetch error:', providerError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Service provider not found' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Exchange authorization code for access token
+    const tokenResponse = await fetch(provider.token_endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      toRecipients: to.map((email: string) => ({
-        emailAddress: {
-          address: email
-        }
-      })),
-      ccRecipients: cc ? cc.map((email: string) => ({
-        emailAddress: {
-          address: email
-        }
-      })) : [],
-      bccRecipients: bcc ? bcc.map((email: string) => ({
-        emailAddress: {
-          address: email
-        }
-      })) : [],
-      importance: importance
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri,
+        code_verifier,
+        client_id: Deno.env.get('MICROSOFT_OUTLOOK_CLIENT_ID')!,
+        client_secret: Deno.env.get('MICROSOFT_OUTLOOK_CLIENT_SECRET')!,
+      }),
+    })
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text()
+      console.error('Token exchange failed:', errorText)
+      return new Response(
+        JSON.stringify({ success: false, error: `Token exchange failed: ${errorText}` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
-  }
 
-  const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(emailBody)
-  })
+    const tokens: TokenResponse = await tokenResponse.json()
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to send Outlook email: ${response.status} ${errorText}`)
-  }
-
-  // sendMail returns 202 with no content on success
-  return { message: 'Email sent successfully' }
-}
-
-async function readOutlookEmails(accessToken: string, params: any) {
-  const { folder = 'inbox', limit = 50, search, unread_only = false } = params
-
-  let endpoint = `https://graph.microsoft.com/v1.0/me/mailFolders/${folder}/messages?$top=${limit}&$orderby=receivedDateTime desc`
-
-  if (search) {
-    endpoint += `&$search="${search}"`
-  }
-
-  if (unread_only) {
-    endpoint += `&$filter=isRead eq false`
-  }
-
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    }
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to read Outlook emails: ${response.status} ${errorText}`)
-  }
-
-  return await response.json()
-}
-
-async function createOutlookEvent(accessToken: string, params: any) {
-  const { subject, start, end, location, attendees = [], body, is_online_meeting = false } = params
-
-  if (!subject || !start || !end) {
-    throw new Error('Subject, start, and end are required')
-  }
-
-  const eventBody = {
-    subject: subject,
-    body: body ? {
-      contentType: 'text',
-      content: body
-    } : undefined,
-    start: {
-      dateTime: start,
-      timeZone: 'UTC'
-    },
-    end: {
-      dateTime: end,
-      timeZone: 'UTC'
-    },
-    location: location ? {
-      displayName: location
-    } : undefined,
-    attendees: attendees.map((email: string) => ({
-      emailAddress: {
-        address: email,
-        name: email
+    // Get user profile from Microsoft Graph
+    const profileResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'Content-Type': 'application/json',
       },
-      type: 'required'
-    })),
-    isOnlineMeeting: is_online_meeting,
-    onlineMeetingProvider: is_online_meeting ? 'teamsForBusiness' : undefined
+    })
+
+    if (!profileResponse.ok) {
+      console.error('Failed to fetch user profile')
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to fetch user profile' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const profile: UserProfile = await profileResponse.json()
+
+    // Store access token in Vault
+    const accessTokenVaultId = `outlook_access_token_${user_id}_${Date.now()}`
+    const { error: accessTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
+      secret_id: accessTokenVaultId,
+      secret: tokens.access_token
+    })
+
+    if (accessTokenError) {
+      console.error('Failed to store access token:', accessTokenError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to store access token' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Store refresh token in Vault
+    const refreshTokenVaultId = `outlook_refresh_token_${user_id}_${Date.now()}`
+    const { error: refreshTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
+      secret_id: refreshTokenVaultId,
+      secret: tokens.refresh_token
+    })
+
+    if (refreshTokenError) {
+      console.error('Failed to store refresh token:', refreshTokenError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to store refresh token' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Calculate expiry date
+    const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000))
+
+    // Store connection in user_integration_credentials
+    const { error: credentialError } = await supabaseServiceRole
+      .from('user_integration_credentials')
+      .insert({
+        user_id,
+        oauth_provider_id: provider.id,
+        external_user_id: profile.id,
+        external_username: profile.mail || profile.userPrincipalName,
+        connection_name: `${profile.displayName} (${profile.mail})`,
+        access_token_vault_id: accessTokenVaultId,
+        refresh_token_vault_id: refreshTokenVaultId,
+        scopes_granted: tokens.scope.split(' '),
+        token_expires_at: expiresAt.toISOString(),
+        connection_status: 'active',
+        credential_type: 'oauth2'
+      })
+
+    if (credentialError) {
+      console.error('Failed to store credentials:', credentialError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to store credentials' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        user_profile: {
+          name: profile.displayName,
+          email: profile.mail || profile.userPrincipalName
+        }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+
+  } catch (error) {
+    console.error('OAuth exchange error:', error)
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
-
-  const response = await fetch('https://graph.microsoft.com/v1.0/me/events', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(eventBody)
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to create Outlook event: ${response.status} ${errorText}`)
-  }
-
-  return await response.json()
 }
 
-async function readOutlookEvents(accessToken: string, params: any) {
-  const { start_date, end_date, limit = 50 } = params
+async function refreshAccessToken(supabaseServiceRole: any, params: any) {
+  const { user_id, connection_id } = params
 
-  let endpoint = `https://graph.microsoft.com/v1.0/me/events?$top=${limit}&$orderby=start/dateTime`
+  try {
+    // Get connection details
+    const { data: connection, error: connectionError } = await supabaseServiceRole
+      .from('user_integration_credentials')
+      .select('*')
+      .eq('id', connection_id)
+      .eq('user_id', user_id)
+      .single()
 
-  if (start_date || end_date) {
-    const filters = []
-    if (start_date) {
-      filters.push(`start/dateTime ge '${start_date}T00:00:00.000Z'`)
+    if (connectionError || !connection) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Connection not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
-    if (end_date) {
-      filters.push(`end/dateTime le '${end_date}T23:59:59.999Z'`)
+
+    // Get refresh token from Vault
+    const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole.rpc('vault_decrypt', {
+      secret_id: connection.refresh_token_vault_id
+    })
+
+    if (refreshTokenError || !refreshTokenData) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to retrieve refresh token' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
-    endpoint += `&$filter=${filters.join(' and ')}`
+
+    // Get service provider
+    const { data: provider } = await supabaseServiceRole
+      .from('service_providers')
+      .select('*')
+      .eq('name', 'microsoft-outlook')
+      .single()
+
+    // Refresh the token
+    const refreshResponse = await fetch(provider.token_endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshTokenData,
+        client_id: Deno.env.get('MICROSOFT_OUTLOOK_CLIENT_ID')!,
+        client_secret: Deno.env.get('MICROSOFT_OUTLOOK_CLIENT_SECRET')!,
+      }),
+    })
+
+    if (!refreshResponse.ok) {
+      throw new Error(`Failed to refresh Microsoft Outlook token: ${refreshResponse.statusText}`)
+    }
+
+    const tokens: TokenResponse = await refreshResponse.json()
+
+    // Store new access token
+    const newAccessTokenVaultId = `outlook_access_token_${user_id}_${Date.now()}`
+    await supabaseServiceRole.rpc('create_vault_secret', {
+      secret_id: newAccessTokenVaultId,
+      secret: tokens.access_token
+    })
+
+    // Store new refresh token if provided
+    let newRefreshTokenVaultId = connection.refresh_token_vault_id
+    if (tokens.refresh_token) {
+      newRefreshTokenVaultId = `outlook_refresh_token_${user_id}_${Date.now()}`
+      await supabaseServiceRole.rpc('create_vault_secret', {
+        secret_id: newRefreshTokenVaultId,
+        secret: tokens.refresh_token
+      })
+    }
+
+    // Update connection with new tokens
+    const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000))
+    await supabaseServiceRole
+      .from('user_integration_credentials')
+      .update({
+        access_token_vault_id: newAccessTokenVaultId,
+        refresh_token_vault_id: newRefreshTokenVaultId,
+        token_expires_at: expiresAt.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', connection_id)
+
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        expires_at: expiresAt.toISOString()
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+
+  } catch (error) {
+    console.error('Token refresh error:', error)
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
+}
 
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    }
-  })
+// Placeholder functions for email, calendar, and contacts functionality
+async function sendEmail(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Email functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to read Outlook events: ${response.status} ${errorText}`)
-  }
+async function getEmails(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Email functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
 
-  return await response.json()
+async function createCalendarEvent(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Calendar functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getCalendarEvents(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Calendar functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getContacts(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Contacts functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
 }

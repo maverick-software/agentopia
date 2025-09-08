@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, RefreshCw, Trash2, CheckCircle, Shield, Key, ExternalLink, Eye, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'react-hot-toast';
 
 // Using centralized service types via hook
 interface OAuthConnection {
@@ -40,6 +41,7 @@ export function CredentialsPage() {
   const [refreshStatus, setRefreshStatus] = useState<RefreshStatus>({});
   const [selectedConnection, setSelectedConnection] = useState<OAuthConnection | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
 
   // Use the unified connections hook
   const connections = unifiedConnections.map((conn: any) => ({
@@ -140,6 +142,41 @@ export function CredentialsPage() {
     }
   };
 
+  const handleClearCache = async () => {
+    if (!user?.id) {
+      toast.error('Unable to clear cache: missing user information');
+      return;
+    }
+
+    setClearingCache(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('invalidate-agent-tool-cache', {
+        body: {
+          user_id: user.id
+        }
+      });
+
+      if (error) {
+        console.error('Cache clear error:', error);
+        toast.error('Failed to clear tool cache');
+        return;
+      }
+
+      if (data?.success) {
+        toast.success(`Tool cache cleared! (${data.tools_count} tools refreshed)`);
+        // Refresh connections after clearing cache
+        refetch();
+      } else {
+        toast.error(data?.error || 'Failed to clear cache');
+      }
+    } catch (error: any) {
+      console.error('Cache clear error:', error);
+      toast.error('Failed to clear tool cache');
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -191,10 +228,20 @@ export function CredentialsPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-semibold">Credentials</h1>
-          <Button onClick={refetch} variant="outline" size="sm" disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              className="p-1.5 hover:bg-accent rounded-lg transition-colors disabled:opacity-50"
+              title="Clear tool cache (refreshes credential tools and schemas)"
+            >
+              <RefreshCw className={`h-4 w-4 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
+            </button>
+            <Button onClick={refetch} variant="outline" size="sm" disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           Manage your OAuth connections and API credentials stored securely in the vault

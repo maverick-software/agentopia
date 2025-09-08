@@ -12,6 +12,9 @@ import { GetZepSetupModal } from '../../getzep/components/GetZepSetupModal';
 import { SerperAPISetupModal } from '../../serper-api/components/SerperAPISetupModal';
 import { SerpAPISetupModal } from '../../serpapi/components/SerpAPISetupModal';
 import { BraveSearchSetupModal } from '../../brave-search/components/BraveSearchSetupModal';
+import { MicrosoftTeamsSetupModal } from '../../microsoft-teams/components/MicrosoftTeamsSetupModal';
+import { MicrosoftOneDriveSetupModal } from '../../microsoft-onedrive/components/MicrosoftOneDriveSetupModal';
+import { MicrosoftOutlookSetupModal } from '../../microsoft-outlook/components/MicrosoftOutlookSetupModal';
 
 /**
  * Registry of all integration setup components
@@ -189,6 +192,70 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
       { key: 'news_search', label: 'News search without tracking' },
       { key: 'image_search', label: 'Image search capabilities' },
       { key: 'independent_results', label: 'Independent search results' }
+    ]
+  },
+
+  // Microsoft Teams - Team collaboration and messaging
+  'Microsoft Teams': {
+    component: MicrosoftTeamsSetupModal,
+    credentialType: 'oauth',
+    defaultScopes: [
+      'https://graph.microsoft.com/Chat.ReadWrite',
+      'https://graph.microsoft.com/Team.ReadBasic.All',
+      'https://graph.microsoft.com/Channel.ReadBasic.All',
+      'https://graph.microsoft.com/OnlineMeetings.ReadWrite',
+      'https://graph.microsoft.com/User.Read'
+    ],
+    capabilities: [
+      { key: 'send_messages', label: 'Send messages to teams and chats' },
+      { key: 'read_messages', label: 'Read team and chat messages' },
+      { key: 'create_meetings', label: 'Create and manage online meetings' },
+      { key: 'team_info', label: 'Access team and channel information' },
+      { key: 'user_profile', label: 'Read user profile information' }
+    ]
+  },
+
+  // Microsoft OneDrive - File storage and sharing
+  'Microsoft OneDrive': {
+    component: MicrosoftOneDriveSetupModal,
+    credentialType: 'oauth',
+    defaultScopes: [
+      'https://graph.microsoft.com/Files.Read',
+      'https://graph.microsoft.com/Files.ReadWrite',
+      'https://graph.microsoft.com/Files.Read.All',
+      'https://graph.microsoft.com/Files.ReadWrite.All',
+      'https://graph.microsoft.com/Sites.Read.All',
+      'https://graph.microsoft.com/Sites.ReadWrite.All',
+      'https://graph.microsoft.com/User.Read'
+    ],
+    capabilities: [
+      { key: 'upload_files', label: 'Upload and store files' },
+      { key: 'download_files', label: 'Download and access files' },
+      { key: 'share_files', label: 'Share files and folders' },
+      { key: 'manage_files', label: 'Organize and manage file structure' },
+      { key: 'search_files', label: 'Search through files and content' }
+    ]
+  },
+
+  // Microsoft Outlook - Email, calendar, and contacts
+  'Microsoft Outlook': {
+    component: MicrosoftOutlookSetupModal,
+    credentialType: 'oauth',
+    defaultScopes: [
+      'https://graph.microsoft.com/Mail.Read',
+      'https://graph.microsoft.com/Mail.Send',
+      'https://graph.microsoft.com/Mail.ReadWrite',
+      'https://graph.microsoft.com/Calendars.Read',
+      'https://graph.microsoft.com/Calendars.ReadWrite',
+      'https://graph.microsoft.com/Contacts.Read',
+      'https://graph.microsoft.com/User.Read'
+    ],
+    capabilities: [
+      { key: 'send_email', label: 'Send and manage emails' },
+      { key: 'read_email', label: 'Read and search email messages' },
+      { key: 'calendar_events', label: 'Create and manage calendar events' },
+      { key: 'contacts', label: 'Access and manage contacts' },
+      { key: 'user_profile', label: 'Read user profile information' }
     ]
   }
 };

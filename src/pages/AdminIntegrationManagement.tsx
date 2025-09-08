@@ -26,6 +26,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { adminServiceProviders } from '@/lib/adminServiceProviders';
 import { toast } from 'react-hot-toast';
 
 interface OAuthProvider {
@@ -55,8 +56,8 @@ interface IntegrationCategory {
 }
 
 const statusOptions = [
-  { value: true, label: 'Enabled', color: 'bg-green-500' },
-  { value: false, label: 'Disabled', color: 'bg-red-500' }
+  { value: 'true', label: 'Enabled', color: 'bg-green-500' },
+  { value: 'false', label: 'Disabled', color: 'bg-red-500' }
 ];
 
 const iconOptions = [
@@ -94,7 +95,8 @@ export function AdminIntegrationManagement() {
     pkce_required: true,
     client_credentials_location: 'header',
     is_enabled: true,
-    configuration_metadata: '{}'
+    configuration_metadata: '{}',
+    status: 'true' // String representation for Select component
   });
   
   const [saving, setSaving] = useState(false);
@@ -105,15 +107,9 @@ export function AdminIntegrationManagement() {
 
   const fetchProviders = async () => {
     try {
-      console.log('[AdminIntegrationManagement] Now using service_providers table instead of integrations');
+      console.log('[AdminIntegrationManagement] Using admin edge function for service_providers');
       
-      const { data, error } = await supabase
-        .from('service_providers')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-
+      const data = await adminServiceProviders.list();
       setProviders(data || []);
     } catch (error) {
       console.error('Error fetching oauth providers:', error);
@@ -155,33 +151,33 @@ export function AdminIntegrationManagement() {
         }
       }
 
+      // Remove form-only fields that aren't database columns
+      const { status, ...formDataWithoutStatus } = formData;
+      
       const providerData = {
-        ...formData,
-        scopes_supported: scopesSupported,
-        configuration_metadata: configMetadata,
+        name: formData.name,
+        display_name: formData.display_name,
+        authorization_endpoint: formData.authorization_endpoint,
+        token_endpoint: formData.token_endpoint,
         revoke_endpoint: formData.revoke_endpoint || null,
-        discovery_endpoint: formData.discovery_endpoint || null
+        discovery_endpoint: formData.discovery_endpoint || null,
+        scopes_supported: scopesSupported,
+        pkce_required: formData.pkce_required,
+        client_credentials_location: formData.client_credentials_location,
+        is_enabled: formData.status === 'true', // Convert string back to boolean
+        configuration_metadata: configMetadata
       };
 
-      let result;
+      console.log('Updating provider with data:', providerData);
+      console.log('Selected provider ID:', selectedProvider?.id);
+
       if (selectedProvider) {
         // Update existing provider
-        result = await supabase
-          .from('service_providers')
-          .update(providerData)
-          .eq('id', selectedProvider.id)
-          .select()
-          .single();
+        await adminServiceProviders.update(selectedProvider.id, providerData);
       } else {
         // Create new provider
-        result = await supabase
-          .from('service_providers')
-          .insert([providerData])
-          .select()
-          .single();
+        await adminServiceProviders.create(providerData);
       }
-          
-      if (result.error) throw result.error;
 
       toast.success(selectedProvider ? 'OAuth provider updated successfully' : 'OAuth provider created successfully');
       setIsAddDialogOpen(false);
@@ -209,7 +205,8 @@ export function AdminIntegrationManagement() {
       pkce_required: provider.pkce_required,
       client_credentials_location: provider.client_credentials_location,
       is_enabled: provider.is_enabled,
-      configuration_metadata: JSON.stringify(provider.configuration_metadata, null, 2)
+      configuration_metadata: JSON.stringify(provider.configuration_metadata, null, 2),
+      status: provider.is_enabled ? 'true' : 'false'
     });
     setIsEditDialogOpen(true);
   };
@@ -218,12 +215,7 @@ export function AdminIntegrationManagement() {
     if (!selectedProvider) return;
 
     try {
-      const { error } = await supabase
-        .from('service_providers')
-        .delete()
-        .eq('id', selectedProvider.id);
-      
-      if (error) throw error;
+      await adminServiceProviders.delete(selectedProvider.id);
 
       toast.success('OAuth provider deleted successfully');
       setIsDeleteDialogOpen(false);
@@ -247,13 +239,14 @@ export function AdminIntegrationManagement() {
       pkce_required: true,
       client_credentials_location: 'header',
       is_enabled: true,
-      configuration_metadata: '{}'
+      configuration_metadata: '{}',
+      status: 'true'
     });
     setSelectedProvider(null);
   };
 
   const getStatusBadge = (isEnabled: boolean) => {
-    const option = statusOptions.find(opt => opt.value === isEnabled);
+    const option = statusOptions.find(opt => opt.value === String(isEnabled));
     return (
       <Badge className={`${option?.color}/20 text-white border-${option?.color}/30`}>
         {option?.label}
@@ -583,28 +576,10 @@ export function AdminIntegrationManagement() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="edit_icon">Icon</Label>
-                <Select value={formData.icon_name} onValueChange={(value) => setFormData(prev => ({ ...prev, icon_name: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {iconOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value}>
-                        <div className="flex items-center gap-2">
-                          <option.icon className="h-4 w-4" />
-                          {option.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <Label htmlFor="edit_status">Status</Label>
-                <Select value={formData.status} onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}>
+                <Select value={formData.status} onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -614,18 +589,6 @@ export function AdminIntegrationManagement() {
                         {option.label}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit_classification">Classification</Label>
-                <Select value={formData.agent_classification} onValueChange={(value: any) => setFormData(prev => ({ ...prev, agent_classification: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tool">Tool</SelectItem>
-                    <SelectItem value="channel">Channel</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

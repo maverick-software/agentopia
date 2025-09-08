@@ -7,8 +7,8 @@ const corsHeaders = {
 }
 
 interface TeamsApiRequest {
-  action: 'send_message' | 'create_meeting' | 'read_messages' | 'list_teams'
-  params: {
+  action: 'send_message' | 'create_meeting' | 'read_messages' | 'list_teams' | 'exchange_code'
+  params?: {
     channel_id?: string
     chat_id?: string
     message?: string
@@ -19,7 +19,12 @@ interface TeamsApiRequest {
     attendees?: string[]
     limit?: number
   }
-  agent_id: string
+  agent_id?: string
+  // OAuth token exchange parameters
+  code?: string
+  code_verifier?: string
+  redirect_uri?: string
+  user_id?: string
 }
 
 serve(async (req) => {
@@ -48,11 +53,32 @@ serve(async (req) => {
       throw new Error(`Failed to parse request body: ${parseError.message}`)
     }
     
-    const { action, params, agent_id } = requestBody
+    const { action, params, agent_id, code, code_verifier, redirect_uri, user_id: oauth_user_id } = requestBody
     console.log('Microsoft Teams API request:', { action, agent_id })
     console.log('Params received:', JSON.stringify(params, null, 2))
 
-    // Validate required parameters
+    // Handle OAuth token exchange separately (doesn't need existing connection or agent_id)
+    if (action === 'exchange_code') {
+      if (!code || !code_verifier || !redirect_uri || !oauth_user_id) {
+        throw new Error('Missing required OAuth parameters: code, code_verifier, redirect_uri, user_id')
+      }
+
+      console.log(`[microsoft-teams-api] Processing OAuth token exchange for user: ${oauth_user_id}`)
+      
+      const result = await exchangeOAuthCode(code, code_verifier, redirect_uri, oauth_user_id)
+      
+      return new Response(
+        JSON.stringify({ success: true, data: result }),
+        { 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
+    }
+
+    // Validate required parameters for other actions
     if (!action || !params || !agent_id) {
       console.error('Missing parameters:', { action: !!action, params: !!params, agent_id: !!agent_id })
       
@@ -176,8 +202,8 @@ serve(async (req) => {
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token: refreshTokenData.secret,
-          client_id: Deno.env.get('MICROSOFT_CLIENT_ID')!,
-          client_secret: Deno.env.get('MICROSOFT_CLIENT_SECRET')!,
+          client_id: Deno.env.get('MICROSOFT_TEAMS_CLIENT_ID')!,
+          client_secret: Deno.env.get('MICROSOFT_TEAMS_CLIENT_SECRET')!,
         }),
       })
 
@@ -408,4 +434,132 @@ async function listUserTeams(accessToken: string, params: any) {
   }
 
   return await response.json()
+}
+
+// OAuth token exchange function
+async function exchangeOAuthCode(code: string, codeVerifier: string, redirectUri: string, userId: string) {
+  console.log(`[microsoft-teams-api] Starting OAuth token exchange for user: ${userId}`)
+
+  // Create Supabase client
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+  // Get Microsoft Teams provider
+  const { data: provider, error: providerError } = await supabaseServiceRole
+    .from('service_providers')
+    .select('id, token_endpoint')
+    .eq('name', 'microsoft-teams')
+    .single()
+
+  if (providerError || !provider) {
+    throw new Error(`Microsoft Teams provider not found: ${providerError?.message || 'Not found'}`)
+  }
+
+  // Exchange code for tokens using Microsoft Graph API
+  const tokenResponse = await fetch(provider.token_endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: Deno.env.get('MICROSOFT_TEAMS_CLIENT_ID')!,
+      client_secret: Deno.env.get('MICROSOFT_TEAMS_CLIENT_SECRET')!,
+      code: code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+    }),
+  })
+
+  if (!tokenResponse.ok) {
+    const errorData = await tokenResponse.text()
+    throw new Error(`Token exchange failed: ${errorData}`)
+  }
+
+  const tokens = await tokenResponse.json()
+
+  if (!tokens.access_token) {
+    throw new Error('No access token received from Microsoft')
+  }
+
+  console.log(`[microsoft-teams-api] Successfully received tokens, storing in vault...`)
+
+  // Store tokens in Supabase Vault
+  const { data: accessTokenVault, error: accessTokenError } = await supabaseServiceRole
+    .from('vault.secrets')
+    .insert({
+      name: `teams_access_token_${userId}_${Date.now()}`,
+      secret: tokens.access_token
+    })
+    .select('id')
+    .single()
+
+  if (accessTokenError) {
+    throw new Error(`Failed to store access token: ${accessTokenError.message}`)
+  }
+
+  let refreshTokenVaultId = null
+  if (tokens.refresh_token) {
+    const { data: refreshTokenVault, error: refreshTokenError } = await supabaseServiceRole
+      .from('vault.secrets')
+      .insert({
+        name: `teams_refresh_token_${userId}_${Date.now()}`,
+        secret: tokens.refresh_token
+      })
+      .select('id')
+      .single()
+
+    if (refreshTokenError) {
+      throw new Error(`Failed to store refresh token: ${refreshTokenError.message}`)
+    }
+    refreshTokenVaultId = refreshTokenVault.id
+  }
+
+  // Store connection in user_integration_credentials
+  const TEAMS_SCOPES = [
+    'https://graph.microsoft.com/Chat.ReadWrite',
+    'https://graph.microsoft.com/Team.ReadBasic.All', 
+    'https://graph.microsoft.com/Channel.ReadBasic.All',
+    'https://graph.microsoft.com/OnlineMeetings.ReadWrite',
+    'https://graph.microsoft.com/User.Read'
+  ]
+
+  const { data: connectionData, error: insertError } = await supabaseServiceRole
+    .from('user_integration_credentials')
+    .insert({
+      user_id: userId,
+      oauth_provider_id: provider.id,
+      external_user_id: userId,
+      external_username: 'teams_user', // Will be updated with actual username later
+      connection_name: 'Microsoft Teams Connection',
+      vault_access_token_id: accessTokenVault.id,
+      vault_refresh_token_id: refreshTokenVaultId,
+      scopes_granted: TEAMS_SCOPES,
+      connection_status: 'active',
+      credential_type: 'oauth',
+      token_expires_at: tokens.expires_in 
+        ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+        : null,
+      connection_metadata: {
+        provider: 'microsoft-teams',
+        token_type: tokens.token_type || 'Bearer',
+        scope: tokens.scope
+      }
+    })
+    .select('*')
+    .single()
+
+  if (insertError) {
+    throw new Error(`Failed to create connection: ${insertError.message}`)
+  }
+
+  console.log(`[microsoft-teams-api] Successfully created connection: ${connectionData.id}`)
+
+  return {
+    connection_id: connectionData.id,
+    connection_name: connectionData.connection_name,
+    scopes_granted: connectionData.scopes_granted,
+    expires_at: connectionData.token_expires_at
+  }
 }

@@ -22,12 +22,16 @@ import {
   AlertCircle,
   ChevronRight,
   Mail,
-  Server
+  Server,
+  RefreshCw
 } from 'lucide-react';
 import { useIntegrationCategories, useIntegrationsByCategory, useConnections } from '@/integrations/_shared';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useGmailConnection } from '@/integrations/gmail';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -73,10 +77,12 @@ const getConnectionStatusIcon = (status: string) => {
 };
 
 export function IntegrationsPage() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedIntegration, setSelectedIntegration] = useState<any>(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
   const modalClosedByUserRef = React.useRef(false); // Track if modal was closed by user action
   const location = useLocation();
   const navigate = useNavigate();
@@ -93,6 +99,41 @@ export function IntegrationsPage() {
   );
   const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
+
+  const handleClearCache = async () => {
+    if (!user?.id) {
+      toast.error('Unable to clear cache: missing user information');
+      return;
+    }
+
+    setClearingCache(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('invalidate-agent-tool-cache', {
+        body: {
+          user_id: user.id
+        }
+      });
+
+      if (error) {
+        console.error('Cache clear error:', error);
+        toast.error('Failed to clear tool cache');
+        return;
+      }
+
+      if (data?.success) {
+        toast.success(`Tool cache cleared! (${data.tools_count} tools refreshed)`);
+        // Refresh connections after clearing cache
+        refetchConnections();
+      } else {
+        toast.error(data?.error || 'Failed to clear cache');
+      }
+    } catch (error: any) {
+      console.error('Cache clear error:', error);
+      toast.error('Failed to clear tool cache');
+    } finally {
+      setClearingCache(false);
+    }
+  };
 
   // Use the actual status from the database - no hardcoded overrides
   const getEffectiveStatus = (integration: any) => {
@@ -247,6 +288,14 @@ export function IntegrationsPage() {
             <span className="text-sm text-muted-foreground">
               {unifiedConnections.length} connected
             </span>
+            <button
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              className="p-1.5 hover:bg-accent rounded-lg transition-colors disabled:opacity-50"
+              title="Clear tool cache (refreshes integration tools and schemas)"
+            >
+              <RefreshCw className={`h-4 w-4 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
         

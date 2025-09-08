@@ -1,6 +1,5 @@
-## Cleanup agent_oauth_permissions table calls ##
 
-There is an old table 'agent_oauth_permissions' and another named 'user_oauth_connections' that were consolidated into to 'agent_integration_permissions.' Grep the entire codebase and create a checklist of all the places in the codebase these calls exists. Then, go through each instance and replace it with the correct table name with the correct schema. Make sure the systems work after. Use the @plan_and_execute.mdc protocol.
+
 
 ## Memory Storage System Upgrade ##
 
@@ -11,11 +10,10 @@ Here are a few metrics we can use: our background process can determine whether 
 Specifically, we want to store memories that are related to expertise, systems, processes and procedures or entities within the business itself (agents, humans, etc.). This will improve awareness over time. These should processed for the explicit memory as episodic memories for vector, and separately semantic understanding for the knowledge graph. We already have these systems built, we just need to add these additional features, and ensure that the background processes for memory storage are not interrupting or slowing down our agentic chat sessions.
 
 
-## Media Library ##
-
-Create an Account based media library where we store file uploads. The system will pull from the supabase buckets /user folders, and will allow all sorts of document types, including image files, documents, powerpoints, excel spreadsheets. Wherever documents flow in from, whether from a chat, or from uploading to an agent, or uploaded directly to the media library, they will be stored in the /user/media/ folders.
-
-The planning process should include adding the file upload feature to the chat page, wiring it up to the media library, adding a media library link to the sidebar, as well as the file ingestion for vector, sql (supabase) and knowledge graph. Also for the agent knowledge modal, where users can already add documents. Investigate that system and include it in the plan to extend it with this more comprehensive media library system.
+Document Creation
+SMS via ClickSend or Twilio
+AI generated Dashboards (TaskViewa or QuickChart.io)
+Time Tracking via Toggl (maybe zapier)
 
 ## Projects ##
 
@@ -121,6 +119,11 @@ This will allow us to add a model selection to the admin settings/setup area, wi
 ---
 
 ## Completed: ##
+
+## Cleanup agent_oauth_permissions table calls ## (completed)
+
+There is an old table 'agent_oauth_permissions' and another named 'user_oauth_connections' that were consolidated into to 'agent_integration_permissions.' Grep the entire codebase and create a checklist of all the places in the codebase these calls exists. Then, go through each instance and replace it with the correct table name with the correct schema. Make sure the systems work after. Use the @plan_and_execute.mdc protocol.
+
 
 ## Tasks ## (Completed)
 

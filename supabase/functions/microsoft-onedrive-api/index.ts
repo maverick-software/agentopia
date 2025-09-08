@@ -7,8 +7,8 @@ const corsHeaders = {
 }
 
 interface OneDriveApiRequest {
-  action: 'upload_file' | 'download_file' | 'share_file' | 'list_files' | 'search_files'
-  params: {
+  action: 'upload_file' | 'download_file' | 'share_file' | 'list_files' | 'search_files' | 'exchange_code'
+  params?: {
     file_name?: string
     file_content?: string
     folder_path?: string
@@ -20,7 +20,12 @@ interface OneDriveApiRequest {
     limit?: number
     query?: string
   }
-  agent_id: string
+  agent_id?: string
+  // OAuth token exchange parameters
+  code?: string
+  code_verifier?: string
+  redirect_uri?: string
+  user_id?: string
 }
 
 serve(async (req) => {
@@ -49,17 +54,39 @@ serve(async (req) => {
       throw new Error(`Failed to parse request body: ${parseError.message}`)
     }
     
-    const { action, params, agent_id } = requestBody
+    const { action, params, agent_id, code, code_verifier, redirect_uri, user_id: oauth_user_id } = requestBody
     console.log('Microsoft OneDrive API request:', { action, agent_id })
     console.log('Params received:', JSON.stringify(params, null, 2))
 
-    // Validate required parameters
-    if (!action || !params || !agent_id) {
+    // Handle OAuth token exchange separately (doesn't need existing connection or agent_id)
+    if (action === 'exchange_code') {
+      if (!code || !code_verifier || !redirect_uri || !oauth_user_id) {
+        throw new Error('Missing required OAuth parameters: code, code_verifier, redirect_uri, user_id')
+      }
+
+      console.log(`[microsoft-onedrive-api] Processing OAuth token exchange for user: ${oauth_user_id}`)
+      
+      const result = await exchangeOAuthCode(code, code_verifier, redirect_uri, oauth_user_id)
+      
+      return new Response(
+        JSON.stringify({ success: true, data: result }),
+        { 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
+    }
+
+    // Validate required parameters for other actions (not needed for exchange_code)
+    if (!action) {
+      throw new Error('Question: What OneDrive action would you like me to perform? Please specify upload_file, download_file, share_file, list_files, or search_files.')
+    }
+    
+    if (!params || !agent_id) {
       console.error('Missing parameters:', { action: !!action, params: !!params, agent_id: !!agent_id })
       
-      if (!action) {
-        throw new Error('Question: What OneDrive action would you like me to perform? Please specify upload_file, download_file, share_file, list_files, or search_files.')
-      }
       if (!agent_id) {
         throw new Error('Missing agent context. Please retry with proper agent identification.')
       }
@@ -159,10 +186,9 @@ serve(async (req) => {
       
       // Get refresh token from vault
       const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole
-        .from('vault.secrets')
-        .select('secret')
-        .eq('id', connection.vault_refresh_token_id)
-        .single()
+        .rpc('vault_decrypt', {
+          vault_id: connection.vault_refresh_token_id
+        })
 
       if (refreshTokenError || !refreshTokenData) {
         throw new Error(`Failed to get refresh token: ${refreshTokenError?.message || 'Not found'}`)
@@ -176,9 +202,9 @@ serve(async (req) => {
         },
         body: new URLSearchParams({
           grant_type: 'refresh_token',
-          refresh_token: refreshTokenData.secret,
-          client_id: Deno.env.get('MICROSOFT_CLIENT_ID')!,
-          client_secret: Deno.env.get('MICROSOFT_CLIENT_SECRET')!,
+          refresh_token: refreshTokenData,
+          client_id: Deno.env.get('MICROSOFT_ONEDRIVE_CLIENT_ID')!,
+          client_secret: Deno.env.get('MICROSOFT_ONEDRIVE_CLIENT_SECRET')!,
         }),
       })
 
@@ -191,9 +217,11 @@ serve(async (req) => {
 
       // Update the access token in vault
       await supabaseServiceRole
-        .from('vault.secrets')
-        .update({ secret: accessToken })
-        .eq('id', connection.vault_access_token_id)
+        .rpc('create_vault_secret', {
+          p_secret: accessToken,
+          p_name: connection.vault_access_token_id,
+          p_description: `Updated OneDrive access token for user ${user_id}`
+        })
 
       // Update token expiry
       const newExpiryTime = new Date(Date.now() + refreshData.expires_in * 1000).toISOString()
@@ -207,16 +235,15 @@ serve(async (req) => {
     } else {
       // Get current access token from vault
       const { data: tokenData, error: tokenError } = await supabaseServiceRole
-        .from('vault.secrets')
-        .select('secret')
-        .eq('id', connection.vault_access_token_id)
-        .single()
+        .rpc('vault_decrypt', {
+          vault_id: connection.vault_access_token_id
+        })
 
       if (tokenError || !tokenData) {
         throw new Error(`Failed to get access token: ${tokenError?.message || 'Not found'}`)
       }
 
-      accessToken = tokenData.secret
+      accessToken = tokenData
     }
 
     // Execute the requested action
@@ -451,4 +478,132 @@ async function searchOneDriveFiles(accessToken: string, params: any) {
   }
 
   return await response.json()
+}
+
+// OAuth token exchange function
+async function exchangeOAuthCode(code: string, codeVerifier: string, redirectUri: string, userId: string) {
+  console.log(`[microsoft-onedrive-api] Starting OAuth token exchange for user: ${userId}`)
+
+  // Create Supabase client
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+  // Get Microsoft OneDrive provider
+  const { data: provider, error: providerError } = await supabaseServiceRole
+    .from('service_providers')
+    .select('id, token_endpoint')
+    .eq('name', 'microsoft-onedrive')
+    .single()
+
+  if (providerError || !provider) {
+    throw new Error(`Microsoft OneDrive provider not found: ${providerError?.message || 'Not found'}`)
+  }
+
+  // Exchange code for tokens using Microsoft Graph API
+  const tokenResponse = await fetch(provider.token_endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+        client_id: Deno.env.get('MICROSOFT_ONEDRIVE_CLIENT_ID')!,
+        client_secret: Deno.env.get('MICROSOFT_ONEDRIVE_CLIENT_SECRET')!,
+      code: code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+    }),
+  })
+
+  if (!tokenResponse.ok) {
+    const errorData = await tokenResponse.text()
+    throw new Error(`Token exchange failed: ${errorData}`)
+  }
+
+  const tokens = await tokenResponse.json()
+
+  if (!tokens.access_token) {
+    throw new Error('No access token received from Microsoft')
+  }
+
+  console.log(`[microsoft-onedrive-api] Successfully received tokens, storing in vault...`)
+
+  // Store tokens in Supabase Vault using the vault API
+  const accessTokenName = `onedrive_access_token_${userId}_${Date.now()}`
+  const { data: accessTokenVault, error: accessTokenError } = await supabaseServiceRole
+    .rpc('create_vault_secret', {
+      p_secret: tokens.access_token,
+      p_name: accessTokenName,
+      p_description: `OneDrive access token for user ${userId}`
+    })
+
+  if (accessTokenError) {
+    throw new Error(`Failed to store access token: ${accessTokenError.message}`)
+  }
+
+  let refreshTokenVaultId = null
+  if (tokens.refresh_token) {
+    const refreshTokenName = `onedrive_refresh_token_${userId}_${Date.now()}`
+    const { data: refreshTokenVault, error: refreshTokenError } = await supabaseServiceRole
+      .rpc('create_vault_secret', {
+        p_secret: tokens.refresh_token,
+        p_name: refreshTokenName,
+        p_description: `OneDrive refresh token for user ${userId}`
+      })
+
+    if (refreshTokenError) {
+      throw new Error(`Failed to store refresh token: ${refreshTokenError.message}`)
+    }
+    refreshTokenVaultId = refreshTokenName
+  }
+
+  // Store connection in user_integration_credentials
+  const ONEDRIVE_SCOPES = [
+    'https://graph.microsoft.com/Files.Read',
+    'https://graph.microsoft.com/Files.ReadWrite',
+    'https://graph.microsoft.com/Files.Read.All',
+    'https://graph.microsoft.com/Files.ReadWrite.All',
+    'https://graph.microsoft.com/Sites.Read.All',
+    'https://graph.microsoft.com/Sites.ReadWrite.All',
+    'https://graph.microsoft.com/User.Read'
+  ]
+
+  const { data: connectionData, error: insertError } = await supabaseServiceRole
+    .from('user_integration_credentials')
+    .insert({
+      user_id: userId,
+      oauth_provider_id: provider.id,
+      external_user_id: userId,
+      external_username: 'onedrive_user', // Will be updated with actual username later
+      connection_name: 'Microsoft OneDrive Connection',
+      vault_access_token_id: accessTokenName,
+      vault_refresh_token_id: refreshTokenVaultId,
+      scopes_granted: ONEDRIVE_SCOPES,
+      connection_status: 'active',
+      credential_type: 'oauth',
+      token_expires_at: tokens.expires_in 
+        ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+        : null,
+      connection_metadata: {
+        provider: 'microsoft-onedrive',
+        token_type: tokens.token_type || 'Bearer',
+        scope: tokens.scope
+      }
+    })
+    .select('*')
+    .single()
+
+  if (insertError) {
+    throw new Error(`Failed to create connection: ${insertError.message}`)
+  }
+
+  console.log(`[microsoft-onedrive-api] Successfully created connection: ${connectionData.id}`)
+
+  return {
+    connection_id: connectionData.id,
+    connection_name: connectionData.connection_name,
+    scopes_granted: connectionData.scopes_granted,
+    expires_at: connectionData.token_expires_at
+  }
 }
