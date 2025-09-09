@@ -57,6 +57,90 @@ interface UploadRequest {
 // Text Extraction Functions
 // =============================================
 
+// =============================================
+// Parser Service Calls
+// =============================================
+
+async function callParserService(serviceName: string, fileData: Uint8Array, fileName: string, options: any = {}): Promise<string> {
+  try {
+    console.log(`[MediaLibrary MCP] Calling ${serviceName} service for ${fileName}`);
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    if (!supabaseUrl) {
+      throw new Error(`Supabase URL not available for ${serviceName} service`);
+    }
+    
+    // Convert file data to base64 for transmission
+    const base64Data = btoa(String.fromCharCode(...fileData));
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/${serviceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        fileData: base64Data,
+        fileName: fileName,
+        options: {
+          includeMetadata: true,
+          maxRetries: 3,
+          ...options
+        }
+      })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success && result.text) {
+        console.log(`[MediaLibrary MCP] ${serviceName} extracted ${result.text.length} characters`);
+        if (result.metadata) {
+          console.log(`[MediaLibrary MCP] ${serviceName} metadata:`, result.metadata);
+        }
+        return result.text;
+      } else {
+        throw new Error(result.error || `${serviceName} service returned no text`);
+      }
+    } else {
+      const errorText = await response.text();
+      throw new Error(`${serviceName} service failed: ${response.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error(`[MediaLibrary MCP] ${serviceName} service error:`, error);
+    throw error;
+  }
+}
+
+async function extractTextFromWord(fileData: Uint8Array, fileName: string): Promise<string> {
+  return await callParserService('word-parser', fileData, fileName, {
+    usePremiumAPI: true
+  });
+}
+
+async function extractTextFromExcel(fileData: Uint8Array, fileName: string): Promise<string> {
+  return await callParserService('excel-parser', fileData, fileName, {
+    usePremiumAPI: true,
+    includeHeaders: true,
+    maxRows: 1000
+  });
+}
+
+async function extractTextFromText(fileData: Uint8Array, fileName: string): Promise<string> {
+  return await callParserService('text-parser', fileData, fileName, {
+    preserveFormatting: false
+  });
+}
+
+async function extractTextFromPowerPoint(fileData: Uint8Array, fileName: string): Promise<string> {
+  return await callParserService('powerpoint-parser', fileData, fileName, {
+    usePremiumAPI: true,
+    includeSlideNumbers: true,
+    extractNotes: true
+  });
+}
+
 async function extractTextFromPDF(pdfData: Uint8Array): Promise<string> {
   try {
     console.log(`[MediaLibrary MCP] Processing PDF file (${pdfData.length} bytes)`);
@@ -671,41 +755,46 @@ async function extractTextFromDocument(
     
     let extractedText = '';
 
-    // Route to appropriate extraction method based on detected file type
+    // Route to appropriate extraction method using dedicated parser services
     if (detectedType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
       extractedText = await extractTextFromPDF(fileData);
       
     } else if (detectedType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                fileName.toLowerCase().endsWith('.docx')) {
-      // Use mammoth for DOCX files instead of the old method
-      extractedText = await extractTextFromDOC(fileData, fileName);
+      extractedText = await extractTextFromWord(fileData, fileName);
       
     } else if (detectedType === 'application/msword' || 
                fileName.toLowerCase().endsWith('.doc')) {
-      // Handle legacy DOC files
-      extractedText = await extractTextFromDOC(fileData, fileName);
+      extractedText = await extractTextFromWord(fileData, fileName);
       
     } else if (detectedType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
                fileName.toLowerCase().endsWith('.xlsx')) {
-      extractedText = await extractTextFromXLSX(fileData, fileName);
+      extractedText = await extractTextFromExcel(fileData, fileName);
       
     } else if (detectedType === 'application/vnd.ms-excel' || 
                fileName.toLowerCase().endsWith('.xls')) {
-      extractedText = await extractTextFromXLSX(fileData, fileName);
+      extractedText = await extractTextFromExcel(fileData, fileName);
+      
+    } else if (detectedType === 'text/csv' || fileName.toLowerCase().endsWith('.csv')) {
+      extractedText = await extractTextFromExcel(fileData, fileName);
       
     } else if (detectedType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || 
                fileName.toLowerCase().endsWith('.pptx')) {
-      extractedText = await extractTextFromPPTX(fileData, fileName);
+      extractedText = await extractTextFromPowerPoint(fileData, fileName);
+      
+    } else if (detectedType === 'application/vnd.ms-powerpoint' || 
+               fileName.toLowerCase().endsWith('.ppt')) {
+      extractedText = await extractTextFromPowerPoint(fileData, fileName);
       
     } else if (detectedType === 'text/plain' || fileName.toLowerCase().endsWith('.txt')) {
-      extractedText = await extractTextFromTXT(fileData, fileName);
+      extractedText = await extractTextFromText(fileData, fileName);
       
     } else if (detectedType.startsWith('image/')) {
       // For images, we'll go straight to OCR
       throw new Error(`Image file detected - will use OCR processing`);
       
     } else {
-      return `Unsupported file type: ${detectedType} (${fileType}). Supported formats: PDF, DOCX, DOC, XLSX, XLS, PPTX, TXT, Images`;
+      return `Unsupported file type: ${detectedType} (${fileType}). Supported formats: PDF, DOC/DOCX, XLS/XLSX/CSV, PPT/PPTX, TXT, Images`;
     }
     
     // Check if extraction was successful

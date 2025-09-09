@@ -144,8 +144,64 @@ async function extractTextWithForcedOCR(supabase: any, storagePath: string, file
   }
 }
 
+// =============================================
+// Parser Service Integration
+// =============================================
+
+async function callParserService(serviceName: string, fileData: Uint8Array, fileName: string, options: any = {}): Promise<string> {
+  try {
+    console.log(`[MediaLibrary] Calling ${serviceName} service for ${fileName}`);
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    if (!supabaseUrl) {
+      throw new Error(`Supabase URL not available for ${serviceName} service`);
+    }
+    
+    // Convert file data to base64 for transmission
+    const base64Data = btoa(String.fromCharCode(...fileData));
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/${serviceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        fileData: base64Data,
+        fileName: fileName,
+        options: {
+          includeMetadata: true,
+          maxRetries: 3,
+          ...options
+        }
+      })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success && result.text) {
+        console.log(`[MediaLibrary] ${serviceName} extracted ${result.text.length} characters`);
+        if (result.metadata) {
+          console.log(`[MediaLibrary] ${serviceName} metadata:`, result.metadata);
+        }
+        return result.text;
+      } else {
+        throw new Error(result.error || `${serviceName} service returned no text`);
+      }
+    } else {
+      const errorText = await response.text();
+      throw new Error(`${serviceName} service failed: ${response.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error(`[MediaLibrary] ${serviceName} service error:`, error);
+    throw error;
+  }
+}
+
 /**
- * Extract text content from various document types
+ * Extract text content from various document types using dedicated parser services
  */
 async function extractTextFromDocument(supabase: any, storagePath: string, fileType: string, userId?: string): Promise<string> {
   try {
@@ -166,24 +222,85 @@ async function extractTextFromDocument(supabase: any, storagePath: string, fileT
     
     const arrayBuffer = await fileData.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
+    const fileName = storagePath.split('/').pop() || 'document';
+    const fileExt = fileName.toLowerCase().split('.').pop() || '';
     
-    // Handle different file types
-    if (fileType === 'application/pdf' || storagePath.toLowerCase().endsWith('.pdf')) {
-      return await extractTextFromPDF(uint8Array, userId);
-    } else if (fileType.startsWith('text/') || storagePath.toLowerCase().endsWith('.txt')) {
-      return new TextDecoder('utf-8').decode(uint8Array);
-    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
-               storagePath.toLowerCase().endsWith('.docx')) {
-      // Extract text from DOCX using built-in capabilities
-      return await extractTextFromDOCX(uint8Array);
+    // Route to appropriate parser service based on file type
+    if (fileType === 'application/pdf' || fileExt === 'pdf') {
+      return await callParserService('pdf-parser', uint8Array, fileName, {
+        includeMetadata: true
+      });
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileExt === 'docx') {
+      return await callParserService('word-parser', uint8Array, fileName, {
+        usePremiumAPI: true
+      });
+    } else if (fileType === 'application/msword' || fileExt === 'doc') {
+      return await callParserService('word-parser', uint8Array, fileName, {
+        usePremiumAPI: true
+      });
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || fileExt === 'xlsx') {
+      return await callParserService('excel-parser', uint8Array, fileName, {
+        usePremiumAPI: true,
+        includeHeaders: true,
+        maxRows: 1000
+      });
+    } else if (fileType === 'application/vnd.ms-excel' || fileExt === 'xls') {
+      return await callParserService('excel-parser', uint8Array, fileName, {
+        usePremiumAPI: true,
+        includeHeaders: true,
+        maxRows: 1000
+      });
+    } else if (fileType === 'text/csv' || fileExt === 'csv') {
+      return await callParserService('excel-parser', uint8Array, fileName, {
+        includeHeaders: true,
+        maxRows: 1000
+      });
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || fileExt === 'pptx') {
+      return await callParserService('powerpoint-parser', uint8Array, fileName, {
+        usePremiumAPI: true,
+        includeSlideNumbers: true,
+        extractNotes: true
+      });
+    } else if (fileType === 'application/vnd.ms-powerpoint' || fileExt === 'ppt') {
+      return await callParserService('powerpoint-parser', uint8Array, fileName, {
+        usePremiumAPI: true,
+        includeSlideNumbers: true,
+        extractNotes: true
+      });
+    } else if (fileType.startsWith('text/') || fileExt === 'txt') {
+      return await callParserService('text-parser', uint8Array, fileName, {
+        preserveFormatting: false
+      });
     } else if (fileType.startsWith('image/')) {
+      // Fall back to existing image OCR for now
       return await extractTextFromImage(uint8Array, fileType, userId);
     } else {
-      console.warn(`[MediaLibrary] Unsupported file type for text extraction: ${fileType}`);
-      return '';
+      throw new Error(`Unsupported file type: ${fileType} (${fileExt}). Supported formats: PDF, DOC/DOCX, XLS/XLSX/CSV, PPT/PPTX, TXT, Images`);
     }
   } catch (error: any) {
     console.error(`[MediaLibrary] Text extraction error:`, error);
+    
+    // If parser service fails, try fallback to original methods for critical formats
+    try {
+      console.log(`[MediaLibrary] Parser service failed, trying fallback extraction for ${fileType}`);
+      
+      const arrayBuffer = await (await supabase.storage.from('media-library').download(storagePath)).data?.arrayBuffer();
+      if (!arrayBuffer) throw new Error('No file data for fallback');
+      
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const fileExt = storagePath.toLowerCase().split('.').pop() || '';
+      
+      if (fileType === 'application/pdf' || fileExt === 'pdf') {
+        return await extractTextFromPDF(uint8Array, userId);
+      } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileExt === 'docx') {
+        return await extractTextFromDOCX(uint8Array);
+      } else if (fileType.startsWith('text/') || fileExt === 'txt') {
+        return new TextDecoder('utf-8').decode(uint8Array);
+      }
+    } catch (fallbackError) {
+      console.error(`[MediaLibrary] Fallback extraction also failed:`, fallbackError);
+    }
+    
     throw error;
   }
 }

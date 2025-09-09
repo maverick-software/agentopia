@@ -118,6 +118,20 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
         description: 'Extract text from PDFs and images with high accuracy OCR',
         requiresApiKey: true,
         requiresOAuth: false
+      },
+      {
+        id: 'azure-document-intelligence',
+        name: 'Azure Document Intelligence',
+        description: 'Microsoft\'s enterprise-grade document analysis and text extraction service',
+        requiresApiKey: true,
+        requiresOAuth: false
+      },
+      {
+        id: 'mistral-ocr',
+        name: 'Mistral OCR',
+        description: 'Advanced AI-powered OCR and document processing with structured output',
+        requiresApiKey: true,
+        requiresOAuth: false
       }
     ],
     voice: [

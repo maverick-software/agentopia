@@ -69,13 +69,21 @@ export function AgentChatPage() {
     const urlConvId = params.get('conv');
     if (urlConvId) return urlConvId;
     
-    // Otherwise, start with a fresh chat (no conversation ID)
-    // This ensures clicking on an agent always starts with a new chat
-    return null;
+    // Generate a temporary conversation ID immediately for better UX
+    // This allows real-time subscriptions to be established before first message
+    const tempConvId = crypto.randomUUID();
+    return tempConvId;
   });
   
   // Track if we're creating a new conversation to prevent race conditions
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
+  // Track if this is a temporary conversation (not yet persisted to database)
+  const [isTemporaryConversation, setIsTemporaryConversation] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const urlConvId = params.get('conv');
+    // If no conversation in URL, we're starting with a temporary one
+    return !urlConvId;
+  });
   // Reasoning toggle (persist per agent in localStorage)
   const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
     const key = `agent_${agentId}_reasoning_enabled`;
@@ -226,11 +234,14 @@ export function AgentChatPage() {
     if (conv && conv !== selectedConversationId) {
       // URL has a conversation ID, use it
       setSelectedConversationId(conv);
+      setIsTemporaryConversation(false); // URL conversations are not temporary
       if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
     } else if (!conv && selectedConversationId) {
       // URL has no conversation ID but we have one in state
-      // This happens when navigating to a new chat - clear the conversation
-      setSelectedConversationId(null);
+      // Generate a new temporary conversation for better UX
+      const tempConvId = crypto.randomUUID();
+      setSelectedConversationId(tempConvId);
+      setIsTemporaryConversation(true);
       setMessages([]);
       if (agentId) {
         try { 
@@ -728,6 +739,12 @@ export function AgentChatPage() {
 					return;
 				}
 
+				// Skip database validation for temporary conversations
+				if (isTemporaryConversation) {
+					setMessages([]);
+					return;
+				}
+
 				// Validate conversation is active; if archived or missing, clear selection and redirect
 				try {
 					const { data: sessionRow } = await supabase
@@ -739,6 +756,7 @@ export function AgentChatPage() {
 						.maybeSingle();
 					if (!sessionRow || sessionRow.status !== 'active') {
 						setSelectedConversationId(null);
+						setIsTemporaryConversation(true);
 						try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
 						// Remove conv param from URL to show new conversation screen
 						navigate(`/agents/${agentId}/chat`, { replace: true });
@@ -785,7 +803,7 @@ export function AgentChatPage() {
 		};
 
 		fetchHistory();
-	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation]);
+	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation, isTemporaryConversation]);
 
   // Set up real-time message subscription
   useEffect(() => {
@@ -946,14 +964,18 @@ export function AgentChatPage() {
     let convId = selectedConversationId;
     let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
     
-    if (!selectedConversationId) {
+    if (isTemporaryConversation) {
       // Set flag to prevent fetchHistory from clearing our messages
       setIsCreatingNewConversation(true);
       
-      // Create new conversation ID immediately for better UX
-      convId = crypto.randomUUID();
+      // Use the existing temporary conversation ID or create a new one
+      convId = selectedConversationId || crypto.randomUUID();
       sessId = crypto.randomUUID();
+      
+      // Mark as no longer temporary since we're persisting it
+      setIsTemporaryConversation(false);
       setSelectedConversationId(convId);
+      
       // Reflect in URL for consistency
       navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
       localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);

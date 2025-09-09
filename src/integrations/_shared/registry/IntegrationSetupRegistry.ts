@@ -16,6 +16,7 @@ import { MicrosoftTeamsSetupModal } from '../../microsoft-teams/components/Micro
 import { MicrosoftOneDriveSetupModal } from '../../microsoft-onedrive/components/MicrosoftOneDriveSetupModal';
 import { MicrosoftOutlookSetupModal } from '../../microsoft-outlook/components/MicrosoftOutlookSetupModal';
 import { MistralOCRSetupModal } from '../../mistral-ocr/components/MistralOCRSetupModal';
+import { AzureDocumentIntelligenceSetupModal } from '../../azure-document-intelligence/components/AzureDocumentIntelligenceSetupModal';
 
 /**
  * Registry of all integration setup components
@@ -273,6 +274,21 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
       { key: 'markdown_output', label: 'Markdown-formatted text output' },
       { key: 'bbox_annotation', label: 'Bounding box annotations' },
       { key: 'document_annotation', label: 'Document-level annotations' }
+    ]
+  },
+
+  // Azure Document Intelligence - Enterprise-grade document processing
+  'Azure Document Intelligence': {
+    component: AzureDocumentIntelligenceSetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['document_analysis', 'form_processing', 'table_extraction', 'layout_analysis'],
+    capabilities: [
+      { key: 'document_analysis', label: 'Advanced document analysis and text extraction', description: 'Extract text with enterprise-grade accuracy and layout understanding' },
+      { key: 'form_processing', label: 'Form and invoice processing', description: 'Extract structured data from forms, invoices, and receipts' },
+      { key: 'table_extraction', label: 'Table data extraction', description: 'Extract and structure data from tables within documents' },
+      { key: 'layout_analysis', label: 'Document layout analysis', description: 'Understand document structure including headers, paragraphs, and sections' },
+      { key: 'multi_format', label: 'Multiple format support', description: 'Support for PDF, images, Office documents, and more' },
+      { key: 'enterprise_grade', label: 'Enterprise-grade accuracy', description: 'Microsoft Azure-powered document intelligence' }
     ]
   }
 };
