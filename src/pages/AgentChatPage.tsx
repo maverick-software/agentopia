@@ -694,6 +694,8 @@ export function AgentChatPage() {
       try {
         setLoading(true);
         setError(null);
+        // Clear previous agent state immediately to prevent showing wrong agent info
+        setAgent(null);
         
         const controller = new AbortController();
         abortControllerRef.current = controller;

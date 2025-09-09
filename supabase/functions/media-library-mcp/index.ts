@@ -72,8 +72,21 @@ async function callParserService(serviceName: string, fileData: Uint8Array, file
       throw new Error(`Supabase URL not available for ${serviceName} service`);
     }
     
-    // Convert file data to base64 for transmission
-    const base64Data = btoa(String.fromCharCode(...fileData));
+    // Convert file data to base64 for transmission - handle large files safely
+    let base64Data: string;
+    const chunkSize = 8192; // 8KB chunks to avoid call stack overflow
+    const chunks: string[] = [];
+    
+    for (let i = 0; i < fileData.length; i += chunkSize) {
+      const chunk = fileData.slice(i, i + chunkSize);
+      // Convert chunk to string without spread operator to avoid stack overflow
+      let binaryString = '';
+      for (let j = 0; j < chunk.length; j++) {
+        binaryString += String.fromCharCode(chunk[j]);
+      }
+      chunks.push(btoa(binaryString));
+    }
+    base64Data = chunks.join('');
     
     const response = await fetch(`${supabaseUrl}/functions/v1/${serviceName}`, {
       method: 'POST',
@@ -681,19 +694,20 @@ async function extractTextWithOCR(
     // Convert file data to base64 - handle large files properly
     let base64Data: string;
     try {
-      // For large files, process in chunks to avoid memory issues
-      if (fileData.length > 1024 * 1024) { // > 1MB
-        console.log(`[MediaLibrary MCP] Large file detected (${fileData.length} bytes), processing in chunks`);
-        const chunks: string[] = [];
-        const chunkSize = 1024 * 1024; // 1MB chunks
-        for (let i = 0; i < fileData.length; i += chunkSize) {
-          const chunk = fileData.slice(i, i + chunkSize);
-          chunks.push(btoa(String.fromCharCode(...chunk)));
+      // For large files, process in smaller chunks to avoid call stack overflow
+      const chunkSize = 8192; // 8KB chunks to avoid call stack issues
+      const chunks: string[] = [];
+      
+      for (let i = 0; i < fileData.length; i += chunkSize) {
+        const chunk = fileData.slice(i, i + chunkSize);
+        // Convert chunk to string without spread operator to avoid stack overflow
+        let binaryString = '';
+        for (let j = 0; j < chunk.length; j++) {
+          binaryString += String.fromCharCode(chunk[j]);
         }
-        base64Data = chunks.join('');
-      } else {
-        base64Data = btoa(String.fromCharCode(...fileData));
+        chunks.push(btoa(binaryString));
       }
+      base64Data = chunks.join('');
     } catch (encodingError) {
       console.error('[MediaLibrary MCP] Base64 encoding failed:', encodingError);
       throw new Error('Failed to encode file for OCR processing');
