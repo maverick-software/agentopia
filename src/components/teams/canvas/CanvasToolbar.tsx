@@ -1,13 +1,15 @@
 import React, { useCallback } from 'react';
 import { 
-  Maximize, 
-  RotateCcw, 
-  Save, 
   Settings, 
   Grid, 
   Network,
   Loader2,
-  Download
+  Download,
+  Plus,
+  Check,
+  Clock,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +45,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onViewModeChange,
 
   onShowSettings,
+  onCreateTeam,
   showMinimap = true,
   onToggleMinimap,
   className
@@ -86,19 +89,6 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         {viewMode === 'canvas' && (
           <>
             <Separator orientation="vertical" className="h-6" />
-            
-            {/* Canvas Controls - No Zoom */}
-            <div className="flex items-center space-x-1">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={onFitView}
-                title="Fit View"
-              >
-                <Maximize className="h-4 w-4 mr-1" />
-                Fit View
-              </Button>
-            </div>
           </>
         )}
       </div>
@@ -114,18 +104,42 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       
       {/* Right Section: Actions */}
       <div className="flex items-center space-x-2">
+        {/* Create Team Button */}
+        {onCreateTeam && (
+          <Button
+            size="sm"
+            onClick={onCreateTeam}
+            title="Create New Team"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Create Team
+          </Button>
+        )}
+        
         {/* Canvas-specific actions */}
         {viewMode === 'canvas' && (
           <>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onResetLayout}
-              title="Reset Layout"
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Reset
-            </Button>
+            {/* Zoom Controls */}
+            <div className="flex items-center space-x-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onZoomOut}
+                disabled={!canZoomOut}
+                title="Zoom Out"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onZoomIn}
+                disabled={!canZoomIn}
+                title="Zoom In"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+            </div>
             
             <Button
               size="sm"
@@ -137,27 +151,30 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               Export
             </Button>
             
-            <Button
-              size="sm"
-              onClick={onSaveLayout}
-              disabled={isSaving || !hasUnsavedChanges}
-              title={hasUnsavedChanges ? "Save Layout" : "No changes to save"}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-1" />
-                  {hasUnsavedChanges ? 'Save Layout' : 'Saved'}
-                </>
-              )}
-            </Button>
-            
             <Separator orientation="vertical" className="h-6" />
           </>
+        )}
+        
+        {/* Autosave Status Indicator */}
+        {viewMode === 'canvas' && (
+          <div className="flex items-center space-x-2 text-sm">
+            {isSaving ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                <span className="text-blue-500 font-medium">Saving...</span>
+              </>
+            ) : hasUnsavedChanges ? (
+              <>
+                <Clock className="h-3 w-3 text-orange-500" />
+                <span className="text-orange-500 font-medium">Unsaved</span>
+              </>
+            ) : (
+              <>
+                <Check className="h-3 w-3 text-green-500" />
+                <span className="text-green-500 font-medium">Auto Saved</span>
+              </>
+            )}
+          </div>
         )}
         
         {/* Settings */}
@@ -169,13 +186,6 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         >
           <Settings className="h-4 w-4" />
         </Button>
-        
-        {/* Unsaved changes indicator */}
-        {hasUnsavedChanges && viewMode === 'canvas' && (
-          <Badge variant="destructive" className="ml-2">
-            Unsaved
-          </Badge>
-        )}
       </div>
     </div>
   );

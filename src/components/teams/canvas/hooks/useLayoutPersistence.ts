@@ -83,6 +83,11 @@ export function useLayoutPersistence(
       if (storageType === 'database' || storageType === 'both') {
         try {
           // Load canvas layout (positions, view settings)
+          console.log('🔍 Calling get_team_canvas_layout with:', { 
+            p_workspace_id: workspaceId || null,
+            p_user_id: null 
+          });
+          
           const { data, error } = await supabase.rpc(
             'get_team_canvas_layout',
             { 
@@ -91,11 +96,20 @@ export function useLayoutPersistence(
             }
           );
           
+          console.log('🔍 Database response:', { data, error });
+          
           if (error) throw error;
           
           const response = data as GetLayoutResponse;
+          console.log('🔍 Parsed response:', response);
+          
           if (response.success && response.layout) {
             remoteLayout = response.layout;
+            console.log('✅ Remote layout loaded:', {
+              positions: remoteLayout.positions?.length || 0,
+              connections: remoteLayout.connections?.length || 0,
+              viewSettings: remoteLayout.viewSettings
+            });
 
             // ALSO load individual connections from team_connections table
             const { data: connectionsData, error: connectionsError } = await supabase

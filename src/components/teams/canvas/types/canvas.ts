@@ -182,6 +182,7 @@ export interface CanvasToolbarProps {
   onConnectionModeChange: (mode: ConnectionType | null) => void; // Legacy - not used
   
   onShowSettings: () => void;
+  onCreateTeam?: () => void;
   
   // Options
   showMinimap?: boolean;

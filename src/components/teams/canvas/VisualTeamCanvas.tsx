@@ -23,6 +23,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -103,11 +104,13 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [isSaving, setIsSaving] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [zoom, setZoom] = useState(0.6);
   
-  // Canvas state hook
-  const canvasState = useCanvasState(teams, initialLayout, {
-    enableAutoSave: !readonly,
-    onLayoutChange: onLayoutSave,
+  // Canvas state hook - Don't pass initialLayout to prevent default positioning
+  const canvasState = useCanvasState(teams, undefined, {
+    enableAutoSave: false, // We'll handle saving manually
+    autoSaveInterval: 5000,
+    debounceMs: 1000,
     onError: (error) => {
       console.error('Canvas state error:', error);
       toast.error('Canvas error: ' + error.message);
@@ -157,50 +160,81 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     }
   });
 
-  // SIMPLE: Load database state on mount - ONCE
+  // State to track if we've loaded the initial data
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
+
+  // CRITICAL: Load database state on mount - ONCE and properly
   useEffect(() => {
-    if (readonly || !userId) return;
+    if (readonly || !userId || hasLoadedInitialData) return;
     
     const loadData = async () => {
       try {
+        console.log('🔄 Loading canvas layout from database...');
         const savedLayout = await persistence.loadLayout();
         
         if (savedLayout) {
-          // Set the entire canvas state at once
+          console.log('✅ Found saved layout:', {
+            positions: savedLayout.positions?.length || 0,
+            connections: savedLayout.connections?.length || 0,
+            viewSettings: savedLayout.viewSettings
+          });
+          
+          // CRITICAL: Load positions first - even if empty array, this means we have a saved layout
+          if (savedLayout.positions && savedLayout.positions.length > 0) {
+            console.log('✅ Loading saved positions:', savedLayout.positions.length);
+            savedLayout.positions.forEach(pos => {
+              canvasState.updateTeamPosition(pos.teamId, { x: pos.x, y: pos.y });
+            });
+          }
+          
+          // Load connections
           if (savedLayout.connections?.length > 0) {
-            // Clear existing and set new connections
+            console.log('✅ Loading connections:', savedLayout.connections.length);
+            // Clear existing connections first
             const currentConnections = [...canvasState.canvasState.connections];
             currentConnections.forEach(conn => canvasState.removeConnection(conn.id));
             
+            // Add loaded connections
             savedLayout.connections.forEach((conn) => {
               canvasState.addConnection({
                 fromTeamId: conn.fromTeamId,
                 toTeamId: conn.toTeamId,
                 type: conn.type,
                 createdAt: conn.createdAt,
-                sourceHandle: conn.sourceHandle,
-                targetHandle: conn.targetHandle
+                sourceHandle: conn.sourceHandle || 'right',
+                targetHandle: conn.targetHandle || 'left-target'
               });
             });
           }
           
-          if (savedLayout.positions?.length > 0) {
-            savedLayout.positions.forEach(pos => {
-              canvasState.updateTeamPosition(pos.teamId, { x: pos.x, y: pos.y });
-            });
+          // Load view settings
+          if (savedLayout.viewSettings) {
+            setZoom(savedLayout.viewSettings.zoom || 0.6);
           }
+          
+          // Mark as not having unsaved changes since we just loaded
+          canvasState.markSaved();
+          
+          // Don't add missing positions if we loaded a saved layout
+          console.log('✅ Layout loaded from database - skipping default positions');
+          
+        } else {
+          console.log('🎯 No saved layout found, generating default positions');
+          // Only add default positions if no saved layout exists
+          canvasState.addMissingTeamPositions(teams);
         }
         
-        // Add missing team positions
-        canvasState.addMissingTeamPositions(teams);
+        setHasLoadedInitialData(true);
         
       } catch (error) {
         console.error('Failed to load canvas data:', error);
+        toast.error('Failed to load canvas layout');
+        setHasLoadedInitialData(true);
       }
     };
     
     loadData();
-  }, [readonly, userId]); // Essential deps only
+  }, [readonly, userId, hasLoadedInitialData, teams, persistence, canvasState]);
   
   // Handle connection start (must be defined before nodes useMemo)
   const handleConnectionStart = useCallback((teamId: string, handle: string) => {
@@ -301,7 +335,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   }, [edges, setEdges]);
 
   // Handle node changes (including dragging) - combine React Flow updates with our state management
-  const handleNodesChange = useCallback((changes: any[]) => {
+  const handleNodesChange = useCallback(async (changes: any[]) => {
     // First, let React Flow handle the changes
     onNodesChange(changes);
     
@@ -310,12 +344,42 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
       change.type === 'position' && change.dragging === false
     );
     
-    positionChanges.forEach(change => {
-      if (change.position) {
-        canvasState.updateTeamPosition(change.id, change.position);
+    if (positionChanges.length > 0) {
+      positionChanges.forEach(change => {
+        if (change.position) {
+          canvasState.updateTeamPosition(change.id, change.position);
+        }
+      });
+      
+      // Trigger immediate autosave after position changes
+      if (!readonly && reactFlowInstance) {
+        setTimeout(async () => {
+          try {
+            setIsSaving(true);
+            const viewport = reactFlowInstance.getViewport();
+            const layout = {
+              userId,
+              workspaceId,
+              positions: Array.from(canvasState.canvasState.teamPositions.values()),
+              connections: canvasState.canvasState.connections,
+              viewSettings: {
+                zoom: viewport.zoom,
+                centerX: viewport.x,
+                centerY: viewport.y
+              }
+            };
+            await persistence.saveLayout(layout);
+            canvasState.markSaved();
+            console.log('✅ Position changes auto-saved');
+          } catch (error) {
+            console.error('Failed to auto-save position changes:', error);
+          } finally {
+            setIsSaving(false);
+          }
+        }, 1500); // Wait 1.5 seconds after drag ends
       }
-    });
-  }, [onNodesChange, canvasState]);
+    }
+  }, [onNodesChange, canvasState, readonly, reactFlowInstance, userId, workspaceId, persistence]);
 
   // Handle edge changes 
   const handleEdgesChange = useCallback((changes: any[]) => {
@@ -323,7 +387,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   }, [onEdgesChange]);
   
   // Handle connection creation - always allow connections with default type
-  const onConnect = useCallback((connection: Connection) => {
+  const onConnect = useCallback(async (connection: Connection) => {
     if (readonly) return;
     
     console.log('🔗 Connection attempted:', connection);
@@ -343,27 +407,59 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     // Add to canvas state for persistence
     canvasState.addConnection(newConnectionData);
     
-    // Check again after a short delay to see the actual state
-    setTimeout(() => {
-      console.log('🔗 Connection added, current connections (after delay):', canvasState.canvasState.connections.length);
-    }, 150);
+    // Trigger immediate autosave after connection creation
+    setTimeout(async () => {
+      if (!readonly && reactFlowInstance) {
+        try {
+          setIsSaving(true);
+          const viewport = reactFlowInstance.getViewport();
+          const layout = {
+            userId,
+            workspaceId,
+            positions: Array.from(canvasState.canvasState.teamPositions.values()),
+            connections: canvasState.canvasState.connections,
+            viewSettings: {
+              zoom: viewport.zoom,
+              centerX: viewport.x,
+              centerY: viewport.y
+            }
+          };
+          await persistence.saveLayout(layout);
+          canvasState.markSaved();
+          console.log('✅ Connection changes auto-saved');
+        } catch (error) {
+          console.error('Failed to auto-save connection changes:', error);
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    }, 1000);
     
     toast.success('Teams connected! Click the connection to change relationship type.');
     
-  }, [canvasState, readonly]);
+  }, [canvasState, readonly, reactFlowInstance, userId, workspaceId, persistence]);
   
-  // Toolbar callbacks
-  const handleFitView = useCallback(() => {
-    if (reactFlowInstance && reactFlowInstance.fitView) {
-      reactFlowInstance.fitView({ padding: 0.2, duration: 200 });
-      canvasState.fitView();
+  // Zoom callbacks
+  const handleZoomIn = useCallback(() => {
+    if (reactFlowInstance) {
+      reactFlowInstance.zoomIn();
+      const currentZoom = reactFlowInstance.getZoom();
+      setZoom(currentZoom);
     }
-  }, [reactFlowInstance, canvasState]);
+  }, [reactFlowInstance]);
   
-  const handleResetLayout = useCallback(() => {
-    canvasState.resetLayout();
-    toast.success('Layout reset to default');
-  }, [canvasState]);
+  const handleZoomOut = useCallback(() => {
+    if (reactFlowInstance) {
+      reactFlowInstance.zoomOut();
+      const currentZoom = reactFlowInstance.getZoom();
+      setZoom(currentZoom);
+    }
+  }, [reactFlowInstance]);
+  
+  // Update zoom state when React Flow zoom changes
+  const handleMove = useCallback((_event: any, viewport: any) => {
+    setZoom(viewport.zoom);
+  }, []);
   
   const handleSaveLayout = useCallback(async () => {
     console.log('💾 Save layout triggered');
@@ -453,19 +549,20 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     onEdgesChange: handleEdgesChange,
     onConnect: onConnect,
     onEdgeClick: handleEdgeClick,
+    onMove: handleMove,
     nodeTypes: nodeTypes,
     edgeTypes: edgeTypes,
     connectionMode: ConnectionMode.Loose,
     defaultMarkerColor: "#374151",
     fitView: false,
-    minZoom: 1,
-    maxZoom: 1,
-    zoomOnScroll: false,
-    zoomOnPinch: false,
-    zoomOnDoubleClick: false,
+    minZoom: 0.1,
+    maxZoom: 4,
+    zoomOnScroll: true,
+    zoomOnPinch: true,
+    zoomOnDoubleClick: true,
     panOnScroll: true,
     preventScrolling: false,
-    defaultViewport: { x: 0, y: 0, zoom: 1 },
+    defaultViewport: { x: 0, y: 0, zoom: 0.6 }, // Smaller initial zoom to make teams appear smaller
     proOptions: { hideAttribution: true },
     attributionPosition: 'bottom-left' as const,
     // Ensure connections are enabled
@@ -474,24 +571,24 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     multiSelectionKeyCode: 'Meta',
     snapToGrid: false,
     snapGrid: [15, 15],
-  }), [flowNodes, flowEdges, handleNodesChange, handleEdgesChange, onConnect, handleEdgeClick, nodeTypes, edgeTypes]);
+  }), [flowNodes, flowEdges, handleNodesChange, handleEdgesChange, onConnect, handleEdgeClick, handleMove, nodeTypes, edgeTypes]);
   
   return (
     <div className={`h-full flex flex-col ${className || ''}`}>
       {showToolbar && (
         <CanvasToolbar
-          zoom={1}
-          canZoomIn={false}
-          canZoomOut={false}
+          zoom={zoom}
+          canZoomIn={zoom < 4}
+          canZoomOut={zoom > 0.1}
           viewMode={viewMode}
           connectionMode={null}
           isConnecting={false}
           hasUnsavedChanges={canvasState.hasUnsavedChanges}
-          isSaving={isSaving}
-          onZoomIn={() => {}}
-          onZoomOut={() => {}}
-          onFitView={handleFitView}
-          onResetLayout={handleResetLayout}
+          isSaving={isSaving || persistence.isSaving}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onFitView={() => {}} // Removed functionality
+          onResetLayout={() => {}} // Removed functionality
           onSaveLayout={handleSaveLayout}
           onExportLayout={() => {
             // TODO: Implement export functionality
@@ -503,6 +600,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
             // TODO: Implement settings modal
             toast.info('Settings modal coming soon');
           }}
+          onCreateTeam={onTeamCreate}
           showMinimap={canvasState.canvasState.showMinimap}
           onToggleMinimap={() => {
             // TODO: Add minimap toggle to canvas state
@@ -557,18 +655,11 @@ export const VisualTeamCanvas: React.FC<VisualTeamCanvasProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] h-[90vh] p-0">
-        <DialogHeader className="px-6 pt-6 pb-4">
-          <DialogTitle className="flex items-center space-x-2">
-            <Network className="h-5 w-5" />
-            <span>Team Organization Canvas</span>
-          </DialogTitle>
-          <DialogDescription>
-            Organize your teams visually and show relationships between different groups.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="flex-1 px-6 pb-6 h-[calc(90vh-120px)] overflow-hidden">
+      <DialogContent className="max-w-[95vw] max-h-[95vh] h-[95vh] p-0">
+        <VisuallyHidden>
+          <DialogTitle>Team Organization Canvas</DialogTitle>
+        </VisuallyHidden>
+        <div className="h-full overflow-hidden">
           <ReactFlowProvider>
             <CanvasContent {...props} onClose={onClose} isOpen={isOpen} />
           </ReactFlowProvider>

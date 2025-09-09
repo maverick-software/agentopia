@@ -50,19 +50,36 @@ export function useTeamsWithAgentCounts(): UseTeamsWithAgentCountsReturn {
       
       if (allTeams && allTeams.length > 0) {
         for (const team of allTeams) {
-          const { data: memberCount, error: countError } = await supabase
+          // Get team members and then check which agents belong to the current user
+          const { data: teamMembers, error: countError } = await supabase
             .from('team_members')
-            .select('agent_id, agents!inner(user_id)')
-            .eq('team_id', team.id)
-            .eq('agents.user_id', user.id);
+            .select('agent_id')
+            .eq('team_id', team.id);
 
           if (countError) {
             console.warn(`Error counting agents for team ${team.name}:`, countError);
           }
 
+          let userAgentCount = 0;
+          if (teamMembers && teamMembers.length > 0) {
+            // Get the agents that belong to the current user
+            const agentIds = teamMembers.map(tm => tm.agent_id);
+            const { data: userAgents, error: agentError } = await supabase
+              .from('agents')
+              .select('id')
+              .in('id', agentIds)
+              .eq('user_id', user.id);
+
+            if (agentError) {
+              console.warn(`Error checking user agents for team ${team.name}:`, agentError);
+            } else {
+              userAgentCount = userAgents?.length || 0;
+            }
+          }
+
           teamsWithCounts.push({
             ...team,
-            agent_count: memberCount?.length || 0
+            agent_count: userAgentCount
           });
         }
       }

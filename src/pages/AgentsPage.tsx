@@ -6,11 +6,11 @@ import { supabase, isSupabaseConnected } from '../lib/supabase';
 import type { Agent } from '../types';
 import { CreateAgentWizard } from '../components/CreateAgentWizard';
 import { useTeamsWithAgentCounts } from '../hooks/useTeamsWithAgentCounts';
+import { VisualTeamCanvas } from '../components/teams/canvas/VisualTeamCanvas';
+import { CreateTeamModal } from '../components/modals/CreateTeamModal';
 
 // Maximum number of team tabs to show before creating dropdown
-const MAX_VISIBLE_TEAMS = 7;
-// Maximum characters to show for team names before truncating
-const MAX_TEAM_NAME_CHARS = 15;
+const MAX_VISIBLE_TEAMS = 5;
 
 export function AgentsPage() {
   const { user } = useAuth();
@@ -25,11 +25,13 @@ export function AgentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const [showTeamsCanvas, setShowTeamsCanvas] = useState(false);
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const totalFetchAttempts = useRef(0);
   const MAX_TOTAL_FETCH_ATTEMPTS = 5;
 
   // Fetch teams with agent counts
-  const { teams, loading: teamsLoading } = useTeamsWithAgentCounts();
+  const { teams, loading: teamsLoading, refetch: refetchTeams } = useTeamsWithAgentCounts();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -238,35 +240,35 @@ export function AgentsPage() {
     return filtered;
   }, [agents, searchQuery, selectedTeam]);
 
-  // Compact agent card component
+  // Agent card component - sized for 5 across
   const AgentCard = ({ agent }: { agent: Agent }) => (
     <div 
       onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="group bg-card rounded-lg border border-border hover:border-primary/40 hover:shadow-md transition-all duration-200 cursor-pointer relative p-3"
+      className="group bg-card rounded-xl border border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 cursor-pointer relative p-4"
     >
-      {/* Small link indicator */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <ArrowUpRight className="w-3 h-3 text-muted-foreground" />
+      {/* Link indicator */}
+      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
       </div>
       
-      <div className="flex flex-col items-center text-center space-y-2">
-        {/* Compact avatar */}
+      <div className="flex flex-col items-center text-center space-y-3">
+        {/* Avatar */}
         {agent.avatar_url ? (
           <img 
             src={agent.avatar_url} 
             alt={`${agent.name} avatar`}
-            className="w-10 h-10 rounded-lg object-cover"
+            className="w-16 h-16 rounded-xl object-cover ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300"
           />
         ) : (
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-            <span className="text-primary text-sm font-semibold">
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
+            <span className="text-primary text-lg font-semibold">
               {agent.name.charAt(0).toUpperCase()}
             </span>
           </div>
         )}
         
-        {/* Compact name */}
-        <h3 className="text-xs font-medium text-foreground group-hover:text-primary transition-colors leading-tight">
+        {/* Name */}
+        <h3 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors leading-tight">
           {agent.name}
         </h3>
       </div>
@@ -304,7 +306,7 @@ export function AgentsPage() {
             </div>
             <div className="flex items-center space-x-3 flex-shrink-0">
               <button
-                onClick={() => navigate('/teams')}
+                onClick={() => setShowTeamsCanvas(true)}
                 className="flex items-center px-5 py-2.5 bg-card text-foreground border border-border hover:bg-accent rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
               >
                 <Building2 className="w-4 h-4 mr-2" />
@@ -321,7 +323,7 @@ export function AgentsPage() {
           </div>
 
           {/* Team Tabs */}
-          <div className="flex items-center space-x-2 overflow-x-auto scrollbar-thin scrollbar-thumb-border">
+          <div className="flex items-center space-x-2">
             {/* All tab */}
             <button
               onClick={() => setSelectedTeam('all')}
@@ -339,18 +341,17 @@ export function AgentsPage() {
               <button
                 key={team.id}
                 onClick={() => setSelectedTeam(team.id)}
-                title={team.name}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                   selectedTeam === team.id
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                 }`}
               >
-                {team.name.length > MAX_TEAM_NAME_CHARS ? `${team.name.substring(0, MAX_TEAM_NAME_CHARS)}...` : team.name}
+                {team.name}
               </button>
             ))}
             
-            {/* Dropdown for additional teams if there are more than MAX_VISIBLE_TEAMS */}
+            {/* Mega menu for additional teams if there are more than MAX_VISIBLE_TEAMS */}
             {teams.length > MAX_VISIBLE_TEAMS && (
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
@@ -365,31 +366,65 @@ export function AgentsPage() {
                   <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showTeamDropdown ? 'rotate-180' : ''}`} />
                 </button>
                 
-                {/* Dropdown menu */}
+                {/* Mega menu */}
                 {showTeamDropdown && (
                   <div 
-                    className="absolute top-full mt-1 right-0 bg-card border border-border rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
+                    className="absolute top-full mt-1 right-0 bg-card border border-border rounded-xl shadow-xl z-50 p-4 min-w-[400px] max-w-[600px]"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {teams.slice(MAX_VISIBLE_TEAMS).map((team) => (
-                      <button
-                        key={team.id}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setSelectedTeam(team.id);
-                          setShowTeamDropdown(false);
-                        }}
-                        title={team.name}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 ${
-                          selectedTeam === team.id
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-foreground hover:bg-accent'
-                        }`}
-                      >
-                        {team.name.length > MAX_TEAM_NAME_CHARS ? `${team.name.substring(0, MAX_TEAM_NAME_CHARS)}...` : team.name}
-                      </button>
-                    ))}
+                    <div className="mb-3">
+                      <h3 className="text-sm font-medium text-foreground">More Teams</h3>
+                      <p className="text-xs text-muted-foreground">Select a team to view its agents</p>
+                    </div>
+                    
+                    {/* Grid layout for teams */}
+                    <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                      {teams.slice(MAX_VISIBLE_TEAMS).map((team) => (
+                        <button
+                          key={team.id}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedTeam(team.id);
+                            setShowTeamDropdown(false);
+                          }}
+                          className={`group flex flex-col items-center p-3 rounded-lg transition-all duration-200 text-center ${
+                            selectedTeam === team.id
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'hover:bg-accent text-foreground'
+                          }`}
+                        >
+                          {/* Team icon/avatar */}
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
+                            selectedTeam === team.id
+                              ? 'bg-primary-foreground/20'
+                              : 'bg-gradient-to-br from-primary/20 to-primary/40'
+                          }`}>
+                            <span className={`text-sm font-semibold ${
+                              selectedTeam === team.id
+                                ? 'text-primary-foreground'
+                                : 'text-primary'
+                            }`}>
+                              {team.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          {/* Team name */}
+                          <span className="text-xs font-medium leading-tight line-clamp-2">
+                            {team.name}
+                          </span>
+                          
+                          {/* Agent count */}
+                          <span className={`text-xs mt-1 ${
+                            selectedTeam === team.id
+                              ? 'text-primary-foreground/70'
+                              : 'text-muted-foreground'
+                          }`}>
+                            {team.agent_count} agent{team.agent_count !== 1 ? 's' : ''}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -419,15 +454,15 @@ export function AgentsPage() {
 
         {/* All Agents Grid */}
         {loading ? (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
-            {[...Array(12)].map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+            {[...Array(10)].map((_, i) => (
               <div 
                 key={i} 
-                className="bg-card border border-border rounded-lg p-3 animate-pulse"
+                className="bg-card border border-border rounded-xl p-4 animate-pulse"
               >
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="w-10 h-10 bg-muted rounded-lg"></div>
-                  <div className="h-3 bg-muted rounded w-full"></div>
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-16 h-16 bg-muted rounded-xl"></div>
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
                 </div>
               </div>
             ))}
@@ -477,7 +512,7 @@ export function AgentsPage() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
                 {renderedAgents}
               </div>
             )}
@@ -517,6 +552,65 @@ export function AgentsPage() {
       <CreateAgentWizard 
         open={showCreateModal} 
         onOpenChange={setShowCreateModal} 
+      />
+
+      {/* Teams Canvas Modal - 95% full page */}
+      {user && showTeamsCanvas && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
+          <div className="fixed inset-[2.5%] bg-background border border-border rounded-xl shadow-2xl overflow-hidden">
+            <VisualTeamCanvas
+              isOpen={showTeamsCanvas}
+              onClose={() => setShowTeamsCanvas(false)}
+              teams={teams.map(team => ({
+                id: team.id,
+                name: team.name,
+                description: team.description,
+                created_at: team.created_at,
+                updated_at: team.updated_at,
+                owner_user_id: team.owner_user_id
+              }))}
+              teamMembers={new Map()} // TODO: Implement team members fetching
+              userId={user.id}
+              workspaceId={undefined} // TODO: Implement workspace support
+              onTeamCreate={() => {
+                setShowCreateTeamModal(true);
+              }}
+              onTeamUpdate={async (teamId, updates) => {
+                // TODO: Implement team update
+                console.log('Update team:', teamId, updates);
+                await refetchTeams();
+              }}
+              onTeamDelete={async (teamId) => {
+                // TODO: Implement team delete
+                console.log('Delete team:', teamId);
+                await refetchTeams();
+              }}
+              onLayoutSave={async (layout) => {
+                // Layout persistence is handled by the canvas component
+                console.log('Layout saved:', layout);
+              }}
+              onConnectionCreate={(connection) => {
+                console.log('Connection created:', connection);
+              }}
+              onConnectionDelete={(connectionId) => {
+                console.log('Connection deleted:', connectionId);
+              }}
+              showToolbar={true}
+              defaultViewMode="canvas"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Create Team Modal */}
+      <CreateTeamModal
+        isOpen={showCreateTeamModal}
+        onClose={() => setShowCreateTeamModal(false)}
+        onTeamCreated={async (teamId) => {
+          // Refresh teams list and close modal
+          setShowCreateTeamModal(false);
+          await refetchTeams();
+        }}
       />
     </div>
   );
