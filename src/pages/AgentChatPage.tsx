@@ -268,7 +268,7 @@ export function AgentChatPage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search, agentId, selectedConversationId]);
+  }, [location.search, agentId]);
 
   // Reset messages when switching agent or conversation
   useEffect(() => {
@@ -762,6 +762,30 @@ export function AgentChatPage() {
 					return;
 				}
 
+				// If we just transitioned from temporary to permanent and have messages,
+				// don't clear them - let real-time subscription handle updates
+				if (messages.length > 0 && !isTemporaryConversation) {
+					// Just validate the conversation exists, but don't clear messages
+					try {
+						const { data: sessionRow } = await supabase
+							.from('conversation_sessions')
+							.select('status')
+							.eq('conversation_id', selectedConversationId)
+							.eq('agent_id', agentId)
+							.eq('user_id', user.id)
+							.maybeSingle();
+						if (!sessionRow || sessionRow.status !== 'active') {
+							setSelectedConversationId(null);
+							setIsTemporaryConversation(true);
+							try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
+							setMessages([]);
+							return;
+						}
+					} catch { /* non-fatal; proceed */ }
+					// Conversation is valid, keep existing messages
+					return;
+				}
+
 				// Validate conversation is active; if archived or missing, clear selection and redirect
 				try {
 					const { data: sessionRow } = await supabase
@@ -775,8 +799,6 @@ export function AgentChatPage() {
 						setSelectedConversationId(null);
 						setIsTemporaryConversation(true);
 						try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
-						// Remove conv param from URL to show new conversation screen
-						navigate(`/agents/${agentId}/chat`, { replace: true });
 						setMessages([]);
 						return;
 					}

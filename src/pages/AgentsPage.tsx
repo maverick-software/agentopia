@@ -238,46 +238,37 @@ export function AgentsPage() {
     return filtered;
   }, [agents, searchQuery, selectedTeam]);
 
-  // Profile-style agent card component
+  // Compact agent card component
   const AgentCard = ({ agent }: { agent: Agent }) => (
     <div 
       onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="group bg-card rounded-2xl border border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 overflow-hidden cursor-pointer relative"
+      className="group bg-card rounded-lg border border-border hover:border-primary/40 hover:shadow-md transition-all duration-200 cursor-pointer relative p-3"
     >
-      {/* Permanent link arrow indicator */}
-      <div className="absolute top-4 right-4 z-10">
-        <div className="w-8 h-8 bg-background/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm border border-border/50 group-hover:bg-primary group-hover:border-primary transition-all duration-200">
-          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary-foreground transition-colors duration-200" />
-        </div>
+      {/* Small link indicator */}
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <ArrowUpRight className="w-3 h-3 text-muted-foreground" />
       </div>
       
-      <div className="p-6">
-        {/* Large centered avatar */}
-        <div className="flex justify-center mb-4">
-          {agent.avatar_url ? (
-            <img 
-              src={agent.avatar_url} 
-              alt={`${agent.name} avatar`}
-              className="w-20 h-20 rounded-2xl object-cover ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
-              <span className="text-primary text-2xl font-semibold">
-                {agent.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
+      <div className="flex flex-col items-center text-center space-y-2">
+        {/* Compact avatar */}
+        {agent.avatar_url ? (
+          <img 
+            src={agent.avatar_url} 
+            alt={`${agent.name} avatar`}
+            className="w-10 h-10 rounded-lg object-cover"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
+            <span className="text-primary text-sm font-semibold">
+              {agent.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        )}
         
-        {/* Centered content */}
-        <div className="text-center">
-          <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors mb-2">
-            {agent.name}
-          </h3>
-          <p className="text-muted-foreground text-sm line-clamp-3 leading-relaxed">
-            {agent.description || 'A helpful AI assistant ready to assist you with various tasks and questions.'}
-          </p>
-        </div>
+        {/* Compact name */}
+        <h3 className="text-xs font-medium text-foreground group-hover:text-primary transition-colors leading-tight">
+          {agent.name}
+        </h3>
       </div>
     </div>
   );
@@ -304,9 +295,9 @@ export function AgentsPage() {
     <div className="min-h-screen bg-background">
       {/* Header Section */}
       <div className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-6">
           {/* Title and Action Buttons */}
-            <div className="flex items-start justify-between mb-6">
+            <div className="flex items-start justify-between mb-4">
             <div className="flex-1 pr-8">
               <h1 className="text-2xl font-bold text-foreground mb-2">Meet Your AI Team</h1>
               <p className="text-muted-foreground">Manage and organize your AI agents by teams</p>
@@ -408,7 +399,7 @@ export function AgentsPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="max-w-7xl mx-auto px-6 py-6">
         
         {/* Error State */}
         {error && (
@@ -428,24 +419,15 @@ export function AgentsPage() {
 
         {/* All Agents Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {[...Array(8)].map((_, i) => (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
+            {[...Array(12)].map((_, i) => (
               <div 
                 key={i} 
-                className="bg-card border border-border rounded-2xl p-6 animate-pulse"
+                className="bg-card border border-border rounded-lg p-3 animate-pulse"
               >
-                {/* Skeleton avatar */}
-                <div className="flex justify-center mb-4">
-                  <div className="w-20 h-20 bg-muted rounded-2xl"></div>
-                </div>
-                {/* Skeleton content */}
-                <div className="text-center space-y-3">
-                  <div className="h-5 bg-muted rounded w-3/4 mx-auto"></div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-muted rounded w-full"></div>
-                    <div className="h-3 bg-muted rounded w-4/5 mx-auto"></div>
-                    <div className="h-3 bg-muted rounded w-2/3 mx-auto"></div>
-                  </div>
+                <div className="flex flex-col items-center space-y-2">
+                  <div className="w-10 h-10 bg-muted rounded-lg"></div>
+                  <div className="h-3 bg-muted rounded w-full"></div>
                 </div>
               </div>
             ))}
@@ -495,7 +477,7 @@ export function AgentsPage() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
                 {renderedAgents}
               </div>
             )}

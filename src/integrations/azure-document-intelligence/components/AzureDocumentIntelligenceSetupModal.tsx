@@ -246,160 +246,151 @@ export function AzureDocumentIntelligenceSetupModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-0 bg-background border-border">
-        <div className="relative overflow-hidden bg-background">
-          {/* Header */}
-          <div className="px-6 py-4 bg-muted/30 border-b border-border">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-foreground text-xl font-semibold">
-                <FileText className="h-6 w-6 text-blue-600" />
-                Set up Azure Document Intelligence
-              </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Connect Microsoft's enterprise-grade document analysis service for advanced text extraction and form processing.
-              </p>
-            </DialogHeader>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto border-0 bg-white dark:bg-gray-900" style={{ zIndex: 9999 }}>
+        <DialogHeader className="pb-4">
+          <DialogTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+            <FileText className="h-5 w-5 text-blue-600" />
+            Set up Azure Document Intelligence
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 pr-2">
+          {/* Connection Name */}
+          <div className="space-y-2">
+            <Label htmlFor="connection_name" className="text-gray-700 dark:text-gray-300">
+              Connection Name
+            </Label>
+            <Input
+              id="connection_name"
+              type="text"
+              value={formData.connection_name}
+              onChange={(e) => handleInputChange('connection_name', e.target.value)}
+              placeholder="Azure Document Intelligence"
+              className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+            />
           </div>
 
-          {/* Content */}
-          <div className="px-6 py-6 space-y-6">
-            {/* Connection Name */}
-            <div className="space-y-2">
-              <Label htmlFor="connection_name" className="text-foreground font-medium">
-                Connection Name
-              </Label>
-              <Input
-                id="connection_name"
-                type="text"
-                value={formData.connection_name}
-                onChange={(e) => handleInputChange('connection_name', e.target.value)}
-                placeholder="Azure Document Intelligence"
-                className="bg-background border-border"
-              />
-            </div>
+          {/* API Key */}
+          <div className="space-y-2">
+            <Label htmlFor="api_key" className="text-gray-700 dark:text-gray-300">
+              API Key *
+            </Label>
+            <Input
+              id="api_key"
+              type="password"
+              value={formData.api_key}
+              onChange={(e) => handleInputChange('api_key', e.target.value)}
+              placeholder="Enter your Azure Form Recognizer API key"
+              className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Found in your Azure portal under Keys and Endpoint
+            </p>
+          </div>
 
-            {/* API Key */}
-            <div className="space-y-2">
-              <Label htmlFor="api_key" className="text-foreground font-medium">
-                API Key *
-              </Label>
-              <Input
-                id="api_key"
-                type="password"
-                value={formData.api_key}
-                onChange={(e) => handleInputChange('api_key', e.target.value)}
-                placeholder="Enter your Azure Form Recognizer API key"
-                className="bg-background border-border"
-              />
-              <p className="text-xs text-muted-foreground">
-                Found in your Azure portal under Keys and Endpoint
-              </p>
-            </div>
+          {/* Endpoint URL */}
+          <div className="space-y-2">
+            <Label htmlFor="endpoint" className="text-gray-700 dark:text-gray-300">
+              Endpoint URL *
+            </Label>
+            <Input
+              id="endpoint"
+              type="url"
+              value={formData.endpoint}
+              onChange={(e) => handleInputChange('endpoint', e.target.value)}
+              placeholder="https://your-resource.cognitiveservices.azure.com/"
+              className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Your Form Recognizer endpoint from the Azure portal
+            </p>
+          </div>
 
-            {/* Endpoint URL */}
-            <div className="space-y-2">
-              <Label htmlFor="endpoint" className="text-foreground font-medium">
-                Endpoint URL *
-              </Label>
-              <Input
-                id="endpoint"
-                type="url"
-                value={formData.endpoint}
-                onChange={(e) => handleInputChange('endpoint', e.target.value)}
-                placeholder="https://your-resource.cognitiveservices.azure.com/"
-                className="bg-background border-border"
-              />
-              <p className="text-xs text-muted-foreground">
-                Your Form Recognizer endpoint from the Azure portal
-              </p>
-            </div>
+          {/* Region */}
+          <div className="space-y-2">
+            <Label htmlFor="region" className="text-gray-700 dark:text-gray-300">
+              Azure Region *
+            </Label>
+            <Select value={formData.region} onValueChange={(value) => handleInputChange('region', value)}>
+              <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                <SelectValue placeholder="Select your Azure region" />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                {AZURE_REGIONS.map((region) => (
+                  <SelectItem key={region.value} value={region.value}>
+                    {region.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            {/* Region */}
-            <div className="space-y-2">
-              <Label htmlFor="region" className="text-foreground font-medium">
-                Azure Region *
-              </Label>
-              <Select value={formData.region} onValueChange={(value) => handleInputChange('region', value)}>
-                <SelectTrigger className="bg-background border-border">
-                  <SelectValue placeholder="Select your Azure region" />
-                </SelectTrigger>
-                <SelectContent className="bg-background border-border">
-                  {AZURE_REGIONS.map((region) => (
-                    <SelectItem key={region.value} value={region.value}>
-                      {region.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Connection Test */}
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={testConnection}
-                disabled={testingConnection || !formData.api_key || !formData.endpoint}
-                className="flex items-center gap-2 border-border"
-              >
-                {testingConnection ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : connectionTestResult === 'success' ? (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                ) : connectionTestResult === 'error' ? (
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                ) : null}
-                Test Connection
-              </Button>
-              {connectionTestResult === 'success' && (
-                <span className="text-sm text-green-600 dark:text-green-400">Connection successful!</span>
-              )}
-            </div>
-
-            {/* Setup Instructions */}
-            <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-              <FileText className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-800 dark:text-blue-200">
-                <div className="space-y-2">
-                  <p className="font-medium">Setup Instructions:</p>
-                  <ol className="text-sm space-y-1 list-decimal list-inside">
-                    <li>Create a Form Recognizer resource in Azure portal</li>
-                    <li>Navigate to Keys and Endpoint section</li>
-                    <li>Copy your API key and endpoint URL</li>
-                    <li>Select the matching Azure region</li>
-                  </ol>
-                  <a 
-                    href="https://docs.microsoft.com/en-us/azure/cognitive-services/form-recognizer/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    View Azure Documentation <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              </AlertDescription>
-            </Alert>
-
-            {/* Error Display */}
-            {error && (
-              <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          {/* Connection Test */}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={testConnection}
+              disabled={testingConnection || !formData.api_key || !formData.endpoint}
+              className="flex items-center gap-2"
+            >
+              {testingConnection ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : connectionTestResult === 'success' ? (
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              ) : connectionTestResult === 'error' ? (
                 <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800 dark:text-red-200">
-                  {error}
-                </AlertDescription>
-              </Alert>
+              ) : null}
+              Test Connection
+            </Button>
+            {connectionTestResult === 'success' && (
+              <span className="text-sm text-green-600 dark:text-green-400">Connection successful!</span>
             )}
           </div>
 
+          {/* Setup Instructions */}
+          <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+            <FileText className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800 dark:text-blue-200">
+              <div className="space-y-2">
+                <p className="font-medium">Setup Instructions:</p>
+                <ol className="text-sm space-y-1 list-decimal list-inside">
+                  <li>Create a Form Recognizer resource in Azure portal</li>
+                  <li>Navigate to Keys and Endpoint section</li>
+                  <li>Copy your API key and endpoint URL</li>
+                  <li>Select the matching Azure region</li>
+                </ol>
+                <a 
+                  href="https://docs.microsoft.com/en-us/azure/cognitive-services/form-recognizer/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  View Azure Documentation <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </AlertDescription>
+          </Alert>
+
+          {/* Error Display */}
+          {error && (
+            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800 dark:text-red-200">
+                {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 px-6 py-4 bg-muted/30 border-t border-border">
+          <div className="flex justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
-              className="border-border"
+              className="border-gray-300 dark:border-gray-600"
             >
               Cancel
             </Button>
