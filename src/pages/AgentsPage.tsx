@@ -1,24 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, RefreshCw, Search, Sparkles, ArrowUpRight, Building2 } from 'lucide-react';
+import { Plus, RefreshCw, Search, ArrowUpRight, Building2, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
 import type { Agent } from '../types';
 import { CreateAgentWizard } from '../components/CreateAgentWizard';
+import { useTeamsWithAgentCounts } from '../hooks/useTeamsWithAgentCounts';
 
-// Agent categories for filtering
-const AGENT_CATEGORIES = [
-  { id: 'all', name: 'All', description: 'All agents' },
-  { id: 'featured', name: 'Featured', description: 'Highlighted agents' },
-  { id: 'productivity', name: 'Productivity', description: 'Boost your productivity' },
-  { id: 'communication', name: 'Communication', description: 'Email, chat, and messaging' },
-  { id: 'content', name: 'Content Creation', description: 'Writing and creative work' },
-  { id: 'analysis', name: 'Data Analysis', description: 'Data processing and insights' },
-  { id: 'automation', name: 'Automation', description: 'Workflow automation' },
-  { id: 'customer-service', name: 'Customer Service', description: 'Support and assistance' }
-] as const;
-
-type AgentCategory = typeof AGENT_CATEGORIES[number]['id'];
+// Maximum number of team tabs to show before creating dropdown
+const MAX_VISIBLE_TEAMS = 7;
+// Maximum characters to show for team names before truncating
+const MAX_TEAM_NAME_CHARS = 15;
 
 export function AgentsPage() {
   const { user } = useAuth();
@@ -31,9 +23,25 @@ export function AgentsPage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('all');
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
   const totalFetchAttempts = useRef(0);
   const MAX_TOTAL_FETCH_ATTEMPTS = 5;
+
+  // Fetch teams with agent counts
+  const { teams, loading: teamsLoading } = useTeamsWithAgentCounts();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (showTeamDropdown) {
+        setShowTeamDropdown(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showTeamDropdown]);
 
   const fetchAgents = useCallback(async (isInitialCall = true) => {
     if (!user) return;
@@ -64,19 +72,49 @@ export function AgentsPage() {
       if (!isConnected) throw new Error('Unable to connect to the database.');
       console.log('DEBUG: Supabase connection successful');
 
+      // First, fetch all agents for the user
       const { data, error: fetchError } = await supabase
         .from('agents')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
+      if (fetchError) throw fetchError;
+
+      // Then, fetch team memberships for these agents
+      if (data && data.length > 0) {
+        const agentIds = data.map(agent => agent.id);
+        const { data: teamMemberships, error: membershipError } = await supabase
+          .from('team_members')
+          .select(`
+            agent_id,
+            team_id,
+            teams(
+              id,
+              name
+            )
+          `)
+          .in('agent_id', agentIds);
+
+        if (membershipError) {
+          console.warn('Error fetching team memberships:', membershipError);
+        }
+
+        // Attach team membership data to agents
+        const agentsWithTeams = data.map(agent => ({
+          ...agent,
+          team_members: teamMemberships?.filter(tm => tm.agent_id === agent.id) || []
+        }));
+
+        console.log('DEBUG: Setting agents with team data');
+        setAgents(agentsWithTeams);
+      } else {
+        setAgents(data || []);
+      }
+
       console.log('DEBUG: Supabase query result:', { data, error: fetchError });
       console.log('DEBUG: Number of agents found:', data?.length || 0);
 
-      if (fetchError) throw fetchError;
-
-      console.log('DEBUG: Setting agents and loading state');
-      setAgents(data || []);
       setLoading(false);
       setIsRetrying(false);
       if (isInitialCall) totalFetchAttempts.current = 0;
@@ -188,18 +226,17 @@ export function AgentsPage() {
       );
     }
 
-    // Apply category filter
-    if (selectedCategory !== 'all') {
-      // For now, we'll just show featured agents as active ones
-      // In the future, this could be based on agent tags or categories
-      if (selectedCategory === 'featured') {
-        filtered = filtered.filter(agent => agent.active);
-      }
-      // Add more category filtering logic here as needed
+    // Apply team filter
+    if (selectedTeam !== 'all') {
+      filtered = filtered.filter(agent => {
+        // Check if agent is a member of the selected team
+        const agentTeams = (agent as any).team_members || [];
+        return agentTeams.some((membership: any) => membership.team_id === selectedTeam);
+      });
     }
 
     return filtered;
-  }, [agents, searchQuery, selectedCategory]);
+  }, [agents, searchQuery, selectedTeam]);
 
   // Profile-style agent card component
   const AgentCard = ({ agent }: { agent: Agent }) => (
@@ -269,10 +306,10 @@ export function AgentsPage() {
       <div className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-8">
           {/* Title and Action Buttons */}
-          <div className="flex items-start justify-between mb-8">
+            <div className="flex items-start justify-between mb-6">
             <div className="flex-1 pr-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Discover custom agents designed for different uses</h1>
-              <p className="text-muted-foreground text-lg">Enhance your productivity, streamline workflows, and get things done with AI agents</p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Meet Your AI Team</h1>
+              <p className="text-muted-foreground">Manage and organize your AI agents by teams</p>
             </div>
             <div className="flex items-center space-x-3 flex-shrink-0">
               <button
@@ -292,33 +329,80 @@ export function AgentsPage() {
             </div>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative max-w-2xl mb-6">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search agents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3.5 bg-card border border-border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all duration-200 shadow-sm"
-            />
-          </div>
-
-          {/* Category Tabs */}
-          <div className="flex space-x-2 overflow-x-auto scrollbar-thin scrollbar-thumb-border">
-            {AGENT_CATEGORIES.map((category) => (
+          {/* Team Tabs */}
+          <div className="flex items-center space-x-2 overflow-x-auto scrollbar-thin scrollbar-thumb-border">
+            {/* All tab */}
+            <button
+              onClick={() => setSelectedTeam('all')}
+              className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                selectedTeam === 'all'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+              }`}
+            >
+              All
+            </button>
+            
+            {/* Visible team tabs (up to MAX_VISIBLE_TEAMS) */}
+            {teams.slice(0, MAX_VISIBLE_TEAMS).map((team) => (
               <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                key={team.id}
+                onClick={() => setSelectedTeam(team.id)}
+                title={team.name}
                 className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  selectedCategory === category.id
+                  selectedTeam === team.id
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                 }`}
               >
-                {category.name}
+                {team.name.length > MAX_TEAM_NAME_CHARS ? `${team.name.substring(0, MAX_TEAM_NAME_CHARS)}...` : team.name}
               </button>
             ))}
+            
+            {/* Dropdown for additional teams if there are more than MAX_VISIBLE_TEAMS */}
+            {teams.length > MAX_VISIBLE_TEAMS && (
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowTeamDropdown(!showTeamDropdown);
+                  }}
+                  className="flex items-center space-x-1 px-4 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-all duration-200"
+                >
+                  <span>More</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showTeamDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Dropdown menu */}
+                {showTeamDropdown && (
+                  <div 
+                    className="absolute top-full mt-1 right-0 bg-card border border-border rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {teams.slice(MAX_VISIBLE_TEAMS).map((team) => (
+                      <button
+                        key={team.id}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedTeam(team.id);
+                          setShowTeamDropdown(false);
+                        }}
+                        title={team.name}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 ${
+                          selectedTeam === team.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-foreground hover:bg-accent'
+                        }`}
+                      >
+                        {team.name.length > MAX_TEAM_NAME_CHARS ? `${team.name.substring(0, MAX_TEAM_NAME_CHARS)}...` : team.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -341,20 +425,6 @@ export function AgentsPage() {
           </div>
         )}
 
-        {/* Featured Section (when on 'all' or 'featured' category) */}
-        {(selectedCategory === 'all' || selectedCategory === 'featured') && !loading && !error && (
-          <div className="mb-12">
-            <div className="flex items-center space-x-3 mb-6">
-              <Sparkles className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-semibold text-foreground">Featured</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {filteredAgents.filter(agent => agent.active).slice(0, 4).map((agent) => (
-                <AgentCard key={`featured-${agent.id}`} agent={agent} />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* All Agents Grid */}
         {loading ? (
@@ -380,39 +450,55 @@ export function AgentsPage() {
               </div>
             ))}
           </div>
-        ) : filteredAgents.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Plus className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">
-              {searchQuery.trim() ? 'No agents found' : 'No agents yet'}
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              {searchQuery.trim() 
-                ? `No agents match "${searchQuery}". Try a different search term.`
-                : 'Create your first agent to get started with AI assistance.'
-              }
-            </p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors duration-200 font-medium"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Agent
-            </button>
-          </div>
         ) : (
           <div>
-            <div className="flex items-center justify-between mb-8">
+            {/* Search Bar - smaller and more discreet */}
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-semibold text-foreground">
-                {selectedCategory === 'all' ? 'All Agents' : AGENT_CATEGORIES.find(c => c.id === selectedCategory)?.name}
+                {selectedTeam === 'all' ? 'All Agents' : teams.find(t => t.id === selectedTeam)?.name || 'Team Agents'}
                 <span className="text-muted-foreground font-normal ml-3 text-lg">({filteredAgents.length})</span>
               </h2>
+              
+              {/* Smaller search bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search agents..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-64 pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all duration-200"
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {renderedAgents}
-            </div>
+            
+            {filteredAgents.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Plus className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {searchQuery.trim() ? 'No agents found' : 'No agents yet'}
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  {searchQuery.trim() 
+                    ? `No agents match "${searchQuery}". Try a different search term.`
+                    : 'Create your first agent to get started with AI assistance.'
+                  }
+                </p>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors duration-200 font-medium"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Agent
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {renderedAgents}
+              </div>
+            )}
           </div>
         )}
       </div>

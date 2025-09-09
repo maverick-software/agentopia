@@ -69,10 +69,9 @@ export function AgentChatPage() {
     const urlConvId = params.get('conv');
     if (urlConvId) return urlConvId;
     
-    // Generate a temporary conversation ID immediately for better UX
-    // This allows real-time subscriptions to be established before first message
-    const tempConvId = crypto.randomUUID();
-    return tempConvId;
+    // If no URL conversation, return null initially
+    // We'll generate the temporary ID in useEffect to properly update the URL
+    return null;
   });
   
   // Track if we're creating a new conversation to prevent race conditions
@@ -81,7 +80,7 @@ export function AgentChatPage() {
   const [isTemporaryConversation, setIsTemporaryConversation] = useState(() => {
     const params = new URLSearchParams(location.search);
     const urlConvId = params.get('conv');
-    // If no conversation in URL, we're starting with a temporary one
+    // If no conversation in URL, we'll need to create a temporary one
     return !urlConvId;
   });
   // Reasoning toggle (persist per agent in localStorage)
@@ -228,14 +227,30 @@ export function AgentChatPage() {
     return () => window.removeEventListener('agentopia:conversation:activated', handler as EventListener);
   }, [agentId]);
 
+  // Generate temporary conversation ID and update URL when needed
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const conv = params.get('conv');
+    
     if (conv && conv !== selectedConversationId) {
       // URL has a conversation ID, use it
       setSelectedConversationId(conv);
       setIsTemporaryConversation(false); // URL conversations are not temporary
       if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
+    } else if (!conv && !selectedConversationId && agentId) {
+      // No conversation ID in URL or state - generate temporary one and update URL
+      const tempConvId = crypto.randomUUID();
+      setSelectedConversationId(tempConvId);
+      setIsTemporaryConversation(true);
+      setMessages([]);
+      // Update URL to include the temporary conversation ID
+      navigate(`/agents/${agentId}/chat?conv=${tempConvId}`, { replace: true });
+      if (agentId) {
+        try { 
+          localStorage.removeItem(`agent_${agentId}_conversation_id`);
+          localStorage.removeItem(`agent_${agentId}_session_id`);
+        } catch {}
+      }
     } else if (!conv && selectedConversationId) {
       // URL has no conversation ID but we have one in state
       // Generate a new temporary conversation for better UX
@@ -243,6 +258,8 @@ export function AgentChatPage() {
       setSelectedConversationId(tempConvId);
       setIsTemporaryConversation(true);
       setMessages([]);
+      // Update URL to include the new temporary conversation ID
+      navigate(`/agents/${agentId}/chat?conv=${tempConvId}`, { replace: true });
       if (agentId) {
         try { 
           localStorage.removeItem(`agent_${agentId}_conversation_id`);
@@ -251,7 +268,7 @@ export function AgentChatPage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search, agentId]);
+  }, [location.search, agentId, selectedConversationId]);
 
   // Reset messages when switching agent or conversation
   useEffect(() => {
