@@ -538,6 +538,31 @@ export class FunctionCallingManager {
         return formattedResult;
       }
       
+      // Special handling for search_document_content
+      if (functionName === 'search_document_content' && result.data?.results) {
+        let formattedResult = `Found ${result.data.results_found} result(s) for "${result.data.search_query}" in ${result.data.document_name}`;
+        if (result.data.total_matches > result.data.results_found) {
+          formattedResult += ` (showing top ${result.data.results_found} of ${result.data.total_matches} matches)`;
+        }
+        formattedResult += `:\n\n`;
+        
+        for (const match of result.data.results) {
+          formattedResult += `🔍 **Match ${match.rank}** (Relevance: ${Math.round(match.relevance_score * 100)}%)\n`;
+          formattedResult += `Position: Character ${match.character_position.toLocaleString()}\n\n`;
+          
+          if (match.context.before) {
+            formattedResult += `...${match.context.before}\n`;
+          }
+          formattedResult += `**${match.snippet}**\n`;
+          if (match.context.after) {
+            formattedResult += `${match.context.after}...\n`;
+          }
+          formattedResult += `\n---\n\n`;
+        }
+        
+        return formattedResult;
+      }
+      
       // Format successful result (generic)
       let formattedResult = `✅ Successfully executed ${functionName}`;
       

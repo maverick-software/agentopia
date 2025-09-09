@@ -294,15 +294,23 @@ async function handler(req: Request): Promise<Response> {
             const headers = createResponseHeaders({ requestId });
             return new Response(
               JSON.stringify({
-                error: 'context_overflow',
-                title: 'Message is too long to process',
-                message:
-                  'I tried trimming older history three times, but this request still exceeds the model\'s limits.',
+                success: false,
+                error: 'context_window_exceeded',
+                error_type: 'CONTEXT_WINDOW_EXCEEDED',
+                title: 'Document Too Large for Context Window',
+                message: 'I apologize, but the document you\'re asking about is too large to process in our current conversation context. The document contains a lot of content that would exceed my context window limits.',
+                agent_instructions: 'Please inform the user that the document is too large for the current conversation context. Suggest they either: 1) Ask specific questions about particular topics in the document, 2) Request a search within the document using search_document_content tool, or 3) Start a new conversation to discuss the document.',
+                technical_details: {
+                  reason: 'Request exceeds context window limits after multiple optimization attempts',
+                  attempts_made: 'Tried trimming conversation history three times',
+                  suggestion: 'Use targeted document search or start fresh conversation'
+                },
                 tips: [
-                  'Clear chat history or start a new conversation',
-                  'Shorten the message or remove large attachments',
-                  'Choose a model with a larger context window',
-                ],
+                  'Ask specific questions about the document content',
+                  'Use document search to find specific information',
+                  'Start a new conversation to discuss this document',
+                  'Break your question into smaller, more focused parts'
+                ]
               }),
               { status: 413, headers: { ...headers, ...CORS_HEADERS } }
             );

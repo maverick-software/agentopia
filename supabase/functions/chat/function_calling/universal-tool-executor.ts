@@ -226,6 +226,17 @@ const TOOL_ROUTING_MAP: Record<string, {
     })
   },
   
+  'search_document_content': {
+    edgeFunction: 'media-library-mcp',
+    actionMapping: () => 'search_document_content',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'search_document_content',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
   'get_document_summary': {
     edgeFunction: 'media-library-mcp',
     actionMapping: () => 'get_document_summary',

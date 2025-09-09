@@ -135,7 +135,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
 
         {/* Main message content */}
       <div
-        className={`relative group rounded-lg p-3 text-sm break-words shadow-md ${
+        className={`relative group rounded-lg p-3 text-sm break-words overflow-wrap-anywhere shadow-md ${
           message.role === 'user'
             ? 'bg-muted text-foreground'
             : 'bg-secondary text-secondary-foreground'
@@ -154,7 +154,7 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
                   )}
                 </div>
         )}
-        <div className="break-words">
+        <div className="break-words overflow-wrap-anywhere w-full">
           {formattedContent}
         </div>
             </div>

@@ -68,7 +68,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                 return index;
               }
             })()}`}
-            className={`flex items-start space-x-4 animate-fade-in ${
+            className={`flex items-start space-x-4 animate-fade-in max-w-full ${
               message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
             }`}
           >
@@ -108,7 +108,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
             </div>
             
             {/* Message Content */}
-            <div className={`flex-1 min-w-0 max-w-[70%] ${
+            <div className={`flex-1 min-w-0 max-w-[70%] overflow-hidden ${
               message.role === 'user' ? 'text-right' : 'text-left'
             }`}>
               <div className={`mb-1 flex items-center space-x-2 ${
@@ -180,31 +180,31 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   })()}
                 </span>
               </div>
-            <div className={`inline-block p-3 rounded-2xl shadow-sm text-left ${
+            <div className={`block w-full p-3 rounded-2xl shadow-sm text-left break-words overflow-wrap-anywhere ${
                 message.role === 'user' 
                   ? 'bg-primary text-primary-foreground' 
                   : 'bg-card text-card-foreground'
               }`}>
                 {message.role === 'assistant' ? (
-                  <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none
+                  <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words overflow-wrap-anywhere
                     prose-headings:mt-4 prose-headings:mb-3 prose-headings:font-semibold
-                    prose-p:my-3 prose-p:leading-7
+                    prose-p:my-3 prose-p:leading-7 prose-p:break-words prose-p:overflow-wrap-anywhere
                     prose-ul:my-3 prose-ul:pl-6 prose-ul:list-disc prose-ul:space-y-2
                     prose-ol:my-3 prose-ol:pl-6 prose-ol:list-decimal prose-ol:space-y-2
-                    prose-li:my-1 prose-li:leading-7
-                    prose-pre:my-4 prose-pre:p-4 prose-pre:bg-muted prose-pre:rounded-lg
-                    prose-code:px-1.5 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm prose-code:font-mono
+                    prose-li:my-1 prose-li:leading-7 prose-li:break-words prose-li:overflow-wrap-anywhere
+                    prose-pre:my-4 prose-pre:p-4 prose-pre:bg-muted prose-pre:rounded-lg prose-pre:overflow-x-auto prose-pre:max-w-full prose-pre:break-all prose-pre:whitespace-pre-wrap
+                    prose-code:px-1.5 prose-code:py-0.5 prose-code:bg-muted prose-code:rounded prose-code:text-sm prose-code:font-mono prose-code:break-words
                     prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground/30 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-4
                     prose-strong:font-semibold prose-strong:text-foreground
-                    prose-a:text-primary prose-a:underline prose-a:underline-offset-2
+                    prose-a:text-primary prose-a:underline prose-a:underline-offset-2 prose-a:break-words
                     prose-hr:my-6 prose-hr:border-muted-foreground/30
                     [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        // Custom paragraph renderer to ensure spacing
+                        // Custom paragraph renderer to ensure spacing and proper word breaking
                         p: ({children}: any) => (
-                          <p className="my-3 leading-7">{children}</p>
+                          <p className="my-3 leading-7 break-words overflow-wrap-anywhere max-w-full">{children}</p>
                         ),
                         // Custom list renderers
                         ul: ({children}: any) => (
@@ -214,7 +214,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                           <ol className="my-3 pl-6 list-decimal space-y-2">{children}</ol>
                         ),
                         li: ({children}: any) => (
-                          <li className="my-1 leading-7">{children}</li>
+                          <li className="my-1 leading-7 break-words overflow-wrap-anywhere max-w-full">{children}</li>
                         ),
                         // Headers with spacing
                         h1: ({children}: any) => (
@@ -226,17 +226,17 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                         h3: ({children}: any) => (
                           <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>
                         ),
-                        // Ensure code blocks render properly
+                        // Ensure code blocks render properly with proper overflow handling
                         code: ({node, inline, className, children, ...props}: any) => {
                           const match = /language-(\w+)/.exec(className || '');
                           return !inline && match ? (
-                            <pre className="my-4 p-4 bg-muted rounded-lg overflow-x-auto">
-                              <code className={`text-sm font-mono ${className}`} {...props}>
+                            <pre className="my-4 p-4 bg-muted rounded-lg overflow-x-auto max-w-full">
+                              <code className={`text-sm font-mono break-all whitespace-pre-wrap ${className}`} {...props}>
                                 {children}
                               </code>
                             </pre>
                           ) : (
-                            <code className="px-1.5 py-0.5 bg-muted rounded text-sm font-mono" {...props}>
+                            <code className="px-1.5 py-0.5 bg-muted rounded text-sm font-mono break-all" {...props}>
                               {children}
                             </code>
                           );
@@ -257,7 +257,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="text-sm leading-relaxed">
+                  <div className="text-sm leading-relaxed break-words overflow-wrap-anywhere">
                     {/* Display attachment indicators for user messages */}
                     {message.role === 'user' && message.metadata?.attachments && message.metadata.attachments.length > 0 && (
                       <div className="mb-2 flex flex-wrap gap-1">
@@ -274,8 +274,8 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                         ))}
                       </div>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span>{message.content}</span>
+                    <div className="w-full">
+                      <span className="break-words overflow-wrap-anywhere">{message.content}</span>
                     </div>
                   </div>
                 )}

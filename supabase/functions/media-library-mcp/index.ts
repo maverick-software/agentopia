@@ -15,6 +15,13 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// Import OCR library
+import { createWorker } from 'npm:tesseract.js@5.0.4';
+
+// Import comprehensive document processing libraries
+import * as mammoth from 'npm:mammoth@1.6.0'; // For .docx and .doc files
+import * as XLSX from 'npm:xlsx@0.18.5'; // For .xlsx, .xls files
+
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -176,6 +183,362 @@ async function extractTextFromDOCX(docxData: Uint8Array): Promise<string> {
   }
 }
 
+async function extractTextFromXLSX(fileData: Uint8Array, fileName: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary MCP] Extracting text from XLSX: ${fileName}`);
+    
+    const workbook = XLSX.read(fileData, { type: 'array' });
+    const allText: string[] = [];
+    
+    // Process all worksheets
+    for (const sheetName of workbook.SheetNames) {
+      console.log(`[MediaLibrary MCP] Processing sheet: ${sheetName}`);
+      const worksheet = workbook.Sheets[sheetName];
+      
+      // Convert sheet to CSV format and then extract text
+      const csvData = XLSX.utils.sheet_to_csv(worksheet);
+      if (csvData.trim()) {
+        allText.push(`=== Sheet: ${sheetName} ===\n${csvData}`);
+      }
+    }
+    
+    const extractedText = allText.join('\n\n');
+    console.log(`[MediaLibrary MCP] Extracted ${extractedText.length} characters from XLSX`);
+    
+    return extractedText;
+  } catch (error: any) {
+    console.error('[MediaLibrary MCP] XLSX extraction error:', error);
+    return `Error extracting text from XLSX: ${error.message}. The file may be corrupted or password-protected.`;
+  }
+}
+
+async function extractTextFromPPTX(fileData: Uint8Array, fileName: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary MCP] Extracting text from PPTX: ${fileName}`);
+    
+    // PPTX files are ZIP archives - we can try to extract XML content
+    // For now, return a placeholder message and use OCR as fallback
+    console.log(`[MediaLibrary MCP] PPTX text extraction not fully implemented - will use OCR fallback`);
+    throw new Error('PPTX text extraction requires OCR processing');
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary MCP] PPTX extraction error:', error);
+    throw error; // Let it fall through to OCR processing
+  }
+}
+
+async function extractTextFromDOC(fileData: Uint8Array, fileName: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary MCP] Extracting text from DOC/DOCX: ${fileName}`);
+    
+    // Mammoth can handle both .doc and .docx files
+    const result = await mammoth.extractRawText({ buffer: fileData });
+    
+    if (result.messages && result.messages.length > 0) {
+      console.log(`[MediaLibrary MCP] Mammoth messages:`, result.messages.map(m => m.message));
+    }
+    
+    const extractedText = result.value || '';
+    console.log(`[MediaLibrary MCP] Extracted ${extractedText.length} characters from DOC/DOCX`);
+    
+    return extractedText;
+  } catch (error: any) {
+    console.error('[MediaLibrary MCP] DOC extraction error:', error);
+    return `Error extracting text from DOC: ${error.message}. The file may be corrupted or password-protected.`;
+  }
+}
+
+async function extractTextFromTXT(fileData: Uint8Array, fileName: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary MCP] Extracting text from TXT: ${fileName}`);
+    
+    // Try different encodings
+    const encodings = ['utf-8', 'utf-16le', 'latin1', 'ascii'];
+    
+    for (const encoding of encodings) {
+      try {
+        const decoder = new TextDecoder(encoding);
+        const text = decoder.decode(fileData);
+        
+        // Check if the text looks valid (not too many null characters or weird chars)
+        const nullCount = (text.match(/\0/g) || []).length;
+        const validCharRatio = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').length / text.length;
+        
+        if (nullCount < text.length * 0.1 && validCharRatio > 0.8) {
+          console.log(`[MediaLibrary MCP] Successfully decoded TXT with ${encoding}: ${text.length} characters`);
+          return text;
+        }
+      } catch (encodingError) {
+        console.log(`[MediaLibrary MCP] Failed to decode with ${encoding}:`, encodingError.message);
+      }
+    }
+    
+    // Fallback: use UTF-8 and clean up the text
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const text = decoder.decode(fileData).replace(/\0/g, '');
+    console.log(`[MediaLibrary MCP] Fallback UTF-8 extraction: ${text.length} characters`);
+    
+    return text;
+  } catch (error: any) {
+    console.error('[MediaLibrary MCP] TXT extraction error:', error);
+    return `Error extracting text from TXT: ${error.message}. The file may have an unsupported encoding.`;
+  }
+}
+
+async function detectFileTypeFromContent(fileData: Uint8Array, fileName: string, providedType?: string): Promise<string> {
+  // If we have a provided type, use it
+  if (providedType && providedType !== 'application/octet-stream') {
+    return providedType;
+  }
+  
+  // File signature detection
+  const signature = Array.from(fileData.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  // Common file signatures
+  const signatures: { [key: string]: string } = {
+    '504b0304': 'application/zip', // ZIP-based formats (DOCX, PPTX, XLSX)
+    '25504446': 'application/pdf', // PDF
+    'd0cf11e0': 'application/vnd.ms-office', // Old Office formats (DOC, XLS, PPT)
+    '89504e47': 'image/png',
+    'ffd8ffe0': 'image/jpeg',
+    'ffd8ffe1': 'image/jpeg',
+    '47494638': 'image/gif',
+    '424d': 'image/bmp',
+  };
+  
+  // Check for ZIP-based Office formats
+  if (signature.startsWith('504b0304')) {
+    const extension = fileName.toLowerCase().split('.').pop();
+    switch (extension) {
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      default: return 'application/zip';
+    }
+  }
+  
+  // Check other signatures
+  for (const [sig, type] of Object.entries(signatures)) {
+    if (signature.startsWith(sig)) {
+      return type;
+    }
+  }
+  
+  // Fallback to file extension
+  const extension = fileName.toLowerCase().split('.').pop();
+  switch (extension) {
+    case 'txt': return 'text/plain';
+    case 'doc': return 'application/msword';
+    case 'pdf': return 'application/pdf';
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'gif': return 'image/gif';
+    case 'bmp': return 'image/bmp';
+    case 'tiff':
+    case 'tif': return 'image/tiff';
+    default: return providedType || 'application/octet-stream';
+  }
+}
+
+async function extractTextWithLocalOCR(
+  fileData: Uint8Array,
+  fileName: string,
+  fileType: string
+): Promise<string> {
+  console.log(`[MediaLibrary MCP] Starting local OCR extraction for ${fileName} (${fileType})`);
+  
+  try {
+    // Only process images with local OCR for now
+    // PDF processing will be handled by the external OCR service
+    if (!fileType.startsWith('image/')) {
+      throw new Error(`Local OCR only supports images. File type: ${fileType}`);
+    }
+    
+    console.log(`[MediaLibrary MCP] Processing image with Tesseract OCR`);
+    
+    // Create Tesseract worker
+    const worker = await createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          console.log(`[MediaLibrary MCP] OCR Progress: ${Math.round(m.progress * 100)}%`);
+        }
+      }
+    });
+    
+    try {
+      // Configure Tesseract for better accuracy
+      await worker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?:;-()[]{}"\'/\\@#$%^&*+=<>|`~_',
+        tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
+        preserve_interword_spaces: '1',
+      });
+      
+      console.log(`[MediaLibrary MCP] Running OCR recognition on ${fileData.length} bytes...`);
+      
+      // Create a buffer for Tesseract
+      const buffer = Buffer.from(fileData);
+      const { data: { text } } = await worker.recognize(buffer);
+      
+      console.log(`[MediaLibrary MCP] Local OCR completed: ${text.length} characters extracted`);
+      
+      if (text.length < 10) {
+        throw new Error('OCR extracted very little text, possibly poor quality image');
+      }
+      
+      return text.trim();
+      
+    } finally {
+      await worker.terminate();
+    }
+    
+  } catch (error) {
+    console.error(`[MediaLibrary MCP] Local OCR extraction failed:`, error);
+    throw error;
+  }
+}
+
+async function extractTextWithMistralOCR(
+  fileData: Uint8Array,
+  fileName: string,
+  userId: string
+): Promise<string> {
+  console.log(`[MediaLibrary MCP] Attempting Mistral OCR extraction for ${fileName}`);
+
+  try {
+    // Get Mistral AI API key from vault-stored credentials
+    const { data: connection, error: connectionError } = await supabase
+      .from('user_integration_credentials')
+      .select(`
+        vault_access_token_id,
+        connection_metadata,
+        service_providers!inner(name)
+      `)
+      .eq('user_id', userId)
+      .eq('credential_type', 'api_key')
+      .eq('connection_status', 'active')
+      .eq('service_providers.name', 'mistral_ai')
+      .single();
+
+    if (connectionError || !connection) {
+      throw new Error('No active Mistral AI connection found');
+    }
+
+    if (!connection.vault_access_token_id) {
+      throw new Error('Mistral AI connection has no vault token');
+    }
+
+    // Decrypt API key from vault
+    const { data: apiKey, error: vaultError } = await supabase
+      .rpc('vault_decrypt', { vault_id: connection.vault_access_token_id });
+
+    if (vaultError || !apiKey) {
+      throw new Error(`Failed to decrypt Mistral API key: ${vaultError?.message}`);
+    }
+
+    // Get connection settings
+    const metadata = connection.connection_metadata || {};
+    const model = metadata.model || 'mistral-ocr-latest';
+    const maxPages = metadata.max_pages || 10;
+    const includeImages = metadata.include_images || false;
+
+    // First, upload the file to Mistral
+    console.log(`[MediaLibrary MCP] Uploading file to Mistral AI (${fileData.length} bytes)`);
+    
+    const uploadFormData = new FormData();
+    const blob = new Blob([fileData], { 
+      type: fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream' 
+    });
+    uploadFormData.append('file', blob, fileName);
+
+    const uploadResponse = await fetch('https://api.mistral.ai/v1/files', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: uploadFormData
+    });
+
+    if (!uploadResponse.ok) {
+      const uploadError = await uploadResponse.text();
+      throw new Error(`File upload failed: ${uploadResponse.status} - ${uploadError}`);
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const fileId = uploadResult.id;
+    
+    console.log(`[MediaLibrary MCP] File uploaded to Mistral with ID: ${fileId}`);
+
+    // Now perform OCR on the uploaded file
+    const ocrPayload = {
+      model: model,
+      document: {
+        type: 'file',
+        file_id: fileId
+      },
+      pages: null, // Process all pages
+      include_image_base64: includeImages,
+      image_limit: includeImages ? 50 : 0,
+      image_min_size: includeImages ? 100 : 0
+    };
+
+    console.log(`[MediaLibrary MCP] Starting OCR processing with model: ${model}`);
+
+    const ocrResponse = await fetch('https://api.mistral.ai/v1/ocr', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(ocrPayload)
+    });
+
+    if (!ocrResponse.ok) {
+      const ocrError = await ocrResponse.text();
+      throw new Error(`Mistral OCR failed: ${ocrResponse.status} - ${ocrError}`);
+    }
+
+    const ocrResult = await ocrResponse.json();
+    
+    // Extract text from all pages
+    const allText: string[] = [];
+    
+    if (ocrResult.pages && ocrResult.pages.length > 0) {
+      for (const page of ocrResult.pages) {
+        if (page.markdown && page.markdown.trim()) {
+          allText.push(`=== Page ${page.index + 1} ===\n${page.markdown.trim()}`);
+        }
+      }
+    }
+
+    // Clean up: delete the uploaded file
+    try {
+      await fetch(`https://api.mistral.ai/v1/files/${fileId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        }
+      });
+      console.log(`[MediaLibrary MCP] Cleaned up uploaded file: ${fileId}`);
+    } catch (cleanupError) {
+      console.warn(`[MediaLibrary MCP] Failed to cleanup file ${fileId}:`, cleanupError);
+    }
+
+    const extractedText = allText.join('\n\n');
+    console.log(`[MediaLibrary MCP] Mistral OCR completed: ${extractedText.length} characters extracted from ${ocrResult.pages?.length || 0} pages`);
+
+    if (extractedText.length === 0) {
+      throw new Error('No text content extracted from document');
+    }
+
+    return extractedText;
+
+  } catch (error: any) {
+    console.error(`[MediaLibrary MCP] Mistral OCR extraction failed:`, error);
+    throw error;
+  }
+}
+
 async function extractTextWithOCR(
   fileData: Uint8Array,
   fileName: string,
@@ -188,16 +551,39 @@ async function extractTextWithOCR(
   try {
     console.log(`[MediaLibrary MCP] Attempting OCR extraction for ${fileName}`);
     
-    // Convert file data to base64
-    const base64Data = btoa(String.fromCharCode(...fileData));
+    // Convert file data to base64 - handle large files properly
+    let base64Data: string;
+    try {
+      // For large files, process in chunks to avoid memory issues
+      if (fileData.length > 1024 * 1024) { // > 1MB
+        console.log(`[MediaLibrary MCP] Large file detected (${fileData.length} bytes), processing in chunks`);
+        const chunks: string[] = [];
+        const chunkSize = 1024 * 1024; // 1MB chunks
+        for (let i = 0; i < fileData.length; i += chunkSize) {
+          const chunk = fileData.slice(i, i + chunkSize);
+          chunks.push(btoa(String.fromCharCode(...chunk)));
+        }
+        base64Data = chunks.join('');
+      } else {
+        base64Data = btoa(String.fromCharCode(...fileData));
+      }
+    } catch (encodingError) {
+      console.error('[MediaLibrary MCP] Base64 encoding failed:', encodingError);
+      throw new Error('Failed to encode file for OCR processing');
+    }
+    
+    // Determine the correct MIME type for the base64 data
+    const mimeType = fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/png';
     
     // Prepare form data for OCR.space API
     const formData = new FormData();
-    formData.append('base64Image', `data:application/pdf;base64,${base64Data}`);
+    formData.append('base64Image', `data:${mimeType};base64,${base64Data}`);
     formData.append('apikey', apiKey);
     formData.append('language', 'eng');
     formData.append('isOverlayRequired', 'false');
     formData.append('OCREngine', '2'); // Use engine 2 for better accuracy
+    formData.append('detectOrientation', 'true'); // Auto-detect orientation
+    formData.append('scale', 'true'); // Auto-scale for better accuracy
     
     const response = await fetch('https://api.ocr.space/parse/image', {
       method: 'POST',
@@ -229,30 +615,53 @@ async function extractTextFromDocument(
   fileData: Uint8Array, 
   fileType: string, 
   fileName: string,
+  userId: string,
   retryCount: number = 0
 ): Promise<string> {
   console.log(`[MediaLibrary MCP] Starting text extraction for ${fileName} (${fileType}) - Attempt ${retryCount + 1}`);
   
   try {
-    let extractedText = '';
+    // Detect the actual file type from content and filename
+    const detectedType = await detectFileTypeFromContent(fileData, fileName, fileType);
+    console.log(`[MediaLibrary MCP] Detected file type: ${detectedType} (provided: ${fileType})`);
     
-    if (fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+    let extractedText = '';
+
+    // Route to appropriate extraction method based on detected file type
+    if (detectedType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
       extractedText = await extractTextFromPDF(fileData);
-    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      
+    } else if (detectedType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                fileName.toLowerCase().endsWith('.docx')) {
-      extractedText = await extractTextFromDOCX(fileData);
-    } else if (fileType === 'text/plain' || fileName.toLowerCase().endsWith('.txt')) {
-      // For text files, just decode as UTF-8
-      try {
-        extractedText = new TextDecoder('utf-8').decode(fileData);
-        console.log(`[MediaLibrary MCP] Extracted ${extractedText.length} characters from TXT file`);
-        return extractedText;
-      } catch (error) {
-        console.error('[MediaLibrary MCP] TXT extraction error:', error);
-        return `Error reading text file: ${error.message}`;
-      }
+      // Use mammoth for DOCX files instead of the old method
+      extractedText = await extractTextFromDOC(fileData, fileName);
+      
+    } else if (detectedType === 'application/msword' || 
+               fileName.toLowerCase().endsWith('.doc')) {
+      // Handle legacy DOC files
+      extractedText = await extractTextFromDOC(fileData, fileName);
+      
+    } else if (detectedType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+               fileName.toLowerCase().endsWith('.xlsx')) {
+      extractedText = await extractTextFromXLSX(fileData, fileName);
+      
+    } else if (detectedType === 'application/vnd.ms-excel' || 
+               fileName.toLowerCase().endsWith('.xls')) {
+      extractedText = await extractTextFromXLSX(fileData, fileName);
+      
+    } else if (detectedType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || 
+               fileName.toLowerCase().endsWith('.pptx')) {
+      extractedText = await extractTextFromPPTX(fileData, fileName);
+      
+    } else if (detectedType === 'text/plain' || fileName.toLowerCase().endsWith('.txt')) {
+      extractedText = await extractTextFromTXT(fileData, fileName);
+      
+    } else if (detectedType.startsWith('image/')) {
+      // For images, we'll go straight to OCR
+      throw new Error(`Image file detected - will use OCR processing`);
+      
     } else {
-      return `Unsupported file type: ${fileType}. Supported formats: PDF, DOCX, TXT`;
+      return `Unsupported file type: ${detectedType} (${fileType}). Supported formats: PDF, DOCX, DOC, XLSX, XLS, PPTX, TXT, Images`;
     }
     
     // Check if extraction was successful
@@ -271,23 +680,52 @@ async function extractTextFromDocument(
     if (retryCount < 2) {
       console.log(`[MediaLibrary MCP] Extraction attempt ${retryCount + 1} yielded poor results, retrying...`);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-      return await extractTextFromDocument(fileData, fileType, fileName, retryCount + 1);
+      return await extractTextFromDocument(fileData, fileType, fileName, userId, retryCount + 1);
     }
     
-    // If all retries failed, try OCR fallback for PDFs
-    if ((fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) && 
-        Deno.env.get('OCR_SPACE_API_KEY')) {
+    // If all retries failed, try OCR fallbacks for supported formats
+    if (fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf') || 
+        fileType.startsWith('image/') || fileName.toLowerCase().endsWith('.pptx')) {
       
-      console.log(`[MediaLibrary MCP] Standard extraction failed after ${retryCount + 1} attempts, trying OCR fallback`);
+      console.log(`[MediaLibrary MCP] Standard extraction failed after ${retryCount + 1} attempts, trying OCR fallbacks`);
       
-      try {
-        const ocrText = await extractTextWithOCR(fileData, fileName, Deno.env.get('OCR_SPACE_API_KEY'));
-        if (ocrText.length > 10) {
-          console.log(`[MediaLibrary MCP] OCR fallback successful: ${ocrText.length} characters`);
-          return `${ocrText}\n\n[Note: This content was extracted using OCR due to document format limitations]`;
+      // For images, try local OCR first
+      if (fileType.startsWith('image/')) {
+        try {
+          const localOcrText = await extractTextWithLocalOCR(fileData, fileName, fileType);
+          if (localOcrText.length > 10) {
+            console.log(`[MediaLibrary MCP] Local OCR fallback successful: ${localOcrText.length} characters`);
+            return `${localOcrText}\n\n[Note: This content was extracted using local OCR due to document format limitations]`;
+          }
+        } catch (localOcrError) {
+          console.error('[MediaLibrary MCP] Local OCR fallback failed:', localOcrError);
         }
-      } catch (ocrError) {
-        console.error('[MediaLibrary MCP] OCR fallback also failed:', ocrError);
+      }
+      
+      // Try Mistral OCR first (if user has it configured) - highest quality
+      try {
+        console.log(`[MediaLibrary MCP] Trying Mistral OCR fallback`);
+        const mistralText = await extractTextWithMistralOCR(fileData, fileName, userId);
+        if (mistralText.length > 10) {
+          console.log(`[MediaLibrary MCP] Mistral OCR fallback successful: ${mistralText.length} characters`);
+          return `${mistralText}\n\n[Note: This content was extracted using Mistral AI OCR due to document format limitations]`;
+        }
+      } catch (mistralError) {
+        console.error('[MediaLibrary MCP] Mistral OCR fallback failed:', mistralError);
+      }
+      
+      // For PDFs, PPTX, or if other OCR methods failed, try OCR.space
+      if (Deno.env.get('OCR_SPACE_API_KEY')) {
+        console.log(`[MediaLibrary MCP] Trying OCR.space fallback`);
+        try {
+          const ocrText = await extractTextWithOCR(fileData, fileName, Deno.env.get('OCR_SPACE_API_KEY'));
+          if (ocrText.length > 10) {
+            console.log(`[MediaLibrary MCP] OCR.space fallback successful: ${ocrText.length} characters`);
+            return `${ocrText}\n\n[Note: This content was extracted using external OCR service due to document format limitations]`;
+          }
+        } catch (ocrError) {
+          console.error('[MediaLibrary MCP] OCR.space fallback also failed:', ocrError);
+        }
       }
     }
     
@@ -301,7 +739,7 @@ async function extractTextFromDocument(
     if (retryCount < 2) {
       console.log(`[MediaLibrary MCP] Retrying extraction due to error...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
-      return await extractTextFromDocument(fileData, fileType, fileName, retryCount + 1);
+      return await extractTextFromDocument(fileData, fileType, fileName, userId, retryCount + 1);
     }
     
     // If all retries failed, return error message
@@ -492,7 +930,8 @@ async function handleProcessDocument(
     const textContent = await extractTextFromDocument(
       uint8Array, 
       mediaFile.file_type, 
-      mediaFile.file_name
+      mediaFile.file_name,
+      userId
     );
     
     console.log(`[MediaLibrary MCP] Extracted ${textContent.length} characters from ${mediaFile.file_name}`);
@@ -777,17 +1216,28 @@ async function handleGetDocumentContent(
       
       console.log(`[MediaLibrary MCP] document_id "${document_id}" is not a UUID, attempting to find by title/filename`);
       
-      // Try to find the document by title or filename
-      // First try exact matches, then partial matches
+      // Try to find the document by title or filename among assigned documents first
+      // This ensures we only get documents that are actually assigned to this agent
       let { data: documents, error: searchError } = await supabase
         .from('media_library')
-        .select('id, file_name, display_name')
+        .select(`
+          id, 
+          file_name, 
+          display_name,
+          agent_media_assignments!inner(agent_id, assignment_type)
+        `)
         .eq('user_id', userId)
-        .eq('is_archived', false);
+        .eq('is_archived', false)
+        .eq('agent_media_assignments.agent_id', agentId);
       
       if (searchError) throw searchError;
       
-      console.log(`[MediaLibrary MCP] Found ${documents?.length || 0} total documents for user ${userId}`);
+      console.log(`[MediaLibrary MCP] Found ${documents?.length || 0} assigned documents for user ${userId} and agent ${agentId}`);
+      
+      // If no assigned documents found, provide helpful error message
+      if (!documents || documents.length === 0) {
+        throw new Error(`No documents assigned to this agent match "${document_id}". Please use list_assigned_documents to see what documents are available to you, or upload and assign the document first.`);
+      }
       
       // Filter documents manually for better matching
       const matchingDocs = documents?.filter(doc => {
@@ -848,9 +1298,9 @@ async function handleGetDocumentContent(
           .eq('user_id', userId)
           .eq('is_archived', false);
         
-        console.log(`[MediaLibrary MCP] No documents found matching "${document_id}". Available documents:`, 
+        console.log(`[MediaLibrary MCP] No assigned documents found matching "${document_id}". Available assigned documents:`, 
           allDocs?.map(d => `"${d.file_name}" (display: "${d.display_name}")`) || []);
-        throw new Error(`Document not found with title/filename containing "${document_id}". Please use the document UUID from list_assigned_documents instead.`);
+        throw new Error(`No assigned documents found matching "${document_id}". Please use list_assigned_documents to see what documents are available to you, or check that the document has been uploaded and assigned to this agent.`);
       }
       
       if (documents.length > 1) {
@@ -967,10 +1417,51 @@ async function handleGetDocumentContent(
       has_content: contentLength > 0
     });
     
-    // Format the response to clearly provide the document content to the agent
-    const contentMessage = documentContent.text_content && documentContent.text_content.trim() 
-      ? `Here is the content from your document "${documentContent.display_name || documentContent.file_name}":\n\n${documentContent.text_content}`
-      : `The document "${documentContent.display_name || documentContent.file_name}" was processed but contains no extractable text content. This may be an image-only PDF, encrypted document, or unsupported file format.`;
+    // Format the response to provide document content, with intelligent truncation for very large documents
+    let contentMessage: string;
+    
+    if (!documentContent.text_content || !documentContent.text_content.trim()) {
+      contentMessage = `The document "${documentContent.display_name || documentContent.file_name}" was processed but contains no extractable text content. This may be an image-only PDF, encrypted document, or unsupported file format.`;
+    } else {
+      const content = documentContent.text_content.trim();
+      const contentLength = content.length;
+      
+      // If document is very large (>50k chars), provide a structured summary instead of full content
+      if (contentLength > 50000) {
+        const firstChunk = content.substring(0, 10000);
+        const middleStart = Math.floor(contentLength / 2) - 5000;
+        const middleChunk = content.substring(middleStart, middleStart + 10000);
+        const lastChunk = content.substring(contentLength - 10000);
+        
+        contentMessage = `I've accessed your document "${documentContent.display_name || documentContent.file_name}", but it's quite large (${contentLength.toLocaleString()} characters). To avoid overwhelming our conversation, I'm showing you key excerpts:
+
+**📊 DOCUMENT OVERVIEW:**
+- Total length: ${contentLength.toLocaleString()} characters
+- Chunk count: ${documentContent.chunk_count || 'Unknown'}
+- Processing status: ${documentContent.processing_status}
+
+**📖 BEGINNING (First 10,000 characters):**
+${firstChunk}
+
+**📖 MIDDLE SECTION (Characters ${middleStart.toLocaleString()}-${(middleStart + 10000).toLocaleString()}):**
+${middleChunk}
+
+**📖 ENDING (Last 10,000 characters):**
+${lastChunk}
+
+**💡 WHAT YOU CAN DO:**
+Since this document is large, I can help you in several ways:
+1. **Search specific topics**: Ask me to search for specific terms or concepts
+2. **Get targeted sections**: Tell me what specific information you're looking for
+3. **Summarize content**: I can provide summaries of specific sections
+4. **Answer questions**: Ask me specific questions about the document content
+
+Just let me know what specific information you need from this document!`;
+      } else {
+        // For smaller documents, provide full content
+        contentMessage = `Here is the content from your document "${documentContent.display_name || documentContent.file_name}":\n\n${content}`;
+      }
+    }
     
     console.log(`[MediaLibrary MCP] Handing off ${contentLength} characters of document content back to agent`);
 
@@ -1499,6 +1990,131 @@ async function handleReprocessDocument(
   }
 }
 
+async function handleSearchDocumentContent(
+  supabase: any,
+  agentId: string,
+  userId: string,
+  params: any
+): Promise<MCPToolResponse> {
+  const startTime = Date.now();
+  
+  try {
+    const { document_id, search_query, max_results = 5 } = params;
+    
+    if (!document_id) {
+      throw new Error('Missing required parameter: document_id');
+    }
+    
+    if (!search_query || search_query.trim().length < 2) {
+      throw new Error('Missing or invalid search_query. Please provide at least 2 characters.');
+    }
+    
+    // Get the document content first
+    const { data: documentContent, error: contentError } = await supabase
+      .rpc('get_media_document_content_for_agent', {
+        p_agent_id: agentId,
+        p_user_id: userId,
+        p_document_id: document_id,
+        p_include_metadata: true
+      });
+    
+    if (contentError) throw contentError;
+    
+    if (!documentContent || !documentContent.text_content) {
+      throw new Error('Document not found, not assigned to agent, or has no content');
+    }
+    
+    const content = documentContent.text_content;
+    const query = search_query.trim().toLowerCase();
+    
+    // Simple text search with context
+    const results: Array<{
+      snippet: string;
+      position: number;
+      context_before: string;
+      context_after: string;
+      relevance_score: number;
+    }> = [];
+    
+    // Find all occurrences of the search query
+    let searchIndex = 0;
+    while (searchIndex < content.length) {
+      const foundIndex = content.toLowerCase().indexOf(query, searchIndex);
+      if (foundIndex === -1) break;
+      
+      // Extract context around the match
+      const contextSize = 500;
+      const snippetSize = 200;
+      
+      const contextStart = Math.max(0, foundIndex - contextSize);
+      const contextEnd = Math.min(content.length, foundIndex + query.length + contextSize);
+      const snippetStart = Math.max(0, foundIndex - snippetSize);
+      const snippetEnd = Math.min(content.length, foundIndex + query.length + snippetSize);
+      
+      const contextBefore = content.substring(contextStart, foundIndex).trim();
+      const contextAfter = content.substring(foundIndex + query.length, contextEnd).trim();
+      const snippet = content.substring(snippetStart, snippetEnd).trim();
+      
+      // Calculate a simple relevance score based on surrounding context
+      const relevanceScore = Math.min(1.0, 0.5 + (contextBefore.length + contextAfter.length) / 2000);
+      
+      results.push({
+        snippet,
+        position: foundIndex,
+        context_before: contextBefore,
+        context_after: contextAfter,
+        relevance_score: relevanceScore
+      });
+      
+      searchIndex = foundIndex + 1;
+      
+      // Limit results to prevent overwhelming response
+      if (results.length >= max_results * 2) break;
+    }
+    
+    // Sort by relevance and limit results
+    const sortedResults = results
+      .sort((a, b) => b.relevance_score - a.relevance_score)
+      .slice(0, max_results);
+    
+    return {
+      success: true,
+      data: {
+        document_id,
+        document_name: documentContent.display_name || documentContent.file_name,
+        search_query,
+        results_found: sortedResults.length,
+        total_matches: results.length,
+        results: sortedResults.map((result, index) => ({
+          rank: index + 1,
+          snippet: result.snippet,
+          character_position: result.position,
+          relevance_score: Math.round(result.relevance_score * 100) / 100,
+          context: {
+            before: result.context_before.length > 200 ? '...' + result.context_before.slice(-200) : result.context_before,
+            after: result.context_after.length > 200 ? result.context_after.slice(0, 200) + '...' : result.context_after
+          }
+        }))
+      },
+      metadata: {
+        tool_name: 'search_document_content',
+        execution_time_ms: Date.now() - startTime
+      }
+    };
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary MCP] Search document content error:', error);
+    return {
+      success: false,
+      error: error.message,
+      metadata: {
+        tool_name: 'search_document_content',
+        execution_time_ms: Date.now() - startTime
+      }
+    };
+  }
+}
+
 // =============================================
 // Main Handler
 // =============================================
@@ -1579,9 +2195,13 @@ serve(async (req) => {
       case 'reprocess_document':
         result = await handleReprocessDocument(supabase, agent_id, user_id, params, authHeader);
         break;
+        
+      case 'search_document_content':
+        result = await handleSearchDocumentContent(supabase, agent_id, user_id, params);
+        break;
 
       default:
-        throw new Error(`Unknown MCP tool action: ${action}. Available actions: upload_document, process_document, assign_to_agent, search_documents, get_document_content, list_assigned_documents, get_document_summary, find_related_documents, reprocess_document`);
+        throw new Error(`Unknown MCP tool action: ${action}. Available actions: upload_document, process_document, assign_to_agent, search_documents, get_document_content, list_assigned_documents, get_document_summary, find_related_documents, reprocess_document, search_document_content`);
     }
 
     return new Response(

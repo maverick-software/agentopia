@@ -1135,6 +1135,30 @@ export function AgentChatPage() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Chat API error response:', { status: response.status, errorText });
+        
+        // Handle 413 (context window exceeded) errors specially
+        if (response.status === 413) {
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { message: 'Document too large for context window' };
+          }
+          
+          // Add a helpful system message explaining the issue
+          const contextErrorMessage: Message = {
+            id: `context_error_${Date.now()}`,
+            role: 'assistant' as const,
+            content: errorData.message || 'I apologize, but the document you\'re asking about is too large to process in our current conversation context. The document contains a lot of content that would exceed my context window limits.\n\nHere are some ways I can help:\n\n• **Ask specific questions** about particular topics in the document\n• **Search for specific information** within the document\n• **Start a new conversation** to discuss this document with a fresh context\n• **Break your question** into smaller, more focused parts\n\nWhat specific information from the document would you like me to help you with?',
+            timestamp: new Date(),
+            metadata: { isContextError: true }
+          };
+          
+          setMessages(prev => [...prev, contextErrorMessage]);
+          scrollToBottom();
+          return; // Don't throw an error, just show the helpful message
+        }
+        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
