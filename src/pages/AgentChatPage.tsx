@@ -1272,24 +1272,28 @@ export function AgentChatPage() {
           setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
 
           // Step 1: Upload document metadata
+          const requestBody = {
+            action: 'upload_document',
+            agent_id: agent.id,
+            user_id: user.id,
+            params: {
+              file_name: file.name,
+              file_type: file.type,
+              file_size: file.size,
+              category: uploadType === 'image' ? 'images' : 'documents',
+              description: `Uploaded via chat on ${new Date().toLocaleDateString()}`
+            }
+          };
+          
+          console.log('[AgentChatPage] Sending upload request:', requestBody);
+          
           const uploadResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-mcp`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${authToken}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              action: 'upload_document',
-              agent_id: agent.id,
-              user_id: user.id,
-              params: {
-                file_name: file.name,
-                file_type: file.type,
-                file_size: file.size,
-                category: uploadType === 'image' ? 'images' : 'documents',
-                description: `Uploaded via chat on ${new Date().toLocaleDateString()}`
-              }
-            })
+            body: JSON.stringify(requestBody)
           });
 
           if (!uploadResponse.ok) {

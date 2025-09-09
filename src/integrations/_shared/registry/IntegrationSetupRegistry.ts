@@ -15,6 +15,7 @@ import { BraveSearchSetupModal } from '../../brave-search/components/BraveSearch
 import { MicrosoftTeamsSetupModal } from '../../microsoft-teams/components/MicrosoftTeamsSetupModal';
 import { MicrosoftOneDriveSetupModal } from '../../microsoft-onedrive/components/MicrosoftOneDriveSetupModal';
 import { MicrosoftOutlookSetupModal } from '../../microsoft-outlook/components/MicrosoftOutlookSetupModal';
+import { MistralOCRSetupModal } from '../../mistral-ocr/components/MistralOCRSetupModal';
 
 /**
  * Registry of all integration setup components
@@ -256,6 +257,22 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
       { key: 'calendar_events', label: 'Create and manage calendar events' },
       { key: 'contacts', label: 'Access and manage contacts' },
       { key: 'user_profile', label: 'Read user profile information' }
+    ]
+  },
+
+  // Mistral AI - Advanced AI-powered document processing
+  'Mistral AI': {
+    component: MistralOCRSetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['ocr', 'document_processing'],
+    capabilities: [
+      { key: 'high_accuracy_ocr', label: 'High-accuracy OCR with AI models' },
+      { key: 'multi_page_processing', label: 'Multi-page document processing' },
+      { key: 'structured_output', label: 'Structured data extraction' },
+      { key: 'image_extraction', label: 'Extract images from documents' },
+      { key: 'markdown_output', label: 'Markdown-formatted text output' },
+      { key: 'bbox_annotation', label: 'Bounding box annotations' },
+      { key: 'document_annotation', label: 'Document-level annotations' }
     ]
   }
 };

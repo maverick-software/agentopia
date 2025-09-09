@@ -393,7 +393,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       'web_search': ['serper_api', 'serpapi', 'brave_search'],
       'voice': ['elevenlabs'],
       'document_creation': ['google_docs', 'microsoft_office', 'notion'],
-      'ocr_processing': ['ocr_space']
+      'ocr_processing': ['ocr_space', 'mistral_ai']
     };
     
     return connections.filter(c => 
@@ -439,7 +439,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       description: 'Enable text extraction from PDFs and images',
       icon: ScanText,
       enabled: settings.ocr_processing_enabled,
-      requiresApi: 'OCR API (OCR.Space)',
+      requiresApi: 'OCR API (OCR.space or Mistral AI)',
       availableCredentials: getAvailableCredentials('ocr_processing'),
       toolType: 'ocr_processing' as const
     }

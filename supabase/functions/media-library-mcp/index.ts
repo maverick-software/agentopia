@@ -15,7 +15,7 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { corsHeaders } from '../_shared/cors.ts';
 
-// Import OCR library
+// Import libraries for document processing
 import { createWorker } from 'npm:tesseract.js@5.0.4';
 
 // Import comprehensive document processing libraries
@@ -61,7 +61,48 @@ async function extractTextFromPDF(pdfData: Uint8Array): Promise<string> {
   try {
     console.log(`[MediaLibrary MCP] Processing PDF file (${pdfData.length} bytes)`);
     
-    // Simple PDF text extraction - look for text objects
+    // Call the dedicated PDF parser edge function
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    if (supabaseUrl) {
+      try {
+        // Convert PDF data to base64 for transmission
+        const base64Data = btoa(String.fromCharCode(...pdfData));
+        
+        const response = await fetch(`${supabaseUrl}/functions/v1/pdf-parser`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            fileData: base64Data,
+            options: {
+              includeMetadata: true
+            }
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.text) {
+            console.log(`[MediaLibrary MCP] PDF parser extracted ${result.text.length} characters`);
+            if (result.metadata) {
+              console.log(`[MediaLibrary MCP] PDF metadata:`, result.metadata);
+            }
+            return result.text;
+          }
+        } else {
+          console.error('[MediaLibrary MCP] PDF parser service failed:', await response.text());
+        }
+      } catch (pdfServiceError) {
+        console.error('[MediaLibrary MCP] PDF parser service error:', pdfServiceError);
+      }
+    }
+    
+    // Fallback: Simple manual extraction if service is unavailable
+    console.log('[MediaLibrary MCP] Falling back to manual PDF extraction');
     const textDecoder = new TextDecoder('latin1');
     const pdfText = textDecoder.decode(pdfData);
     
@@ -104,7 +145,7 @@ async function extractTextFromPDF(pdfData: Uint8Array): Promise<string> {
       .replace(/\s+/g, ' ')
       .trim();
     
-    console.log(`[MediaLibrary MCP] Successfully extracted ${extractedText.length} characters from PDF`);
+    console.log(`[MediaLibrary MCP] Manual extraction: ${extractedText.length} characters from PDF`);
     
     if (extractedText.length > 0) {
       return extractedText;
@@ -401,13 +442,14 @@ async function extractTextWithLocalOCR(
 async function extractTextWithMistralOCR(
   fileData: Uint8Array,
   fileName: string,
-  userId: string
+  userId: string,
+  supabaseClient: any
 ): Promise<string> {
   console.log(`[MediaLibrary MCP] Attempting Mistral OCR extraction for ${fileName}`);
 
   try {
     // Get Mistral AI API key from vault-stored credentials
-    const { data: connection, error: connectionError } = await supabase
+    const { data: connection, error: connectionError } = await supabaseClient
       .from('user_integration_credentials')
       .select(`
         vault_access_token_id,
@@ -429,7 +471,7 @@ async function extractTextWithMistralOCR(
     }
 
     // Decrypt API key from vault
-    const { data: apiKey, error: vaultError } = await supabase
+    const { data: apiKey, error: vaultError } = await supabaseClient
       .rpc('vault_decrypt', { vault_id: connection.vault_access_token_id });
 
     if (vaultError || !apiKey) {
@@ -442,7 +484,7 @@ async function extractTextWithMistralOCR(
     const maxPages = metadata.max_pages || 10;
     const includeImages = metadata.include_images || false;
 
-    // First, upload the file to Mistral
+    // First, upload the file to Mistral's files endpoint
     console.log(`[MediaLibrary MCP] Uploading file to Mistral AI (${fileData.length} bytes)`);
     
     const uploadFormData = new FormData();
@@ -450,6 +492,7 @@ async function extractTextWithMistralOCR(
       type: fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream' 
     });
     uploadFormData.append('file', blob, fileName);
+    uploadFormData.append('purpose', 'ocr'); // Required field
 
     const uploadResponse = await fetch('https://api.mistral.ai/v1/files', {
       method: 'POST',
@@ -616,6 +659,7 @@ async function extractTextFromDocument(
   fileType: string, 
   fileName: string,
   userId: string,
+  supabaseClient: any,
   retryCount: number = 0
 ): Promise<string> {
   console.log(`[MediaLibrary MCP] Starting text extraction for ${fileName} (${fileType}) - Attempt ${retryCount + 1}`);
@@ -680,7 +724,7 @@ async function extractTextFromDocument(
     if (retryCount < 2) {
       console.log(`[MediaLibrary MCP] Extraction attempt ${retryCount + 1} yielded poor results, retrying...`);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-      return await extractTextFromDocument(fileData, fileType, fileName, userId, retryCount + 1);
+      return await extractTextFromDocument(fileData, fileType, fileName, userId, supabaseClient, retryCount + 1);
     }
     
     // If all retries failed, try OCR fallbacks for supported formats
@@ -705,7 +749,7 @@ async function extractTextFromDocument(
       // Try Mistral OCR first (if user has it configured) - highest quality
       try {
         console.log(`[MediaLibrary MCP] Trying Mistral OCR fallback`);
-        const mistralText = await extractTextWithMistralOCR(fileData, fileName, userId);
+        const mistralText = await extractTextWithMistralOCR(fileData, fileName, userId, supabaseClient);
         if (mistralText.length > 10) {
           console.log(`[MediaLibrary MCP] Mistral OCR fallback successful: ${mistralText.length} characters`);
           return `${mistralText}\n\n[Note: This content was extracted using Mistral AI OCR due to document format limitations]`;
@@ -739,7 +783,7 @@ async function extractTextFromDocument(
     if (retryCount < 2) {
       console.log(`[MediaLibrary MCP] Retrying extraction due to error...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
-      return await extractTextFromDocument(fileData, fileType, fileName, userId, retryCount + 1);
+      return await extractTextFromDocument(fileData, fileType, fileName, userId, supabaseClient, retryCount + 1);
     }
     
     // If all retries failed, return error message
@@ -860,6 +904,7 @@ async function handleUploadDocument(
 
 async function handleProcessDocument(
   supabase: any,
+  supabaseServiceRole: any,
   agentId: string,
   userId: string,
   params: any
@@ -931,7 +976,8 @@ async function handleProcessDocument(
       uint8Array, 
       mediaFile.file_type, 
       mediaFile.file_name,
-      userId
+      userId,
+      supabaseServiceRole  // Use service role client for vault access
     );
     
     console.log(`[MediaLibrary MCP] Extracted ${textContent.length} characters from ${mediaFile.file_name}`);
@@ -1153,7 +1199,7 @@ async function handleSearchDocuments(
           `${index + 1}. "${doc.title}" (ID: ${doc.id})\n   Category: ${doc.category}\n   Preview: ${doc.content_preview || 'No preview available'}`
         ).join('\n\n')}\n\nUse get_document_content with the document ID to retrieve the full content of any document.`
       : `No documents found matching "${query}". The user may need to upload documents first or try different search terms.`;
-
+    
     return {
       success: true,
       data: {
@@ -1349,13 +1395,13 @@ async function handleGetDocumentContent(
       console.log(`[MediaLibrary MCP] Attempting to retrieve document content (attempt ${retryCount + 1})`);
       
       const { data, error } = await supabase
-        .rpc('get_media_document_content_for_agent', {
-          p_agent_id: agentId,
-          p_user_id: userId,
-          p_document_id: document_id,
-          p_include_metadata: include_metadata
-        });
-      
+      .rpc('get_media_document_content_for_agent', {
+        p_agent_id: agentId,
+        p_user_id: userId,
+        p_document_id: document_id,
+        p_include_metadata: include_metadata
+      });
+    
       if (error) {
         contentError = error;
         console.error(`[MediaLibrary MCP] Content retrieval attempt ${retryCount + 1} failed:`, error);
@@ -1464,7 +1510,7 @@ Just let me know what specific information you need from this document!`;
     }
     
     console.log(`[MediaLibrary MCP] Handing off ${contentLength} characters of document content back to agent`);
-
+    
     return {
       success: true,
       data: {
@@ -2127,13 +2173,21 @@ serve(async (req) => {
 
   try {
     // Parse request body
-    const body: MCPToolRequest = await req.json();
+    let body: MCPToolRequest;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error('[MediaLibrary MCP] JSON parsing error:', parseError);
+      throw new Error(`Failed to parse JSON request body: ${parseError.message}`);
+    }
+    
     console.log('[MediaLibrary MCP] Received request:', JSON.stringify(body, null, 2));
     
     const { action, agent_id, user_id, params } = body;
 
     // Validate required fields
     if (!action || !agent_id || !user_id || !params) {
+      console.error('[MediaLibrary MCP] Missing fields:', { action, agent_id, user_id, params: !!params });
       throw new Error('Missing required fields: action, agent_id, user_id, params');
     }
 
@@ -2143,13 +2197,25 @@ serve(async (req) => {
       throw new Error('Missing authorization header');
     }
 
-    // Create Supabase client
+    // Create Supabase client (user-scoped)
     const supabase = createClient(
       supabaseUrl,
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { 
         global: { 
           headers: { Authorization: authHeader } 
+        } 
+      }
+    );
+
+    // Create service role client for vault operations
+    const supabaseServiceRole = createClient(
+      supabaseUrl,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
         } 
       }
     );
@@ -2164,7 +2230,7 @@ serve(async (req) => {
         break;
         
       case 'process_document':
-        result = await handleProcessDocument(supabase, agent_id, user_id, params);
+        result = await handleProcessDocument(supabase, supabaseServiceRole, agent_id, user_id, params);
         break;
         
       case 'assign_to_agent':
