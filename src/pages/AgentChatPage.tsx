@@ -67,10 +67,14 @@ export function AgentChatPage() {
     // Check if we have a conversation ID in the URL first
     const params = new URLSearchParams(location.search);
     const urlConvId = params.get('conv');
-    if (urlConvId) return urlConvId;
+    if (urlConvId) {
+      console.log('[AgentChatPage] Initial conversation ID from URL:', urlConvId);
+      return urlConvId;
+    }
     
     // If no URL conversation, return null initially
     // We'll generate the temporary ID in useEffect to properly update the URL
+    console.log('[AgentChatPage] No initial conversation ID, will generate in useEffect');
     return null;
   });
   
@@ -234,12 +238,14 @@ export function AgentChatPage() {
     
     if (conv && conv !== selectedConversationId) {
       // URL has a conversation ID, use it
+      console.log('[AgentChatPage] Setting conversation ID from URL:', conv, 'previous:', selectedConversationId);
       setSelectedConversationId(conv);
       setIsTemporaryConversation(false); // URL conversations are not temporary
       if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
     } else if (!conv && !selectedConversationId && agentId) {
       // No conversation ID in URL or state - generate temporary one and update URL
       const tempConvId = crypto.randomUUID();
+      console.log('[AgentChatPage] Generating new temporary conversation ID:', tempConvId);
       setSelectedConversationId(tempConvId);
       setIsTemporaryConversation(true);
       setMessages([]);
@@ -255,6 +261,7 @@ export function AgentChatPage() {
       // URL has no conversation ID but we have one in state
       // Generate a new temporary conversation for better UX
       const tempConvId = crypto.randomUUID();
+      console.log('[AgentChatPage] URL cleared but state has conversation, generating new:', tempConvId, 'previous:', selectedConversationId);
       setSelectedConversationId(tempConvId);
       setIsTemporaryConversation(true);
       setMessages([]);
@@ -1008,7 +1015,10 @@ export function AgentChatPage() {
       setIsCreatingNewConversation(true);
       
       // Use the existing temporary conversation ID or create a new one
-      convId = selectedConversationId || crypto.randomUUID();
+      // Defensive: preserve existing convId if selectedConversationId was reset unexpectedly
+      console.log('[AgentChatPage] handleSubmit - selectedConversationId:', selectedConversationId, 'convId before:', convId);
+      convId = selectedConversationId || convId || crypto.randomUUID();
+      console.log('[AgentChatPage] handleSubmit - convId after:', convId);
       sessId = crypto.randomUUID();
       
       // Mark as no longer temporary since we're persisting it
