@@ -501,7 +501,44 @@ export class FunctionCallingManager {
         }
       }
       
-      // Format successful result
+      // Special handling for media library document content
+      if (functionName === 'get_document_content' && result.data?.document_content) {
+        // Return the actual document content directly so the agent can read it
+        return result.data.document_content;
+      }
+      
+      // Special handling for search_documents to make results more readable
+      if (functionName === 'search_documents' && result.data?.documents) {
+        let formattedResult = `Found ${result.data.documents.length} document(s) matching your search:\n\n`;
+        for (const doc of result.data.documents) {
+          formattedResult += `📄 ${doc.display_name || doc.file_name}\n`;
+          if (doc.relevance_score) {
+            formattedResult += `   Relevance: ${(doc.relevance_score * 100).toFixed(1)}%\n`;
+          }
+          if (doc.snippet) {
+            formattedResult += `   Preview: ${doc.snippet}\n`;
+          }
+          formattedResult += `   ID: ${doc.id}\n\n`;
+        }
+        return formattedResult;
+      }
+      
+      // Special handling for list_assigned_documents
+      if (functionName === 'list_assigned_documents' && result.data?.documents) {
+        let formattedResult = `You have ${result.data.documents.length} assigned document(s):\n\n`;
+        for (const doc of result.data.documents) {
+          formattedResult += `📄 ${doc.display_name || doc.file_name}\n`;
+          formattedResult += `   Type: ${doc.file_type}\n`;
+          formattedResult += `   Status: ${doc.processing_status}\n`;
+          if (doc.text_content) {
+            formattedResult += `   Content: ${doc.text_content.length} characters\n`;
+          }
+          formattedResult += `   ID: ${doc.id}\n\n`;
+        }
+        return formattedResult;
+      }
+      
+      // Format successful result (generic)
       let formattedResult = `✅ Successfully executed ${functionName}`;
       
       if (result.data) {

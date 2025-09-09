@@ -177,9 +177,32 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-2">
               <p className="text-xs text-muted-foreground opacity-80">
-                {message.timestamp instanceof Date 
-                  ? message.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-                  : '--:--'}
+                {(() => {
+                  try {
+                    // Handle multiple timestamp formats
+                    let timestamp: Date;
+                    
+                    if (message.timestamp instanceof Date) {
+                      timestamp = message.timestamp;
+                    } else if (typeof message.timestamp === 'string') {
+                      timestamp = new Date(message.timestamp);
+                    } else if (typeof message.timestamp === 'number') {
+                      timestamp = new Date(message.timestamp);
+                    } else {
+                      return '--:--';
+                    }
+                    
+                    // Check if the date is valid
+                    if (isNaN(timestamp.getTime())) {
+                      return '--:--';
+                    }
+                    
+                    return timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                  } catch (error) {
+                    console.warn('Error formatting timestamp:', message.timestamp, error);
+                    return '--:--';
+                  }
+                })()}
               </p>
 {/* Smart tool categorization tags */}
               {message.toolCalls && message.toolCalls.length > 0 && (() => {

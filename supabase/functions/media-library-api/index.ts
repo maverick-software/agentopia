@@ -107,6 +107,44 @@ interface MediaLibraryResponse {
 // =============================================
 
 /**
+ * Extract text with forced OCR processing - bypasses normal text extraction and goes directly to OCR
+ */
+async function extractTextWithForcedOCR(supabase: any, storagePath: string, fileType: string, userId?: string): Promise<string> {
+  try {
+    console.log(`[MediaLibrary] Force OCR: Downloading file from storage: ${storagePath}`);
+    
+    // Download the file from storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('media_uploads')
+      .download(storagePath);
+    
+    if (downloadError || !fileData) {
+      throw new Error(`Failed to download file: ${downloadError?.message || 'Unknown error'}`);
+    }
+    
+    const arrayBuffer = await fileData.arrayBuffer();
+    const fileBuffer = new Uint8Array(arrayBuffer);
+    
+    console.log(`[MediaLibrary] Force OCR: Downloaded ${fileBuffer.length} bytes, file type: ${fileType}`);
+    
+    // Force OCR processing based on file type
+    if (fileType.includes('pdf') || fileType === 'application/pdf') {
+      console.log(`[MediaLibrary] Force OCR: Processing PDF with OCR`);
+      return await performOCRExtraction(fileBuffer, userId);
+    } else if (fileType.startsWith('image/')) {
+      console.log(`[MediaLibrary] Force OCR: Processing image with OCR`);
+      return await extractTextFromImage(fileBuffer, fileType, userId);
+    } else {
+      throw new Error(`Force OCR not supported for file type: ${fileType}`);
+    }
+    
+  } catch (error: any) {
+    console.error(`[MediaLibrary] Force OCR extraction failed:`, error);
+    throw new Error(`Force OCR failed: ${error.message}`);
+  }
+}
+
+/**
  * Extract text content from various document types
  */
 async function extractTextFromDocument(supabase: any, storagePath: string, fileType: string, userId?: string): Promise<string> {
@@ -136,8 +174,8 @@ async function extractTextFromDocument(supabase: any, storagePath: string, fileT
       return new TextDecoder('utf-8').decode(uint8Array);
     } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                storagePath.toLowerCase().endsWith('.docx')) {
-      // For now, return a placeholder - DOCX extraction requires additional libraries
-      return '[DOCX document - text extraction not yet implemented]';
+      // Extract text from DOCX using built-in capabilities
+      return await extractTextFromDOCX(uint8Array);
     } else if (fileType.startsWith('image/')) {
       return await extractTextFromImage(uint8Array, fileType, userId);
     } else {
@@ -147,6 +185,94 @@ async function extractTextFromDocument(supabase: any, storagePath: string, fileT
   } catch (error: any) {
     console.error(`[MediaLibrary] Text extraction error:`, error);
     throw error;
+  }
+}
+
+/**
+ * Extract text from DOCX files
+ */
+async function extractTextFromDOCX(docxData: Uint8Array): Promise<string> {
+  try {
+    console.log(`[MediaLibrary] Processing DOCX file (${docxData.length} bytes)`);
+    
+    // DOCX files are ZIP archives containing XML files
+    // The main document content is in word/document.xml
+    
+    // Convert to string to search for ZIP patterns and XML content
+    const textDecoder = new TextDecoder('latin1'); // Use latin1 to preserve binary data
+    const docxText = textDecoder.decode(docxData);
+    
+    // Method 1: Look for word/document.xml content within the ZIP
+    // DOCX files contain the actual text in word/document.xml within <w:t> tags
+    let extractedText = '';
+    
+    // Search for XML content patterns that indicate document text
+    const xmlPatterns = [
+      /<w:t[^>]*>([^<]+)<\/w:t>/g,           // Standard text elements
+      /<w:t>([^<]+)<\/w:t>/g,                // Simple text elements
+      /<t[^>]*>([^<]+)<\/t>/g,               // Alternative text tags
+    ];
+    
+    for (const pattern of xmlPatterns) {
+      const matches = docxText.match(pattern);
+      if (matches && matches.length > 0) {
+        const textContent = matches
+          .map(match => {
+            // Extract text between tags, handling various formats
+            return match.replace(/<[^>]*>/g, '').trim();
+          })
+          .filter(text => text.length > 0 && text !== ' ')
+          .join(' ');
+        
+        if (textContent.length > extractedText.length) {
+          extractedText = textContent;
+        }
+      }
+    }
+    
+    if (extractedText.length > 0) {
+      // Clean up the extracted text
+      extractedText = extractedText
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+      
+      console.log(`[MediaLibrary] Successfully extracted ${extractedText.length} characters from DOCX`);
+      return extractedText;
+    }
+    
+    // Method 2: Fallback - search for readable text patterns
+    console.log(`[MediaLibrary] XML extraction failed, trying fallback method for DOCX`);
+    
+    // Look for sequences of readable text
+    const readableChunks = [];
+    const lines = docxText.split(/[\r\n]+/);
+    
+    for (const line of lines) {
+      // Look for lines with substantial readable content
+      const cleanLine = line
+        .replace(/[^\x20-\x7E]/g, ' ') // Replace non-printable chars
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // If line has reasonable length and word-like patterns, include it
+      if (cleanLine.length > 10 && /[a-zA-Z].*[a-zA-Z]/.test(cleanLine)) {
+        readableChunks.push(cleanLine);
+      }
+    }
+    
+    if (readableChunks.length > 0) {
+      const fallbackText = readableChunks.join(' ').substring(0, 1000);
+      console.log(`[MediaLibrary] Extracted ${fallbackText.length} characters from DOCX (fallback method)`);
+      return fallbackText;
+    }
+    
+    // Method 3: Return informative message if no text found
+    console.log(`[MediaLibrary] No extractable text found in DOCX file`);
+    return 'This DOCX document was processed but contains no extractable text. It may be encrypted, corrupted, contain only images, or use unsupported formatting.';
+    
+  } catch (error: any) {
+    console.error('[MediaLibrary] DOCX text extraction error:', error);
+    return `DOCX processing completed but text extraction failed: ${error.message}. The document structure may be complex or corrupted.`;
   }
 }
 
@@ -630,7 +756,7 @@ async function handleProcess(
   request: MediaUploadRequest
 ): Promise<MediaLibraryResponse> {
   try {
-    const { document_id } = request;
+    const { document_id, force_reprocess = false, force_ocr = false } = request;
     
     if (!document_id) {
       throw new Error('Missing required field: document_id');
@@ -661,7 +787,12 @@ async function handleProcess(
     let chunkCount = 0;
     
     try {
-      textContent = await extractTextFromDocument(supabase, mediaFile.storage_path, mediaFile.file_type, userId);
+      if (force_ocr) {
+        console.log(`[MediaLibrary] Force OCR requested for document ${document_id}`);
+        textContent = await extractTextWithForcedOCR(supabase, mediaFile.storage_path, mediaFile.file_type, userId);
+      } else {
+        textContent = await extractTextFromDocument(supabase, mediaFile.storage_path, mediaFile.file_type, userId);
+      }
       
       if (textContent && textContent.trim().length > 0) {
         // Create chunks for better search and RAG performance
@@ -690,19 +821,30 @@ async function handleProcess(
       })
       .eq('id', document_id);
     
+    const processingMethod = force_ocr ? 'OCR processing' : 'standard text extraction';
+    
+    // Log successful extraction for debugging
+    console.log(`[MediaLibrary] Successfully processed document ${document_id}. Ready to hand off ${textContent.length} characters to MCP.`);
+    
     return {
       success: true,
       data: {
         media_id: document_id,
+        file_name: mediaFile.file_name,
         processing_status: 'completed',
+        text_content: textContent, // Include actual content for direct handoff
         text_content_length: textContent.length,
         chunk_count: chunkCount,
+        processing_method: processingMethod,
         message: chunkCount > 0 
-          ? `Document processed successfully. Extracted ${textContent.length} characters into ${chunkCount} chunks.`
-          : 'Document uploaded successfully. No text content could be extracted from this file type.'
+          ? `Document processed successfully using ${processingMethod}. Extracted ${textContent.length} characters into ${chunkCount} chunks. Content ready for MCP handoff.`
+          : `Document processed using ${processingMethod}. No text content could be extracted from this file type.`
       },
       metadata: {
-        action_performed: 'document_processed'
+        action_performed: 'document_processed',
+        force_ocr_used: force_ocr,
+        handoff_ready: true,
+        document_id: document_id
       }
     };
     

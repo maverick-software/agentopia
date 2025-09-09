@@ -97,6 +97,7 @@ export class EnrichmentStage extends ProcessingStage {
   constructor(private contextEngine: ContextEngine, private memoryManager: MemoryManager) {
     super();
   }
+
   
   get name(): string {
     return 'enrichment';
@@ -239,6 +240,7 @@ export class EnrichmentStage extends ProcessingStage {
             metadata: { memory_id: m.id, created_at: m.created_at },
           });
         }
+
 
         // Include low-confidence external fallback (vector_search.ts) when present
         if ((memoryResults as any)?.external && (memoryResults as any).external.length > 0) {

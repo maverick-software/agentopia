@@ -56,6 +56,13 @@ export function AgentChatPage() {
   // File upload state
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+  const [attachedDocuments, setAttachedDocuments] = useState<Array<{
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    uploadStatus: 'uploading' | 'completed' | 'error';
+  }>>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(() => {
     // Check if we have a conversation ID in the URL first
     const params = new URLSearchParams(location.search);
@@ -930,6 +937,8 @@ export function AgentChatPage() {
 
     const messageText = input.trim();
     setInput('');
+    // Clear attached documents after sending
+    setAttachedDocuments([]);
     setSending(true);
 
     // Establish conversation ID FIRST (before adding messages or starting AI processing)
@@ -951,12 +960,23 @@ export function AgentChatPage() {
       localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
     }
 
+    // Get attached document IDs for metadata
+    const completedAttachments = attachedDocuments.filter(doc => doc.uploadStatus === 'completed');
+    
     // Add user message after conversation context is established
     const userMessage: Message = {
       role: 'user',
       content: messageText,
       timestamp: new Date(),
       userId: user.id,
+      metadata: completedAttachments.length > 0 ? {
+        attachments: completedAttachments.map(doc => ({
+          id: doc.id,
+          name: doc.name,
+          size: doc.size,
+          type: doc.type
+        }))
+      } : undefined
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -1055,6 +1075,20 @@ export function AgentChatPage() {
       const conversationId = convId;
       const sessionId = sessId;
 
+      // Include attached documents in the message context
+      // Re-use completedAttachments from earlier or redefine if needed
+      const attachedDocumentIds = completedAttachments.map(doc => doc.id);
+      
+      // If there are attached documents, add context about them to the message
+      let enhancedMessageText = messageText;
+      if (attachedDocumentIds.length > 0) {
+        const docNames = completedAttachments.map(doc => doc.name).join(', ');
+        const docIds = attachedDocumentIds.join(', ');
+        
+        // Add context about attached documents with their IDs
+        enhancedMessageText = `${messageText}\n\n[Context: The user has attached the following document(s): ${docNames}. The document IDs are: ${docIds}. Use get_document_content with these exact IDs to access their content.]`;
+      }
+
       const requestBody: any = {
         version: '2.0.0',
         context: {
@@ -1066,7 +1100,12 @@ export function AgentChatPage() {
         },
         message: {
           role: 'user',
-          content: { type: 'text', text: messageText }
+          content: { type: 'text', text: enhancedMessageText },
+          // Include document IDs in metadata
+          metadata: attachedDocumentIds.length > 0 ? {
+            attached_documents: attachedDocumentIds,
+            document_names: completedAttachments.map(doc => ({ id: doc.id, name: doc.name }))
+          } : undefined
         },
         options: { 
           context: { max_messages: contextSize },
@@ -1155,6 +1194,11 @@ export function AgentChatPage() {
     }
   }, [handleSubmit]);
 
+  // Remove attachment handler
+  const handleRemoveAttachment = useCallback((documentId: string) => {
+    setAttachedDocuments(prev => prev.filter(doc => doc.id !== documentId));
+  }, []);
+
   // File upload handler
   const handleFileUpload = useCallback(async (files: FileList, uploadType: 'document' | 'image') => {
     if (!user || !agent || files.length === 0) return;
@@ -1186,79 +1230,157 @@ export function AgentChatPage() {
           continue;
         }
 
-        try {
-          // Upload to Media Library via API
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('category', uploadType === 'image' ? 'images' : 'documents');
-          formData.append('description', `Uploaded via chat on ${new Date().toLocaleDateString()}`);
+        // Add to attached documents with uploading status (use temp ID for now)
+        const documentAttachment = {
+          id: fileId, // This will be updated with actual media_id after upload
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          uploadStatus: 'uploading' as const,
+          tempId: fileId // Keep track of temp ID for updates
+        };
+        setAttachedDocuments(prev => [...prev, documentAttachment]);
 
+        try {
+          // Upload to Media Library via MCP (self-contained)
+          const authToken = (await supabase.auth.getSession()).data.session?.access_token;
+          
           setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
 
-          // Upload file
-          const uploadResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+          // Step 1: Upload document metadata
+          const uploadResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-mcp`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              'Authorization': `Bearer ${authToken}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              action: 'upload',
-              file_name: file.name,
-              file_type: file.type,
-              file_size: file.size,
-              category: uploadType === 'image' ? 'images' : 'documents',
-              description: `Uploaded via chat on ${new Date().toLocaleDateString()}`
+              action: 'upload_document',
+              agent_id: agent.id,
+              user_id: user.id,
+              params: {
+                file_name: file.name,
+                file_type: file.type,
+                file_size: file.size,
+                category: uploadType === 'image' ? 'images' : 'documents',
+                description: `Uploaded via chat on ${new Date().toLocaleDateString()}`
+              }
             })
           });
 
           if (!uploadResponse.ok) {
-            throw new Error(`Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+            const errorText = await uploadResponse.text();
+            throw new Error(`Upload failed: ${errorText}`);
           }
 
           const uploadData = await uploadResponse.json();
-          setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
+          
+          if (!uploadData.success) {
+            throw new Error(uploadData.error || 'Upload failed');
+          }
 
-          // Upload actual file to storage
+          setUploadProgress(prev => ({ ...prev, [fileId]: 40 }));
+
+          // Step 2: Upload actual file to storage
           const { error: storageError } = await supabase.storage
-            .from(uploadData.data.bucket)
+            .from('media-library')
             .upload(uploadData.data.storage_path, file, {
               contentType: file.type,
               duplex: 'half'
             });
 
           if (storageError) {
-            throw new Error(`Storage upload failed: ${storageError.message}`);
+            throw new Error(`File storage failed: ${storageError.message}`);
           }
 
-          setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
+          setUploadProgress(prev => ({ ...prev, [fileId]: 60 }));
 
-          // Process the document and auto-assign to current agent
-          const processResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-api`, {
+          // Step 3: Process document (extract text)
+          const processResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-mcp`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              'Authorization': `Bearer ${authToken}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              action: 'process',
-              document_id: uploadData.data.media_id,
-              agent_id: agent.id // Auto-assign to current agent
+              action: 'process_document',
+              agent_id: agent.id,
+              user_id: user.id,
+              params: {
+                document_id: uploadData.data.media_id
+              }
+            })
+          });
+
+          setUploadProgress(prev => ({ ...prev, [fileId]: 80 }));
+
+          if (!processResponse.ok) {
+            throw new Error(`Document processing failed: ${await processResponse.text()}`);
+          }
+
+          const processData = await processResponse.json();
+          
+          if (!processData.success) {
+            throw new Error(processData.error || 'Document processing failed');
+          }
+
+          // Step 4: Assign to agent
+          const assignResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/media-library-mcp`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'assign_to_agent',
+              agent_id: agent.id,
+              user_id: user.id,
+              params: {
+                document_id: uploadData.data.media_id,
+                assignment_type: 'reference',
+                include_in_vector_search: true,
+                include_in_knowledge_graph: false,
+                priority_level: 1
+              }
             })
           });
 
           setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
 
-          if (processResponse.ok) {
-            uploadedFiles.push(file.name);
-            toast.success(`${file.name} uploaded and assigned to ${agent.name}`);
+          if (!assignResponse.ok) {
+            console.error('[AgentChat] Failed to assign document to agent:', await assignResponse.text());
+            toast.warn(`${file.name} processed but assignment failed`);
           } else {
-            toast.warn(`${file.name} uploaded but processing failed`);
+            const assignData = await assignResponse.json();
+            if (!assignData.success) {
+              console.error('[AgentChat] Document assignment failed:', assignData.error);
+              toast.warn(`${file.name} processed but assignment failed`);
+            }
           }
+
+          uploadedFiles.push(file.name);
+          toast.success(`${file.name} uploaded, processed, and assigned to ${agent.name}`);
+          
+          // Update attachment with real media_id and status to completed
+          setAttachedDocuments(prev => 
+            prev.map(doc => 
+              doc.tempId === fileId || doc.id === fileId
+                ? { ...doc, id: uploadData.data.media_id, uploadStatus: 'completed' as const }
+                : doc
+            )
+          );
 
         } catch (error: any) {
           console.error('File upload error:', error);
           toast.error(`Failed to upload ${file.name}: ${error.message}`);
+          // Update attachment status to error
+          setAttachedDocuments(prev => 
+            prev.map(doc => 
+              doc.tempId === fileId || doc.id === fileId 
+                ? { ...doc, uploadStatus: 'error' as const }
+                : doc
+            )
+          );
         } finally {
           // Clean up progress tracking
           setTimeout(() => {
@@ -1275,16 +1397,18 @@ export function AgentChatPage() {
         // Add a system message to chat indicating files were uploaded
         const systemMessage: Message = {
           id: `upload_${Date.now()}`,
-          role: 'system',
+          role: 'assistant' as const,  // Use 'assistant' role for system messages
           content: `📎 Uploaded ${uploadedFiles.length} ${uploadType}${uploadedFiles.length !== 1 ? 's' : ''}: ${uploadedFiles.join(', ')}. ${uploadedFiles.length === 1 ? 'It has' : 'They have'} been added to the Media Library and assigned to ${agent.name} for training.`,
-          timestamp: new Date().toISOString(),
+          timestamp: new Date(),
           conversation_id: selectedConversationId,
           agent_id: agent.id,
-          user_id: user.id
+          user_id: user.id,
+          metadata: { isSystemMessage: true }  // Mark as system message in metadata
         };
 
-        setMessages(prev => [...prev, systemMessage]);
-        scrollToBottom();
+        // Don't add system message or trigger automatic response
+        // Documents should be uploaded silently in the background
+        // The user can then chat about them when they send a message
       }
 
     } catch (error: any) {
@@ -1403,9 +1527,11 @@ export function AgentChatPage() {
         sending={sending}
         uploading={uploading}
         uploadProgress={uploadProgress}
+        attachedDocuments={attachedDocuments}
         onSubmit={handleSubmit}
-                  onKeyDown={handleKeyDown}
+        onKeyDown={handleKeyDown}
         onFileUpload={handleFileUpload}
+        onRemoveAttachment={handleRemoveAttachment}
         adjustTextareaHeight={adjustTextareaHeight}
         onShowAgentSettings={() => setShowAgentSettingsModal(true)}
       />

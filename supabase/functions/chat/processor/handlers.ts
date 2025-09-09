@@ -170,6 +170,20 @@ export class TextMessageHandler implements MessageHandler {
         preamble.push(agent.system_instructions);
         preamble.push(`=== END SYSTEM INSTRUCTIONS ===\n`);
       }
+      // Document tools guidance - CRITICAL for accessing uploaded content
+      preamble.push(`=== DOCUMENT ACCESS INSTRUCTIONS ===`);
+      preamble.push(`IMPORTANT: When users ask about uploaded documents, files, or content they've shared:`);
+      preamble.push(`1. FIRST use 'search_documents' to find relevant documents`);
+      preamble.push(`2. THEN use 'get_document_content' to retrieve the actual content`);
+      preamble.push(`3. Reference the document content directly in your response`);
+      preamble.push(`4. Always mention the document name/source when referencing content`);
+      preamble.push(`Examples of when to use document tools:`);
+      preamble.push(`- "What does the document say about..."`);
+      preamble.push(`- "Summarize the uploaded file"`);
+      preamble.push(`- "What are the key points in..."`);
+      preamble.push(`- "Tell me about the document I uploaded"`);
+      preamble.push(`=== END DOCUMENT ACCESS INSTRUCTIONS ===\n`);
+      
       // Memory handling guidance (episodic + semantic + conclusions/concepts)
       preamble.push(`=== MEMORY HANDLING INSTRUCTIONS ===\n` +
         `You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.\n\n` +

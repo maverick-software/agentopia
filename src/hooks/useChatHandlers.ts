@@ -303,12 +303,13 @@ export function useChatHandlers({
         // Add a system message to chat indicating files were uploaded
         const systemMessage: Message = {
           id: `upload_${Date.now()}`,
-          role: 'system',
+          role: 'assistant' as const,  // Use 'assistant' role for system messages
           content: `📎 Uploaded ${uploadedFiles.length} ${uploadType}${uploadedFiles.length !== 1 ? 's' : ''}: ${uploadedFiles.join(', ')}. ${uploadedFiles.length === 1 ? 'It has' : 'They have'} been added to the Media Library and assigned to ${chatState.agent.name} for training.`,
-          timestamp: new Date().toISOString(),
+          timestamp: new Date(),
           conversation_id: chatState.selectedConversationId,
           agent_id: chatState.agent.id,
-          user_id: user.id
+          user_id: user.id,
+          metadata: { isSystemMessage: true }  // Mark as system message in metadata
         };
 
         updateChatState({ messages: [...chatState.messages, systemMessage] });

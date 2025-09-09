@@ -54,7 +54,20 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
                  {message.sender_user?.full_name || message.sender_agent?.name || 'Unknown Sender'}
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatTimestamp(message.created_at)}
+                {(() => {
+                  try {
+                    // Handle both timestamp formats for compatibility
+                    const timestamp = message.timestamp || message.created_at;
+                    if (timestamp instanceof Date) {
+                      return timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                    } else if (timestamp) {
+                      return formatTimestamp(timestamp);
+                    }
+                    return '--:--';
+                  } catch {
+                    return '--:--';
+                  }
+                })()}
               </span>
             </div>
             {/* Message Content - needs careful handling for potential markdown/code blocks later */}

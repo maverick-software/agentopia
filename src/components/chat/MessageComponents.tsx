@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { BarChart3, Brain, ChevronRight } from 'lucide-react';
+import { BarChart3, Brain, ChevronRight, FileText, Paperclip } from 'lucide-react';
 import { InlineThinkingIndicator } from '../InlineThinkingIndicator';
 import type { Message } from '../../types';
 import type { Database } from '../../types/database.types';
@@ -56,7 +56,18 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
         // Handle regular messages
         return (
           <div
-            key={`${message.role}-${index}-${message.timestamp.toISOString()}`}
+            key={`${message.role}-${index}-${(() => {
+              try {
+                if (message.timestamp instanceof Date) {
+                  return message.timestamp.toISOString();
+                } else if (typeof message.timestamp === 'string' || typeof message.timestamp === 'number') {
+                  return String(message.timestamp);
+                }
+                return index;
+              } catch {
+                return index;
+              }
+            })()}`}
             className={`flex items-start space-x-4 animate-fade-in ${
               message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
             }`}
@@ -141,10 +152,32 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                 )}
                 
                 <span className="text-xs text-muted-foreground">
-                  {message.timestamp.toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
+                  {(() => {
+                    const timestamp = message.timestamp;
+                    if (!timestamp) return '';
+                    
+                    // Handle different timestamp formats
+                    let date: Date;
+                    if (timestamp instanceof Date) {
+                      date = timestamp;
+                    } else if (typeof timestamp === 'string') {
+                      date = new Date(timestamp);
+                    } else if (typeof timestamp === 'number') {
+                      date = new Date(timestamp);
+                    } else {
+                      return '';
+                    }
+                    
+                    // Check if date is valid
+                    if (isNaN(date.getTime())) {
+                      return '';
+                    }
+                    
+                    return date.toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    });
+                  })()}
                 </span>
               </div>
             <div className={`inline-block p-3 rounded-2xl shadow-sm text-left ${
@@ -225,6 +258,22 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   </div>
                 ) : (
                   <div className="text-sm leading-relaxed">
+                    {/* Display attachment indicators for user messages */}
+                    {message.role === 'user' && message.metadata?.attachments && message.metadata.attachments.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {message.metadata.attachments.map((attachment: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 rounded-md text-xs"
+                          >
+                            <Paperclip className="w-3 h-3" />
+                            <span className="font-medium truncate max-w-[120px]" title={attachment.name}>
+                              {attachment.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <span>{message.content}</span>
                     </div>
