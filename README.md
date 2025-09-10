@@ -127,6 +127,9 @@ See `docs/fixes/CRITICAL_MCP_BYPASS_FIX.md` and `docs/fixes/tool_authorization_s
 *   Agent‑scoped datastore credentials via `agent_datastores` (per‑agent Pinecone/GetZep configs used by chat at runtime)
 *   **🆕 Secure Secret Management:** Built-in Supabase Vault integration for secure API key storage and management
 *   **🆕 Gmail Integration:** Complete OAuth-based Gmail integration allowing agents to send emails on behalf of users
+*   **🆕 Microsoft Outlook Integration:** Complete OAuth-based Microsoft Outlook integration with email, calendar, and contacts management through Microsoft Graph API
+*   **🆕 Microsoft Teams Integration:** Microsoft Teams collaboration platform integration for messaging, meetings, and team communication
+*   **🆕 Microsoft OneDrive Integration:** File storage and sharing integration with Microsoft OneDrive for document management
 *   **🆕 SendGrid Integration:** Complete API-based SendGrid integration with agent inboxes, smart routing, and webhook processing for sending and receiving emails
 *   **🆕 Web Research Capabilities:** Integrated web search, page scraping, and content summarization through multiple providers (Serper API, SerpAPI, Brave Search)
 *   **🆕 Mailgun Integration:** API-based Mailgun integration with validation, analytics, inbound routing, and agent authorization flow
@@ -925,6 +928,223 @@ Key tables for web research:
 3. **Agent Access**: Agents can use web research tools when granted permissions
 4. **Execution**: The `web-search-api` function handles search, scrape, and summarization requests
 5. **Results**: Processed information is returned to agents for response generation
+
+## 🏢 Microsoft 365 Integration Suite
+
+Agentopia provides comprehensive integration with Microsoft 365 services, enabling agents to seamlessly interact with Outlook email, Teams collaboration, and OneDrive file storage through Microsoft Graph API. This enterprise-grade integration suite transforms agents into powerful productivity assistants capable of managing communications, scheduling, and document workflows.
+
+### 📧 **Microsoft Outlook Integration**
+
+#### **Complete Email, Calendar, and Contacts Management**
+- **OAuth 2.0 with PKCE**: Secure authentication flow with Microsoft Graph API
+- **Email Operations**: Send, read, search emails with comprehensive filtering and management
+- **Calendar Management**: Create events, schedule meetings, and manage calendar appointments
+- **Contact Access**: Search and retrieve contacts from Microsoft Outlook address books
+- **Enterprise Security**: All tokens encrypted in Supabase Vault with zero plain-text storage
+
+#### **Supported Microsoft Graph Scopes**
+```typescript
+// Email capabilities
+'https://graph.microsoft.com/Mail.Read'        // Read email messages
+'https://graph.microsoft.com/Mail.Send'        // Send emails
+'https://graph.microsoft.com/Mail.ReadWrite'   // Full email management
+
+// Calendar capabilities  
+'https://graph.microsoft.com/Calendars.Read'      // Read calendar events
+'https://graph.microsoft.com/Calendars.ReadWrite' // Manage calendar events
+
+// Contact capabilities
+'https://graph.microsoft.com/Contacts.Read'       // Access contact information
+'https://graph.microsoft.com/User.Read'           // User profile information
+```
+
+#### **Agent Tool Capabilities**
+- `outlook_send_email` - Send emails with attachments and formatting
+- `outlook_read_emails` - Retrieve and filter email messages
+- `outlook_search_emails` - Search across email content and metadata
+- `outlook_create_event` - Schedule calendar events and meetings
+- `outlook_get_events` - Retrieve calendar events and appointments
+- `outlook_get_contacts` - Access contact directory
+- `outlook_search_contacts` - Search contacts by name, email, or organization
+
+### 👥 **Microsoft Teams Integration**
+
+#### **Team Collaboration and Communication**
+- **Chat Integration**: Send messages to Teams channels and direct chats
+- **Meeting Management**: Create and manage online meetings and conferences
+- **Team Information**: Access team structures, channels, and member information
+- **Real-time Collaboration**: Enable agents to participate in team workflows
+
+#### **Microsoft Teams Capabilities**
+```typescript
+// Teams communication scopes
+'https://graph.microsoft.com/Chat.ReadWrite'          // Chat messaging
+'https://graph.microsoft.com/Team.ReadBasic.All'      // Team information
+'https://graph.microsoft.com/Channel.ReadBasic.All'   // Channel access
+'https://graph.microsoft.com/OnlineMeetings.ReadWrite' // Meeting management
+```
+
+### 📁 **Microsoft OneDrive Integration**
+
+#### **File Storage and Document Management**
+- **File Operations**: Upload, download, and manage files in OneDrive
+- **Document Sharing**: Create and manage shared links with permissions
+- **Folder Management**: Organize files in structured folder hierarchies
+- **Search Capabilities**: Find files by name, content, and metadata
+- **Version Control**: Access file versions and revision history
+
+#### **OneDrive File Operations**
+```typescript
+// File management scopes
+'https://graph.microsoft.com/Files.Read'         // Read files and folders
+'https://graph.microsoft.com/Files.ReadWrite'    // Full file management
+'https://graph.microsoft.com/Files.Read.All'     // Read all accessible files
+'https://graph.microsoft.com/Files.ReadWrite.All' // Manage all files
+'https://graph.microsoft.com/Sites.Read.All'     // SharePoint site access
+'https://graph.microsoft.com/Sites.ReadWrite.All' // SharePoint management
+```
+
+### 🔧 **Technical Architecture**
+
+#### **Modular Edge Function Design**
+The Microsoft integrations follow a sophisticated modular architecture:
+
+```
+supabase/functions/microsoft-outlook-api/
+├── index.ts                    # Main router and handler
+├── outlook-utils.ts           # Utility functions and validation
+├── outlook-graph-client.ts    # Microsoft Graph API client
+├── outlook-email-operations.ts # Email-specific operations
+├── outlook-calendar-operations.ts # Calendar management
+└── outlook-contact-operations.ts  # Contact operations
+```
+
+#### **Database Integration**
+```sql
+-- Microsoft service providers configuration
+service_providers: {
+  name: 'microsoft-outlook' | 'microsoft-teams' | 'microsoft-onedrive',
+  authorization_endpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  token_endpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  scopes_supported: jsonb, -- Microsoft Graph API scopes
+  configuration_metadata: jsonb -- Microsoft-specific settings
+}
+
+-- Integration capabilities for each Microsoft service
+integration_capabilities: {
+  integration_id: uuid,
+  capability_key: text, -- e.g., 'outlook_send_email', 'teams_send_message'
+  display_label: text,  -- Human-readable capability description
+  display_order: integer
+}
+```
+
+#### **Universal Tool Executor Integration**
+Microsoft tools are seamlessly integrated into the Universal Tool Executor:
+
+```typescript
+// Tool routing configuration
+TOOL_ROUTING_MAP: {
+  'outlook_': {
+    function_name: 'microsoft-outlook-api',
+    action_mapping: {
+      'outlook_send_email': 'send_email',
+      'outlook_read_emails': 'get_emails',
+      'outlook_create_event': 'create_event',
+      // ... additional mappings
+    }
+  }
+}
+```
+
+### 🔒 **Security & Compliance**
+
+#### **Enterprise-Grade Security**
+- **OAuth 2.0 with PKCE**: Industry-standard secure authentication
+- **Token Encryption**: All access and refresh tokens stored in Supabase Vault
+- **Service Role Operations**: Token operations restricted to server-side functions
+- **Row Level Security**: User-scoped access to all Microsoft integration data
+
+#### **Microsoft Graph API Security**
+- **Tenant Isolation**: Support for both personal and organizational Microsoft accounts
+- **Scope-Based Permissions**: Granular control over Microsoft service access
+- **Token Refresh**: Automatic token renewal with secure re-encryption
+- **Audit Logging**: Complete operation tracking for compliance requirements
+
+### 🎯 **User Experience**
+
+#### **Integration Setup Flow**
+1. **Service Selection**: Choose Microsoft Outlook/Teams/OneDrive from integrations page
+2. **OAuth Authorization**: Secure Microsoft OAuth flow with consent screen
+3. **Automatic Configuration**: Tokens encrypted and capabilities discovered automatically
+4. **Agent Assignment**: Grant specific Microsoft permissions to individual agents
+5. **Immediate Availability**: Microsoft tools available in agent conversations instantly
+
+#### **Agent Channel Configuration**
+Microsoft Outlook is fully integrated into the agent channels system:
+- **Email Provider Option**: Available alongside Gmail, SMTP, SendGrid, and Mailgun
+- **OAuth Scope Mapping**: Microsoft Graph scopes automatically mapped to agent capabilities
+- **Permission Management**: Granular control over which agents can access Microsoft services
+- **Credential Status**: Real-time display of Microsoft connection health and token expiration
+
+### 📊 **Usage Examples**
+
+#### **Email Management Workflow**
+```typescript
+// User: "Send a follow-up email about yesterday's meeting"
+// Agent automatically uses outlook_send_email tool
+const emailResult = await agent.callTool('outlook_send_email', {
+  to: 'client@example.com',
+  subject: 'Follow-up: Project Discussion Meeting',
+  body: 'Thank you for taking the time to discuss...',
+  importance: 'high'
+});
+```
+
+#### **Calendar Integration**
+```typescript
+// User: "Schedule a team meeting for next Tuesday at 2 PM"
+// Agent uses outlook_create_event tool
+const eventResult = await agent.callTool('outlook_create_event', {
+  subject: 'Team Strategy Meeting',
+  start: '2025-01-14T14:00:00',
+  end: '2025-01-14T15:00:00',
+  attendees: ['team@company.com'],
+  location: 'Conference Room A'
+});
+```
+
+#### **Contact Management**
+```typescript
+// User: "Find John Smith's contact information"
+// Agent uses outlook_search_contacts tool
+const contactResult = await agent.callTool('outlook_search_contacts', {
+  query: 'John Smith',
+  limit: 10
+});
+```
+
+### 🔄 **Integration Status**
+
+#### **✅ Production-Ready Features**
+- Complete Microsoft Outlook integration with email, calendar, and contacts
+- Microsoft Teams integration framework (ready for enhancement)
+- Microsoft OneDrive integration foundation (ready for enhancement)
+- Universal Tool Executor routing for all Microsoft services
+- Database migrations with integration capabilities deployed
+- Frontend integration with agent channels and permissions system
+- Comprehensive error handling with LLM-friendly error messages
+- Token refresh and automatic re-encryption system
+
+#### **🚀 Future Enhancements**
+- Advanced calendar management (recurring events, meeting rooms)
+- Microsoft Teams bot integration for direct agent interaction
+- OneDrive file collaboration and real-time editing
+- Microsoft Power Platform integration (Power Automate, Power BI)
+- SharePoint document management and workflow integration
+- Microsoft Dynamics 365 CRM integration
+
+The Microsoft 365 Integration Suite transforms Agentopia agents into comprehensive productivity assistants, enabling seamless interaction with the full Microsoft ecosystem while maintaining enterprise-grade security and compliance standards.
 
 ## 📧 Gmail Integration & MCP System
 
@@ -2745,6 +2965,18 @@ Located in `services/`. These are designed for persistent execution on a server 
     * **Real-Time Status Tracking:** Processing status monitoring with chunk count reporting and error handling
     * **Cache Invalidation System:** Manual tool cache clearing with UI controls for immediate agent tool updates
     * **UUID-Based Document Access:** Secure document identification with fallback resolution for agent-friendly interactions
+*   **🆕 Microsoft 365 Integration Suite (September 2025):**
+    * **Microsoft Outlook Integration:** Complete OAuth-based integration with email, calendar, and contacts management through Microsoft Graph API
+    * **Modular Edge Function Architecture:** 6-file modular structure with specialized components for email, calendar, and contact operations
+    * **Universal Tool Executor Integration:** Seamless routing of 7 Outlook tools (send_email, read_emails, search_emails, create_event, get_events, get_contacts, search_contacts)
+    * **Database Integration:** Complete migration with integration capabilities, service provider configuration, and agent permission system
+    * **Frontend Integration:** Full integration with agent channels system, setup modals, and credential management interfaces
+    * **Enterprise Security:** OAuth 2.0 with PKCE, token encryption in Supabase Vault, and comprehensive scope-based permission management
+    * **Microsoft Teams Framework:** Foundation for team collaboration, messaging, and meeting management capabilities
+    * **Microsoft OneDrive Framework:** File storage and document management integration foundation with SharePoint support
+    * **Agent Channel Integration:** Microsoft Outlook available as email provider alongside Gmail, SMTP, SendGrid, and Mailgun
+    * **LLM-Friendly Error Handling:** Intelligent error messages and automatic retry mechanisms for improved user experience
+    * **Token Refresh System:** Automatic token renewal with secure re-encryption and connection health monitoring
 
 ## Memory Systems & Knowledge Integration
 
@@ -3874,6 +4106,7 @@ while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
 *   **✅ Enhanced Team Management System:** **COMPLETE & PRODUCTION-READY** - Modern team management workflow with modal-based creation, comprehensive team details with descriptions and member management, fixed edit functionality, and complete theme consistency. Includes proper TypeScript integration and modular component architecture.
 *   **✅ Zapier MCP Integration:** **COMPLETE & DEPLOYED** - Universal tool connectivity through Model Context Protocol allowing agents to access 8,000+ applications. Full implementation with dynamic tool discovery, seamless function calling integration, and comprehensive UI management. Metadata-based routing issue resolved for proper tool execution.
 *   **✅ Media Library & Document Processing System:** **COMPLETE & PRODUCTION-READY** - Comprehensive WordPress-style media management system with centralized document storage, automated text extraction and processing, agent training integration, and MCP tool framework. Features secure file handling, multi-format support, intelligent document reprocessing with visual UI feedback, knowledge graph integration, advanced UI with drag-and-drop uploads, cache invalidation controls, and UUID-based document access with fallback resolution.
+*   **✅ Microsoft 365 Integration Suite:** **COMPLETE & PRODUCTION-READY** - Comprehensive Microsoft Outlook integration with email, calendar, and contacts management through Microsoft Graph API. Features modular Edge Function architecture, 7 specialized agent tools, Universal Tool Executor routing, complete database migrations, frontend integration with agent channels system, OAuth 2.0 with PKCE security, token encryption in Supabase Vault, and intelligent error handling. Microsoft Teams and OneDrive integration frameworks deployed and ready for enhancement.
 *   **MCP Management Interface (Phase 2.3.1):** **40% Complete** - Major progress on Multi-MCP Management Components:
     *   ✅ **Foundation Complete:** TypeScript interfaces, component architecture, DTMA API integration
     *   ✅ **MCPServerList Component:** Full server listing with search, filtering, status management (432 lines)

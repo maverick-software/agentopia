@@ -427,6 +427,13 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     try {
       const authType = provider.authType || 'api_key';
       
+      // For OAuth providers like Microsoft Outlook, redirect to integrations page
+      if (authType === 'oauth') {
+        setCredentialModal(prev => ({ ...prev, isOpen: false }));
+        toast.info(`Please set up ${provider.name} in the Integrations page first. OAuth providers require proper authentication flow.`);
+        return;
+      }
+      
       if (authType === 'api_key' && !newApiKey.trim()) {
         toast.error('API key is required');
         return;
@@ -435,6 +442,17 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       if (authType === 'bot_token' && !newBotToken.trim()) {
         toast.error('Bot token is required');
         return;
+      }
+
+      // Find the service provider ID from the database
+      const { data: serviceProvider, error: providerError } = await supabase
+        .from('service_providers')
+        .select('id')
+        .eq('name', provider.id)
+        .single();
+
+      if (providerError || !serviceProvider) {
+        throw new Error(`Service provider ${provider.id} not found`);
       }
 
       const credentialValue = authType === 'bot_token' ? newBotToken : newApiKey;
@@ -447,7 +465,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
 
       const credentialData = {
         user_id: user.id,
-        oauth_provider_id: provider.id,
+        service_provider_id: serviceProvider.id, // Use the correct column name
         external_user_id: `${authType}_${Date.now()}`,
         external_username: provider.name || null,
         connection_name: `${credentialModal.channelType}_${provider.id}`,
