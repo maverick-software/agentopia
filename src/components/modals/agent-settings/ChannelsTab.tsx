@@ -72,7 +72,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   // Function to check if a channel is actually enabled based on active permissions
   const isChannelEnabled = useCallback((channelType: string): boolean => {
     const providerMap: Record<string, string[]> = {
-      email: ['gmail', 'smtp', 'smtp_server', 'sendgrid', 'mailgun'],
+      email: ['gmail', 'smtp', 'smtp_server', 'sendgrid', 'mailgun', 'microsoft-outlook'],
       sms: ['twilio', 'aws_sns'],
       slack: ['slack'],
       discord: ['discord'],
@@ -143,7 +143,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     try {
       const channelType = channel.replace('_enabled', '');
       const providerMap: Record<string, string[]> = {
-        email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+        email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'],
         sms: ['twilio', 'aws_sns'],
         slack: ['slack'],
         discord: ['discord'],
@@ -193,7 +193,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         `)
         .eq('user_id', user?.id)
         .in('connection_status', ['active', 'connected'])
-        .in('service_providers.name', ['smtp', 'sendgrid', 'mailgun', 'gmail']);
+        .in('service_providers.name', ['smtp', 'sendgrid', 'mailgun', 'gmail', 'microsoft-outlook']);
 
       if (error) {
         console.error('Error loading email credentials:', error);
@@ -207,6 +207,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         availableProviders: [
           { id: 'smtp', name: 'SMTP', description: 'Generic SMTP server', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
           { id: 'gmail', name: 'Gmail', description: 'Google Gmail', requiresApiKey: false, requiresOAuth: true, authType: 'oauth' },
+          { id: 'microsoft-outlook', name: 'Microsoft Outlook', description: 'Microsoft Outlook/Office 365', requiresApiKey: false, requiresOAuth: true, authType: 'oauth' },
           { id: 'sendgrid', name: 'SendGrid', description: 'SendGrid email service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
           { id: 'mailgun', name: 'Mailgun', description: 'Mailgun email service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' }
         ],
@@ -268,6 +269,39 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       capabilities.push('profile.email');
     }
     if (oauthScopes.includes('profile')) {
+      capabilities.push('profile.info');
+    }
+    
+    // Fallback: if no specific scopes found, grant basic send permission
+    return capabilities.length > 0 ? capabilities : ['email.send'];
+  }
+  
+  if (providerName === 'microsoft-outlook') {
+    const capabilities: string[] = [];
+    
+    // Microsoft Graph API scopes
+    if (oauthScopes.includes('https://graph.microsoft.com/Mail.Send')) {
+      capabilities.push('email.send');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/Mail.Read')) {
+      capabilities.push('email.read');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/Mail.ReadWrite')) {
+      capabilities.push('email.read', 'email.modify');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/Calendars.Read')) {
+      capabilities.push('calendar.read');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/Calendars.ReadWrite')) {
+      capabilities.push('calendar.read', 'calendar.write');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/Contacts.Read')) {
+      capabilities.push('contacts.read');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/Contacts.ReadWrite')) {
+      capabilities.push('contacts.read', 'contacts.write');
+    }
+    if (oauthScopes.includes('https://graph.microsoft.com/User.Read')) {
       capabilities.push('profile.info');
     }
     
