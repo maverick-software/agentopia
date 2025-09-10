@@ -59,6 +59,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     availableProviders: [] as any[],
     availableCredentials: [] as any[]
   });
+  const [newApiKey, setNewApiKey] = useState('');
+  const [newBotToken, setNewBotToken] = useState('');
 
   const supabase = useSupabaseClient();
   const { user } = useAuth();
@@ -380,6 +382,68 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     setCredentialModal(prev => ({ ...prev, isOpen: false }));
     toast.info(`Please set up ${providerId} credentials in the Integrations page first`);
     // You could also open the specific provider setup modal here
+  };
+
+  const handleCreateCredential = async () => {
+    if (!credentialModal.selectedProvider || !user) return;
+
+    const provider = credentialModal.availableProviders.find(p => p.id === credentialModal.selectedProvider);
+    if (!provider) return;
+
+    try {
+      const authType = provider.authType || 'api_key';
+      
+      if (authType === 'api_key' && !newApiKey.trim()) {
+        toast.error('API key is required');
+        return;
+      }
+      
+      if (authType === 'bot_token' && !newBotToken.trim()) {
+        toast.error('Bot token is required');
+        return;
+      }
+
+      const credentialValue = authType === 'bot_token' ? newBotToken : newApiKey;
+      
+      const configuration = {
+        provider: provider.id,
+        auth_type: authType,
+        [authType]: credentialValue
+      };
+
+      const credentialData = {
+        user_id: user.id,
+        oauth_provider_id: provider.id,
+        external_user_id: `${authType}_${Date.now()}`,
+        external_username: provider.name || null,
+        connection_name: `${credentialModal.channelType}_${provider.id}`,
+        connection_status: 'active' as const,
+        credential_type: authType as 'api_key',
+        scopes_granted: ['channel_access'],
+        vault_access_token_id: credentialValue,
+        vault_refresh_token_id: null,
+        token_expires_at: null,
+        connection_metadata: configuration
+      };
+
+      const { error } = await supabase
+        .from('user_integration_credentials')
+        .insert(credentialData);
+
+      if (error) throw error;
+
+      toast.success(`${provider.name} credentials saved successfully`);
+      setNewApiKey('');
+      setNewBotToken('');
+      setCredentialModal(prev => ({ ...prev, isOpen: false }));
+      
+      // Refresh permissions to update the UI
+      await refetchPermissions();
+      
+    } catch (error) {
+      console.error('Error creating credential:', error);
+      toast.error('Failed to save credentials. Please try again.');
+    }
   };
 
   const handleSave = async () => {
