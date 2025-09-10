@@ -6,7 +6,7 @@
  * Normalizes a scope name to a valid OpenAI tool name
  * OpenAI requires tool names to match pattern: ^[a-zA-Z0-9_-]+$
  */
-function normalizeToolName(scope: string): string {
+export function normalizeToolName(scope: string): string {
   // Remove URLs and convert to valid tool name
   return scope
     .replace(/^https?:\/\/[^\/]+\//, '') // Remove URL prefix

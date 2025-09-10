@@ -2653,6 +2653,17 @@ Located in `services/`. These are designed for persistent execution on a server 
 
 ## Recent Improvements
 
+*   **🆕 OpenAI Tool Name Normalization Fix (September 2025):**
+    *   **Critical Chat Function Fix:** Resolved 500 errors caused by invalid tool names containing dots (e.g., `profile.email`, `profile.info`)
+    *   **OpenAI Compliance:** Implemented automatic tool name normalization to meet OpenAI's naming pattern requirements (`^[a-zA-Z0-9_-]+$`)
+    *   **Seamless Integration:** Enhanced `get-agent-tools` Edge Function with `normalizeToolName()` utility that converts problematic characters
+    *   **Zero Breaking Changes:** All existing tools continue to work with normalized names (dots become underscores)
+    *   **Technical Implementation:** 
+      - Exported `normalizeToolName()` function from `scope-mapper.ts` for reusability
+      - Applied normalization to all MCP tool names during discovery phase
+      - Maintains original capability descriptions while ensuring OpenAI compatibility
+      - Comprehensive error prevention for future tool integrations
+    *   **Impact:** Eliminates `Invalid 'tools[3].function.name'` errors and enables reliable agent tool execution
 *   **🆕 Light Mode Theme Implementation (January 2025):**
     *   **Complete UI Transformation:** Implemented comprehensive light mode as default theme with professional, clean appearance
     *   **CSS Variable System:** Advanced theming architecture using CSS custom properties for both light and dark modes

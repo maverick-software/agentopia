@@ -14,13 +14,13 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 // Import modular components
 import { ToolDefinition, AgentToolsResponse } from './types.ts';
-import { mapScopeToCapability, isScopeAllowed } from './scope-mapper.ts';
+import { mapScopeToCapability, isScopeAllowed, normalizeToolName } from './scope-mapper.ts';
 import { getCredentialStatus } from './credential-utils.ts';
 import { generateParametersForCapability } from './tool-generator.ts';
 import { 
   getAgentPermissions, 
   getServiceProviders, 
-  hasAgentDocuments
+  hasAgentDocuments 
 } from './database-service.ts';
 
 serve(async (req) => {
@@ -133,11 +133,14 @@ serve(async (req) => {
         const mappedCapabilities = mapScopeToCapability(scope, providerName);
         
         for (const capability of mappedCapabilities) {
+          // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
+          const normalizedToolName = normalizeToolName(capability);
+          
           // Generate tool parameters
-          const parameters = generateParametersForCapability(capability);
+          const parameters = generateParametersForCapability(normalizedToolName);
           
           tools.push({
-            name: capability,
+            name: normalizedToolName,
             description: `${capability} - ${provider.display_name}`,
             parameters,
             status: credentialStatus.status,
