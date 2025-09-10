@@ -29,6 +29,11 @@ BEGIN
     END IF;
 
     -- Check if all required scopes are granted
+    -- Handle case where p_required_scopes might be null or empty
+    IF p_required_scopes IS NULL OR array_length(p_required_scopes, 1) IS NULL THEN
+        RETURN TRUE; -- If no scopes required, allow access
+    END IF;
+    
     FOR i IN 1..array_length(p_required_scopes, 1) LOOP
         v_scope := p_required_scopes[i];
         

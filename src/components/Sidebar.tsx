@@ -137,26 +137,19 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
   }
 };
 
-// Custom component for Agents navigation with recent agents
+// Simplified Agents navigation - just the main link
 const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({ isCollapsed, level = 0 }) => {
   const location = useLocation();
   const { agents, fetchAllAgents } = useAgents();
-  const [isExpanded, setIsExpanded] = useState(false);
   const [recentAgents, setRecentAgents] = useState<any[]>([]);
 
   const isActiveOrParent = location.pathname.startsWith('/agents');
 
-  useEffect(() => {
-    if (isActiveOrParent && !isCollapsed) {
-      setIsExpanded(true);
-    }
-  }, [isActiveOrParent, isCollapsed]);
-
   // Update recent agents when the agents list changes
   useEffect(() => {
     if (agents.length > 0) {
-      // Get top 3 most recent agents (already ordered by created_at desc)
-      setRecentAgents(agents.slice(0, 3));
+      // Get top 10 most recent agents (already ordered by created_at desc)
+      setRecentAgents(agents.slice(0, 10));
     }
   }, [agents]);
 
@@ -184,69 +177,53 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
   }
 
   return (
-    <div>
-      <div className={`flex items-center w-full rounded-md transition-colors ${
-        isActiveOrParent ? 'bg-sidebar-accent/50' : ''
-      }`}>
-        <NavLink
-          to="/agents"
-          className={({ isActive }): string =>
-            `flex items-center space-x-2 rounded-l-md transition-colors px-3 py-2 flex-1 text-sm ${
-              isActive
-                ? 'bg-sidebar-accent/30 text-sidebar-foreground'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent'
-            }`
-          }
-          style={{ paddingLeft: `${1 + level * 1.5}rem` }}
-        >
-          <Users className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/agents', 'Agents')}`} />
-          <span className="font-medium truncate">Agents</span>
-        </NavLink>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="p-3 hover:bg-sidebar-accent rounded-r-md transition-colors text-sidebar-foreground"
-        >
-          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        </button>
-      </div>
-      {isExpanded && (
-        <div className="mt-1 space-y-1">
+    <div className="space-y-1">
+      {/* Main Agents Link */}
+      <NavLink
+        to="/agents"
+        className={({ isActive }): string =>
+          `flex items-center space-x-2 rounded-md transition-colors px-3 py-2 text-sm ${
+            isActive
+              ? 'bg-sidebar-accent/30 text-sidebar-foreground'
+              : 'text-sidebar-foreground hover:bg-sidebar-accent'
+          }`
+        }
+        style={{ paddingLeft: `${1 + level * 1.5}rem` }}
+      >
+        <Users className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/agents', 'Agents')}`} />
+        <span className="font-medium truncate">Agents</span>
+      </NavLink>
+
+      {/* Recent Agents List */}
+      {recentAgents.length > 0 && (
+        <div className="ml-6 space-y-1">
           {recentAgents.map((agent) => (
             <NavLink
               key={agent.id}
               to={`/agents/${agent.id}/chat`}
-              onClick={() => {
-                // Clear stored conversation ID to ensure new chat starts fresh
-                try { 
-                  localStorage.removeItem(`agent_${agent.id}_conversation_id`);
-                  localStorage.removeItem(`agent_${agent.id}_session_id`);
-                } catch {}
-              }}
               className={({ isActive }): string =>
-                `flex items-center space-x-2 rounded-md transition-colors py-2 text-sm px-3 ${
+                `flex items-center space-x-2 rounded-md transition-colors px-2 py-1.5 text-sm group ${
                   isActive
                     ? 'bg-sidebar-accent/20 text-sidebar-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                 }`
               }
             >
+              {/* Agent Avatar */}
               {agent.avatar_url ? (
                 <img 
                   src={agent.avatar_url} 
-                  alt={agent.name || 'Agent'}
-                  className="w-4 h-4 rounded object-cover flex-shrink-0"
+                  alt={agent.name}
+                  className="w-4 h-4 rounded-full flex-shrink-0"
                 />
               ) : (
-                <div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-xs font-medium">
-                    {agent.name?.charAt(0)?.toUpperCase() || 'A'}
-                  </span>
-                </div>
+                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex-shrink-0" />
               )}
-              <span className="font-medium truncate">{agent.name || 'Unnamed Agent'}</span>
+              
+              {/* Agent Name */}
+              <span className="truncate text-xs">{agent.name}</span>
             </NavLink>
           ))}
-
         </div>
       )}
     </div>

@@ -16,7 +16,7 @@ async function refreshGmailToken(supabase: SupabaseClient, userId: string, conne
   // Get the connection details including credential type
   const { data: connection, error: fetchError } = await supabase
     .from('user_integration_credentials')
-    .select('vault_refresh_token_id, external_username, credential_type, service_providers!user_integration_credentials_service_provider_id_fkey(name)')
+    .select('vault_refresh_token_id, external_username, credential_type, service_providers!oauth_provider_id(name)')
     .eq('id', connectionId)
     .eq('user_id', userId)
     .single();

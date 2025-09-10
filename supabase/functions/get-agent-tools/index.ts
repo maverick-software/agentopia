@@ -133,8 +133,11 @@ serve(async (req) => {
         const mappedCapabilities = mapScopeToCapability(scope, providerName);
         
         for (const capability of mappedCapabilities) {
+          // Create provider-prefixed tool name (e.g., gmail_send_email)
+          const providerPrefixedName = `${providerName}_${capability}`;
+          
           // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
-          const normalizedToolName = normalizeToolName(capability);
+          const normalizedToolName = normalizeToolName(providerPrefixedName);
           
           // Generate tool parameters
           const parameters = generateParametersForCapability(normalizedToolName);

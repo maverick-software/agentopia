@@ -130,7 +130,34 @@ serve(async (req) => {
     console.log('[gmail-api] Debug - Agent Gmail permissions:', debugPermissions);
 
     if (permissionError || !hasPermissions) {
-      throw new Error(`Agent does not have required permissions for this Gmail operation. Required: ${JSON.stringify(requiredScopes)}, Permission error: ${permissionError?.message || 'None'}`)
+      console.error('[gmail-api] Permission validation failed:', {
+        hasPermissions,
+        permissionError,
+        requiredScopes,
+        debugPermissions
+      });
+      
+      // Provide intelligent error message for the LLM
+      let errorMessage = '';
+      
+      if (permissionError) {
+        if (permissionError.message?.includes('upper bound of FOR loop cannot be null')) {
+          errorMessage = 'Gmail integration configuration issue detected. The required scopes validation failed due to a database configuration problem.';
+        } else {
+          errorMessage = `Gmail permission validation error: ${permissionError.message}`;
+        }
+      } else if (!hasPermissions) {
+        if (debugPermissions && debugPermissions.length === 0) {
+          errorMessage = 'No Gmail integration found for this agent. Please configure Gmail access in the agent settings under the Channels tab.';
+        } else {
+          errorMessage = `This agent does not have the required Gmail permissions for '${action}'. Required permissions: ${requiredScopes.join(', ')}. Please check the agent's Gmail integration settings.`;
+        }
+      }
+      
+      // Add helpful context for the LLM
+      errorMessage += ` To resolve this, the user should: 1) Go to Agent Settings → Channels tab, 2) Configure Gmail integration, 3) Grant the required permissions: ${requiredScopes.join(', ')}.`;
+      
+      throw new Error(errorMessage);
     }
 
     // Get user's Gmail access token from integration credentials
@@ -147,7 +174,7 @@ serve(async (req) => {
 
     const { data: connection, error: connectionError } = await supabaseServiceRole
       .from('user_integration_credentials')
-      .select('vault_access_token_id, vault_refresh_token_id, token_expires_at, connection_status, created_at, updated_at')
+      .select('id, vault_access_token_id, vault_refresh_token_id, token_expires_at, connection_status, connection_name, external_username, created_at, updated_at')
       .eq('user_id', user_id)
       .eq('oauth_provider_id', gmailProvider.id)
       .eq('connection_status', 'active')
@@ -164,12 +191,32 @@ serve(async (req) => {
       // Let's also check if there are any connections at all for this user
       const { data: allConnections } = await supabaseServiceRole
         .from('user_integration_credentials')
-        .select('id, connection_status, oauth_provider_id, created_at, updated_at')
+        .select('id, connection_status, oauth_provider_id, connection_name, external_username, created_at, updated_at, service_providers!inner(name)')
         .eq('user_id', user_id);
       
       console.log('[gmail-api] All user connections:', allConnections);
       
-      throw new Error(`No active Gmail connection found: ${connectionError?.message || 'Not found'}`);
+      // Check for inactive Gmail connections
+      const { data: inactiveGmailConnections } = await supabaseServiceRole
+        .from('user_integration_credentials')
+        .select('id, connection_status, connection_name, external_username, created_at, updated_at')
+        .eq('user_id', user_id)
+        .eq('oauth_provider_id', gmailProvider.id);
+      
+      console.log('[gmail-api] All Gmail connections (including inactive):', inactiveGmailConnections);
+      
+      let errorMessage = 'No active Gmail connection found for this agent.';
+      
+      if (inactiveGmailConnections && inactiveGmailConnections.length > 0) {
+        const statuses = inactiveGmailConnections.map(conn => conn.connection_status).join(', ');
+        errorMessage = `Gmail connection exists but is not active (status: ${statuses}). The connection may have expired or been revoked.`;
+      } else if (allConnections && allConnections.length === 0) {
+        errorMessage = 'No integrations configured for this user.';
+      }
+      
+      errorMessage += ' To resolve this: 1) Go to Agent Settings → Channels tab, 2) Configure Gmail integration, 3) Complete the OAuth authorization process.';
+      
+      throw new Error(errorMessage);
     }
 
     let accessToken: string;
@@ -187,24 +234,48 @@ serve(async (req) => {
     } else {
       // SECURITY: Get access token from Supabase Vault (not directly from connection)
       const vaultTokenId = connection.vault_access_token_id;
-      console.log('[gmail-api] Vault token ID:', vaultTokenId);
+      console.log('[gmail-api] Connection details:', {
+        vault_access_token_id: vaultTokenId,
+        vault_refresh_token_id: connection.vault_refresh_token_id,
+        connection_status: connection.connection_status,
+        token_expires_at: connection.token_expires_at,
+        created_at: connection.created_at,
+        updated_at: connection.updated_at
+      });
       
       if (!vaultTokenId) {
-        throw new Error('Vault token ID is empty or not found.');
+        throw new Error('Gmail access token not found in vault. The Gmail integration may need to be reconnected. Please go to Agent Settings → Channels → Gmail and reconnect your account.');
       }
 
       // Retrieve actual token from vault using service role client
+      console.log('[gmail-api] Attempting to decrypt vault token:', vaultTokenId);
       const { data: decryptedToken, error: vaultError } = await supabaseServiceRole
         .rpc('vault_decrypt', { vault_id: vaultTokenId });
 
       console.log('[gmail-api] Vault decrypt result:', {
         success: !!decryptedToken,
         error: vaultError,
-        token_length: decryptedToken ? decryptedToken.length : 0
+        token_length: decryptedToken ? decryptedToken.length : 0,
+        vault_error_code: vaultError?.code,
+        vault_error_details: vaultError?.details
       });
 
       if (vaultError || !decryptedToken) {
-        throw new Error(`Failed to retrieve Gmail access token from vault: ${vaultError?.message || 'Token not found'}`);
+        let errorMessage = 'Failed to retrieve Gmail access token from vault.';
+        
+        if (vaultError) {
+          if (vaultError.code === 'PGRST116' || vaultError.message?.includes('not found')) {
+            errorMessage = 'Gmail access token not found in secure storage. This usually means the Gmail integration needs to be reconnected.';
+          } else if (vaultError.code === 'PGRST301') {
+            errorMessage = 'Gmail access token could not be decrypted. The token may be corrupted.';
+          } else {
+            errorMessage = `Gmail vault error: ${vaultError.message}`;
+          }
+        }
+        
+        errorMessage += ' To resolve this: 1) Go to Agent Settings → Channels tab, 2) Remove the existing Gmail integration, 3) Add Gmail integration again and complete the OAuth flow.';
+        
+        throw new Error(errorMessage);
       }
       
       accessToken = decryptedToken;
@@ -222,28 +293,64 @@ serve(async (req) => {
       switch (action) {
         case 'send_email':
           console.log('Calling sendEmail with params:', params)
-          result = await sendEmail(accessToken, params as EmailMessage)
+          result = await executeWithTokenRefresh(
+            (token) => sendEmail(token, params as EmailMessage),
+            supabaseServiceRole,
+            connection,
+            user_id,
+            accessToken,
+            'send_email'
+          )
           console.log('sendEmail result:', result)
           quotaConsumed = 100 // Sending emails costs 100 quota units
           break
         
         case 'read_emails':
-          result = await readEmails(accessToken, params)
+        case 'list_messages': // Handle list_messages as an alias for read_emails
+          result = await executeWithTokenRefresh(
+            (token) => readEmails(token, params),
+            supabaseServiceRole,
+            connection,
+            user_id,
+            accessToken,
+            action
+          )
           quotaConsumed = 5 * (params.max_results || 50) // 5 units per message
           break
         
         case 'search_emails':
-          result = await searchEmails(accessToken, params)
+          result = await executeWithTokenRefresh(
+            (token) => searchEmails(token, params),
+            supabaseServiceRole,
+            connection,
+            user_id,
+            accessToken,
+            'search_emails'
+          )
           quotaConsumed = 5 * (params.max_results || 50)
           break
         
         case 'email_actions':
-          result = await emailActions(accessToken, params)
+          result = await executeWithTokenRefresh(
+            (token) => emailActions(token, params),
+            supabaseServiceRole,
+            connection,
+            user_id,
+            accessToken,
+            'email_actions'
+          )
           quotaConsumed = 5
           break
 
         case 'manage_labels':
-          result = await manageLabels(accessToken, params)
+          result = await executeWithTokenRefresh(
+            (token) => manageLabels(token, params),
+            supabaseServiceRole,
+            connection,
+            user_id,
+            accessToken,
+            'manage_labels'
+          )
           quotaConsumed = 5 // Label operations cost 5 units
           break
         
@@ -321,6 +428,7 @@ function getRequiredScopes(action: string): string[] {
     send_email: ['email.send'],
     read_emails: ['email.read'],
     search_emails: ['email.read', 'email.metadata'],
+    list_messages: ['email.read'], // Add mapping for list_messages action
     manage_labels: ['email.labels', 'email.modify'],
     email_actions: ['email.modify'],
     compose_email: ['email.compose'],
@@ -328,7 +436,7 @@ function getRequiredScopes(action: string): string[] {
     get_profile: ['profile.email', 'profile.info'],
     manage_settings: ['email.settings.basic', 'email.settings.sharing'],
   };
-  return scopeMap[action] || [];
+  return scopeMap[action] || ['email.read']; // Default to email.read instead of empty array
 }
 
 // Gmail API Operations
@@ -427,7 +535,7 @@ async function sendEmail(accessToken: string, message: EmailMessage): Promise<an
     
     // Provide user-friendly error messages
     if (response.status === 401) {
-      throw new Error('Gmail authentication failed. Please reconnect your Gmail account.')
+      throw new Error('401: Gmail authentication failed. Token may be expired.')
     } else if (response.status === 403) {
       throw new Error('Permission denied. Please ensure you granted email sending permissions.')
     } else if (response.status === 400) {
@@ -465,6 +573,9 @@ async function readEmails(accessToken: string, parameters: any): Promise<any> {
 
   if (!response.ok) {
     const error = await response.text()
+    if (response.status === 401) {
+      throw new Error('401: Gmail authentication failed. Token may be expired.')
+    }
     throw new Error(`Failed to read emails: ${error}`)
   }
 
@@ -502,6 +613,9 @@ async function readEmails(accessToken: string, parameters: any): Promise<any> {
         const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}` , {
           headers: { 'Authorization': `Bearer ${accessToken}` },
         })
+        if (!res.ok && res.status === 401) {
+          throw new Error('401: Gmail authentication failed. Token may be expired.')
+        }
         return res.ok ? await res.json() : m
       })
     )
@@ -557,6 +671,9 @@ async function manageLabels(accessToken: string, parameters: any): Promise<any> 
       
       if (!createResponse.ok) {
         const error = await createResponse.text()
+        if (createResponse.status === 401) {
+          throw new Error('401: Gmail authentication failed. Token may be expired.')
+        }
         throw new Error(`Failed to create label: ${error}`)
       }
       
@@ -571,6 +688,9 @@ async function manageLabels(accessToken: string, parameters: any): Promise<any> 
       
       if (!listResponse.ok) {
         const error = await listResponse.text()
+        if (listResponse.status === 401) {
+          throw new Error('401: Gmail authentication failed. Token may be expired.')
+        }
         throw new Error(`Failed to list labels: ${error}`)
       }
       
@@ -635,6 +755,9 @@ async function emailActions(accessToken: string, parameters: any): Promise<any> 
     })
     if (!resp.ok) {
       const err = await resp.text()
+      if (resp.status === 401) {
+        throw new Error('401: Gmail authentication failed. Token may be expired.')
+      }
       throw new Error(`Failed to modify messages: ${err}`)
     }
     return { success: true, modified: message_ids.length }
@@ -666,6 +789,9 @@ async function emailActions(accessToken: string, parameters: any): Promise<any> 
         })
         if (!resp.ok) {
           const err = await resp.text()
+          if (resp.status === 401) {
+            throw new Error('401: Gmail authentication failed. Token may be expired.')
+          }
           throw new Error(`Failed to delete messages: ${err}`)
         }
         return { success: true, deleted: message_ids.length }
@@ -676,6 +802,8 @@ async function emailActions(accessToken: string, parameters: any): Promise<any> 
 }
 
 async function refreshGmailToken(supabase: any, connection: any, userId: string): Promise<string> {
+  console.log('[refreshGmailToken] Starting token refresh process');
+  
   // Decrypt refresh token
   const { data: refreshToken, error: decryptError } = await supabase.rpc(
     'vault_decrypt',
@@ -683,6 +811,7 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
   )
 
   if (decryptError || !refreshToken) {
+    console.error('[refreshGmailToken] Failed to decrypt refresh token:', decryptError);
     throw new Error('Failed to decrypt refresh token')
   }
 
@@ -690,6 +819,8 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!
 
+  console.log('[refreshGmailToken] Making token refresh request to Google');
+  
   // Refresh the token
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -706,10 +837,12 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
 
   if (!tokenResponse.ok) {
     const error = await tokenResponse.text()
+    console.error('[refreshGmailToken] Token refresh failed:', error);
     throw new Error(`Token refresh failed: ${error}`)
   }
 
   const tokens = await tokenResponse.json()
+  console.log('[refreshGmailToken] Token refresh successful, expires in:', tokens.expires_in);
 
   // Encrypt new access token
   const { data: encryptedAccessToken, error: encryptError } = await supabase.rpc(
@@ -721,11 +854,14 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
   )
 
   if (encryptError) {
+    console.error('[refreshGmailToken] Failed to encrypt new token:', encryptError);
     throw new Error('Failed to encrypt refreshed access token')
   }
 
+  console.log('[refreshGmailToken] Updating database with new token');
+  
   // Update the connection with new token
-  await supabase
+  const { error: updateError } = await supabase
     .from('user_integration_credentials')
     .update({
       vault_access_token_id: encryptedAccessToken,
@@ -733,7 +869,50 @@ async function refreshGmailToken(supabase: any, connection: any, userId: string)
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)
-    .eq('id', connection.connection_id)
+    .eq('vault_access_token_id', connection.vault_access_token_id); // Use the old token ID to find the record
 
+  if (updateError) {
+    console.error('[refreshGmailToken] Failed to update database:', updateError);
+    throw new Error('Failed to update token in database');
+  }
+
+  console.log('[refreshGmailToken] Token refresh completed successfully');
   return tokens.access_token
+}
+
+// Helper function to execute Gmail API operations with automatic token refresh
+async function executeWithTokenRefresh<T>(
+  operation: (accessToken: string) => Promise<T>,
+  supabaseServiceRole: any,
+  connection: any,
+  user_id: string,
+  currentAccessToken: string,
+  operationName: string
+): Promise<T> {
+  try {
+    console.log(`[executeWithTokenRefresh] Executing ${operationName} with current token`);
+    return await operation(currentAccessToken);
+  } catch (error: any) {
+    console.log(`[executeWithTokenRefresh] ${operationName} failed:`, error.message);
+    
+    // Check if it's a 401 authentication error
+    if (error.message.includes('401') || error.message.includes('authentication') || error.message.includes('unauthorized')) {
+      console.log(`[executeWithTokenRefresh] Detected authentication error, attempting token refresh`);
+      
+      try {
+        // Attempt to refresh the token
+        const newAccessToken = await refreshGmailToken(supabaseServiceRole, connection, user_id);
+        console.log(`[executeWithTokenRefresh] Token refreshed, retrying ${operationName}`);
+        
+        // Retry the operation with the new token
+        return await operation(newAccessToken);
+      } catch (refreshError: any) {
+        console.error(`[executeWithTokenRefresh] Token refresh failed:`, refreshError.message);
+        throw new Error(`Gmail authentication expired and could not be renewed automatically: ${refreshError.message}. Please reconnect your Gmail account in the integration settings.`);
+      }
+    } else {
+      // Re-throw non-authentication errors
+      throw error;
+    }
+  }
 } 
