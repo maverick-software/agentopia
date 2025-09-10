@@ -381,10 +381,11 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
     const profile: UserProfile = await profileResponse.json()
 
     // Store access token in Vault
-    const accessTokenVaultId = `outlook_access_token_${user_id}_${Date.now()}`
-    const { error: accessTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
-      secret_id: accessTokenVaultId,
-      secret: tokens.access_token
+    const accessTokenName = `outlook_access_token_${user_id}_${Date.now()}`
+    const { data: accessTokenVaultId, error: accessTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
+      p_secret: tokens.access_token,
+      p_name: accessTokenName,
+      p_description: 'Microsoft Outlook access token'
     })
 
     if (accessTokenError) {
@@ -396,10 +397,11 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
     }
 
     // Store refresh token in Vault
-    const refreshTokenVaultId = `outlook_refresh_token_${user_id}_${Date.now()}`
-    const { error: refreshTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
-      secret_id: refreshTokenVaultId,
-      secret: tokens.refresh_token
+    const refreshTokenName = `outlook_refresh_token_${user_id}_${Date.now()}`
+    const { data: refreshTokenVaultId, error: refreshTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
+      p_secret: tokens.refresh_token,
+      p_name: refreshTokenName,
+      p_description: 'Microsoft Outlook refresh token'
     })
 
     if (refreshTokenError) {
@@ -517,20 +519,23 @@ async function refreshAccessToken(supabaseServiceRole: any, params: any) {
     const tokens: TokenResponse = await refreshResponse.json()
 
     // Store new access token
-    const newAccessTokenVaultId = `outlook_access_token_${user_id}_${Date.now()}`
-    await supabaseServiceRole.rpc('create_vault_secret', {
-      secret_id: newAccessTokenVaultId,
-      secret: tokens.access_token
+    const newAccessTokenName = `outlook_access_token_${user_id}_${Date.now()}`
+    const { data: newAccessTokenVaultId } = await supabaseServiceRole.rpc('create_vault_secret', {
+      p_secret: tokens.access_token,
+      p_name: newAccessTokenName,
+      p_description: 'Microsoft Outlook access token (refreshed)'
     })
 
     // Store new refresh token if provided
     let newRefreshTokenVaultId = connection.refresh_token_vault_id
     if (tokens.refresh_token) {
-      newRefreshTokenVaultId = `outlook_refresh_token_${user_id}_${Date.now()}`
-      await supabaseServiceRole.rpc('create_vault_secret', {
-        secret_id: newRefreshTokenVaultId,
-        secret: tokens.refresh_token
+      const newRefreshTokenName = `outlook_refresh_token_${user_id}_${Date.now()}`
+      const { data: refreshVaultId } = await supabaseServiceRole.rpc('create_vault_secret', {
+        p_secret: tokens.refresh_token,
+        p_name: newRefreshTokenName,
+        p_description: 'Microsoft Outlook refresh token (refreshed)'
       })
+      newRefreshTokenVaultId = refreshVaultId
     }
 
     // Update connection with new tokens

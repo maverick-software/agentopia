@@ -88,15 +88,41 @@ export function MicrosoftOutlookCallback() {
       setStatus('success');
       setMessage('Microsoft Outlook connected successfully!');
 
-      // Redirect to integrations page after a short delay
-      setTimeout(() => {
-        navigate('/integrations', { replace: true });
-      }, 2000);
+      // Notify parent window if this is a popup
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'MICROSOFT_OUTLOOK_OAUTH_SUCCESS',
+          data: { success: true }
+        }, window.location.origin);
+        
+        // Close popup after a short delay
+        setTimeout(() => {
+          window.close();
+        }, 2000);
+      } else {
+        // Redirect to integrations page if not in popup
+        setTimeout(() => {
+          navigate('/integrations', { replace: true });
+        }, 2000);
+      }
 
     } catch (error) {
       console.error('Callback handling error:', error);
       setStatus('error');
       setMessage('An unexpected error occurred during authorization');
+      
+      // Notify parent window of error if this is a popup
+      if (window.opener) {
+        window.opener.postMessage({
+          type: 'MICROSOFT_OUTLOOK_OAUTH_ERROR',
+          data: { error: error instanceof Error ? error.message : 'Unknown error occurred' }
+        }, window.location.origin);
+        
+        // Close popup after a short delay
+        setTimeout(() => {
+          window.close();
+        }, 3000);
+      }
     }
   };
 

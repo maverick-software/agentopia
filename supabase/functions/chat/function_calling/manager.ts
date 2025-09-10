@@ -33,10 +33,10 @@ export class FunctionCallingManager {
   // Execution tracking to prevent duplicates
   private executionTracker: Map<string, Promise<MCPToolResult>> = new Map();
   
-  // Tool caching system - validate every 15 messages OR 10 minutes
+  // Tool caching system - DISABLED for debugging schema issues
   private toolsCache: Map<string, CachedTools> = new Map();
-  private readonly CACHE_MESSAGE_THRESHOLD = 15; // Revalidate after 15 messages
-  private readonly CACHE_TIME_THRESHOLD = 600000; // 10 minutes in milliseconds
+  private readonly CACHE_MESSAGE_THRESHOLD = 0; // Revalidate immediately (caching disabled)
+  private readonly CACHE_TIME_THRESHOLD = 0; // Revalidate immediately (caching disabled)
   
   // Universal tool executor for all integrations
   private toolExecutor: typeof import('./universal-tool-executor.ts').UniversalToolExecutor | null = null;

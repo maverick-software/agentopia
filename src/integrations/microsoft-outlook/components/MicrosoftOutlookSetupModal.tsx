@@ -131,8 +131,65 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
       }
       sessionStorage.setItem('outlook_user_id', user!.id);
       
-      // Redirect to Microsoft OAuth
-      window.location.href = data.auth_url;
+      // Open OAuth in popup window
+      const popup = window.open(
+        data.auth_url,
+        'microsoft-outlook-oauth',
+        'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes'
+      );
+
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        console.error('Popup was blocked by browser');
+        setLoading(false);
+        // Fallback to redirect if popup is blocked
+        window.location.href = data.auth_url;
+        return;
+      }
+
+      // Listen for messages from popup
+      const handleMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        
+        if (event.data.type === 'MICROSOFT_OUTLOOK_OAUTH_SUCCESS') {
+          console.log('Microsoft Outlook OAuth success');
+          clearInterval(checkClosed);
+          clearTimeout(timeout);
+          window.removeEventListener('message', handleMessage);
+          setLoading(false);
+          checkConnectionStatus();
+          if (onComplete) onComplete();
+        } else if (event.data.type === 'MICROSOFT_OUTLOOK_OAUTH_ERROR') {
+          console.error('Microsoft Outlook OAuth error:', event.data.data.error);
+          clearInterval(checkClosed);
+          clearTimeout(timeout);
+          window.removeEventListener('message', handleMessage);
+          setLoading(false);
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Listen for popup completion (fallback)
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          clearTimeout(timeout);
+          window.removeEventListener('message', handleMessage);
+          setLoading(false);
+          // Check if connection was successful
+          checkConnectionStatus();
+        }
+      }, 1000);
+
+      // Timeout after 5 minutes
+      const timeout = setTimeout(() => {
+        clearInterval(checkClosed);
+        window.removeEventListener('message', handleMessage);
+        if (!popup.closed) {
+          popup.close();
+        }
+        setLoading(false);
+      }, 300000);
     } catch (error) {
       console.error('Error initiating Outlook OAuth:', error);
       setLoading(false);
