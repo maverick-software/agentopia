@@ -130,42 +130,6 @@ const TOOL_ROUTING_MAP: Record<string, {
     }
   },
   
-  // Microsoft Outlook tools
-  'outlook_': {
-    edgeFunction: 'microsoft-outlook-api',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'outlook_send_email': 'send_email',
-        'outlook_read_emails': 'get_emails',
-        'outlook_search_emails': 'search_emails',
-        'outlook_create_event': 'create_calendar_event',
-        'outlook_get_events': 'get_calendar_events',
-        'outlook_get_contacts': 'get_contacts',
-        'outlook_search_contacts': 'search_contacts'
-      };
-      return actionMap[toolName] || 'unknown_action';
-    },
-    parameterMapping: (params: Record<string, any>, context: any) => {
-      const actionMap: Record<string, string> = {
-        'outlook_send_email': 'send_email',
-        'outlook_read_emails': 'get_emails',
-        'outlook_search_emails': 'search_emails',
-        'outlook_create_event': 'create_calendar_event',
-        'outlook_get_events': 'get_calendar_events',
-        'outlook_get_contacts': 'get_contacts',
-        'outlook_search_contacts': 'search_contacts'
-      };
-      const action = actionMap[context.toolName] || 'unknown_action';
-      
-      return {
-        action: action,
-        agent_id: context.agentId,
-        user_id: context.userId,
-        params: params
-      };
-    }
-  },
-  
   // Web search tools (using web-search-api)
   'web_search': {
     edgeFunction: 'web-search-api',

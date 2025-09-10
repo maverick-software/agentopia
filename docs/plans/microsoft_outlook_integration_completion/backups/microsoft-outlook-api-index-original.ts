@@ -1,29 +1,11 @@
-/**
- * Microsoft Outlook Integration - Main Handler
- * Routes requests to appropriate operation modules
- * Follows existing Gmail integration patterns with modular architecture
- */
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-
-// Import modular components
-import { validateRequest, formatResponse, getRequiredScopes, OutlookAPIRequest } from './outlook-utils.ts'
-import { createOutlookGraphClient } from './outlook-graph-client.ts'
-import { handleEmailOperation } from './outlook-email-operations.ts'
-import { handleCalendarOperation } from './outlook-calendar-operations.ts'
-import { handleContactOperation } from './outlook-contact-operations.ts'
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Legacy OAuth interfaces for backward compatibility
 interface TokenResponse {
   access_token: string;
   refresh_token: string;
@@ -39,179 +21,91 @@ interface UserProfile {
   userPrincipalName: string;
 }
 
-/**
- * Action routing configuration
- */
-const ACTION_ROUTING = {
-  // Email actions
-  'send_email': { module: 'email', handler: handleEmailOperation },
-  'get_emails': { module: 'email', handler: handleEmailOperation },
-  'search_emails': { module: 'email', handler: handleEmailOperation },
-  
-  // Calendar actions
-  'create_calendar_event': { module: 'calendar', handler: handleCalendarOperation },
-  'get_calendar_events': { module: 'calendar', handler: handleCalendarOperation },
-  
-  // Contact actions
-  'get_contacts': { module: 'contact', handler: handleContactOperation },
-  'search_contacts': { module: 'contact', handler: handleContactOperation }
-};
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const startTime = Date.now();
-
   try {
     // Initialize Supabase client with service role key
-    const supabaseServiceRole = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    
+    const supabaseServiceRole = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
       }
-    });
+    })
 
-    // Debug logging for incoming request
-    console.log(`[outlook-api] Raw request method: ${req.method}`);
-    console.log(`[outlook-api] Raw request headers:`, Object.fromEntries(req.headers.entries()));
-    
-    let requestBody: any;
-    try {
-      const rawText = await req.text();
-      console.log(`[outlook-api] Raw request body:`, rawText);
+    const { action, ...params } = await req.json()
+
+    // Skip validation for exchange_code action
+    if (action !== 'exchange_code') {
+      // Validate required parameters for other actions
+      const { agent_id, user_id } = params
       
-      if (!rawText || rawText.trim() === '') {
-        throw new Error('Request body is empty');
+      if (!agent_id || !user_id) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Missing agent context. Please retry with proper agent identification.' 
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
       }
+    }
+
+    switch (action) {
+      case 'exchange_code':
+        return await exchangeOAuthCode(supabaseServiceRole, params)
       
-      requestBody = JSON.parse(rawText);
-      console.log(`[outlook-api] Parsed request body:`, JSON.stringify(requestBody, null, 2));
-    } catch (parseError) {
-      console.error(`[outlook-api] JSON parse error:`, parseError);
-      throw new Error(`Failed to parse request body: ${parseError.message}`);
-    }
-
-    const { action, ...params } = requestBody;
-    console.log('Outlook API request:', { action, ...params });
-
-    // Handle legacy OAuth actions first (maintain backward compatibility)
-    if (action === 'exchange_code') {
-      return await exchangeOAuthCode(supabaseServiceRole, params);
-    }
-    
-    if (action === 'refresh_token') {
-      return await refreshAccessToken(supabaseServiceRole, params);
-    }
-
-    // For all other actions, use the new modular system
-    const { agent_id, user_id } = params;
-
-    // Validate request structure for tool actions
-    const toolRequest: OutlookAPIRequest = {
-      action,
-      params,
-      agent_id,
-      user_id
-    };
-
-    const validation = validateRequest(toolRequest);
-    if (!validation.valid) {
-      const errorMessage = validation.errors[0]; // Return first error as LLM-friendly message
-      console.error('Request validation failed:', validation.errors);
+      case 'refresh_token':
+        return await refreshAccessToken(supabaseServiceRole, params)
       
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: errorMessage
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      case 'send_email':
+        return await sendEmail(supabaseServiceRole, params)
+      
+      case 'get_emails':
+        return await getEmails(supabaseServiceRole, params)
+      
+      case 'create_calendar_event':
+        return await createCalendarEvent(supabaseServiceRole, params)
+      
+      case 'get_calendar_events':
+        return await getCalendarEvents(supabaseServiceRole, params)
+      
+      case 'get_contacts':
+        return await getContacts(supabaseServiceRole, params)
+      
+      default:
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid action' }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
     }
-
-    // Validate agent permissions for Outlook
-    const requiredScopes = getRequiredScopes(action);
-    console.log('[outlook-api] Validating permissions:', {
-      agent_id,
-      user_id,
-      action,
-      requiredScopes
-    });
-
-    const { data: hasPermissions, error: permissionError } = await supabaseServiceRole.rpc(
-      'validate_agent_outlook_permissions',
-      {
-        p_agent_id: agent_id,
-        p_user_id: user_id,
-        p_required_scopes: requiredScopes
-      }
-    );
-
-    if (permissionError) {
-      console.error('[outlook-api] Permission validation error:', permissionError);
-      throw new Error('Question: I had trouble checking your Outlook permissions. Please ensure your Outlook account is properly connected.');
-    }
-
-    if (!hasPermissions) {
-      console.error('[outlook-api] Agent lacks required permissions');
-      throw new Error('Question: I don\'t have permission to access your Outlook account. Please grant the necessary permissions in your agent settings.');
-    }
-
-    // Create Microsoft Graph API client
-    console.log('[outlook-api] Creating Graph API client');
-    const graphClient = await createOutlookGraphClient(user_id, agent_id, supabaseServiceRole);
-
-    // Route action to appropriate handler
-    const routing = ACTION_ROUTING[action as keyof typeof ACTION_ROUTING];
-    if (!routing) {
-      throw new Error(`Question: I don't recognize the Outlook action "${action}". Available actions are: ${Object.keys(ACTION_ROUTING).join(', ')}.`);
-    }
-
-    console.log(`[outlook-api] Routing action "${action}" to ${routing.module} module`);
-    
-    // Execute the operation
-    const result = await routing.handler(action, params, graphClient, {
-      agentId: agent_id,
-      userId: user_id
-    });
-
-    // Format and return successful response
-    const response = formatResponse(result, action, { agentId: agent_id, userId: user_id });
-    response.metadata!.execution_time = Date.now() - startTime;
-    
-    console.log(`[outlook-api] Request completed successfully in ${response.metadata!.execution_time}ms`);
-    
-    return new Response(
-      JSON.stringify(response),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
   } catch (error) {
-    console.error('[outlook-api] Request failed:', error);
-    
-    // Format error response
-    const errorResponse = {
-      success: false,
-      error: error.message || 'An unexpected error occurred',
-      metadata: {
-        execution_time: Date.now() - startTime,
-        error_type: error.constructor.name
-      }
-    };
-    
+    console.error('[microsoft-outlook-api] Error:', error)
     return new Response(
-      JSON.stringify(errorResponse),
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Internal server error' 
+      }),
       { 
-        status: 500,
+        status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
-    );
+    )
   }
 })
 
-// Legacy OAuth functions (maintain backward compatibility)
 async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
   const { code, code_verifier, user_id, redirect_uri } = params
 
@@ -463,4 +357,40 @@ async function refreshAccessToken(supabaseServiceRole: any, params: any) {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
+}
+
+// Placeholder functions for email, calendar, and contacts functionality
+async function sendEmail(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Email functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getEmails(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Email functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function createCalendarEvent(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Calendar functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getCalendarEvents(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Calendar functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
+async function getContacts(supabaseServiceRole: any, params: any) {
+  return new Response(
+    JSON.stringify({ success: false, error: 'Contacts functionality not yet implemented' }),
+    { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
 }
