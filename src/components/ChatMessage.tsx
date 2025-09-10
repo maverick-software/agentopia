@@ -135,10 +135,10 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
 
         {/* Main message content */}
       <div
-        className={`relative group rounded-lg p-3 text-sm break-words overflow-wrap-anywhere shadow-md ${
+        className={`relative group rounded-lg p-3 text-sm break-words overflow-wrap-anywhere shadow-sm ${
           message.role === 'user'
-            ? 'bg-muted text-foreground'
-            : 'bg-secondary text-secondary-foreground'
+            ? 'bg-muted/50 text-foreground'
+            : 'bg-secondary/50 text-secondary-foreground'
         }`}
       >
           <div className="flex items-start justify-between">

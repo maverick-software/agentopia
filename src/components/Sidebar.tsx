@@ -5,11 +5,10 @@ import {
   LogOut, Bot, PanelLeftClose, PanelRightClose,
   ChevronDown, ChevronRight, MemoryStick,
   GitBranch, FolderKanban,
-  Building2,
   User as UserIcon,
   Server, Key, Zap, Plus, MessageSquarePlus,
   MoreVertical, Pencil, Archive, Trash2,
-  Network, FileText
+  Network, FileText, HelpCircle, Crown, CreditCard
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -64,12 +63,7 @@ const navItems: NavItem[] = [
     label: 'Agents',
     isCustom: true
   },
-  { to: '/teams', icon: Building2, label: 'Teams' },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
-  { to: '/media', icon: FileText, label: 'Media' },
-  { to: '/workflows', icon: GitBranch, label: 'Workflows' },
-  { to: '/workflows/automations', icon: Zap, label: 'Automations' },
-  { to: '/graph-settings', icon: Network, label: 'Knowledge Graph' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item
@@ -96,12 +90,12 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center w-full space-x-3 rounded-md transition-colors px-4 py-3 text-sidebar-foreground hover:bg-sidebar-accent ${
+          className={`flex items-center w-full space-x-2 rounded-md transition-colors px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent text-sm ${
             isActiveOrParent ? 'bg-sidebar-accent/50' : '' // Subtle highlight for active parent
           }`}
           style={{ paddingLeft: `${1 + level * 1.5}rem` }} // Indentation for submenus
         >
-          <item.icon className={`w-5 h-5 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
+          <item.icon className={`w-4 h-4 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
           <span className="font-medium flex-1 text-left truncate">{item.label}</span>
           {isExpanded ? <ChevronDown size={16} className="text-sidebar-foreground" /> : <ChevronRight size={16} className="text-sidebar-foreground" />}
         </button>
@@ -122,12 +116,12 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
         to={item.to}
         title={isCollapsed ? item.label : undefined}
         className={({ isActive }): string =>
-          `flex items-center space-x-3 rounded-md transition-colors ${
+          `flex items-center space-x-2 rounded-md transition-colors text-sm ${
             isCollapsed
-              ? 'px-2 justify-center py-3' // Collapsed style
+              ? 'px-2 justify-center py-2' // Collapsed style
               : level > 0 
-                ? 'py-2 text-sm' // Child item style (not collapsed)
-                : 'px-4 py-3' // Top-level item style (not collapsed)
+                ? 'py-1.5 px-3' // Child item style (not collapsed)
+                : 'px-3 py-2' // Top-level item style (not collapsed)
           } ${
             isActive
               ? 'bg-sidebar-accent/20 text-sidebar-foreground'
@@ -136,7 +130,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
         }
         style={!isCollapsed ? { paddingLeft: `${1 + level * 1.5}rem` } : {}}
       >
-        <item.icon className={`w-5 h-5 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
+        <item.icon className={`w-4 h-4 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
         {!isCollapsed && <span className="font-medium truncate">{item.label}</span>}
       </NavLink>
     );
@@ -149,7 +143,6 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
   const { agents, fetchAllAgents } = useAgents();
   const [isExpanded, setIsExpanded] = useState(false);
   const [recentAgents, setRecentAgents] = useState<any[]>([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const isActiveOrParent = location.pathname.startsWith('/agents');
 
@@ -178,7 +171,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
         to="/agents"
         title="Agents"
         className={({ isActive }): string =>
-          `flex items-center space-x-3 rounded-md transition-colors px-2 justify-center py-3 ${
+          `flex items-center space-x-2 rounded-md transition-colors px-2 justify-center py-2 text-sm ${
             isActive
               ? 'bg-sidebar-accent/20 text-sidebar-foreground'
               : 'text-sidebar-foreground hover:bg-sidebar-accent'
@@ -198,7 +191,7 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
         <NavLink
           to="/agents"
           className={({ isActive }): string =>
-            `flex items-center space-x-3 rounded-l-md transition-colors px-4 py-3 flex-1 ${
+            `flex items-center space-x-2 rounded-l-md transition-colors px-3 py-2 flex-1 text-sm ${
               isActive
                 ? 'bg-sidebar-accent/30 text-sidebar-foreground'
                 : 'text-sidebar-foreground hover:bg-sidebar-accent'
@@ -230,13 +223,12 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
                 } catch {}
               }}
               className={({ isActive }): string =>
-                `flex items-center space-x-3 rounded-md transition-colors py-2 text-sm ${
+                `flex items-center space-x-2 rounded-md transition-colors py-2 text-sm px-3 ${
                   isActive
                     ? 'bg-sidebar-accent/20 text-sidebar-foreground'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent'
                 }`
               }
-              style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
             >
               {agent.avatar_url ? (
                 <img 
@@ -254,27 +246,9 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
               <span className="font-medium truncate">{agent.name || 'Unnamed Agent'}</span>
             </NavLink>
           ))}
-          
-          {/* Create New Agent Button */}
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-3 rounded-md transition-colors py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent w-full"
-            style={{ paddingLeft: `${1 + (level + 1) * 1.5}rem` }}
-          >
-            <div className="w-4 h-4 rounded bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">+</span>
-            </div>
-            <span className="font-medium truncate text-green-600 dark:text-green-400">Create New</span>
-          </button>
 
         </div>
       )}
-      
-      {/* Create Agent Wizard */}
-      <CreateAgentWizard 
-        open={showCreateModal} 
-        onOpenChange={setShowCreateModal} 
-      />
     </div>
   );
 };
@@ -292,6 +266,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
 
   // Filter nav items based on admin status - no longer needed for the main list
   // const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
@@ -309,19 +284,36 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   return (
     <nav 
-      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-16 p-2' : 'w-64 p-4'}`}
+      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-12 p-1' : 'w-56 p-2'}`}
     >
-      <div className="flex-1 mb-4 flex flex-col min-h-0 overflow-y-auto">
+      <div className="flex-1 mb-2 flex flex-col min-h-0 overflow-y-auto">
         <div>
-          <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
-            <Bot size={isCollapsed ? 28 : 24} className="text-icon-agents" />
-            <span className={`ml-2 text-xl font-bold text-sidebar-foreground transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
+          <div className={`flex items-center mb-3 transition-all duration-300 ${isCollapsed ? 'justify-center mt-4' : 'justify-start px-2'}`}>
+            <Bot size={isCollapsed ? 20 : 18} className="text-icon-agents" />
+            <span className={`ml-2 text-lg font-semibold text-sidebar-foreground transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
               Agentopia
             </span>
           </div>
           
-          <div className="space-y-2">
-            {/* New Chat (global top link) */}
+          <div className="space-y-1">
+            {/* Create Agent Button */}
+            <button
+              onClick={() => setShowCreateAgentModal(true)}
+              className="flex items-center space-x-2 rounded-md transition-colors py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent w-full px-3"
+            >
+              <Plus className="w-4 h-4 flex-shrink-0" />
+              {!isCollapsed && <span className="font-medium truncate">Create Agent</span>}
+            </button>
+
+            {visibleNavItems.map((item) => {
+              if (item.isCustom && item.label === 'Agents') {
+                return <AgentsNavRenderer key={item.to} isCollapsed={isCollapsed} />;
+              } else {
+                return <NavItemRenderer key={item.to} item={item} isCollapsed={isCollapsed} />;
+              }
+            })}
+
+            {/* New Chat (positioned after Projects, before Conversations) */}
             {(() => {
               const m = location.pathname.match(/^\/agents\/([^/]+)\/chat/);
               const agentId = m?.[1];
@@ -346,24 +338,16 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                       navigate(`/agents/${agentId}/chat`);
                     }
                   }}
-                  className={`flex items-center space-x-3 rounded-md transition-colors px-4 py-3 w-full text-left text-sidebar-foreground hover:bg-sidebar-accent`}
+                  className={`flex items-center space-x-2 rounded-md transition-colors px-3 py-2 w-full text-left text-sidebar-foreground hover:bg-sidebar-accent text-sm`}
                   title="New Chat"
                 >
-                  <MessageSquarePlus className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/chat/new', 'New Chat')}`} />
+                  <MessageSquarePlus className={`w-4 h-4 flex-shrink-0 ${getIconColorClass('/chat/new', 'New Chat')}`} />
                   {!isCollapsed && <span className="font-medium truncate">New Chat</span>}
                 </button>
               );
             })()}
 
-            {visibleNavItems.map((item) => {
-              if (item.isCustom && item.label === 'Agents') {
-                return <AgentsNavRenderer key={item.to} isCollapsed={isCollapsed} />;
-              } else {
-                return <NavItemRenderer key={item.to} item={item} isCollapsed={isCollapsed} />;
-              }
-            })}
-
-            {/* Conversations injected under Automations only on agent chat page */}
+            {/* Conversations injected after New Chat only on agent chat page */}
             {(() => {
               const m = location.pathname.match(/^\/agents\/([^/]+)\/chat/);
               if (!m || !user) return null;
@@ -416,12 +400,13 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       </div>
 
       {user && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button 
-              className={`flex items-center w-full rounded-md hover:bg-sidebar-accent transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'} sticky bottom-2`}
-              title="Account options"
-            >
+        <div className="border-t border-sidebar-border/50 pt-2 mt-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button 
+                className={`flex items-center w-full rounded-md hover:bg-sidebar-accent/50 bg-sidebar-background/50 transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
+                title="Account options"
+              >
               <Avatar className={`flex-shrink-0 w-8 h-8 ${!isCollapsed ? 'mr-3' : ''}`}> 
                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
                     {user.email?.substring(0, 2).toUpperCase() || '??'}
@@ -435,65 +420,127 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent 
-             className="w-56 bg-popover border-border text-popover-foreground" 
-             sideOffset={5} 
+             className="w-64 bg-card border-border/50 text-foreground p-2 shadow-lg rounded-xl" 
+             sideOffset={8} 
              align={isCollapsed ? "start" : "center"}
              alignOffset={isCollapsed ? 5 : 0}
           >
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                 <p className="text-sm font-medium leading-none">Signed in as</p>
-                 <p className="text-xs leading-none text-muted-foreground truncate">
-                    {user.email}
-                 </p>
+            {/* User Info Section */}
+            <div className="px-3 py-3 border-b border-border/50 mb-2">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-10 h-10">
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
+                    {user.email?.substring(0, 2).toUpperCase() || '??'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {user.email?.split('@')[0] || 'User'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
+                      <Crown className="w-3 h-3" />
+                      Pro plan
+                    </div>
+                    <div className="w-2 h-2 bg-green-500 rounded-full" title="Online" />
+                  </div>
+                </div>
               </div>
-            </DropdownMenuLabel>
-                        <DropdownMenuSeparator className="border-border" />
-            <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              {theme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-              <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="border-border" />
-            {isAdmin && (
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-                <Link to="/admin" className="flex items-center w-full">
-                  <UserIcon className="mr-2 h-4 w-4" />
-                  <span>Admin Panel</span>
+            </div>
+
+            {/* Main Menu Items */}
+            <div className="space-y-1 mb-3">
+              <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                {theme === 'dark' ? <Sun className="mr-3 h-4 w-4 text-muted-foreground" /> : <Moon className="mr-3 h-4 w-4 text-muted-foreground" />}
+                <span className="text-sm">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+              </DropdownMenuItem>
+              
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/settings" className="flex items-center w-full">
+                  <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Settings</span>
                 </Link>
               </DropdownMenuItem>
-            )}
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/memory" className="flex items-center w-full">
-                <MemoryStick className="mr-2 h-4 w-4" />
-                <span>Memory</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/integrations" className="flex items-center w-full">
-                <Server className="mr-2 h-4 w-4" />
-                <span>Integrations</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/credentials" className="flex items-center w-full">
-                <Key className="mr-2 h-4 w-4" />
-                <span>Credentials</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent focus:text-accent-foreground">
-              <Link to="/settings" className="flex items-center w-full">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="border-border" />
-            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-900/50 focus:text-red-300">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Log out</span>
-            </DropdownMenuItem>
+              
+              <DropdownMenuItem className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <HelpCircle className="mr-3 h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Get help</span>
+              </DropdownMenuItem>
+            </div>
+
+            {/* Plan Section */}
+            <div className="border-t border-border/50 pt-3 mb-3">
+              <DropdownMenuItem className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <CreditCard className="mr-3 h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Upgrade plan</span>
+              </DropdownMenuItem>
+            </div>
+
+            {/* Advanced Options */}
+            <div className="border-t border-border/50 pt-3 mb-3">
+              
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/media" className="flex items-center w-full">
+                  <FileText className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Media</span>
+                </Link>
+              </DropdownMenuItem>
+              
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/graph-settings" className="flex items-center w-full">
+                  <Network className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Knowledge Graph</span>
+                </Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/memory" className="flex items-center w-full">
+                  <MemoryStick className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Memory</span>
+                </Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/integrations" className="flex items-center w-full">
+                  <Server className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Integrations</span>
+                </Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/credentials" className="flex items-center w-full">
+                  <Key className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Credentials</span>
+                </Link>
+              </DropdownMenuItem>
+
+              {isAdmin && (
+                <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                  <Link to="/admin" className="flex items-center w-full">
+                    <UserIcon className="mr-3 h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Admin Panel</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
+            </div>
+
+            {/* Logout */}
+            <div className="border-t border-border/50 pt-3">
+              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-50 dark:focus:bg-red-900/20 focus:text-red-600 dark:focus:text-red-400 rounded-md px-3 py-2">
+                <LogOut className="mr-3 h-4 w-4" />
+                <span className="text-sm">Log out</span>
+              </DropdownMenuItem>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       )}
+
+      {/* Create Agent Wizard */}
+      <CreateAgentWizard 
+        open={showCreateAgentModal} 
+        onOpenChange={setShowCreateAgentModal} 
+      />
     </nav>
   );
 }
@@ -502,22 +549,26 @@ function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: 
   const { items, createConversation, renameConversation, archiveConversation } = useConversations(agentId, userId);
   const navigate = useNavigate();
   if (isCollapsed) return null;
+  
+  // Limit to last 10 chats
+  const recentItems = items.slice(0, 10);
+  const hasMoreChats = items.length > 10;
+  
   return (
     <div className="mt-2">
-      <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground">Conversations</div>
-      <div className="space-y-1">
-        {items.map(c => {
-          const displayTitle = c.title || (c.last_message ? 'Conversation' : 'New conversation');
+      <div className="px-3 py-1.5 text-xs uppercase tracking-wider text-muted-foreground font-medium">Chats</div>
+      <div className="space-y-0.5">
+        {recentItems.map(c => {
+          const displayTitle = c.title || (c.last_message ? 'Chat' : 'New chat');
           return (
-            <div key={c.conversation_id} className="px-4 py-2 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id); }}>
+            <div key={c.conversation_id} className="px-3 py-1.5 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between text-sm group" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id); }}>
               <div className="min-w-0 flex-1 pr-2">
                 <div className="truncate text-sm text-sidebar-foreground">{displayTitle}</div>
-                {c.last_message && <div className="truncate text-[11px] text-muted-foreground/80">{c.last_message}</div>}
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="p-1.5 hover:bg-sidebar-accent rounded text-sidebar-foreground" onClick={(e) => { e.stopPropagation(); }}>
-                    <MoreVertical className="w-4 h-4" />
+                  <button className="p-1 hover:bg-sidebar-accent rounded text-sidebar-foreground opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); }}>
+                    <MoreVertical className="w-3 h-3" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44 bg-popover text-popover-foreground border-border">
@@ -552,6 +603,13 @@ function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: 
             </div>
           );
         })}
+        
+        {/* View All link if there are more than 10 chats */}
+        {hasMoreChats && (
+          <div className="px-3 py-1.5 hover:bg-sidebar-accent rounded cursor-pointer text-sm" onClick={() => navigate(`/chats/${agentId}`)}>
+            <div className="text-muted-foreground hover:text-sidebar-foreground transition-colors">View all ({items.length})</div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -244,7 +244,7 @@ export function AgentsPage() {
   const AgentCard = ({ agent }: { agent: Agent }) => (
     <div 
       onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="group bg-card rounded-xl border border-border hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 cursor-pointer relative p-4"
+      className="group bg-card/50 rounded-xl border border-border/50 hover:bg-card hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 cursor-pointer relative p-4"
     >
       {/* Link indicator */}
       <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -296,7 +296,7 @@ export function AgentsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header Section */}
-      <div className="border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
+      <div className="border-b border-border/50 bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6">
           {/* Title and Action Buttons */}
             <div className="flex items-start justify-between mb-4">
@@ -307,7 +307,7 @@ export function AgentsPage() {
             <div className="flex items-center space-x-3 flex-shrink-0">
               <button
                 onClick={() => setShowTeamsCanvas(true)}
-                className="flex items-center px-5 py-2.5 bg-card text-foreground border border-border hover:bg-accent rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                className="flex items-center px-5 py-2.5 bg-card/50 text-foreground border border-border/50 hover:bg-card hover:border-border transition-all duration-200 font-medium shadow-sm hover:shadow-md"
               >
                 <Building2 className="w-4 h-4 mr-2" />
                 Teams

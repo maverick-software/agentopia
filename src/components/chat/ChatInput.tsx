@@ -117,7 +117,7 @@ export function ChatInput({
 
         <form onSubmit={onSubmit} className="relative">
           {/* Text input container - Clean text area only */}
-          <div className="relative bg-card border border-border/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md">
+          <div className="relative bg-card/50 border border-border/40 rounded-3xl shadow-sm hover:bg-card hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md focus-within:bg-card">
             <div className="px-4 py-2 flex items-center">
               <textarea
                 ref={textareaRef}

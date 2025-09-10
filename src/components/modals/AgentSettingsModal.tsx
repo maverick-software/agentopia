@@ -22,7 +22,9 @@ import {
   Plug,
   FolderOpen,
   Users,
-  Library
+  Library,
+  GitBranch,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,10 +53,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'workflows' | 'automations';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'workflows' | 'automations';
 
 interface TabConfig {
   id: TabId;
@@ -129,6 +131,18 @@ const TABS: TabConfig[] = [
     label: 'Team',
     icon: Users,
     description: 'Team assignments and collaboration'
+  },
+  {
+    id: 'workflows',
+    label: 'Workflows',
+    icon: GitBranch,
+    description: 'Process automation and task flows'
+  },
+  {
+    id: 'automations',
+    label: 'Automations',
+    icon: Zap,
+    description: 'Automated actions and triggers'
   }
 ];
 

@@ -345,7 +345,7 @@ export function IntegrationsPage() {
                 return (
                   <Card 
                     key={integration.id} 
-                    className={`bg-card border-border transition-colors w-full min-h-[240px] flex flex-col ${
+                    className={`bg-card/50 border-border/50 hover:bg-card transition-colors w-full min-h-[240px] flex flex-col ${
                       isComingSoon ? 'opacity-60' : 'hover:border-muted-foreground'
                     }`}
                   >

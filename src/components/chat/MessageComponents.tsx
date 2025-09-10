@@ -324,14 +324,12 @@ export function ChatStarterScreen({ agent }: ChatStarterScreenProps) {
         <p className="text-muted-foreground mb-8 leading-relaxed">
           Start a conversation with your AI assistant. Ask questions, get help, or just chat!
         </p>
-        <div className="grid grid-cols-1 gap-2 text-sm">
-          <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
-            <div className="font-medium text-foreground">💡 Try asking:</div>
-            <div className="text-muted-foreground mt-1">"What can you help me with?"</div>
+        <div className="flex flex-col gap-1 text-xs">
+          <div className="px-2 py-1 rounded text-left border border-border/30 bg-background/50">
+            <div className="text-muted-foreground/70">"What can you help me with?"</div>
           </div>
-          <div className="p-3 bg-card rounded-lg text-left border border-border shadow-sm">
-            <div className="font-medium text-foreground">🔍 Or request:</div>
-            <div className="text-muted-foreground mt-1">"Help me analyze this data"</div>
+          <div className="px-2 py-1 rounded text-left border border-border/30 bg-background/50">
+            <div className="text-muted-foreground/70">"Help me analyze this data"</div>
           </div>
         </div>
       </div>

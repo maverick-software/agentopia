@@ -67,6 +67,7 @@ import { MicrosoftTeamsCallbackPage } from '../pages/integrations/MicrosoftTeams
 import { MicrosoftOneDriveCallbackPage } from '../pages/integrations/MicrosoftOneDriveCallbackPage';
 import { MicrosoftOutlookCallbackPage } from '../pages/integrations/MicrosoftOutlookCallbackPage';
 import GraphSettingsPage from '../pages/GraphSettingsPage';
+import { ChatsPage } from '../pages/ChatsPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
@@ -84,6 +85,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/agents/:agentId', element: AgentEditPage, protection: 'protected', layout: true },
   { path: '/agents/:agentId/edit', element: AgentEditPage, protection: 'protected', layout: true },
   { path: '/agents/:agentId/chat', element: AgentChatPage, protection: 'protected', layout: true },
+  { path: '/chats/:agentId', element: ChatsPage, protection: 'protected', layout: true },
   { path: '/memory', element: DatastoresPage, protection: 'protected', layout: true },
   { path: '/memory/new', element: DatastoreEditPage, protection: 'protected', layout: true },
   { path: '/memory/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
