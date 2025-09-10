@@ -100,38 +100,39 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
   };
 
   const handleConnect = async () => {
-    if (!provider?.configuration_metadata?.client_id) {
-      console.error('Microsoft Client ID not configured');
-      return;
-    }
-
     setLoading(true);
     
     try {
-      // Generate PKCE parameters
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = await generateCodeChallenge(codeVerifier);
-      
-      // Store code verifier in session storage for the callback
-      sessionStorage.setItem('outlook_code_verifier', codeVerifier);
-      sessionStorage.setItem('outlook_user_id', user!.id);
-      
-      // Build OAuth URL
-      const params = new URLSearchParams({
-        client_id: provider.configuration_metadata.client_id,
-        scope: requiredScopes.join(' '),
-        redirect_uri: `${window.location.origin}/integrations/microsoft-outlook/callback`,
-        response_type: 'code',
-        state: `outlook_${user!.id}_${Date.now()}`,
-        prompt: 'consent',
-        code_challenge: codeChallenge,
-        code_challenge_method: 'S256'
+      // Call Edge Function to initiate OAuth flow
+      // This will use the client ID from Supabase secrets
+      const { data, error } = await supabase.functions.invoke('microsoft-outlook-api', {
+        body: {
+          action: 'initiate_oauth',
+          user_id: user!.id,
+          redirect_uri: `${window.location.origin}/integrations/microsoft-outlook/callback`
+        }
       });
 
-      const authUrl = `${provider.authorization_endpoint}?${params.toString()}`;
+      if (error) {
+        console.error('Error initiating OAuth:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (!data?.auth_url) {
+        console.error('No auth URL received from Edge Function');
+        setLoading(false);
+        return;
+      }
+
+      // Store PKCE verifier and user ID for callback
+      if (data.code_verifier) {
+        sessionStorage.setItem('outlook_code_verifier', data.code_verifier);
+      }
+      sessionStorage.setItem('outlook_user_id', user!.id);
       
-      // Open OAuth flow
-      window.location.href = authUrl;
+      // Redirect to Microsoft OAuth
+      window.location.href = data.auth_url;
     } catch (error) {
       console.error('Error initiating Outlook OAuth:', error);
       setLoading(false);

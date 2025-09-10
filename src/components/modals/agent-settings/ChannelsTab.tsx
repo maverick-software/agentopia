@@ -414,7 +414,10 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   const handleCreateNewCredential = (providerId: string) => {
     // Close this modal and redirect to integrations page for setup
     setCredentialModal(prev => ({ ...prev, isOpen: false }));
-    toast.info(`Please set up ${providerId} credentials in the Integrations page first`);
+    toast(`Please set up ${providerId} credentials in the Integrations page first`, {
+      icon: 'ℹ️',
+      duration: 4000,
+    });
     // You could also open the specific provider setup modal here
   };
 
@@ -427,10 +430,21 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     try {
       const authType = provider.authType || 'api_key';
       
-      // For OAuth providers like Microsoft Outlook, redirect to integrations page
+      // For OAuth providers like Microsoft Outlook, open the proper setup modal
       if (authType === 'oauth') {
         setCredentialModal(prev => ({ ...prev, isOpen: false }));
-        toast.info(`Please set up ${provider.name} in the Integrations page first. OAuth providers require proper authentication flow.`);
+        
+        // For Microsoft Outlook, redirect to integrations page to use the proper OAuth setup
+        if (provider.id === 'microsoft-outlook') {
+          window.location.href = '/integrations?provider=microsoft-outlook';
+          return;
+        }
+        
+        // For other OAuth providers, show informational message
+        toast(`Please set up ${provider.name} in the Integrations page first. OAuth providers require proper authentication flow.`, {
+          icon: 'ℹ️',
+          duration: 4000,
+        });
         return;
       }
       

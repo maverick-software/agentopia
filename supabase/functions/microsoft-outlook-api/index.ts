@@ -98,6 +98,10 @@ serve(async (req) => {
     console.log('Outlook API request:', { action, ...params });
 
     // Handle legacy OAuth actions first (maintain backward compatibility)
+    if (action === 'initiate_oauth') {
+      return await initiateOAuthFlow(params);
+    }
+    
     if (action === 'exchange_code') {
       return await exchangeOAuthCode(supabaseServiceRole, params);
     }
@@ -212,6 +216,99 @@ serve(async (req) => {
 })
 
 // Legacy OAuth functions (maintain backward compatibility)
+async function initiateOAuthFlow(params: any) {
+  const { user_id, redirect_uri } = params;
+
+  if (!user_id || !redirect_uri) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Missing required parameters: user_id, redirect_uri' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  try {
+    // Get client ID from Supabase secrets (not from database)
+    const clientId = Deno.env.get('MICROSOFT_OUTLOOK_CLIENT_ID');
+    
+    if (!clientId) {
+      console.error('Microsoft Outlook Client ID not configured in secrets');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Microsoft Outlook integration not properly configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Generate PKCE parameters
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    
+    // Required scopes for Microsoft Graph API
+    const requiredScopes = [
+      'https://graph.microsoft.com/Mail.Read',
+      'https://graph.microsoft.com/Mail.Send', 
+      'https://graph.microsoft.com/Mail.ReadWrite',
+      'https://graph.microsoft.com/Calendars.Read',
+      'https://graph.microsoft.com/Calendars.ReadWrite',
+      'https://graph.microsoft.com/Contacts.Read',
+      'https://graph.microsoft.com/User.Read'
+    ];
+
+    // Build OAuth URL
+    const params = new URLSearchParams({
+      client_id: clientId,
+      scope: requiredScopes.join(' '),
+      redirect_uri: redirect_uri,
+      response_type: 'code',
+      state: `outlook_${user_id}_${Date.now()}`,
+      prompt: 'consent',
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
+    });
+
+    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`;
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        auth_url: authUrl,
+        code_verifier: codeVerifier,
+        state: `outlook_${user_id}_${Date.now()}`
+      }),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+
+  } catch (error) {
+    console.error('Error initiating OAuth flow:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: `Failed to initiate OAuth flow: ${error.message}` }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
+// PKCE helper functions
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+async function generateCodeChallenge(codeVerifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
 async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
   const { code, code_verifier, user_id, redirect_uri } = params
 

@@ -100,6 +100,31 @@ export function IntegrationsPage() {
   const { connections: unifiedConnections, loading: unifiedLoading, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { connections: gmailConnections } = useGmailConnection();
 
+  // Handle URL parameters to auto-open specific provider modals
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const providerParam = searchParams.get('provider');
+    
+    if (providerParam && !showSetupModal && integrations.length > 0) {
+      // Find the integration by provider name
+      const integration = integrations.find(int => {
+        const providerName = providerNameForIntegration(int.name);
+        return providerName === providerParam || int.name.toLowerCase().replace(/\s+/g, '-') === providerParam;
+      });
+      
+      if (integration) {
+        console.log('[IntegrationsPage] Auto-opening modal for provider:', providerParam);
+        setSelectedIntegration(integration);
+        setShowSetupModal(true);
+        
+        // Clean up URL parameter
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('provider');
+        window.history.replaceState({}, '', newUrl.toString());
+      }
+    }
+  }, [location.search, integrations, showSetupModal]);
+
   const handleClearCache = async () => {
     if (!user?.id) {
       toast.error('Unable to clear cache: missing user information');

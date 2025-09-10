@@ -47,7 +47,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Update get_user_gmail_connection function to use service_providers
+-- Update get_user_gmail_connection function to use service_providers  
 CREATE OR REPLACE FUNCTION get_user_gmail_connection(p_user_id UUID)
 RETURNS TABLE (
     connection_id UUID,
