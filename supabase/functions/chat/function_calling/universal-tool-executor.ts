@@ -131,29 +131,29 @@ const TOOL_ROUTING_MAP: Record<string, {
   },
   
   // Microsoft Outlook tools
-  'microsoft-outlook_': {
+  'outlook_': {
     edgeFunction: 'microsoft-outlook-api',
     actionMapping: (toolName: string) => {
       const actionMap: Record<string, string> = {
-        'microsoft-outlook_email_send': 'send_email',
-        'microsoft-outlook_email_read': 'get_emails',
-        'microsoft-outlook_email_search': 'search_emails',
-        'microsoft-outlook_calendar_create': 'create_calendar_event',
-        'microsoft-outlook_calendar_read': 'get_calendar_events',
-        'microsoft-outlook_contacts_read': 'get_contacts',
-        'microsoft-outlook_contacts_search': 'search_contacts'
+        'outlook_send_email': 'send_email',
+        'outlook_read_emails': 'get_emails',
+        'outlook_search_emails': 'search_emails',
+        'outlook_create_event': 'create_calendar_event',
+        'outlook_get_events': 'get_calendar_events',
+        'outlook_get_contacts': 'get_contacts',
+        'outlook_search_contacts': 'search_contacts'
       };
       return actionMap[toolName] || 'unknown_action';
     },
     parameterMapping: (params: Record<string, any>, context: any) => {
       const actionMap: Record<string, string> = {
-        'microsoft-outlook_email_send': 'send_email',
-        'microsoft-outlook_email_read': 'get_emails',
-        'microsoft-outlook_email_search': 'search_emails',
-        'microsoft-outlook_calendar_create': 'create_calendar_event',
-        'microsoft-outlook_calendar_read': 'get_calendar_events',
-        'microsoft-outlook_contacts_read': 'get_contacts',
-        'microsoft-outlook_contacts_search': 'search_contacts'
+        'outlook_send_email': 'send_email',
+        'outlook_read_emails': 'get_emails',
+        'outlook_search_emails': 'search_emails',
+        'outlook_create_event': 'create_calendar_event',
+        'outlook_get_events': 'get_calendar_events',
+        'outlook_get_contacts': 'get_contacts',
+        'outlook_search_contacts': 'search_contacts'
       };
       const action = actionMap[context.toolName] || 'unknown_action';
       

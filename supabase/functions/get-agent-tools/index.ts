@@ -134,7 +134,13 @@ serve(async (req) => {
         
         for (const capability of mappedCapabilities) {
           // Create provider-prefixed tool name (e.g., gmail_send_email)
-          const providerPrefixedName = `${providerName}_${capability}`;
+          // But don't double-prefix if capability already has provider prefix
+          // Special case for outlook which uses different prefix than provider name
+          const providerPrefixedName = (providerName === 'microsoft-outlook' && capability.startsWith('outlook_'))
+            ? capability  // Already has outlook_ prefix, use as-is
+            : capability.includes('_') && capability.startsWith(providerName.split('-')[0]) 
+              ? capability  // Already has provider prefix
+              : `${providerName}_${capability}`;  // Add provider prefix
           
           // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
           const normalizedToolName = normalizeToolName(providerPrefixedName);

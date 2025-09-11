@@ -116,15 +116,15 @@ serve(async (req) => {
 
     // Handle legacy OAuth actions first (maintain backward compatibility)
     if (action === 'initiate_oauth') {
-      return await initiateOAuthFlow(params);
+      return await initiateOAuthFlow(fullRequest);
     }
     
     if (action === 'exchange_code') {
-      return await exchangeOAuthCode(supabaseServiceRole, params);
+      return await exchangeOAuthCode(supabaseServiceRole, fullRequest);
     }
     
     if (action === 'refresh_token') {
-      return await refreshAccessToken(supabaseServiceRole, params);
+      return await refreshAccessToken(supabaseServiceRole, fullRequest);
     }
 
     // For all other actions, use the new modular system
@@ -143,10 +143,14 @@ serve(async (req) => {
       const errorMessage = validation.errors[0]; // Return first error as LLM-friendly message
       console.error('Request validation failed:', validation.errors);
       
+      // Check if this is an interactive question that should trigger retry
+      const isInteractiveQuestion = errorMessage.toLowerCase().startsWith('question:');
+      
       return new Response(
         JSON.stringify({
           success: false,
-          error: errorMessage
+          error: errorMessage,
+          requires_retry: isInteractiveQuestion  // Enable retry mechanism for questions
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -267,7 +271,8 @@ async function initiateOAuthFlow(params: any) {
       'https://graph.microsoft.com/Calendars.Read',
       'https://graph.microsoft.com/Calendars.ReadWrite',
       'https://graph.microsoft.com/Contacts.Read',
-      'https://graph.microsoft.com/User.Read'
+      'https://graph.microsoft.com/User.Read',
+      'offline_access'  // Required for refresh tokens
     ];
 
     // Build OAuth URL
@@ -448,7 +453,7 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
     const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000))
 
     // Store connection in user_integration_credentials
-    const { error: credentialError } = await supabaseServiceRole
+    const { data: insertedCredential, error: credentialError } = await supabaseServiceRole
       .from('user_integration_credentials')
       .insert({
         user_id,
@@ -463,6 +468,8 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
         connection_status: 'active',
         credential_type: 'oauth'
       })
+      .select('id')
+      .single()
 
     if (credentialError) {
       console.error('Failed to store credentials:', credentialError)
@@ -470,6 +477,58 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
         JSON.stringify({ success: false, error: 'Failed to store credentials' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // Automatically grant permissions to all user's agents
+    try {
+      console.log('[outlook-api] Auto-granting permissions to user agents')
+      
+      // Get all agents that the user has access to
+      const { data: userAgents, error: agentsError } = await supabaseServiceRole
+        .from('agents')
+        .select('id')
+        .eq('user_id', user_id)
+
+      if (agentsError) {
+        console.error('Failed to fetch user agents:', agentsError)
+        // Don't fail the OAuth flow, just log the error
+      } else if (userAgents && userAgents.length > 0) {
+        // Use the Microsoft Graph API scopes that were requested and granted
+        // These should match what getRequiredScopes() returns for validation
+        const grantedScopes = [
+          'https://graph.microsoft.com/Mail.Read',
+          'https://graph.microsoft.com/Mail.Send', 
+          'https://graph.microsoft.com/Mail.ReadWrite',
+          'https://graph.microsoft.com/Calendars.Read',
+          'https://graph.microsoft.com/Calendars.ReadWrite',
+          'https://graph.microsoft.com/Contacts.Read',
+          'https://graph.microsoft.com/User.Read'
+        ]
+        
+        // Create permission records for all user's agents
+        const permissionInserts = userAgents.map(agent => ({
+          agent_id: agent.id,
+          user_oauth_connection_id: insertedCredential.id,
+          granted_by_user_id: user_id,
+          permission_level: 'custom',
+          allowed_scopes: grantedScopes,
+          is_active: true
+        }))
+
+        const { error: permissionsError } = await supabaseServiceRole
+          .from('agent_integration_permissions')
+          .insert(permissionInserts)
+
+        if (permissionsError) {
+          console.error('Failed to auto-grant agent permissions:', permissionsError)
+          // Don't fail the OAuth flow, just log the error
+        } else {
+          console.log(`[outlook-api] Successfully granted permissions to ${userAgents.length} agents`)
+        }
+      }
+    } catch (autoGrantError) {
+      console.error('Error during auto-grant permissions:', autoGrantError)
+      // Don't fail the OAuth flow, just log the error
     }
 
     return new Response(

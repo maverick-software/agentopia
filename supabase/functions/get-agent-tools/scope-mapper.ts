@@ -43,6 +43,20 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
     return smtpMappings[scope] || [scope];
   }
   
+  // Microsoft Outlook scope mappings
+  if (providerName === 'microsoft-outlook') {
+    const outlookMappings: Record<string, string[]> = {
+      'https://graph.microsoft.com/Mail.Send': ['outlook_send_email'],
+      'https://graph.microsoft.com/Mail.Read': ['outlook_read_emails'],
+      'https://graph.microsoft.com/Mail.ReadWrite': ['outlook_read_emails', 'outlook_search_emails'],
+      'https://graph.microsoft.com/Calendars.Read': ['outlook_get_events'],
+      'https://graph.microsoft.com/Calendars.ReadWrite': ['outlook_create_event', 'outlook_get_events'],
+      'https://graph.microsoft.com/Contacts.Read': ['outlook_get_contacts', 'outlook_search_contacts'],
+      'https://graph.microsoft.com/User.Read': ['outlook_get_user_info']
+    };
+    return outlookMappings[scope] || [normalizeToolName(scope)];
+  }
+
   // Microsoft OneDrive scope mappings
   if (providerName === 'microsoft-onedrive') {
     const onedriveMappings: Record<string, string[]> = {
