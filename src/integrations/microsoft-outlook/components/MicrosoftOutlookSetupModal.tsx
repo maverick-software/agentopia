@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Mail, Calendar, Users, CheckCircle, AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Mail, Calendar, Users, CheckCircle, AlertCircle, ExternalLink, Loader2, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { revokeConnection } from '@/integrations/_shared/services/connections';
@@ -15,20 +17,22 @@ interface MicrosoftOutlookSetupModalProps {
   onComplete?: () => void;
 }
 
-interface ConnectionStatus {
-  isConnected: boolean;
-  connectionId?: string;
-  externalUsername?: string;
-  scopes?: string[];
-  expiresAt?: string;
+interface OutlookConnection {
+  id: string;
+  connection_name: string;
+  external_username: string;
+  scopes_granted: string[];
+  token_expires_at?: string;
+  connection_status: 'active' | 'expired' | 'error';
 }
 
 export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: MicrosoftOutlookSetupModalProps) {
   const { user } = useAuth();
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({ isConnected: false });
+  const [connections, setConnections] = useState<OutlookConnection[]>([]);
   const [loading, setLoading] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [provider, setProvider] = useState<any>(null);
+  const [connectionName, setConnectionName] = useState('');
 
   const requiredScopes = [
     'https://graph.microsoft.com/Mail.Read',
@@ -43,9 +47,14 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
   useEffect(() => {
     if (isOpen) {
       fetchProvider();
-      checkConnectionStatus();
     }
   }, [isOpen, user?.id]);
+
+  useEffect(() => {
+    if (provider) {
+      fetchConnections();
+    }
+  }, [provider, user?.id]);
 
   const fetchProvider = async () => {
     try {
@@ -66,45 +75,51 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
     }
   };
 
-  const checkConnectionStatus = async () => {
-    if (!user?.id) return;
-
+  const fetchConnections = async () => {
+    if (!user?.id || !provider?.id) return;
+    
     try {
       const { data, error } = await supabase
         .from('user_integration_credentials')
-        .select('*')
+        .select('id, connection_name, external_username, scopes_granted, token_expires_at, connection_status')
         .eq('user_id', user.id)
-        .eq('oauth_provider_id', (await supabase.from('service_providers').select('id').eq('name', 'microsoft-outlook').single()).data?.id)
-        .eq('connection_status', 'active');
+        .eq('oauth_provider_id', provider.id)
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error checking connection status:', error);
+        console.error('Error fetching connections:', error);
         return;
       }
 
-      if (data && data.length > 0) {
-        const connection = data[0];
-        setConnectionStatus({
-          isConnected: true,
-          connectionId: connection.id,
-          externalUsername: connection.external_username || undefined,
-          scopes: connection.scopes_granted || [],
-          expiresAt: connection.token_expires_at || undefined
-        });
-      } else {
-        setConnectionStatus({ isConnected: false });
-      }
+      const outlookConnections: OutlookConnection[] = (data || []).map(conn => ({
+        id: conn.id,
+        connection_name: conn.connection_name || `Outlook (${conn.external_username})`,
+        external_username: conn.external_username,
+        scopes_granted: conn.scopes_granted || [],
+        token_expires_at: conn.token_expires_at,
+        connection_status: conn.connection_status
+      }));
+
+      setConnections(outlookConnections);
     } catch (error) {
-      console.error('Error checking connection status:', error);
+      console.error('Error fetching connections:', error);
+      setConnections([]);
     }
   };
 
   const handleConnect = async () => {
+    if (!connectionName.trim()) {
+      alert('Please enter a connection name');
+      return;
+    }
+    
     setLoading(true);
     
     try {
+      // Store connection name for the callback
+      sessionStorage.setItem('outlook_connection_name', connectionName.trim());
+      
       // Call Edge Function to initiate OAuth flow
-      // This will use the client ID from Supabase secrets
       const { data, error } = await supabase.functions.invoke('microsoft-outlook-api', {
         body: {
           action: 'initiate_oauth',
@@ -156,7 +171,8 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
           clearTimeout(timeout);
           window.removeEventListener('message', handleMessage);
           setLoading(false);
-          checkConnectionStatus();
+          setConnectionName(''); // Clear the connection name
+          fetchConnections();
           if (onComplete) onComplete();
         } else if (event.data.type === 'MICROSOFT_OUTLOOK_OAUTH_ERROR') {
           console.error('Microsoft Outlook OAuth error:', event.data.data.error);
@@ -177,7 +193,7 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
           window.removeEventListener('message', handleMessage);
           setLoading(false);
           // Check if connection was successful
-          checkConnectionStatus();
+          fetchConnections();
         }
       }, 1000);
 
@@ -196,39 +212,18 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!connectionStatus.connectionId) return;
-
+  const handleDisconnect = async (connectionId: string) => {
     setDisconnecting(true);
     try {
-      await revokeConnection(supabase, connectionStatus.connectionId);
-      setConnectionStatus({ isConnected: false });
+      await revokeConnection(supabase, connectionId);
+      // Refresh connections list
+      await fetchConnections();
       onComplete?.();
     } catch (error) {
       console.error('Error disconnecting Outlook:', error);
     } finally {
       setDisconnecting(false);
     }
-  };
-
-  // PKCE helper functions
-  const generateCodeVerifier = () => {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    return btoa(String.fromCharCode(...array))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
-  };
-
-  const generateCodeChallenge = async (verifier: string) => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-    return btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
   };
 
   const formatExpiryDate = (expiresAt?: string) => {
@@ -255,79 +250,101 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Connection Status */}
-          <Card className="border-2">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  {connectionStatus.isConnected ? (
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 text-yellow-500" />
-                  )}
-                  <div>
-                    <p className="font-medium">
-                      {connectionStatus.isConnected ? 'Connected' : 'Not Connected'}
-                    </p>
-                    {connectionStatus.isConnected && connectionStatus.externalUsername && (
-                      <p className="text-sm text-muted-foreground">
-                        Connected as: {connectionStatus.externalUsername}
-                      </p>
-                    )}
-                  </div>
+          {/* Existing Connections */}
+          {connections.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Connected Accounts</h3>
+              {connections.map((connection) => (
+                <Card key={connection.id} className="border-2">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="w-5 h-5 text-green-500" />
+                        <div>
+                          <p className="font-medium">{connection.connection_name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Connected as: {connection.external_username}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDisconnect(connection.id)}
+                        disabled={disconnecting}
+                      >
+                        {disconnecting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Disconnecting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Disconnect
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Token Expires</p>
+                          <p className="font-medium">{formatExpiryDate(connection.token_expires_at)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Permissions</p>
+                          <p className="font-medium">{connection.scopes_granted.length} scopes granted</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Add New Connection */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Plus className="w-5 h-5" />
+                  <h3 className="text-lg font-medium">Add New Connection</h3>
                 </div>
                 
-                {connectionStatus.isConnected ? (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleDisconnect}
-                    disabled={disconnecting}
-                  >
-                    {disconnecting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Disconnecting...
-                      </>
-                    ) : (
-                      'Disconnect'
-                    )}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleConnect}
+                <div className="space-y-2">
+                  <Label htmlFor="connectionName">Connection Name</Label>
+                  <Input
+                    id="connectionName"
+                    placeholder="e.g., Work Outlook, Personal Outlook"
+                    value={connectionName}
+                    onChange={(e) => setConnectionName(e.target.value)}
                     disabled={loading}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Connecting...
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Connect Outlook
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-
-              {connectionStatus.isConnected && (
-                <div className="mt-4 pt-4 border-t">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="font-medium text-muted-foreground">Token Expires</p>
-                      <p>{formatExpiryDate(connectionStatus.expiresAt)}</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-muted-foreground">Permissions</p>
-                      <p>{connectionStatus.scopes?.length || 0} scopes granted</p>
-                    </div>
-                  </div>
+                  />
                 </div>
-              )}
+
+                <Button
+                  onClick={handleConnect}
+                  disabled={loading || !connectionName.trim()}
+                  className="w-full"
+                  size="lg"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Connect Microsoft Outlook
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -335,25 +352,25 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
           <div>
             <h3 className="font-semibold mb-3">What you can do with Outlook integration:</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
-                <Mail className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div className="flex items-start space-x-3">
+                <Mail className="w-5 h-5 text-blue-500 mt-1" />
                 <div>
-                  <p className="font-medium text-sm">Email Management</p>
-                  <p className="text-xs text-muted-foreground">Send, read, and manage emails</p>
+                  <h4 className="font-medium">Email Management</h4>
+                  <p className="text-sm text-muted-foreground">Send, read, and manage emails</p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
-                <Calendar className="w-5 h-5 text-green-600 mt-0.5" />
+              <div className="flex items-start space-x-3">
+                <Calendar className="w-5 h-5 text-blue-500 mt-1" />
                 <div>
-                  <p className="font-medium text-sm">Calendar Events</p>
-                  <p className="text-xs text-muted-foreground">Create and manage calendar events</p>
+                  <h4 className="font-medium">Calendar Events</h4>
+                  <p className="text-sm text-muted-foreground">Create and manage calendar events</p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3 p-3 rounded-lg bg-muted/50">
-                <Users className="w-5 h-5 text-purple-600 mt-0.5" />
+              <div className="flex items-start space-x-3">
+                <Users className="w-5 h-5 text-blue-500 mt-1" />
                 <div>
-                  <p className="font-medium text-sm">Contacts</p>
-                  <p className="text-xs text-muted-foreground">Access and manage contacts</p>
+                  <h4 className="font-medium">Contacts</h4>
+                  <p className="text-sm text-muted-foreground">Access and manage contacts</p>
                 </div>
               </div>
             </div>
@@ -362,32 +379,25 @@ export function MicrosoftOutlookSetupModal({ isOpen, onClose, onComplete }: Micr
           {/* Required Permissions */}
           <div>
             <h3 className="font-semibold mb-3">Required Permissions:</h3>
-            <div className="space-y-2">
-              {requiredScopes.map((scope, index) => (
-                <div key={index} className="flex items-center space-x-2">
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                { scope: 'Mail.Read', label: 'Read email messages' },
+                { scope: 'Mail.Send', label: 'Send email messages' },
+                { scope: 'Mail.ReadWrite', label: 'Read and write email messages' },
+                { scope: 'Calendars.Read', label: 'Read calendar events' },
+                { scope: 'Calendars.ReadWrite', label: 'Read and write calendar events' },
+                { scope: 'Contacts.Read', label: 'Read contacts' },
+                { scope: 'User.Read', label: 'Read user profile' }
+              ].map((permission) => (
+                <div key={permission.scope} className="flex items-center space-x-2">
                   <Badge variant="outline" className="text-xs">
-                    {scope.replace('https://graph.microsoft.com/', '')}
+                    {permission.scope}
                   </Badge>
-                  {connectionStatus.scopes?.includes(scope) && (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                  )}
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span className="text-sm">{permission.label}</span>
                 </div>
               ))}
             </div>
-          </div>
-
-          <Separator />
-
-          {/* Footer Actions */}
-          <div className="flex justify-end space-x-3">
-            <Button variant="outline" onClick={onClose}>
-              Close
-            </Button>
-            {connectionStatus.isConnected && onComplete && (
-              <Button onClick={onComplete}>
-                Continue
-              </Button>
-            )}
           </div>
         </div>
       </DialogContent>

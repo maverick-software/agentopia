@@ -2,6 +2,7 @@
  * Microsoft Outlook Integration - Main Handler
  * Routes requests to appropriate operation modules
  * Follows existing Gmail integration patterns with modular architecture
+ * Version: Added support for custom connection names
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -94,8 +95,24 @@ serve(async (req) => {
       throw new Error(`Failed to parse request body: ${parseError.message}`);
     }
 
-    const { action, ...params } = requestBody;
-    console.log('Outlook API request:', { action, ...params });
+    const { action, params: rawParams, ...otherParams } = requestBody;
+    
+    // Handle parameter format - check if params.input contains JSON string
+    let params = rawParams || {};
+    if (params.input && typeof params.input === 'string') {
+      try {
+        // Parse the JSON string in the input field
+        const parsedInput = JSON.parse(params.input);
+        params = { ...params, ...parsedInput };
+        delete params.input; // Remove the input field after parsing
+      } catch (parseError) {
+        console.warn('[outlook-api] Failed to parse params.input as JSON:', parseError);
+        // Keep original params if parsing fails
+      }
+    }
+    
+    const fullRequest = { action, params, ...otherParams };
+    console.log('Outlook API request:', fullRequest);
 
     // Handle legacy OAuth actions first (maintain backward compatibility)
     if (action === 'initiate_oauth') {
@@ -111,7 +128,7 @@ serve(async (req) => {
     }
 
     // For all other actions, use the new modular system
-    const { agent_id, user_id } = params;
+    const { agent_id, user_id } = fullRequest;
 
     // Validate request structure for tool actions
     const toolRequest: OutlookAPIRequest = {
@@ -310,7 +327,7 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
 }
 
 async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
-  const { code, code_verifier, user_id, redirect_uri } = params
+  const { code, code_verifier, user_id, connection_name, redirect_uri } = params
 
   if (!code || !code_verifier || !user_id || !redirect_uri) {
     return new Response(
@@ -398,11 +415,26 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
 
     // Store refresh token in Vault
     const refreshTokenName = `outlook_refresh_token_${user_id}_${Date.now()}`
-    const { data: refreshTokenVaultId, error: refreshTokenError } = await supabaseServiceRole.rpc('create_vault_secret', {
-      p_secret: tokens.refresh_token,
+    
+    // Debug: Check if refresh_token exists
+    console.log('Refresh token exists:', !!tokens.refresh_token)
+    console.log('Refresh token type:', typeof tokens.refresh_token)
+    
+    if (!tokens.refresh_token) {
+      console.error('Warning: No refresh token received from Microsoft')
+      // Some OAuth flows don't return refresh tokens on every exchange
+      // We'll use a placeholder for now
+    }
+    
+    const vaultParams = {
+      p_secret: tokens.refresh_token || 'NO_REFRESH_TOKEN_PROVIDED',
       p_name: refreshTokenName,
       p_description: 'Microsoft Outlook refresh token'
-    })
+    }
+    
+    console.log('Calling create_vault_secret with params:', JSON.stringify(vaultParams))
+    
+    const { data: refreshTokenVaultId, error: refreshTokenError } = await supabaseServiceRole.rpc('create_vault_secret', vaultParams)
 
     if (refreshTokenError) {
       console.error('Failed to store refresh token:', refreshTokenError)
@@ -423,13 +455,13 @@ async function exchangeOAuthCode(supabaseServiceRole: any, params: any) {
         oauth_provider_id: provider.id,
         external_user_id: profile.id,
         external_username: profile.mail || profile.userPrincipalName,
-        connection_name: `${profile.displayName} (${profile.mail})`,
-        access_token_vault_id: accessTokenVaultId,
-        refresh_token_vault_id: refreshTokenVaultId,
+        connection_name: connection_name || `${profile.displayName} (${profile.mail})`,
+        vault_access_token_id: accessTokenVaultId,
+        vault_refresh_token_id: refreshTokenVaultId,
         scopes_granted: tokens.scope.split(' '),
         token_expires_at: expiresAt.toISOString(),
         connection_status: 'active',
-        credential_type: 'oauth2'
+        credential_type: 'oauth'
       })
 
     if (credentialError) {
@@ -481,7 +513,7 @@ async function refreshAccessToken(supabaseServiceRole: any, params: any) {
 
     // Get refresh token from Vault
     const { data: refreshTokenData, error: refreshTokenError } = await supabaseServiceRole.rpc('vault_decrypt', {
-      secret_id: connection.refresh_token_vault_id
+      secret_id: connection.vault_refresh_token_id
     })
 
     if (refreshTokenError || !refreshTokenData) {
@@ -527,7 +559,7 @@ async function refreshAccessToken(supabaseServiceRole: any, params: any) {
     })
 
     // Store new refresh token if provided
-    let newRefreshTokenVaultId = connection.refresh_token_vault_id
+    let newRefreshTokenVaultId = connection.vault_refresh_token_id
     if (tokens.refresh_token) {
       const newRefreshTokenName = `outlook_refresh_token_${user_id}_${Date.now()}`
       const { data: refreshVaultId } = await supabaseServiceRole.rpc('create_vault_secret', {
@@ -543,8 +575,8 @@ async function refreshAccessToken(supabaseServiceRole: any, params: any) {
     await supabaseServiceRole
       .from('user_integration_credentials')
       .update({
-        access_token_vault_id: newAccessTokenVaultId,
-        refresh_token_vault_id: newRefreshTokenVaultId,
+        vault_access_token_id: newAccessTokenVaultId,
+        vault_refresh_token_id: newRefreshTokenVaultId,
         token_expires_at: expiresAt.toISOString(),
         updated_at: new Date().toISOString()
       })

@@ -429,7 +429,7 @@ export function IntegrationsPage() {
                     <div className="px-6 h-10 flex items-center flex-shrink-0 mb-2">
                       {isConnected && !isComingSoon ? (
                         <div className="flex w-full gap-2">
-                          {integration.name === 'Gmail' ? (
+                          {(integration.name === 'Gmail' || integration.name === 'Microsoft Outlook') ? (
                             <Button
                               onClick={() => handleAddCredentials(integration)}
                               size="sm"

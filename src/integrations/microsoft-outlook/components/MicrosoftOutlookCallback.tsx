@@ -54,11 +54,15 @@ export function MicrosoftOutlookCallback() {
         return;
       }
 
+      setMessage('Exchanging authorization code for access token...');
+
+      // Get connection name from session storage before cleanup
+      const connectionName = sessionStorage.getItem('outlook_connection_name') || 'Microsoft Outlook';
+
       // Clean up session storage
       sessionStorage.removeItem('outlook_code_verifier');
       sessionStorage.removeItem('outlook_user_id');
-
-      setMessage('Exchanging authorization code for access token...');
+      sessionStorage.removeItem('outlook_connection_name');
 
       // Call the Edge Function to exchange the code for tokens
       const { data, error: exchangeError } = await supabase.functions.invoke('microsoft-outlook-api', {
@@ -67,6 +71,7 @@ export function MicrosoftOutlookCallback() {
           code,
           code_verifier: codeVerifier,
           user_id: userId,
+          connection_name: connectionName,
           redirect_uri: `${window.location.origin}/integrations/microsoft-outlook/callback`
         }
       });
