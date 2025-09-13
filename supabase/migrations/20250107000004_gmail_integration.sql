@@ -10,18 +10,16 @@ BEGIN
         INSERT INTO service_providers (
             name, 
             display_name, 
-            authorization_url, 
-            token_url, 
-            user_info_url,
-            scopes, 
-            configuration, 
+            authorization_endpoint, 
+            token_endpoint, 
+            scopes_supported,
+            configuration_metadata, 
             is_enabled
         ) VALUES (
             'gmail',
             'Gmail',
             'https://accounts.google.com/o/oauth2/v2/auth',
             'https://oauth2.googleapis.com/token',
-            'https://www.googleapis.com/oauth2/v1/userinfo',
             '[
                 "https://www.googleapis.com/auth/gmail.readonly",
                 "https://www.googleapis.com/auth/gmail.send",
@@ -95,17 +93,19 @@ CREATE TABLE IF NOT EXISTS gmail_operation_logs (
     error_message TEXT,
     quota_consumed INTEGER DEFAULT 0,
     execution_time_ms INTEGER,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    INDEX(agent_id, created_at),
-    INDEX(user_id, created_at),
-    INDEX(operation_type, created_at)
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Add Gmail integration to integrations table
+-- Create indexes for gmail_operation_logs
+CREATE INDEX IF NOT EXISTS idx_gmail_operation_logs_agent_id_created_at ON gmail_operation_logs(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_gmail_operation_logs_user_id_created_at ON gmail_operation_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_gmail_operation_logs_operation_type_created_at ON gmail_operation_logs(operation_type, created_at);
+
+-- Add Gmail integration to integrations_renamed table
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM integrations WHERE name = 'Gmail') THEN
-        INSERT INTO integrations (
+    IF NOT EXISTS (SELECT 1 FROM integrations_renamed WHERE name = 'Gmail') THEN
+        INSERT INTO integrations_renamed (
             category_id, 
             name, 
             description, 

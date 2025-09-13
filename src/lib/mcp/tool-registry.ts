@@ -11,6 +11,7 @@
 
 import { gmailMCPTools, MCPTool, MCPToolResult, MCPToolExecutionContext } from '@/integrations/gmail/services/gmail-tools';
 import { smtpMCPTools } from '@/integrations/smtp/services/smtp-tools';
+import { clicksendMCPTools } from '@/integrations/clicksend/services/clicksend-tools';
 import { supabase } from '../supabase';
 
 export interface RegisteredTool extends MCPTool {
@@ -56,6 +57,7 @@ export class MCPToolRegistry {
     // DO NOT auto-add tools without permission checks
     this.registerToolProvider('gmail', gmailMCPTools);
     this.registerToolProvider('smtp', smtpMCPTools);
+    this.registerToolProvider('clicksend', clicksendMCPTools);
   }
 
   /**
@@ -87,7 +89,7 @@ export class MCPToolRegistry {
       .eq('agent_id', agentId)
       .eq('user_integration_credentials.user_id', userId)
       .eq('is_active', true)
-      .in('user_integration_credentials.service_providers.name', ['gmail', 'smtp', 'sendgrid', 'mailgun']);
+      .in('user_integration_credentials.service_providers.name', ['gmail', 'smtp', 'sendgrid', 'mailgun', 'clicksend_sms']);
 
     // Process email permissions
     for (const permission of emailPermissions || []) {
@@ -124,6 +126,20 @@ export class MCPToolRegistry {
               updated_at: new Date().toISOString(),
             });
           }
+        }
+      } else if (providerName === 'clicksend_sms') {
+        // Add ClickSend SMS/MMS tools
+        const clicksendTools = await clicksendMCPTools.listTools(agentId, userId);
+        for (const tool of clicksendTools) {
+          availableTools.push({
+            ...tool,
+            provider: 'clicksend',
+            category: 'messaging',
+            version: '1.0.0',
+            enabled: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
         }
       }
     }
@@ -191,6 +207,15 @@ export class MCPToolRegistry {
       switch (correctedRequest.tool_provider) {
         case 'gmail':
           result = await gmailMCPTools.executeTool({
+            agentId: correctedRequest.agent_id,
+            userId: correctedRequest.user_id,
+            tool: correctedRequest.tool_name,
+            parameters: correctedRequest.parameters,
+          });
+          break;
+        
+        case 'clicksend':
+          result = await clicksendMCPTools.executeTool({
             agentId: correctedRequest.agent_id,
             userId: correctedRequest.user_id,
             tool: correctedRequest.tool_name,
@@ -392,6 +417,12 @@ export class MCPToolRegistry {
       if (provider === 'gmail') {
         const gmailTools = await import('@/integrations/gmail/services/gmail-tools');
         return gmailTools.GMAIL_MCP_TOOLS[toolName]?.parameters || null;
+      }
+
+      // For ClickSend tools, get from static registry
+      if (provider === 'clicksend') {
+        const clicksendTools = await import('@/integrations/clicksend/services/clicksend-tools');
+        return clicksendTools.CLICKSEND_MCP_TOOLS[toolName]?.parameters || null;
       }
 
       return null;

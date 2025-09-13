@@ -17,6 +17,7 @@ import { MicrosoftOneDriveSetupModal } from '../../microsoft-onedrive/components
 import { MicrosoftOutlookSetupModal } from '../../microsoft-outlook/components/MicrosoftOutlookSetupModal';
 import { MistralOCRSetupModal } from '../../mistral-ocr/components/MistralOCRSetupModal';
 import { AzureDocumentIntelligenceSetupModal } from '../../azure-document-intelligence/components/AzureDocumentIntelligenceSetupModal';
+import { ClickSendSetupModal } from '../../clicksend/components/ClickSendSetupModal';
 
 /**
  * Registry of all integration setup components
@@ -289,6 +290,23 @@ export const integrationSetupRegistry: IntegrationSetupRegistry = {
       { key: 'layout_analysis', label: 'Document layout analysis', description: 'Understand document structure including headers, paragraphs, and sections' },
       { key: 'multi_format', label: 'Multiple format support', description: 'Support for PDF, images, Office documents, and more' },
       { key: 'enterprise_grade', label: 'Enterprise-grade accuracy', description: 'Microsoft Azure-powered document intelligence' }
+    ]
+  },
+
+  // ClickSend SMS/MMS - SMS and MMS messaging service
+  'ClickSend SMS': {
+    component: ClickSendSetupModal,
+    credentialType: 'api_key',
+    defaultScopes: ['sms', 'mms', 'balance', 'history', 'delivery_receipts'],
+    capabilities: [
+      { key: 'send_sms', label: 'Send SMS messages', description: 'Send text messages to phone numbers worldwide' },
+      { key: 'send_mms', label: 'Send MMS messages', description: 'Send multimedia messages with images, videos, and audio' },
+      { key: 'get_balance', label: 'Check account balance', description: 'View account balance and credit information' },
+      { key: 'sms_history', label: 'SMS message history', description: 'View sent SMS messages and delivery status' },
+      { key: 'mms_history', label: 'MMS message history', description: 'View sent MMS messages and delivery status' },
+      { key: 'delivery_receipts', label: 'Delivery receipts', description: 'Track message delivery and read receipts' },
+      { key: 'international_sms', label: 'International SMS', description: 'Send SMS messages to international numbers' },
+      { key: 'scheduled_messages', label: 'Scheduled messaging', description: 'Schedule messages for future delivery' }
     ]
   }
 };

@@ -86,10 +86,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_service_providers_updated_at
-    BEFORE UPDATE ON service_providers
-    FOR EACH ROW
-    EXECUTE FUNCTION update_service_providers_updated_at();
+-- Create trigger conditionally
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers 
+        WHERE trigger_name = 'update_service_providers_updated_at'
+        AND event_object_table = 'service_providers'
+    ) THEN
+        CREATE TRIGGER update_service_providers_updated_at
+            BEFORE UPDATE ON service_providers
+            FOR EACH ROW
+            EXECUTE FUNCTION update_service_providers_updated_at();
+    END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION update_user_oauth_connections_updated_at()
 RETURNS TRIGGER AS $$
@@ -99,10 +109,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_user_oauth_connections_updated_at
-    BEFORE UPDATE ON user_oauth_connections
-    FOR EACH ROW
-    EXECUTE FUNCTION update_user_oauth_connections_updated_at();
+-- Create trigger conditionally
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers 
+        WHERE trigger_name = 'update_user_oauth_connections_updated_at'
+        AND event_object_table = 'user_oauth_connections'
+    ) THEN
+        CREATE TRIGGER update_user_oauth_connections_updated_at
+            BEFORE UPDATE ON user_oauth_connections
+            FOR EACH ROW
+            EXECUTE FUNCTION update_user_oauth_connections_updated_at();
+    END IF;
+END $$;
 
 -- Grant permissions
 GRANT SELECT ON service_providers TO anon, authenticated;

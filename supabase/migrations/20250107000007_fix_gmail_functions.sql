@@ -1,6 +1,9 @@
 -- Fix missing Gmail integration functions
 -- This ensures the get_user_gmail_connection function exists
 
+-- Drop existing function first to avoid signature conflicts
+DROP FUNCTION IF EXISTS get_user_gmail_connection(UUID);
+
 -- Function to get Gmail connection for user
 CREATE OR REPLACE FUNCTION get_user_gmail_connection(p_user_id UUID)
 RETURNS TABLE (

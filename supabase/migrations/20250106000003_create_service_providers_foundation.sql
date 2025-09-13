@@ -4,8 +4,8 @@
 -- Create service_providers table to replace oauth_providers
 -- Based on existing oauth_providers schema
 
--- Step 1: Create service_providers table (identical to oauth_providers)
-CREATE TABLE public.service_providers (
+-- Step 1: Create service_providers table (if it doesn't exist)
+CREATE TABLE IF NOT EXISTS public.service_providers (
   id uuid not null default gen_random_uuid(),
   name text not null,
   display_name text not null,
@@ -34,49 +34,105 @@ CREATE INDEX IF NOT EXISTS idx_service_providers_name
   ON public.service_providers USING btree (name) 
   TABLESPACE pg_default;
 
--- Step 3: Create triggers (reuse existing functions)
-CREATE TRIGGER service_providers_deletion_cascade_trigger
-  AFTER DELETE ON service_providers 
-  FOR EACH ROW
-  EXECUTE FUNCTION handle_integration_deletion_cascade();
+-- Step 3: Create triggers (if they don't exist)
+DO $$
+BEGIN
+    -- Create deletion cascade trigger if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers 
+        WHERE trigger_name = 'service_providers_deletion_cascade_trigger'
+        AND event_object_table = 'service_providers'
+    ) THEN
+        CREATE TRIGGER service_providers_deletion_cascade_trigger
+          AFTER DELETE ON service_providers 
+          FOR EACH ROW
+          EXECUTE FUNCTION handle_integration_deletion_cascade();
+    END IF;
 
-CREATE TRIGGER update_service_providers_updated_at 
-  BEFORE UPDATE ON service_providers 
-  FOR EACH ROW
-  EXECUTE FUNCTION update_oauth_providers_updated_at();
+    -- Create updated_at trigger if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers 
+        WHERE trigger_name = 'update_service_providers_updated_at'
+        AND event_object_table = 'service_providers'
+    ) THEN
+        CREATE TRIGGER update_service_providers_updated_at 
+          BEFORE UPDATE ON service_providers 
+          FOR EACH ROW
+          EXECUTE FUNCTION update_oauth_providers_updated_at();
+    END IF;
+END $$;
 
--- Step 4: Enable RLS (matching oauth_providers)
-ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
+-- Step 4: Enable RLS (if not already enabled)
+DO $$
+BEGIN
+    -- Enable RLS if not already enabled
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class c 
+        JOIN pg_namespace n ON n.oid = c.relnamespace 
+        WHERE c.relname = 'service_providers' 
+        AND n.nspname = 'public' 
+        AND c.relrowsecurity = true
+    ) THEN
+        ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 
--- Step 5: Create RLS policies (matching oauth_providers)
-CREATE POLICY "Service providers are readable by authenticated users"
-  ON service_providers FOR SELECT
-  TO authenticated
-  USING (is_enabled = true);
+-- Step 5: Create RLS policies (if they don't exist)
+DO $$
+BEGIN
+    -- Create read policy if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'service_providers' 
+        AND policyname = 'Service providers are readable by authenticated users'
+    ) THEN
+        CREATE POLICY "Service providers are readable by authenticated users"
+          ON service_providers FOR SELECT
+          TO authenticated
+          USING (is_enabled = true);
+    END IF;
 
-CREATE POLICY "Only service role can modify service providers"
-  ON service_providers FOR ALL
-  TO service_role
-  USING (true);
+    -- Create admin policy if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'service_providers' 
+        AND policyname = 'Only service role can modify service providers'
+    ) THEN
+        CREATE POLICY "Only service role can modify service providers"
+          ON service_providers FOR ALL
+          TO service_role
+          USING (true);
+    END IF;
+END $$;
 
 -- Step 6: Grant permissions (matching oauth_providers)
 GRANT SELECT ON service_providers TO anon, authenticated;
 GRANT ALL ON service_providers TO service_role;
 
--- Step 7: Copy all existing data from oauth_providers
-INSERT INTO service_providers (
-  id, name, display_name, authorization_endpoint, token_endpoint,
-  revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
-  client_credentials_location, is_enabled, configuration_metadata,
-  created_at, updated_at
-)
-SELECT 
-  id, name, display_name, authorization_endpoint, token_endpoint,
-  revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
-  client_credentials_location, is_enabled, configuration_metadata,
-  created_at, updated_at
-FROM oauth_providers
-ON CONFLICT (id) DO NOTHING;
+-- Step 7: Copy all existing data from oauth_providers (if table exists)
+DO $$
+BEGIN
+    -- Check if oauth_providers table exists before copying data
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_providers') THEN
+        INSERT INTO service_providers (
+          id, name, display_name, authorization_endpoint, token_endpoint,
+          revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
+          client_credentials_location, is_enabled, configuration_metadata,
+          created_at, updated_at
+        )
+        SELECT 
+          id, name, display_name, authorization_endpoint, token_endpoint,
+          revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
+          client_credentials_location, is_enabled, configuration_metadata,
+          created_at, updated_at
+        FROM oauth_providers
+        ON CONFLICT (id) DO NOTHING;
+        
+        RAISE NOTICE 'Copied data from oauth_providers to service_providers';
+    ELSE
+        RAISE NOTICE 'oauth_providers table does not exist, skipping data copy';
+    END IF;
+END $$;
 
 -- Step 8: Create migration logging infrastructure
 CREATE TABLE public.migration_fallback_logs (
@@ -367,11 +423,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger on oauth_providers to sync to service_providers
--- This ensures any direct writes to oauth_providers are reflected in service_providers
-CREATE TRIGGER sync_oauth_providers_to_service
-  AFTER INSERT OR UPDATE OR DELETE ON oauth_providers
-  FOR EACH ROW EXECUTE FUNCTION sync_oauth_to_service_providers();
+-- Note: Trigger on oauth_providers view is handled by INSTEAD OF trigger
+-- No additional trigger needed here since oauth_providers is a view, not a table
 
 -- Step 15: Log migration completion
 INSERT INTO migration_fallback_logs (

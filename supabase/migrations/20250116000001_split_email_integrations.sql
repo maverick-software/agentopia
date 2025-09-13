@@ -2,31 +2,23 @@
 -- Date: January 16, 2025  
 -- Purpose: Fix tool discovery by using separate SMTP, SendGrid, and Mailgun integrations instead of unified Email Relay
 
-BEGIN;
-
--- =============================================
--- STEP 1: Remove Email Relay integration (unified approach)
--- =============================================
-
--- Remove Email Relay integration capabilities
-DELETE FROM integration_capabilities 
-WHERE integration_id = 'b58d82ea-a1f9-4826-923e-1ec2a8e5b2b7'; -- Email Relay ID from your data
-
--- Remove Email Relay integration
-DELETE FROM integrations 
-WHERE id = 'b58d82ea-a1f9-4826-923e-1ec2a8e5b2b7'; -- Email Relay ID
-
--- =============================================
--- STEP 2: Reactivate and fix existing separate email integrations
--- =============================================
-
--- Reactivate existing deprecated email integrations
+-- Skip this migration if required tables don't exist (for shadow database compatibility)
 DO $$
 DECLARE
     smtp_provider_id UUID;
     sendgrid_provider_id UUID;
     mailgun_provider_id UUID;
 BEGIN
+    -- Check if required tables exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integration_capabilities') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integrations') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agent_integration_permissions') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_integration_credentials') THEN
+        RAISE NOTICE 'Skipping email integrations split migration - required tables do not exist yet';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'Proceeding with email integrations split migration - required tables exist';
     -- Get oauth provider IDs using actual names from your data
     SELECT id INTO smtp_provider_id FROM service_providers WHERE name = 'smtp';
     SELECT id INTO sendgrid_provider_id FROM service_providers WHERE name = 'sendgrid';
@@ -235,5 +227,3 @@ BEGIN
     RAISE NOTICE '✅ Fixed % agent permissions with proper email scopes', fixed_permissions_count;
     RAISE NOTICE '✅ Email integration split migration completed successfully!';
 END $$;
-
-COMMIT;

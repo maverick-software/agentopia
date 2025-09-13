@@ -5,8 +5,51 @@
 -- This migration creates the new table structure with identical schema
 -- and sets up fallback logging infrastructure for safe migration
 
--- Step 1: Create service_providers table (identical to oauth_providers)
-CREATE TABLE public.service_providers (
+-- Step 0: Create required functions first
+-- Function to handle cascade deletion cleanup
+CREATE OR REPLACE FUNCTION handle_integration_deletion_cascade()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Log the deletion for debugging
+    RAISE NOTICE 'Service provider deleted: % (ID: %)', OLD.name, OLD.id;
+    
+    -- Clean up related integration_capabilities
+    DELETE FROM integration_capabilities 
+    WHERE integration_id = OLD.id;
+    
+    -- Clean up related user_integration_credentials
+    DELETE FROM user_integration_credentials 
+    WHERE oauth_provider_id = OLD.id;
+    
+    -- Clean up related agent_integration_permissions
+    DELETE FROM agent_integration_permissions 
+    WHERE user_oauth_connection_id IN (
+        SELECT id FROM user_integration_credentials 
+        WHERE oauth_provider_id = OLD.id
+    );
+    
+    -- Log completion
+    RAISE NOTICE 'Cleanup completed for service provider: %', OLD.name;
+    
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_oauth_providers_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Grant permissions on functions
+GRANT EXECUTE ON FUNCTION handle_integration_deletion_cascade() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION update_oauth_providers_updated_at() TO anon, authenticated;
+
+-- Step 1: Create service_providers table (if it doesn't exist)
+CREATE TABLE IF NOT EXISTS public.service_providers (
   id uuid not null default gen_random_uuid(),
   name text not null,
   display_name text not null,
@@ -35,52 +78,106 @@ CREATE INDEX IF NOT EXISTS idx_service_providers_name
   ON public.service_providers USING btree (name) 
   TABLESPACE pg_default;
 
--- Step 3: Create triggers (reuse existing functions)
-CREATE TRIGGER service_providers_deletion_cascade_trigger
-  AFTER DELETE ON service_providers 
-  FOR EACH ROW
-  EXECUTE FUNCTION handle_integration_deletion_cascade();
+-- Step 3: Create triggers (if they don't exist)
+DO $$
+BEGIN
+    -- Create deletion cascade trigger if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers 
+        WHERE trigger_name = 'service_providers_deletion_cascade_trigger'
+    ) THEN
+        CREATE TRIGGER service_providers_deletion_cascade_trigger
+          AFTER DELETE ON service_providers 
+          FOR EACH ROW
+          EXECUTE FUNCTION handle_integration_deletion_cascade();
+    END IF;
 
-CREATE TRIGGER update_service_providers_updated_at 
-  BEFORE UPDATE ON service_providers 
-  FOR EACH ROW
-  EXECUTE FUNCTION update_oauth_providers_updated_at();
+    -- Create updated_at trigger if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers 
+        WHERE trigger_name = 'update_service_providers_updated_at'
+    ) THEN
+        CREATE TRIGGER update_service_providers_updated_at 
+          BEFORE UPDATE ON service_providers 
+          FOR EACH ROW
+          EXECUTE FUNCTION update_oauth_providers_updated_at();
+    END IF;
+END $$;
 
--- Step 4: Enable RLS (matching oauth_providers)
-ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
+-- Step 4: Enable RLS (if not already enabled)
+DO $$
+BEGIN
+    -- Enable RLS if not already enabled
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class c 
+        JOIN pg_namespace n ON n.oid = c.relnamespace 
+        WHERE c.relname = 'service_providers' 
+        AND n.nspname = 'public' 
+        AND c.relrowsecurity = true
+    ) THEN
+        ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 
--- Step 5: Create RLS policies (matching oauth_providers)
-CREATE POLICY "Service providers are readable by authenticated users"
-  ON service_providers FOR SELECT
-  TO authenticated
-  USING (is_enabled = true);
+-- Step 5: Create RLS policies (if they don't exist)
+DO $$
+BEGIN
+    -- Create read policy if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'service_providers' 
+        AND policyname = 'Service providers are readable by authenticated users'
+    ) THEN
+        CREATE POLICY "Service providers are readable by authenticated users"
+          ON service_providers FOR SELECT
+          TO authenticated
+          USING (is_enabled = true);
+    END IF;
 
-CREATE POLICY "Only service role can modify service providers"
-  ON service_providers FOR ALL
-  TO service_role
-  USING (true);
+    -- Create admin policy if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'service_providers' 
+        AND policyname = 'Only service role can modify service providers'
+    ) THEN
+        CREATE POLICY "Only service role can modify service providers"
+          ON service_providers FOR ALL
+          TO service_role
+          USING (true);
+    END IF;
+END $$;
 
 -- Step 6: Grant permissions (matching oauth_providers)
 GRANT SELECT ON service_providers TO anon, authenticated;
 GRANT ALL ON service_providers TO service_role;
 
--- Step 7: Copy all existing data from oauth_providers
-INSERT INTO service_providers (
-  id, name, display_name, authorization_endpoint, token_endpoint,
-  revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
-  client_credentials_location, is_enabled, configuration_metadata,
-  created_at, updated_at
-)
-SELECT 
-  id, name, display_name, authorization_endpoint, token_endpoint,
-  revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
-  client_credentials_location, is_enabled, configuration_metadata,
-  created_at, updated_at
-FROM oauth_providers
-ON CONFLICT (id) DO NOTHING;
+-- Step 7: Copy all existing data from oauth_providers (if table exists)
+DO $$
+BEGIN
+    -- Check if oauth_providers table exists before copying data
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_providers') THEN
+        INSERT INTO service_providers (
+          id, name, display_name, authorization_endpoint, token_endpoint,
+          revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
+          client_credentials_location, is_enabled, configuration_metadata,
+          created_at, updated_at
+        )
+        SELECT 
+          id, name, display_name, authorization_endpoint, token_endpoint,
+          revoke_endpoint, discovery_endpoint, scopes_supported, pkce_required,
+          client_credentials_location, is_enabled, configuration_metadata,
+          created_at, updated_at
+        FROM oauth_providers
+        ON CONFLICT (id) DO NOTHING;
+        
+        RAISE NOTICE 'Copied data from oauth_providers to service_providers';
+    ELSE
+        RAISE NOTICE 'oauth_providers table does not exist, skipping data copy';
+    END IF;
+END $$;
 
--- Step 8: Create migration logging infrastructure
-CREATE TABLE public.migration_fallback_logs (
+-- Step 8: Create migration logging infrastructure (if it doesn't exist)
+CREATE TABLE IF NOT EXISTS public.migration_fallback_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   table_name text NOT NULL,
   operation_type text NOT NULL, -- 'SELECT', 'INSERT', 'UPDATE', 'DELETE'
@@ -260,7 +357,29 @@ RETURNS TABLE (
   status text,
   details text
 ) AS $$
+DECLARE
+  oauth_exists BOOLEAN;
 BEGIN
+  -- Check if oauth_providers exists (table or view)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_providers'
+    UNION
+    SELECT 1 FROM information_schema.views WHERE table_name = 'oauth_providers'
+  ) INTO oauth_exists;
+  
+  IF NOT oauth_exists THEN
+    -- If oauth_providers doesn't exist, just return service_providers info
+    RETURN QUERY
+    SELECT 
+      'service_only'::text,
+      0::bigint as oauth_count,
+      (SELECT COUNT(*) FROM service_providers)::bigint as service_count,
+      'OK'::text,
+      'Only service_providers table exists - this is normal'::text;
+    RETURN;
+  END IF;
+  
+  -- If oauth_providers exists, do full consistency checks
   -- Check record counts
   RETURN QUERY
   WITH counts AS (
@@ -270,12 +389,12 @@ BEGIN
   )
   SELECT 
     'record_count'::text,
-    oauth_count,
-    service_count,
-    CASE WHEN oauth_count = service_count THEN 'OK' ELSE 'MISMATCH' END::text,
-    CASE WHEN oauth_count = service_count 
+    counts.oauth_count,
+    counts.service_count,
+    CASE WHEN counts.oauth_count = counts.service_count THEN 'OK' ELSE 'MISMATCH' END::text,
+    CASE WHEN counts.oauth_count = counts.service_count 
          THEN 'Record counts match' 
-         ELSE 'Record counts differ: oauth=' || oauth_count || ', service=' || service_count 
+         ELSE 'Record counts differ: oauth=' || counts.oauth_count || ', service=' || counts.service_count 
     END::text
   FROM counts;
   
@@ -283,8 +402,8 @@ BEGIN
   RETURN QUERY
   SELECT 
     'data_drift'::text,
-    COUNT(CASE WHEN op.updated_at != sp.updated_at THEN 1 END)::bigint as oauth_count,
-    COUNT(*)::bigint as service_count,
+    COUNT(CASE WHEN op.updated_at != sp.updated_at THEN 1 END)::bigint,
+    COUNT(*)::bigint,
     CASE WHEN COUNT(CASE WHEN op.updated_at != sp.updated_at THEN 1 END) = 0 
          THEN 'OK' ELSE 'DRIFT_DETECTED' END::text,
     CASE WHEN COUNT(CASE WHEN op.updated_at != sp.updated_at THEN 1 END) = 0
@@ -298,8 +417,8 @@ BEGIN
   RETURN QUERY
   SELECT 
     'missing_records'::text,
-    COUNT(CASE WHEN sp.id IS NULL THEN 1 END)::bigint as oauth_count,
-    COUNT(CASE WHEN op.id IS NULL THEN 1 END)::bigint as service_count,
+    COUNT(CASE WHEN sp.id IS NULL THEN 1 END)::bigint,
+    COUNT(CASE WHEN op.id IS NULL THEN 1 END)::bigint,
     CASE WHEN COUNT(CASE WHEN sp.id IS NULL OR op.id IS NULL THEN 1 END) = 0 
          THEN 'OK' ELSE 'MISSING_RECORDS' END::text,
     CASE WHEN COUNT(CASE WHEN sp.id IS NULL OR op.id IS NULL THEN 1 END) = 0
@@ -373,28 +492,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger on oauth_providers to sync to service_providers
--- This ensures any direct writes to oauth_providers are reflected in service_providers
-CREATE TRIGGER sync_oauth_providers_to_service
-  AFTER INSERT OR UPDATE OR DELETE ON oauth_providers
-  FOR EACH ROW EXECUTE FUNCTION sync_oauth_to_service_providers();
+-- Note: Trigger on oauth_providers view is handled by INSTEAD OF trigger in Step 11
+-- No additional trigger needed here since oauth_providers is a view, not a table
 
--- Step 16: Initial consistency check
+-- Step 16: Initial consistency check (only if oauth_providers exists)
 DO $$
 DECLARE
   consistency_results RECORD;
+  oauth_table_exists BOOLEAN;
 BEGIN
-  -- Run initial consistency check and log results
-  FOR consistency_results IN 
-    SELECT * FROM check_service_providers_consistency()
-  LOOP
-    RAISE NOTICE 'Consistency Check - %: % (OAuth: %, Service: %) - %', 
-      consistency_results.check_type,
-      consistency_results.status,
-      consistency_results.oauth_count,
-      consistency_results.service_count,
-      consistency_results.details;
-  END LOOP;
+  -- Check if oauth_providers table/view exists
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_name = 'oauth_providers'
+    UNION
+    SELECT 1 FROM information_schema.views 
+    WHERE table_name = 'oauth_providers'
+  ) INTO oauth_table_exists;
+  
+  IF oauth_table_exists THEN
+    -- Run consistency check and log results
+    FOR consistency_results IN 
+      SELECT * FROM check_service_providers_consistency()
+    LOOP
+      RAISE NOTICE 'Consistency Check - %: % (OAuth: %, Service: %) - %', 
+        consistency_results.check_type,
+        consistency_results.status,
+        consistency_results.oauth_count,
+        consistency_results.service_count,
+        consistency_results.details;
+    END LOOP;
+  ELSE
+    RAISE NOTICE 'Skipping consistency check - oauth_providers does not exist';
+  END IF;
 END $$;
 
 -- Step 17: Log migration completion

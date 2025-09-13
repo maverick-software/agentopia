@@ -165,7 +165,10 @@ END $$;
 -- ⚠️ This is the point of no return
 DROP TABLE IF EXISTS oauth_providers CASCADE;
 
-RAISE NOTICE '🗑️  Dropped oauth_providers table - migration is now irreversible';
+DO $$
+BEGIN
+    RAISE NOTICE '🗑️  Dropped oauth_providers table - migration is now irreversible';
+END $$;
 
 -- Step 9: Clean up migration infrastructure
 DROP TABLE migration_fallback_logs;

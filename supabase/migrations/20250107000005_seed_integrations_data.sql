@@ -12,7 +12,7 @@ INSERT INTO integration_categories (name, description, icon_name, display_order)
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert default integrations
-INSERT INTO integrations (category_id, name, description, icon_name, status, is_popular, display_order) VALUES
+INSERT INTO integrations_renamed (category_id, name, description, icon_name, status, is_popular, display_order) VALUES
     -- API Integrations
     ((SELECT id FROM integration_categories WHERE name = 'API Integrations'), 'REST API', 'Connect to RESTful web services', 'Globe', 'available', true, 1),
     ((SELECT id FROM integration_categories WHERE name = 'API Integrations'), 'GraphQL', 'Query APIs with GraphQL', 'Globe', 'available', true, 2),
@@ -42,10 +42,10 @@ INSERT INTO integrations (category_id, name, description, icon_name, status, is_
     ((SELECT id FROM integration_categories WHERE name = 'Automation & Workflows'), 'Zapier', 'Connect with Zapier workflows', 'Zap', 'available', true, 1),
     ((SELECT id FROM integration_categories WHERE name = 'Automation & Workflows'), 'GitHub Actions', 'Trigger GitHub workflow actions', 'Zap', 'available', true, 2),
     ((SELECT id FROM integration_categories WHERE name = 'Automation & Workflows'), 'Scheduled Tasks', 'Schedule automated tasks', 'Zap', 'available', false, 3)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
 -- Add Gmail integration specifically
-INSERT INTO integrations (
+INSERT INTO integrations_renamed (
     category_id, 
     name, 
     description, 
@@ -107,4 +107,4 @@ INSERT INTO integrations (
         }
     }'::jsonb,
     0
-) ON CONFLICT (category_id, name) DO NOTHING; 
+) ON CONFLICT (name) DO NOTHING; 
