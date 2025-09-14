@@ -2,9 +2,18 @@
 -- Date: 2025-01-25
 -- Purpose: Setup storage bucket for agent document uploads and datastore table
 
-BEGIN;
-
--- 1. Create datastore_documents table to track uploaded and processed documents
+-- Skip this migration if agents table doesn't exist (for shadow database compatibility)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agents') THEN
+        RAISE NOTICE 'Skipping datastore documents storage creation - agents table does not exist yet';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'Creating datastore documents storage - agents table exists';
+    
+    EXECUTE $MIGRATION$
+    -- 1. Create datastore_documents table to track uploaded and processed documents
 CREATE TABLE IF NOT EXISTS datastore_documents (
     id TEXT PRIMARY KEY,
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
@@ -63,12 +72,12 @@ CREATE INDEX IF NOT EXISTS idx_datastore_documents_created_at ON datastore_docum
 
 -- Add updated_at trigger
 CREATE OR REPLACE FUNCTION update_datastore_documents_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $FUNC$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$FUNC$ language 'plpgsql';
 
 CREATE TRIGGER update_datastore_documents_updated_at
     BEFORE UPDATE ON datastore_documents
@@ -137,5 +146,5 @@ ON storage.objects FOR ALL
 TO service_role
 USING (bucket_id = 'datastore-documents')
 WITH CHECK (bucket_id = 'datastore-documents');
-
-COMMIT;
+    $MIGRATION$;
+END $$;

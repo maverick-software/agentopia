@@ -1,7 +1,18 @@
 -- Create reasoning_steps table to track individual steps within reasoning sessions
 -- This provides detailed audit trail and enables step-by-step analysis
 
-CREATE TABLE IF NOT EXISTS reasoning_steps (
+-- Skip this migration if reasoning_sessions table doesn't exist (for shadow database compatibility)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'reasoning_sessions') THEN
+        RAISE NOTICE 'Skipping reasoning_steps creation - reasoning_sessions table does not exist yet';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'Creating reasoning_steps table - reasoning_sessions table exists';
+    
+    EXECUTE $MIGRATION$
+    CREATE TABLE IF NOT EXISTS reasoning_steps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL REFERENCES reasoning_sessions(id) ON DELETE CASCADE,
   
@@ -69,7 +80,9 @@ CREATE POLICY "Service role full access to reasoning steps" ON reasoning_steps
 
 -- Add comments
 COMMENT ON TABLE reasoning_steps IS 'Individual steps within reasoning sessions, providing detailed audit trail';
-COMMENT ON COLUMN reasoning_steps.reasoning_state IS 'Current state in Markov chain: analyze, hypothesize, test, observe, update, conclude';
-COMMENT ON COLUMN reasoning_steps.memories_used IS 'JSON object containing episodic and semantic memories used in this step';
-COMMENT ON COLUMN reasoning_steps.memory_insights IS 'Array of insights extracted from memories for this step';
-COMMENT ON COLUMN reasoning_steps.facts_considered IS 'Array of facts/context considered in this reasoning step';
+COMMENT ON COLUMN reasoning_steps.reasoning_state IS ''Current state in Markov chain: analyze, hypothesize, test, observe, update, conclude'';
+COMMENT ON COLUMN reasoning_steps.memories_used IS ''JSON object containing episodic and semantic memories used in this step'';
+COMMENT ON COLUMN reasoning_steps.memory_insights IS ''Array of insights extracted from memories for this step'';
+COMMENT ON COLUMN reasoning_steps.facts_considered IS ''Array of facts/context considered in this reasoning step'';
+    $MIGRATION$;
+END $$;

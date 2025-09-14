@@ -8,6 +8,13 @@ DECLARE
     smtp_provider_id UUID;
     sendgrid_provider_id UUID;
     mailgun_provider_id UUID;
+    smtp_count INTEGER;
+    sendgrid_count INTEGER;
+    mailgun_count INTEGER;
+    smtp_capabilities_count INTEGER;
+    sendgrid_capabilities_count INTEGER;
+    mailgun_capabilities_count INTEGER;
+    fixed_permissions_count INTEGER;
 BEGIN
     -- Check if required tables exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integration_capabilities') OR
@@ -84,7 +91,6 @@ BEGIN
     RAISE NOTICE '✅ Reactivated SMTP integration (ID: 9cd9e1a9-630d-413a-93c8-b63f8da720c4)';
     RAISE NOTICE '✅ Reactivated SendGrid integration (ID: f56b8ae0-8630-4919-8888-66e89c1fbecd)';
     RAISE NOTICE '✅ Reactivated Mailgun integration (ID: 8049e60c-af31-493b-8f23-59340a5940fa)';
-END $$;
 
 -- =============================================
 -- STEP 3.5: Fix other integrations missing required_oauth_provider_id
@@ -168,16 +174,6 @@ WHERE id IN (
 -- =============================================
 
 -- Verify new integrations were created
-DO $$
-DECLARE
-    smtp_count INTEGER;
-    sendgrid_count INTEGER;
-    mailgun_count INTEGER;
-    smtp_capabilities_count INTEGER;
-    sendgrid_capabilities_count INTEGER;
-    mailgun_capabilities_count INTEGER;
-    fixed_permissions_count INTEGER;
-BEGIN
     -- Count reactivated integrations (using actual names from your data)
     SELECT COUNT(*) INTO smtp_count FROM integrations WHERE name = 'SMTP' AND status = 'available';
     SELECT COUNT(*) INTO sendgrid_count FROM integrations WHERE name = 'SendGrid' AND status = 'available';

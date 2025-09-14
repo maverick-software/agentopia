@@ -1,16 +1,30 @@
 -- Grant reasoning tool access to all agents automatically
 -- Simple approach: when agent is created, insert the right permissions
 
--- Create trigger to automatically grant reasoning access to new agents
+-- Skip this migration if required tables don't exist (for shadow database compatibility)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agents') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integrations_renamed') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_integration_credentials') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agent_integration_permissions') THEN
+        RAISE NOTICE 'Skipping reasoning access grant - required tables do not exist yet';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'Creating reasoning access grant trigger - required tables exist';
+    
+    EXECUTE $MIGRATION$
+    -- Create trigger to automatically grant reasoning access to new agents
 CREATE OR REPLACE FUNCTION grant_reasoning_access_to_new_agent()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $FUNC$
 DECLARE
   reasoning_integration_id UUID;
   reasoning_credential_id UUID;
 BEGIN
   -- Get the Advanced Reasoning integration ID
   SELECT id INTO reasoning_integration_id 
-  FROM integrations 
+  FROM integrations_renamed 
   WHERE name = 'Advanced Reasoning' 
   LIMIT 1;
   
@@ -82,7 +96,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$FUNC$ LANGUAGE plpgsql;
 
 -- Create trigger for new agents
 DROP TRIGGER IF EXISTS trigger_grant_reasoning_access_to_new_agent ON agents;
@@ -92,3 +106,5 @@ CREATE TRIGGER trigger_grant_reasoning_access_to_new_agent
   EXECUTE FUNCTION grant_reasoning_access_to_new_agent();
 
 -- Note: Existing agents are handled by separate SQL script (grant_reasoning_permissions.sql)
+    $MIGRATION$;
+END $$;

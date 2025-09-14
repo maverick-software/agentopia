@@ -1,7 +1,21 @@
 -- Add MCP reasoning tools to tool_catalog and integration_capabilities
 -- This registers the new advanced reasoning system as available tools
 
--- Insert reasoning tools into tool_catalog
+-- Skip this migration if required tables don't exist (for shadow database compatibility)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tool_catalog') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integrations_renamed') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integration_capabilities') OR
+       NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integration_categories') THEN
+        RAISE NOTICE 'Skipping reasoning tools catalog addition - required tables do not exist yet';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'Adding reasoning tools to catalog - required tables exist';
+    
+    -- Insert reasoning tools into tool_catalog
+    EXECUTE $MIGRATION$
 INSERT INTO tool_catalog (
   id,
   tool_name,
@@ -153,7 +167,7 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = NOW();
 
 -- Add reasoning integration to integrations table first
-INSERT INTO integrations (
+INSERT INTO integrations_renamed (
   id,
   category_id,
   name,
@@ -274,5 +288,7 @@ INSERT INTO integration_capabilities (
   updated_at = NOW();
 
 -- Add comment
-COMMENT ON TABLE reasoning_sessions IS 'Enhanced: Tracks MCP-based iterative reasoning sessions with confidence progression';
-COMMENT ON TABLE reasoning_steps IS 'Enhanced: Individual steps within MCP reasoning sessions with detailed memory integration';
+COMMENT ON TABLE reasoning_sessions IS ''Enhanced: Tracks MCP-based iterative reasoning sessions with confidence progression'';
+COMMENT ON TABLE reasoning_steps IS ''Enhanced: Individual steps within MCP reasoning sessions with detailed memory integration'';
+    $MIGRATION$;
+END $$;

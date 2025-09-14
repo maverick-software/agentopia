@@ -1,7 +1,18 @@
 -- Create reasoning_sessions table for MCP advanced reasoning system
 -- This table tracks iterative reasoning sessions with confidence progression
 
-CREATE TABLE IF NOT EXISTS reasoning_sessions (
+-- Skip this migration if required tables don't exist (for shadow database compatibility)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agents') THEN
+        RAISE NOTICE 'Skipping reasoning_sessions creation - agents table does not exist yet';
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE 'Creating reasoning_sessions table - agents table exists';
+    
+    EXECUTE $MIGRATION$
+    CREATE TABLE IF NOT EXISTS reasoning_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -49,12 +60,12 @@ CREATE INDEX IF NOT EXISTS idx_reasoning_sessions_reasoning_type ON reasoning_se
 
 -- Create updated_at trigger
 CREATE OR REPLACE FUNCTION update_reasoning_sessions_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $FUNC$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$FUNC$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_reasoning_sessions_updated_at
   BEFORE UPDATE ON reasoning_sessions
@@ -83,6 +94,8 @@ COMMENT ON TABLE reasoning_sessions IS 'Tracks iterative reasoning sessions with
 COMMENT ON COLUMN reasoning_sessions.reasoning_type IS 'Type of reasoning: inductive, deductive, abductive, analogical, causal, probabilistic';
 COMMENT ON COLUMN reasoning_sessions.iterations IS 'Number of reasoning iterations completed';
 COMMENT ON COLUMN reasoning_sessions.final_confidence IS 'Final confidence level achieved (0.00-1.00)';
-COMMENT ON COLUMN reasoning_sessions.insights IS 'Array of insights generated during reasoning';
-COMMENT ON COLUMN reasoning_sessions.memory_connections IS 'JSON object tracking episodic and semantic memory usage';
-COMMENT ON COLUMN reasoning_sessions.forced_stop IS 'Whether reasoning was manually stopped via safety switch';
+COMMENT ON COLUMN reasoning_sessions.insights IS ''Array of insights generated during reasoning'';
+COMMENT ON COLUMN reasoning_sessions.memory_connections IS ''JSON object tracking episodic and semantic memory usage'';
+COMMENT ON COLUMN reasoning_sessions.forced_stop IS ''Whether reasoning was manually stopped via safety switch'';
+    $MIGRATION$;
+END $$;

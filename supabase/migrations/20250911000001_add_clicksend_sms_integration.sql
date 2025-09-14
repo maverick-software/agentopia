@@ -189,7 +189,7 @@ BEGIN
   -- Check if user has an active ClickSend connection
   SELECT EXISTS(
     SELECT 1 
-    FROM user_oauth_connections uoc
+    FROM user_integration_credentials uoc
     WHERE uoc.user_id = p_user_id 
       AND uoc.oauth_provider_id = v_provider_id
       AND uoc.connection_status = 'active'
@@ -203,7 +203,7 @@ BEGIN
   SELECT EXISTS(
     SELECT 1
     FROM agent_integration_permissions aip
-    JOIN user_oauth_connections uoc ON uoc.id = aip.user_oauth_connection_id
+    JOIN user_integration_credentials uoc ON uoc.id = aip.user_oauth_connection_id
     WHERE aip.agent_id = p_agent_id
       AND uoc.user_id = p_user_id
       AND uoc.oauth_provider_id = v_provider_id
