@@ -49,6 +49,7 @@ export function ClickSendSetupModal({
   const [username, setUsername] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [connectionName, setConnectionName] = useState('');
+  const [senderId, setSenderId] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -58,6 +59,7 @@ export function ClickSendSetupModal({
     setUsername('');
     setApiKey('');
     setConnectionName('');
+    setSenderId('');
     setShowApiKey(false);
     setTestResult(null);
     onClose();
@@ -88,7 +90,7 @@ export function ClickSendSetupModal({
         setTestResult({
           success: true,
           details: `Connected successfully! Account: ${accountData.data?.username || 'Unknown'}`,
-          balance: accountData.data?.balance,
+          balance: parseFloat(accountData.data?.balance) || 0,
           account_name: accountData.data?.username
         });
         toast.success('Connection test successful!');
@@ -163,22 +165,25 @@ export function ClickSendSetupModal({
         throw new Error('Failed to encrypt credentials. Please try again.');
       }
 
-      // Create user OAuth connection record
+      // Create user integration credentials record
       const { data: connection, error: connectionError } = await supabase
-        .from('user_oauth_connections')
+        .from('user_integration_credentials')
         .insert({
           user_id: user.id,
           oauth_provider_id: provider.id,
-          encrypted_access_token: encryptedUsername.id,
-          encrypted_refresh_token: encryptedApiKey.id,
-          granted_scopes: ['sms', 'mms', 'balance', 'history', 'delivery_receipts'],
+          vault_access_token_id: encryptedUsername.id,
+          vault_refresh_token_id: encryptedApiKey.id,
+          scopes_granted: ['sms', 'mms', 'balance', 'history', 'delivery_receipts'],
           connection_status: 'active',
           external_username: testResult.account_name || username.trim(),
+          external_user_id: testResult.account_name || username.trim(),
           connection_name: connectionName.trim() || 'ClickSend SMS/MMS',
+          credential_type: 'api_key',
           connection_metadata: {
             account_balance: testResult.balance,
             setup_date: new Date().toISOString(),
-            features_enabled: ['sms', 'mms', 'balance', 'history']
+            features_enabled: ['sms', 'mms', 'balance', 'history'],
+            default_sender_id: senderId.trim() || null
           }
         })
         .select()
@@ -285,6 +290,24 @@ export function ClickSendSetupModal({
               />
             </div>
 
+            <div>
+              <Label htmlFor="senderId" className="text-sm font-medium text-gray-700">
+                Default Sender ID (Optional)
+              </Label>
+              <Input
+                id="senderId"
+                type="text"
+                value={senderId}
+                onChange={(e) => setSenderId(e.target.value)}
+                placeholder="e.g., +1234567890 or YourBrand"
+                className="mt-1"
+                disabled={isConnecting}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Phone number (with country code) or alphanumeric sender ID (up to 11 characters)
+              </p>
+            </div>
+
             {/* Test Connection Button */}
             <Button
               type="button"
@@ -328,7 +351,7 @@ export function ClickSendSetupModal({
                 )}
                 {testResult.success && testResult.balance !== undefined && (
                   <p className="mt-1 text-sm">
-                    Account Balance: ${testResult.balance?.toFixed(2) || '0.00'}
+                    Account Balance: ${typeof testResult.balance === 'number' ? testResult.balance.toFixed(2) : '0.00'}
                   </p>
                 )}
               </div>

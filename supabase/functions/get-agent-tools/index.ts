@@ -20,7 +20,7 @@ import { generateParametersForCapability } from './tool-generator.ts';
 import { 
   getAgentPermissions, 
   getServiceProviders, 
-  hasAgentDocuments 
+  hasAgentDocuments
 } from './database-service.ts';
 
 serve(async (req) => {
@@ -138,6 +138,10 @@ serve(async (req) => {
           // Special case for outlook which uses different prefix than provider name
           const providerPrefixedName = (providerName === 'microsoft-outlook' && capability.startsWith('outlook_'))
             ? capability  // Already has outlook_ prefix, use as-is
+            : (providerName === 'clicksend_sms' && capability.startsWith('clicksend_'))
+              ? capability  // ClickSend capabilities already have clicksend_ prefix
+            : (providerName === 'contact_management')
+              ? capability  // Contact management tools don't need prefix (search_contacts, get_contact_details)
             : capability.includes('_') && capability.startsWith(providerName.split('-')[0]) 
               ? capability  // Already has provider prefix
               : `${providerName}_${capability}`;  // Add provider prefix
@@ -204,6 +208,9 @@ serve(async (req) => {
 
       providersProcessed.add('Media Library');
     }
+
+    // Contact Management tools are now handled through the standard integration system
+    // They will be processed automatically with other integrations above
 
     console.log(`[GetAgentTools] Retrieved ${tools.length} tools from ${providersProcessed.size} providers`);
     console.log(`[GetAgentTools] Providers: ${Array.from(providersProcessed).join(', ')}`);

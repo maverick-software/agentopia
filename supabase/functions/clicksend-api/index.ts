@@ -15,7 +15,7 @@ const corsHeaders = {
 interface ClickSendRequest {
   agent_id: string;
   action: string;
-  parameters: any;
+  params: any;
 }
 
 interface ClickSendResponse {
@@ -164,13 +164,30 @@ serve(async (req) => {
 
     // Parse request body
     const body: ClickSendRequest = await req.json();
-    const { agent_id, action, parameters } = body;
+    const { agent_id, action, params } = body;
 
     console.log(`[ClickSend] Processing ${action} request for agent ${agent_id}`);
+    
+    // Extract parameters - handle both direct params and nested input structure
+    let parameters: any;
+    if (params?.input && typeof params.input === 'string') {
+      try {
+        parameters = JSON.parse(params.input);
+        console.log(`[ClickSend] Parsed parameters from input field:`, JSON.stringify(parameters, null, 2));
+      } catch (e) {
+        console.error(`[ClickSend] Failed to parse input field:`, e);
+        parameters = params;
+      }
+    } else {
+      parameters = params || {};
+      console.log(`[ClickSend] Using direct parameters:`, JSON.stringify(parameters, null, 2));
+    }
 
     // Get user from JWT token
     const authHeader = req.headers.get('Authorization');
+    console.log(`[ClickSend] Auth header present: ${!!authHeader}`);
     if (!authHeader) {
+      console.error(`[ClickSend] Missing authorization header`);
       throw new Error('Authorization header required');
     }
 
@@ -178,25 +195,48 @@ serve(async (req) => {
       authHeader.replace('Bearer ', '')
     );
 
+    console.log(`[ClickSend] User auth result - User ID: ${user?.id}, Error: ${userError?.message}`);
     if (userError || !user) {
+      console.error(`[ClickSend] Authentication failed:`, userError);
       throw new Error('Invalid authentication token');
     }
 
-    // Validate agent permissions for ClickSend
-    const { data: hasPermissions, error: permissionError } = await supabase.rpc(
-      'validate_agent_clicksend_permissions',
-      {
-        p_agent_id: agent_id,
-        p_user_id: user.id,
-        p_required_scopes: getRequiredScopes(action)
-      }
-    );
+    // Check agent permissions for ClickSend
+    console.log(`[ClickSend] Checking permissions for agent ${agent_id}, user ${user.id}`);
+    const { data: agentPermissions, error: permissionError } = await supabase
+      .from('agent_integration_permissions')
+      .select(`
+        allowed_scopes,
+        is_active,
+        user_integration_credentials!agent_integration_permissions_connection_id_fkey!inner(
+          id,
+          vault_access_token_id,
+          vault_refresh_token_id,
+          connection_status,
+          user_id,
+          service_providers!inner(name)
+        )
+      `)
+      .eq('agent_id', agent_id)
+      .eq('user_integration_credentials.user_id', user.id)
+      .eq('user_integration_credentials.service_providers.name', 'clicksend_sms')
+      .eq('user_integration_credentials.connection_status', 'active')
+      .eq('is_active', true);
 
-    if (permissionError || !hasPermissions) {
+    console.log(`[ClickSend] Permission query result - Error: ${permissionError?.message}, Records: ${agentPermissions?.length}`);
+    if (permissionError) {
+      console.error(`[ClickSend] Permission query error:`, permissionError);
+    }
+    if (agentPermissions) {
+      console.log(`[ClickSend] Found permissions:`, JSON.stringify(agentPermissions, null, 2));
+    }
+
+    if (permissionError || !agentPermissions || agentPermissions.length === 0) {
+      console.error(`[ClickSend] No permissions found - returning 403`);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Agent does not have required ClickSend permissions',
+          error: 'Agent does not have ClickSend permissions or no active ClickSend connection found',
           metadata: { execution_time_ms: Date.now() - startTime }
         }),
         { 
@@ -206,47 +246,63 @@ serve(async (req) => {
       );
     }
 
-    // Get user's ClickSend connection
-    const { data: connection, error: connectionError } = await supabase.rpc(
-      'get_user_clicksend_connection',
-      { p_user_id: user.id }
-    );
+    const permission = agentPermissions[0];
+    const userConnection = permission.user_integration_credentials;
 
-    if (connectionError || !connection || connection.length === 0) {
+    // Check if agent has required scopes for this action
+    const requiredScopes = getRequiredScopes(action);
+    const allowedScopes = permission.allowed_scopes || [];
+    const hasRequiredScopes = requiredScopes.every(scope => allowedScopes.includes(scope));
+
+    console.log(`[ClickSend] Scope validation - Action: ${action}, Required: [${requiredScopes.join(', ')}], Allowed: [${allowedScopes.join(', ')}], Has Required: ${hasRequiredScopes}`);
+
+    if (!hasRequiredScopes) {
+      console.error(`[ClickSend] Scope validation failed - returning 403`);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'No active ClickSend connection found. Please connect your ClickSend account.',
+          error: `Agent missing required scopes for ${action}. Required: ${requiredScopes.join(', ')}, Allowed: ${allowedScopes.join(', ')}`,
           metadata: { execution_time_ms: Date.now() - startTime }
         }),
         { 
-          status: 400, 
+          status: 403, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
 
-    const userConnection = connection[0];
-
     // Decrypt credentials from Supabase Vault
+    console.log(`[ClickSend] Decrypting credentials - Username vault ID: ${userConnection.vault_access_token_id}, API key vault ID: ${userConnection.vault_refresh_token_id}`);
+    
     const { data: usernameData, error: usernameError } = await supabase.rpc(
-      'vault.decrypt_secret',
-      { secret_id: userConnection.encrypted_access_token }
+      'vault_decrypt',
+      { vault_id: userConnection.vault_access_token_id }
     );
 
     const { data: apiKeyData, error: apiKeyError } = await supabase.rpc(
-      'vault.decrypt_secret', 
-      { secret_id: userConnection.encrypted_refresh_token }
+      'vault_decrypt', 
+      { vault_id: userConnection.vault_refresh_token_id }
     );
 
+    console.log(`[ClickSend] Vault decryption result - Username: ${usernameData ? 'SUCCESS' : 'FAILED'}, API Key: ${apiKeyData ? 'SUCCESS' : 'FAILED'}`);
+    if (usernameError) {
+      console.error(`[ClickSend] Username decryption error:`, usernameError);
+    }
+    if (apiKeyError) {
+      console.error(`[ClickSend] API key decryption error:`, apiKeyError);
+    }
+
     if (usernameError || apiKeyError || !usernameData || !apiKeyData) {
+      console.error(`[ClickSend] Credential decryption failed - throwing error`);
       throw new Error('Failed to decrypt ClickSend credentials');
     }
 
     // Initialize ClickSend client
-    const clicksendClient = new ClickSendClient(usernameData.decrypted_secret, apiKeyData.decrypted_secret);
+    console.log(`[ClickSend] Initializing ClickSend client with decrypted credentials`);
+    const clicksendClient = new ClickSendClient(usernameData, apiKeyData);
 
     // Execute the requested action
+    console.log(`[ClickSend] Executing action: ${action} with parameters:`, JSON.stringify(parameters, null, 2));
     let result: any;
     let quotaConsumed = 0;
 
@@ -327,11 +383,11 @@ serve(async (req) => {
       );
 
       await supabase.from('tool_execution_logs').insert({
-        agent_id: body?.agent_id || null,
+        agent_id: agent_id || null,
         user_id: null, // We may not have user context in error cases
-        tool_name: `clicksend_${body?.action || 'unknown'}`,
+        tool_name: `clicksend_${action || 'unknown'}`,
         tool_provider: 'clicksend',
-        parameters: body?.parameters || {},
+        parameters: parameters || {},
         success: false,
         error_message: error.message,
         execution_time_ms: Date.now() - startTime,
@@ -361,37 +417,81 @@ serve(async (req) => {
 
 // Action handlers
 async function handleSendSMS(client: ClickSendClient, params: any): Promise<any> {
-  const { to, body, from } = params;
+  // Handle both 'body' and 'message' field names for flexibility
+  let { to, body, message, from } = params;
+  const messageText = body || message;
 
-  // Validate required parameters
-  if (!to || !body) {
-    throw new Error('Missing required parameters: to, body');
+  // Validate required parameters with intelligent error messages
+  const missingParams = [];
+  if (!to) missingParams.push('to (phone number)');
+  if (!messageText) missingParams.push('message or body (SMS text content)');
+  
+  if (missingParams.length > 0) {
+    throw new Error(`Missing required parameters: ${missingParams.join(', ')}. Please provide: ${
+      !to ? 'a phone number in international format (e.g., +1234567890)' : ''
+    }${!to && !messageText ? ' and ' : ''}${
+      !messageText ? 'the SMS message text' : ''
+    }.`);
+  }
+
+  // Auto-fix common phone number format issues (assume USA +1 if not specified)
+  if (to && !to.startsWith('+')) {
+    // Remove any non-digit characters except +
+    const cleanNumber = to.replace(/[^\d]/g, '');
+    
+    // If it's 10 digits, assume US number
+    if (cleanNumber.length === 10 && /^[2-9]\d{2}[2-9]\d{2}\d{4}$/.test(cleanNumber)) {
+      to = `+1${cleanNumber}`;
+      console.log(`[ClickSend] Auto-corrected US phone number to: ${to}`);
+    }
+    // If it's 11 digits starting with 1, assume US number with country code
+    else if (cleanNumber.length === 11 && cleanNumber.startsWith('1')) {
+      to = `+${cleanNumber}`;
+      console.log(`[ClickSend] Auto-corrected phone number to: ${to}`);
+    }
   }
 
   // Validate phone number format
   if (!validatePhoneNumber(to)) {
-    throw new Error('Invalid phone number format. Use international format: +1234567890');
+    throw new Error(`Invalid phone number format. The number "${params.to}" was processed as "${to}". Please provide a valid phone number. For US numbers, use formats like: +1234567890, 1234567890, (123) 456-7890, or 123-456-7890.`);
   }
 
   // Validate SMS body
-  if (!validateSMSBody(body)) {
-    throw new Error('SMS body must be between 1 and 1600 characters');
+  if (!validateSMSBody(messageText)) {
+    throw new Error('SMS message must be between 1 and 1600 characters');
   }
 
-  return await client.sendSMS(to, body, from);
+  return await client.sendSMS(to, messageText, from);
 }
 
 async function handleSendMMS(client: ClickSendClient, params: any): Promise<any> {
-  const { to, body, media_url, subject, from } = params;
+  let { to, body, media_url, subject, from } = params;
 
   // Validate required parameters
   if (!to || !body || !media_url) {
     throw new Error('Missing required parameters: to, body, media_url');
   }
 
+  // Auto-fix common phone number format issues (assume USA +1 if not specified)
+  if (to && !to.startsWith('+')) {
+    // Remove any non-digit characters except +
+    const cleanNumber = to.replace(/[^\d]/g, '');
+    
+    // If it's 10 digits, assume US number
+    if (cleanNumber.length === 10 && /^[2-9]\d{2}[2-9]\d{2}\d{4}$/.test(cleanNumber)) {
+      to = `+1${cleanNumber}`;
+      console.log(`[ClickSend] Auto-corrected US phone number to: ${to}`);
+    }
+    // If it's 11 digits starting with 1, assume US number with country code
+    else if (cleanNumber.length === 11 && cleanNumber.startsWith('1')) {
+      to = `+${cleanNumber}`;
+      console.log(`[ClickSend] Auto-corrected phone number to: ${to}`);
+    }
+  }
+
   // Validate phone number format
   if (!validatePhoneNumber(to)) {
-    throw new Error('Invalid phone number format. Use international format: +1234567890');
+    throw new Error(`Invalid phone number format. The number "${params.to}" was processed as "${to}". Please provide a valid phone number. For US numbers, use formats like: +1234567890, 1234567890, (123) 456-7890, or 123-456-7890.`);
   }
 
   // Validate media URL
@@ -442,12 +542,12 @@ async function handleGetDeliveryReceipts(client: ClickSendClient, params: any): 
 // Helper function to get required scopes for each action
 function getRequiredScopes(action: string): string[] {
   const scopeMap: Record<string, string[]> = {
-    'send_sms': ['sms'],
-    'send_mms': ['mms'],
-    'get_balance': ['balance'],
-    'get_sms_history': ['history'],
-    'get_mms_history': ['history'],
-    'get_delivery_receipts': ['history']
+    'send_sms': ['clicksend_send_sms'],
+    'send_mms': ['clicksend_send_mms'],
+    'get_balance': ['clicksend_get_balance'],
+    'get_sms_history': ['clicksend_get_sms_history'],
+    'get_mms_history': ['clicksend_get_sms_history'],
+    'get_delivery_receipts': ['clicksend_get_delivery_receipts']
   };
 
   return scopeMap[action] || [];

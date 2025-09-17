@@ -259,6 +259,63 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+    // Handle Contact Management tools
+    if (toolName === 'search_contacts') {
+      return {
+        ...baseSchema,
+        properties: {
+          query: { 
+            type: 'string', 
+            description: 'Natural language search query. Examples: "list all contacts", "find contacts with numbers that start with 661", "show customers at Microsoft", "contacts with WhatsApp", "internal employees named John"' 
+          },
+          contact_type: { 
+            type: 'string', 
+            enum: ['internal', 'external', 'customer', 'vendor', 'partner', 'prospect'],
+            description: 'Filter by specific contact type (optional)' 
+          },
+          channel_type: {
+            type: 'string',
+            enum: ['phone', 'mobile', 'email', 'whatsapp', 'telegram', 'slack', 'discord', 'sms'],
+            description: 'Filter contacts that have a specific communication channel (optional)'
+          },
+          phone_pattern: {
+            type: 'string',
+            description: 'Search for phone numbers matching a pattern (e.g., "661" for numbers starting with 661)'
+          },
+          email_pattern: {
+            type: 'string',
+            description: 'Search for email addresses containing specific text or domain'
+          },
+          organization_filter: {
+            type: 'string',
+            description: 'Filter by organization/company name'
+          },
+          job_title_filter: {
+            type: 'string',
+            description: 'Filter by job title or role'
+          },
+          tags: { 
+            type: 'array', 
+            items: { type: 'string' },
+            description: 'Filter by contact tags (optional)' 
+          },
+          limit: { type: 'number', description: 'Maximum number of contacts to return', default: 20 },
+          offset: { type: 'number', description: 'Number of results to skip for pagination', default: 0 }
+        },
+        required: []
+      };
+    }
+
+  if (toolName === 'get_contact_details') {
+    return {
+      ...baseSchema,
+      properties: {
+        contact_id: { type: 'string', description: 'Contact ID to retrieve details for' }
+      },
+      required: ['contact_id']
+    };
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,

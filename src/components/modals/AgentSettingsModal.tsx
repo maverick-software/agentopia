@@ -24,7 +24,8 @@ import {
   Users,
   Library,
   GitBranch,
-  Zap
+  Zap,
+  UserCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +41,7 @@ import { ChannelsTab } from './agent-settings/ChannelsTab';
 import { IntegrationsTab } from './agent-settings/IntegrationsTab';
 import { SourcesTab } from './agent-settings/SourcesTab';
 import { TeamTab } from './agent-settings/TeamTab';
+import ContactsTab from './agent-settings/ContactsTab';
 
 interface AgentSettingsModalProps {
   isOpen: boolean;
@@ -53,10 +55,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'workflows' | 'automations';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'workflows' | 'automations';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations';
 
 interface TabConfig {
   id: TabId;
@@ -133,6 +135,12 @@ const TABS: TabConfig[] = [
     description: 'Team assignments and collaboration'
   },
   {
+    id: 'contacts',
+    label: 'Contacts',
+    icon: UserCheck,
+    description: 'Contact access and permissions'
+  },
+  {
     id: 'workflows',
     label: 'Workflows',
     icon: GitBranch,
@@ -197,6 +205,8 @@ export function AgentSettingsModal({
         return <SourcesTab {...commonProps} />;
       case 'team':
         return <TeamTab {...commonProps} />;
+      case 'contacts':
+        return <ContactsTab agent={{ id: agentId, name: agentData?.name || 'Agent', user_id: '' }} />;
       default:
         return <GeneralTab {...commonProps} />;
     }

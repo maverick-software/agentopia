@@ -23,6 +23,7 @@ export const TeamsPage = lazy(() => import('../pages/TeamsPage.tsx').then(module
 export const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage.tsx').then(module => ({ default: module.TeamDetailsPage })));
 export const EditTeamPage = lazy(() => import('../pages/EditTeamPage.tsx').then(module => ({ default: module.EditTeamPage })));
 export const SettingsPage = lazy(() => import('../pages/SettingsPage.tsx').then(module => ({ default: module.Settings })));
+export const BillingPage = lazy(() => import('../pages/BillingPage').then(module => ({ default: module.default })));
 
 export const MonitoringPage = lazy(() => import('../pages/MonitoringPage.tsx').then(module => ({ default: module.Monitoring })));
 export const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement.tsx').then(module => ({ default: module.AdminUserManagement })));
@@ -51,6 +52,11 @@ export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConf
 
 export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 
 export const AdminIntegrationManagement = lazy(() => import('../pages/AdminIntegrationManagement').then(module => ({ default: module.AdminIntegrationManagement })));
+
+// Admin Billing Pages
+export const AdminStripeConfigPage = lazy(() => import('../pages/admin/AdminStripeConfigPage').then(module => ({ default: module.default })));
+export const AdminUserBillingPage = lazy(() => import('../pages/admin/AdminUserBillingPage').then(module => ({ default: module.default })));
+export const StripeOAuthCallbackPage = lazy(() => import('../pages/admin/StripeOAuthCallbackPage').then(module => ({ default: module.default })));
 
 // Add IntegrationsPage
 export const IntegrationsPage = lazy(() => import('../pages/IntegrationsPage').then(module => ({ default: module.IntegrationsPage }))); 

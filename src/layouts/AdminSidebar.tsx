@@ -8,9 +8,12 @@ import {
   Store, // Add Store icon for marketplace
   Wrench, // Add Wrench icon for Tools
   Settings, // Add Settings icon for Integration Management
+  CreditCard, // Add CreditCard icon for Stripe Configuration
+  DollarSign, // Add DollarSign icon for User Billing
   PanelLeftClose, 
   PanelRightClose 
 } from 'lucide-react';
+import { AccountMenu } from '@/components/shared/AccountMenu';
 
 // Define props for the component
 interface AdminSidebarProps {
@@ -26,6 +29,8 @@ const navigation = [
     { name: 'Integration Management', href: '/admin/integrations', icon: Settings },
     { name: 'MCP Templates', href: '/admin/marketplace', icon: Store },
     { name: 'Droplets', href: '/admin/tools', icon: Wrench },
+    { name: 'Stripe Configuration', href: '/admin/billing/stripe-config', icon: CreditCard },
+    { name: 'User Billing', href: '/admin/billing/users', icon: DollarSign },
     // Add other admin items here if needed
 ];
 
@@ -40,16 +45,16 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isCollapsed, setIsCo
         <nav 
             className={`relative flex flex-col bg-gray-800 h-full overflow-y-auto transition-all duration-300 ease-in-out ${isCollapsed ? 'p-2' : 'p-4'}`}
         >
-            {/* Use flex-1 to push button to bottom */}
-            <div className="flex-1 mb-4 flex flex-col">
+            {/* Main content area */}
+            <div className="flex-1 flex flex-col">
                 {/* Top section (Logo/Title and Nav Links) */}
-                <div>
+                <div className="flex-1">
                     {/* Logo/Title section - adjust styling based on isCollapsed */}
                     <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
                         {/* Use a generic icon or replace img src */}
                         <Bot size={isCollapsed ? 28 : 24} className="text-indigo-400" />
                         <span className={`ml-2 text-xl font-bold transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
-                            Admin Panel
+                            Admin Portal
                         </span>
                     </div>
                     
@@ -79,19 +84,27 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isCollapsed, setIsCo
                     </ul>
                 </div>
                 
-                {/* Collapse Button - pushed to bottom */}
-                <button 
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className={`mt-auto text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700 transition-colors duration-200 mb-2 ${ 
-                        isCollapsed ? 'self-center' : 'self-start ml-1' // Adjust positioning
-                    }`}
-                    title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                >
-                    {isCollapsed ? <PanelRightClose size={20} /> : <PanelLeftClose size={20} />}
-                </button>
+                {/* Bottom section - Collapse Button and Account Menu */}
+                <div className="mt-auto">
+                    {/* Collapse Button - Above the line */}
+                    <div className="mb-4 flex">
+                        <button 
+                            onClick={() => setIsCollapsed(!isCollapsed)}
+                            className={`text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700 transition-colors duration-200 ${ 
+                                isCollapsed ? 'mx-auto' : 'ml-1' // Adjust positioning
+                            }`}
+                            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                        >
+                            {isCollapsed ? <PanelRightClose size={20} /> : <PanelLeftClose size={20} />}
+                        </button>
+                    </div>
+                    
+                    {/* Account Menu - Fixed at bottom with separator line */}
+                    <div className="border-t border-gray-700 pt-4">
+                        <AccountMenu isCollapsed={isCollapsed} isAdminArea={true} />
+                    </div>
+                </div>
             </div>
-
-            {/* Remove user profile section for now, keep it simpler */}
         </nav>
     );
 }; 

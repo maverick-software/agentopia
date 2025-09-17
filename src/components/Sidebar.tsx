@@ -3,28 +3,27 @@ import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   Users, Settings,
   LogOut, Bot, PanelLeftClose, PanelRightClose,
-  ChevronDown, ChevronRight, MemoryStick,
+  ChevronDown, ChevronRight,
   GitBranch, FolderKanban,
   User as UserIcon,
   Server, Key, Zap, Plus, MessageSquarePlus,
   MoreVertical, Pencil, Archive, Trash2,
-  Network, FileText, HelpCircle, Crown, CreditCard
+  Network, FileText, HelpCircle, Crown, CreditCard, Shield,
+  UserCheck, Library, Plug
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
+import { useSubscription } from '../hooks/useSubscription';
 import { CreateAgentWizard } from './CreateAgentWizard';
+import { AccountMenu } from './shared/AccountMenu';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useConversations } from '../hooks/useConversations';
-import { useTheme } from '../contexts/ThemeContext';
-import { Sun, Moon } from 'lucide-react';
 
 // Define type for a single navigation item, allowing for children
 interface NavItem {
@@ -42,6 +41,8 @@ const getIconColorClass = (route: string, label: string): string => {
 
   if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
   if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
+  if (route.includes('/media') || label.includes('Media')) return 'text-icon-media';
+  if (route.includes('/contacts') || label.includes('Contacts')) return 'text-icon-contacts';
   if (route.includes('/workflows') || label.includes('Workflows')) return 'text-icon-workflows';
   if (route.includes('/automations') || label.includes('Automations')) return 'text-purple-500';
   if (route.includes('/integrations') || label.includes('Integrations')) return 'text-icon-integrations';
@@ -64,6 +65,10 @@ const navItems: NavItem[] = [
     isCustom: true
   },
   { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/media', icon: Library, label: 'Media' },
+  { to: '/contacts', icon: UserCheck, label: 'Contacts' },
+  { to: '/integrations', icon: Plug, label: 'Integrations' },
+  { to: '/teams', icon: Users, label: 'Teams' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item
@@ -239,10 +244,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
-  const { user, signOut, isAdmin } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
 
   // Filter nav items based on admin status - no longer needed for the main list
@@ -250,14 +254,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   // Use the full navItems list now
   const visibleNavItems = navItems; 
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      navigate('/login');
-    } catch (error) {
-      console.error("Sign out failed:", error);
-    }
-  };
 
   return (
     <nav 
@@ -378,138 +374,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
       {user && (
         <div className="border-t border-sidebar-border/50 pt-2 mt-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button 
-                className={`flex items-center w-full rounded-md hover:bg-sidebar-accent/50 bg-sidebar-background/50 transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
-                title="Account options"
-              >
-              <Avatar className={`flex-shrink-0 w-8 h-8 ${!isCollapsed ? 'mr-3' : ''}`}> 
-                 <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                    {user.email?.substring(0, 2).toUpperCase() || '??'}
-                 </AvatarFallback>
-              </Avatar>
-              {!isCollapsed && (
-                <span className="flex-1 text-sm text-left text-sidebar-foreground truncate" title={user.email || 'User'}>
-                  {user.email}
-                </span>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent 
-             className="w-64 bg-card border-border/50 text-foreground p-2 shadow-lg rounded-xl" 
-             sideOffset={8} 
-             align={isCollapsed ? "start" : "center"}
-             alignOffset={isCollapsed ? 5 : 0}
-          >
-            {/* User Info Section */}
-            <div className="px-3 py-3 border-b border-border/50 mb-2">
-              <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
-                    {user.email?.substring(0, 2).toUpperCase() || '??'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {user.email?.split('@')[0] || 'User'}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs font-medium">
-                      <Crown className="w-3 h-3" />
-                      Pro plan
-                    </div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full" title="Online" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Main Menu Items */}
-            <div className="space-y-1 mb-3">
-              <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                {theme === 'dark' ? <Sun className="mr-3 h-4 w-4 text-muted-foreground" /> : <Moon className="mr-3 h-4 w-4 text-muted-foreground" />}
-                <span className="text-sm">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <Link to="/settings" className="flex items-center w-full">
-                  <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Settings</span>
-                </Link>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <HelpCircle className="mr-3 h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Get help</span>
-              </DropdownMenuItem>
-            </div>
-
-            {/* Plan Section */}
-            <div className="border-t border-border/50 pt-3 mb-3">
-              <DropdownMenuItem className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <CreditCard className="mr-3 h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Upgrade plan</span>
-              </DropdownMenuItem>
-            </div>
-
-            {/* Advanced Options */}
-            <div className="border-t border-border/50 pt-3 mb-3">
-              
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <Link to="/media" className="flex items-center w-full">
-                  <FileText className="mr-3 h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Media</span>
-                </Link>
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <Link to="/graph-settings" className="flex items-center w-full">
-                  <Network className="mr-3 h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Knowledge Graph</span>
-                </Link>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <Link to="/memory" className="flex items-center w-full">
-                  <MemoryStick className="mr-3 h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Memory</span>
-                </Link>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <Link to="/integrations" className="flex items-center w-full">
-                  <Server className="mr-3 h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Integrations</span>
-                </Link>
-              </DropdownMenuItem>
-
-              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                <Link to="/credentials" className="flex items-center w-full">
-                  <Key className="mr-3 h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Credentials</span>
-                </Link>
-              </DropdownMenuItem>
-
-              {isAdmin && (
-                <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                  <Link to="/admin" className="flex items-center w-full">
-                    <UserIcon className="mr-3 h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Admin Panel</span>
-                  </Link>
-                </DropdownMenuItem>
-              )}
-            </div>
-
-            {/* Logout */}
-            <div className="border-t border-border/50 pt-3">
-              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-50 dark:focus:bg-red-900/20 focus:text-red-600 dark:focus:text-red-400 rounded-md px-3 py-2">
-                <LogOut className="mr-3 h-4 w-4" />
-                <span className="text-sm">Log out</span>
-              </DropdownMenuItem>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          <AccountMenu isCollapsed={isCollapsed} isAdminArea={false} />
         </div>
       )}
 

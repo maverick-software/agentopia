@@ -94,6 +94,23 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
     return serperMappings[scope] || [scope];
   }
 
+  // ClickSend SMS/MMS scope mappings
+  if (providerName === 'clicksend_sms') {
+    const clicksendMappings: Record<string, string[]> = {
+      'sms': ['clicksend_send_sms'],
+      'mms': ['clicksend_send_mms'],
+      'balance': ['clicksend_get_balance'],
+      'history': ['clicksend_get_sms_history'],
+      'delivery_receipts': ['clicksend_get_delivery_receipts'],
+      'sms.send': ['clicksend_send_sms'],
+      'mms.send': ['clicksend_send_mms'],
+      'account.balance': ['clicksend_get_balance'],
+      'sms.history': ['clicksend_get_sms_history'],
+      'sms.delivery': ['clicksend_get_delivery_receipts']
+    };
+    return clicksendMappings[scope] || [scope];
+  }
+
   // Internal System scope mappings
   if (providerName === 'internal_system') {
     const internalMappings: Record<string, string[]> = {
@@ -107,6 +124,17 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
       'api_access': ['api_access']
     };
     return internalMappings[scope] || [scope];
+  }
+
+  // Contact Management scope mappings
+  if (providerName === 'contact_management') {
+    const contactMappings: Record<string, string[]> = {
+      'search_contacts': ['search_contacts'],
+      'get_contact_details': ['get_contact_details'],
+      'view_contact_channels': ['get_contact_details'], // Channel info included in details
+      'contact_permissions': ['search_contacts'] // Permission info available through search
+    };
+    return contactMappings[scope] || [scope];
   }
   
   // Default: normalize the scope name to be OpenAI-compatible

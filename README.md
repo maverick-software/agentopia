@@ -11,6 +11,7 @@ All documentation has been organized into topic-specific guides in the **[README
 ### 🚀 Quick Links
 - **[Getting Started](README/getting-started.md)** - Installation, setup, and first steps
 - **[Project Overview](README/project-overview.md)** - Features, architecture, and tech stack
+- **[Tool Infrastructure](README/tool-infrastructure.md)** - MCP tool development and integration guide
 - **[Security Updates](README/security-updates.md)** - Critical security information and compliance
 - **[Integrations](README/integrations.md)** - Email, tools, and external services
 - **[Database Schema](README/database-schema.md)** - Complete database architecture
@@ -44,6 +45,8 @@ For detailed setup instructions, see the **[Getting Started Guide](README/gettin
 - Enterprise-grade security with Supabase Vault integration
 - Comprehensive email integrations (Gmail, Outlook, SMTP, SendGrid, Mailgun)
 - Universal tool connectivity via Zapier MCP integration
+- **MCP Tool Infrastructure**: Scalable Model Context Protocol implementation
+- Contact management system with agent-based permissions
 - Advanced task scheduling and multi-step workflows
 - Professional UI with light/dark theme support
 
@@ -59,7 +62,19 @@ For detailed status information, see **[Current Status](README/current-status.md
 We welcome contributions! Please see our documentation for:
 - **[Development Setup](README/getting-started.md)** - Environment setup and installation
 - **[Architecture Overview](README/project-overview.md)** - Understanding the codebase
+- **[Tool Infrastructure](README/tool-infrastructure.md)** - MCP tool development and integration
 - **[Security Guidelines](README/security-updates.md)** - Security best practices
+
+### 🛠️ For Tool Developers
+
+Agentopia uses a sophisticated MCP (Model Context Protocol) infrastructure that makes it easy to add new tools and integrations:
+
+- **Universal Tool Execution**: Single pathway for all tool types with automatic routing
+- **Dynamic Discovery**: Tools are automatically discovered and registered based on permissions  
+- **Scalable Architecture**: Add new tools without modifying core chat functionality
+- **Complete Documentation**: Step-by-step guides for tool development and deployment
+
+**[📖 Read the Tool Infrastructure Guide](README/tool-infrastructure.md)** for complete information on developing, registering, and deploying MCP tools.
 
 ## 📞 Support
 

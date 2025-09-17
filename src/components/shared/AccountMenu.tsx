@@ -1,0 +1,274 @@
+/**
+ * Shared Account Menu Component
+ * Used in both main sidebar and admin sidebar
+ * Provides user profile, settings, billing, and navigation options
+ */
+
+import React, { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Settings, LogOut, HelpCircle, Crown, CreditCard, Shield,
+  Network, FileText, MemoryStick, Server, Key,
+  Sun, Moon, Home
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/hooks/useSubscription';
+import { useTheme } from '@/contexts/ThemeContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PricingModal } from '@/components/billing/PricingModal';
+import { UserProfileModal } from '@/components/modals/UserProfileModal';
+
+interface AccountMenuProps {
+  isCollapsed: boolean;
+  isAdminArea?: boolean;
+}
+
+export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuProps) {
+  const { user, signOut, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
+  const { subscription, getStatusColor, getStatusIcon, isFreePlan } = useSubscription();
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Failed to sign out:', error);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <>
+      <div className={`${isCollapsed ? 'px-2' : 'px-4'} pb-4`}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button 
+              className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-700 transition-colors text-left ${
+                isCollapsed ? 'justify-center' : ''
+              }`}
+              title={isCollapsed ? user.email : undefined}
+            >
+              <Avatar className="w-8 h-8 flex-shrink-0">
+                <AvatarFallback className="bg-indigo-600 text-white text-sm">
+                  {user.email?.substring(0, 2).toUpperCase() || '??'}
+                </AvatarFallback>
+              </Avatar>
+              {!isCollapsed && (
+                <span className="text-sm text-gray-300 truncate">
+                  {user.email}
+                </span>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent 
+             className={`w-64 p-2 shadow-lg rounded-xl ${
+               isAdminArea 
+                 ? 'bg-gray-800 border-gray-600 text-gray-100' 
+                 : 'bg-card border-border/50 text-foreground'
+             }`}
+             sideOffset={8} 
+             align={isCollapsed ? "start" : "center"}
+             alignOffset={isCollapsed ? 5 : 0}
+          >
+            {/* User Info Section - Clickable */}
+            <div className={`px-3 py-3 mb-2 border-b ${
+              isAdminArea ? 'border-gray-600' : 'border-border/50'
+            }`}>
+              {/* Theme Toggle Icon - Top Right */}
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTheme();
+                  }}
+                  className="p-1.5 hover:bg-accent rounded-md transition-colors"
+                  title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {theme === 'dark' ? 
+                    <Sun className="h-4 w-4 text-muted-foreground hover:text-foreground" /> : 
+                    <Moon className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  }
+                </button>
+              </div>
+
+              <DropdownMenuItem 
+                onClick={() => setShowUserProfileModal(true)}
+                className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-0 py-2 w-full"
+              >
+                <div className="flex items-center gap-3 w-full">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
+                      {user.email?.substring(0, 2).toUpperCase() || '??'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {user.email?.split('@')[0] || 'User'}
+                    </p>
+                    <div className="mt-1">
+                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getStatusColor()}`}>
+                        <span className="text-xs">{getStatusIcon()}</span>
+                        <span className="truncate">{subscription?.display_name || 'Loading...'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </div>
+
+            {/* Main Menu Items */}
+            <div className="space-y-1 mb-3">
+
+              {/* Settings with Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                  <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Settings</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-48 bg-card border-border/50 text-foreground shadow-lg rounded-xl">
+                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                    <Link to="/settings" className="flex items-center w-full">
+                      <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">General Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                    <Link to="/media" className="flex items-center w-full">
+                      <FileText className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Media</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                    <Link to="/graph-settings" className="flex items-center w-full">
+                      <Network className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Knowledge Graph</span>
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                    <Link to="/memory" className="flex items-center w-full">
+                      <MemoryStick className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Memory</span>
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                    <Link to="/integrations" className="flex items-center w-full">
+                      <Server className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Integrations</span>
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                    <Link to="/credentials" className="flex items-center w-full">
+                      <Key className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Credentials</span>
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              <DropdownMenuItem className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <HelpCircle className="mr-3 h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Get help</span>
+              </DropdownMenuItem>
+            </div>
+
+            {/* Plan Section */}
+            <div className={`pt-3 mb-3 border-t ${
+              isAdminArea ? 'border-gray-600' : 'border-border/50'
+            }`}>
+              <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
+                <Link to="/billing" className="flex items-center w-full">
+                  <CreditCard className="mr-3 h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Billing & Plans</span>
+                </Link>
+              </DropdownMenuItem>
+              
+              {(isFreePlan || subscription?.status !== 'active') && (
+                <DropdownMenuItem 
+                  onClick={() => setShowPricingModal(true)} 
+                  className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2"
+                >
+                  <Crown className="mr-3 h-4 w-4 text-blue-500" />
+                  <span className="text-sm">Upgrade plan</span>
+                </DropdownMenuItem>
+              )}
+            </div>
+
+            {/* Admin Portal - Highlighted - Only show for admins not in admin area */}
+            {isAdmin && !isAdminArea && (
+              <div className={`pt-3 mb-3 border-t ${
+                isAdminArea ? 'border-gray-600' : 'border-border/50'
+              }`}>
+                <DropdownMenuItem asChild className="cursor-pointer focus:bg-purple-50 dark:focus:bg-purple-900/20 focus:text-purple-600 dark:focus:text-purple-400 rounded-md px-3 py-2 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800">
+                  <Link to="/admin" className="flex items-center w-full">
+                    <Shield className="mr-3 h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-medium text-purple-600 dark:text-purple-400">Admin Portal</span>
+                  </Link>
+                </DropdownMenuItem>
+              </div>
+            )}
+
+            {/* User Dashboard - Highlighted - Only show in admin area */}
+            {isAdminArea && (
+              <div className={`pt-3 mb-3 border-t ${
+                isAdminArea ? 'border-gray-600' : 'border-border/50'
+              }`}>
+                <DropdownMenuItem asChild className="cursor-pointer focus:bg-purple-50 dark:focus:bg-purple-900/20 focus:text-purple-600 dark:focus:text-purple-400 rounded-md px-3 py-2 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800">
+                  <Link to="/" className="flex items-center w-full">
+                    <Home className="mr-3 h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-medium text-purple-600 dark:text-purple-400">User Dashboard</span>
+                  </Link>
+                </DropdownMenuItem>
+              </div>
+            )}
+
+            {/* Logout */}
+            <div className={`pt-3 border-t ${
+              isAdminArea ? 'border-gray-600' : 'border-border/50'
+            }`}>
+              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-50 dark:focus:bg-red-900/20 focus:text-red-600 dark:focus:text-red-400 rounded-md px-3 py-2">
+                <LogOut className="mr-3 h-4 w-4" />
+                <span className="text-sm">Log out</span>
+              </DropdownMenuItem>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Modals */}
+      <PricingModal
+        isOpen={showPricingModal}
+        onClose={() => setShowPricingModal(false)}
+        currentPlan={subscription?.plan_name || 'free'}
+        onPlanSelect={(planName) => {
+          console.log('Selected plan:', planName);
+          setShowPricingModal(false);
+        }}
+      />
+
+      <UserProfileModal
+        isOpen={showUserProfileModal}
+        onClose={() => setShowUserProfileModal(false)}
+      />
+    </>
+  );
+}

@@ -1,0 +1,23 @@
+/**
+ * Admin User Billing Management Page
+ * Wrapper page for the User Billing Management component
+ * Accessible at /admin/billing/users
+ */
+
+import React from 'react';
+import { UserBillingManagement } from '@/components/admin/billing/UserBillingManagement';
+
+export default function AdminUserBillingPage() {
+  return (
+    <div className="container mx-auto py-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-foreground mb-2">User Billing Management</h1>
+        <p className="text-muted-foreground">
+          View and manage billing information for all users, including subscription status, payment history, and account actions.
+        </p>
+      </div>
+      
+      <UserBillingManagement />
+    </div>
+  );
+}

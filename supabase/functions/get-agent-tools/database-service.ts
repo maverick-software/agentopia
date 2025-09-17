@@ -93,3 +93,30 @@ export async function hasAgentDocuments(agentId: string, userId: string): Promis
   return assignments && assignments.length > 0;
 }
 
+/**
+ * Checks if agent has contact permissions
+ */
+export async function hasAgentContactPermissions(agentId: string, userId: string): Promise<boolean> {
+  console.log(`[DatabaseService] Checking for agent contact permissions for agent ${agentId}, user ${userId}`);
+  
+  try {
+    const { data: contactPermissions, error } = await supabase
+      .from('agent_contact_permissions')
+      .select('id')
+      .eq('agent_id', agentId)
+      .limit(1);
+    
+    if (error) {
+      console.error('[DatabaseService] Error checking contact permissions:', error);
+      return false;
+    }
+
+    const hasPermissions = contactPermissions && contactPermissions.length > 0;
+    console.log(`[DatabaseService] Found ${contactPermissions?.length || 0} contact permission records`);
+    return hasPermissions;
+  } catch (error) {
+    console.error('[DatabaseService] Error checking contact permissions:', error);
+    return false;
+  }
+}
+

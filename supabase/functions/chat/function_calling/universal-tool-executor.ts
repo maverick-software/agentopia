@@ -130,6 +130,40 @@ const TOOL_ROUTING_MAP: Record<string, {
     }
   },
   
+  // ClickSend SMS/MMS tools
+  'clicksend_': {
+    edgeFunction: 'clicksend-api',
+    actionMapping: (toolName: string) => {
+      const actionMap: Record<string, string> = {
+        'clicksend_send_sms': 'send_sms',
+        'clicksend_send_mms': 'send_mms',
+        'clicksend_get_balance': 'get_balance',
+        'clicksend_get_sms_history': 'get_sms_history',
+        'clicksend_get_delivery_receipts': 'get_delivery_receipts',
+        'clicksend_validate_number': 'validate_number'
+      };
+      return actionMap[toolName] || 'send_sms';
+    },
+    parameterMapping: (params: Record<string, any>, context: any) => {
+      const actionMap: Record<string, string> = {
+        'clicksend_send_sms': 'send_sms',
+        'clicksend_send_mms': 'send_mms',
+        'clicksend_get_balance': 'get_balance',
+        'clicksend_get_sms_history': 'get_sms_history',
+        'clicksend_get_delivery_receipts': 'get_delivery_receipts',
+        'clicksend_validate_number': 'validate_number'
+      };
+      const action = actionMap[context.toolName] || 'send_sms';
+      
+      return {
+        action: action,
+        agent_id: context.agentId,
+        user_id: context.userId, 
+        params: params
+      };
+    }
+  },
+  
   // Microsoft Outlook tools
   'outlook_': {
     edgeFunction: 'microsoft-outlook-api',
@@ -333,6 +367,29 @@ const TOOL_ROUTING_MAP: Record<string, {
         ...params  // Pass all reasoning parameters directly
       };
     }
+  },
+  
+  // Contact Management tools
+  'search_contacts': {
+    edgeFunction: 'contact-mcp-tools',
+    actionMapping: () => 'search_contacts',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'search_contacts',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      ...params  // Flatten parameters directly into the body
+    })
+  },
+  
+  'get_contact_details': {
+    edgeFunction: 'contact-mcp-tools',
+    actionMapping: () => 'get_contact_details',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_contact_details',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      ...params  // Flatten parameters directly into the body
+    })
   }
 };
 
@@ -356,6 +413,8 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
   const lowerError = error.toLowerCase();
   const isEmailTool = toolName.startsWith('gmail_') || toolName.startsWith('smtp_');
   const isSearchTool = toolName.startsWith('web_search') || toolName.startsWith('news_') || toolName.startsWith('scrape_');
+  const isSMSTool = toolName.startsWith('clicksend_');
+  const isContactTool = toolName === 'search_contacts' || toolName === 'get_contact_details';
   
   // Missing parameters errors
   if (lowerError.includes('missing') && lowerError.includes('parameter')) {
@@ -364,6 +423,23 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
     }
     if (isSearchTool) {
       return 'Question: What would you like me to search for? Please provide a search query or topic.';
+    }
+    if (isSMSTool) {
+      return 'Question: What SMS details are missing? Please provide the recipient phone number (in international format like +1234567890) and the message text you want to send.';
+    }
+    if (isContactTool) {
+      if (toolName === 'search_contacts') {
+        return 'Question: What would you like to search for in your contacts? You can use natural language like:\n' +
+               '• "list all contacts you have access to"\n' +
+               '• "find contacts with numbers that start with 661"\n' +
+               '• "show customers at Microsoft"\n' +
+               '• "contacts with WhatsApp"\n' +
+               '• "internal employees named John"\n' +
+               '• "vendors in the technology sector"';
+      }
+      if (toolName === 'get_contact_details') {
+        return 'Question: Which contact would you like to get details for? Please provide the contact ID from a previous search result.';
+      }
     }
   }
   
@@ -378,6 +454,12 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
     if (isSearchTool) {
       return 'Question: The search service needs to be configured. Please add your web search API key in the integration settings.';
     }
+    if (isSMSTool) {
+      return 'Question: The ClickSend SMS service needs to be set up. Please go to the Integrations page to configure your ClickSend credentials, then try again.';
+    }
+    if (isContactTool) {
+      return 'Question: There seems to be an issue accessing your contacts. Please ensure you have contacts in your contact list and the agent has permission to access them.';
+    }
     
     // Generic OAuth expiration message
     if (lowerError.includes('expired') || lowerError.includes('token')) {
@@ -390,8 +472,27 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
     if (isEmailTool) {
       return 'Question: There seems to be an issue with the email parameters. Please check that the recipient email address is valid and all required fields are provided.';
     }
+    if (isSMSTool) {
+      if (lowerError.includes('phone') || lowerError.includes('number')) {
+        return 'Question: The phone number format is invalid. Please provide the phone number in international format (e.g., +1234567890 for US numbers).';
+      }
+      return 'Question: There seems to be an issue with the SMS parameters. Please check that the phone number is in international format and the message text is provided.';
+    }
     if (isSearchTool) {
       return 'Question: There seems to be an issue with the search parameters. Please provide a clear search query or valid URLs to scrape.';
+    }
+    if (isContactTool) {
+      if (toolName === 'search_contacts') {
+        return 'Question: Please provide search criteria for contacts. You can use natural language queries like:\n' +
+               '• "list all contacts" (shows all accessible contacts)\n' +
+               '• "find contacts with phone numbers starting with 661"\n' +
+               '• "show customers at Microsoft"\n' +
+               '• "contacts with WhatsApp available"\n' +
+               '• Or search by name, organization, or job title';
+      }
+      if (toolName === 'get_contact_details') {
+        return 'Question: Please provide a valid contact ID. You can get contact IDs by using search_contacts first.';
+      }
     }
   }
   
@@ -441,6 +542,7 @@ export class UniversalToolExecutor {
     
     try {
       console.log(`[UniversalToolExecutor] Executing ${toolName} for agent ${agentId}`);
+      console.log(`[UniversalToolExecutor] Parameters received:`, JSON.stringify(parameters, null, 2));
       
       // Check tool status before execution
       const toolStatus = await this.checkToolStatus(toolName, agentId, userId, supabase);
@@ -479,8 +581,8 @@ export class UniversalToolExecutor {
       // Apply parameter mapping if provided, otherwise merge parameters directly
       const mappingContext = { agentId, userId, toolName, parameters };
       const edgeFunctionParams = routingConfig.parameterMapping 
-        ? { ...baseParams, ...routingConfig.parameterMapping(parameters, mappingContext) }
-        : { ...baseParams, ...parameters };
+        ? routingConfig.parameterMapping(parameters, mappingContext)
+        : { ...baseParams, params: parameters };
       
       console.log(`[UniversalToolExecutor] Routing ${toolName} -> ${routingConfig.edgeFunction} (action: ${action})`);
       console.log(`[UniversalToolExecutor] Edge function params:`, JSON.stringify(edgeFunctionParams, null, 2));

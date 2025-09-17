@@ -30,11 +30,15 @@ import {
     TeamDetailsPage,
     EditTeamPage,
     SettingsPage,
+    BillingPage,
     MonitoringPage,
     AdminUserManagement,
     AdminAgentManagement,
     AdminMCPMarketplaceManagement,
     AdminIntegrationManagement,
+    AdminStripeConfigPage,
+    AdminUserBillingPage,
+    StripeOAuthCallbackPage,
     HomePage,
     LoginPage, // Now imported here
     RegisterPage, // Now imported here
@@ -68,6 +72,7 @@ import { MicrosoftOneDriveCallbackPage } from '../pages/integrations/MicrosoftOn
 import { MicrosoftOutlookCallbackPage } from '../pages/integrations/MicrosoftOutlookCallbackPage';
 import GraphSettingsPage from '../pages/GraphSettingsPage';
 import { ChatsPage } from '../pages/ChatsPage';
+import ContactsPage from '../pages/ContactsPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
@@ -90,6 +95,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/memory/new', element: DatastoreEditPage, protection: 'protected', layout: true },
   { path: '/memory/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
   { path: '/media', element: MediaLibraryPage, protection: 'protected', layout: true },
+  { path: '/contacts', element: ContactsPage, protection: 'protected', layout: true },
   { path: '/teams', element: TeamsPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId', element: TeamDetailsPage, protection: 'protected', layout: true },
   { path: '/teams/:teamId/edit', element: EditTeamPage, protection: 'protected', layout: true },
@@ -102,6 +108,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/integrations/smtp', element: SMTPIntegrationsPage, protection: 'protected', layout: true },
   { path: '/credentials', element: CredentialsPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
+  { path: '/billing', element: BillingPage, protection: 'protected', layout: true },
   { path: '/monitoring', element: MonitoringPage, protection: 'protected', layout: true },
   { path: '/graph-settings', element: GraphSettingsPage, protection: 'protected', layout: true },
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
@@ -129,6 +136,9 @@ export const appRoutes: RouteConfig[] = [
       { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/marketplace', element: AdminMCPMarketplaceManagement, protection: 'admin', layout: false }, // Add marketplace management
       { path: '/admin/oauth-providers', element: AdminIntegrationManagement, protection: 'admin', layout: false }, // OAuth providers management
+      { path: '/admin/billing/stripe-config', element: AdminStripeConfigPage, protection: 'admin', layout: false }, // Stripe configuration
+      { path: '/admin/billing/users', element: AdminUserBillingPage, protection: 'admin', layout: false }, // User billing management
+      { path: '/admin/billing/stripe-callback', element: StripeOAuthCallbackPage, protection: 'admin', layout: false }, // Stripe OAuth callback
     ]
   },
 

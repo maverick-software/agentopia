@@ -54,7 +54,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   const [hasChanges, setHasChanges] = useState(false);
   const [credentialModal, setCredentialModal] = useState({
     isOpen: false,
-    channelType: null as 'email' | null,
+    channelType: null as 'email' | 'sms' | null,
     selectedProvider: '',
     availableProviders: [] as any[],
     availableCredentials: [] as any[]
@@ -73,7 +73,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   const isChannelEnabled = useCallback((channelType: string): boolean => {
     const providerMap: Record<string, string[]> = {
       email: ['gmail', 'smtp', 'smtp_server', 'sendgrid', 'mailgun', 'microsoft-outlook'],
-      sms: ['twilio', 'aws_sns'],
+      sms: ['twilio', 'aws_sns', 'clicksend_sms'],
       slack: ['slack'],
       discord: ['discord'],
       telegram: ['telegram'],
@@ -128,6 +128,12 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       return;
     }
     
+    if (enabled && channel === 'sms_enabled') {
+      // Open SMS provider selection modal
+      await openSmsProviderModal();
+      return;
+    }
+    
     if (!enabled) {
       // Disable channel by revoking permissions
       await handleDisableChannel(channel);
@@ -144,7 +150,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       const channelType = channel.replace('_enabled', '');
       const providerMap: Record<string, string[]> = {
         email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'],
-        sms: ['twilio', 'aws_sns'],
+        sms: ['twilio', 'aws_sns', 'clicksend_sms'],
         slack: ['slack'],
         discord: ['discord'],
         telegram: ['telegram'],
@@ -216,6 +222,41 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     } catch (error) {
       console.error('Error opening email provider modal:', error);
       toast.error('Failed to load email providers');
+    }
+  };
+
+  const openSmsProviderModal = async () => {
+    // Check for existing SMS credentials in your system
+    try {
+      const { data: credentials, error } = await supabase
+        .from('user_integration_credentials')
+        .select(`
+          *,
+          service_providers!inner(name, display_name)
+        `)
+        .eq('user_id', user?.id)
+        .in('connection_status', ['active', 'connected'])
+        .in('service_providers.name', ['twilio', 'aws_sns', 'clicksend_sms']);
+
+      if (error) {
+        console.error('Error loading SMS credentials:', error);
+      }
+
+      // Show provider selection modal with existing credentials
+      setCredentialModal({
+        isOpen: true,
+        channelType: 'sms',
+        selectedProvider: '',
+        availableProviders: [
+          { id: 'clicksend_sms', name: 'ClickSend SMS', description: 'ClickSend SMS/MMS service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
+          { id: 'twilio', name: 'Twilio', description: 'Twilio SMS service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
+          { id: 'aws_sns', name: 'AWS SNS', description: 'Amazon Simple Notification Service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' }
+        ],
+        availableCredentials: credentials || []
+      });
+    } catch (error) {
+      console.error('Error opening SMS provider modal:', error);
+      toast.error('Failed to load SMS providers');
     }
   };
 
@@ -307,6 +348,39 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     
     // Fallback: if no specific scopes found, grant basic send permission
     return capabilities.length > 0 ? capabilities : ['email.send'];
+  }
+  
+  // For SMS providers
+  if (providerName === 'clicksend_sms') {
+    const capabilities: string[] = [];
+    
+    // ClickSend MCP tool capabilities based on scopes (using actual MCP tool names)
+    if (oauthScopes.includes('sms') || oauthScopes.includes('sms.send')) {
+      capabilities.push('clicksend_send_sms');
+    }
+    if (oauthScopes.includes('mms') || oauthScopes.includes('mms.send')) {
+      capabilities.push('clicksend_send_mms');
+    }
+    if (oauthScopes.includes('balance') || oauthScopes.includes('account.balance')) {
+      capabilities.push('clicksend_get_balance');
+    }
+    if (oauthScopes.includes('history') || oauthScopes.includes('sms.history')) {
+      capabilities.push('clicksend_get_sms_history');
+    }
+    if (oauthScopes.includes('delivery_receipts') || oauthScopes.includes('sms.delivery')) {
+      capabilities.push('clicksend_get_delivery_receipts');
+    }
+    
+    // Default ClickSend MCP tools if no specific scopes (grant basic SMS/MMS capabilities)
+    return capabilities.length > 0 ? capabilities : ['clicksend_send_sms', 'clicksend_send_mms'];
+  }
+  
+  if (providerName === 'twilio') {
+    return ['sms.send', 'sms.receive'];
+  }
+  
+  if (providerName === 'aws_sns') {
+    return ['sms.send'];
   }
   
   // For other providers, default to basic capabilities
@@ -547,7 +621,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   const getConnectedProviders = (channelType: string): string[] => {
     const providerMap: Record<string, string[]> = {
       email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
-      sms: ['twilio', 'aws_sns'],
+      sms: ['twilio', 'aws_sns', 'clicksend_sms'],
       slack: ['slack'],
       discord: ['discord'],
       telegram: ['telegram'],
@@ -565,7 +639,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     try {
       const providerMap: Record<string, string[]> = {
         email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
-        sms: ['twilio', 'aws_sns'],
+        sms: ['twilio', 'aws_sns', 'clicksend_sms'],
         slack: ['slack'],
         discord: ['discord'],
         telegram: ['telegram'],
