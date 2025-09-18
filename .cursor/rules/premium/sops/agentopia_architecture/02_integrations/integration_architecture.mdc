@@ -1,0 +1,487 @@
+---
+description: Overall integration system design and architecture for connecting external services to Agentopia
+globs: []
+alwaysApply: false
+---
+
+# Integration Architecture
+
+## Executive Summary
+
+Agentopia's integration architecture provides a unified framework for connecting external services through multiple authentication methods: OAuth 2.0, API keys, and SMTP. The system supports 50+ integrations per user with enterprise-grade security and granular permission control.
+
+## Core Architecture Principles
+
+### 1. **Unified Credential Model**
+- Single table (`user_integration_credentials`) for all credential types
+- Discriminator field (`credential_type`) to differentiate authentication methods
+- Consistent permission model across OAuth, API key, and SMTP integrations
+
+### 2. **Zero Plain-Text Security**
+- All credentials encrypted using Supabase Vault
+- Vault UUIDs stored in database, never plain-text secrets
+- Automatic prevention of plain-text storage through database triggers
+
+### 3. **Granular Permission Control**
+- Agent-level permissions for each integration
+- Scope-based access control for OAuth integrations
+- Capability-based permissions for API key services
+
+### 4. **Extensible Provider System**
+- Plugin-based architecture for new integrations
+- Standardized provider configuration metadata
+- Dynamic tool discovery based on user connections
+
+## Integration Types
+
+### OAuth 2.0 Integrations
+
+OAuth integrations support user authorization flows with automatic token refresh.
+
+**Supported OAuth Providers:**
+- **Gmail**: Email operations (send, read, search, manage)
+- **Microsoft Outlook**: Email and calendar management
+- **Microsoft Teams**: Team collaboration and messaging
+- **Microsoft OneDrive**: File storage and sharing
+- **GitHub**: Repository and code management (future)
+- **Slack**: Workspace messaging (future)
+
+**OAuth Flow Characteristics:**
+- PKCE (Proof Key for Code Exchange) required for security
+- Automatic token refresh with refresh tokens
+- Scope-based permission granularity
+- User consent required for all access
+
+### API Key Integrations
+
+API key integrations use simple key-based authentication for services.
+
+**Supported API Key Providers:**
+- **Serper API**: Web search and news
+- **SerpAPI**: Alternative web search
+- **Brave Search**: Privacy-focused search
+- **SendGrid**: Transactional email service
+- **Mailgun**: Email delivery service
+- **Pinecone**: Vector database for AI
+- **GetZep**: Knowledge graph service
+
+**API Key Characteristics:**
+- Long-lived credentials without expiration
+- Capability-based permissions
+- Rate limiting awareness
+- Simple header-based authentication
+
+### SMTP Integrations
+
+SMTP integrations support direct email server connections.
+
+**SMTP Characteristics:**
+- Direct server connection (no OAuth required)
+- Username/password or app password authentication
+- TLS/SSL encryption support
+- Custom server configuration
+
+## System Architecture
+
+```mermaid
+graph TB
+    User[User] --> Frontend[Frontend UI]
+    Frontend --> IntegrationManager[Integration Manager]
+    
+    IntegrationManager --> OAuthFlow[OAuth Flow Handler]
+    IntegrationManager --> APIKeyFlow[API Key Handler]
+    IntegrationManager --> SMTPFlow[SMTP Handler]
+    
+    OAuthFlow --> Vault[Supabase Vault]
+    APIKeyFlow --> Vault
+    SMTPFlow --> Vault
+    
+    Vault --> Database[(Database)]
+    Database --> PermissionEngine[Permission Engine]
+    
+    PermissionEngine --> ToolDiscovery[Tool Discovery]
+    ToolDiscovery --> AgentTools[Available Agent Tools]
+    
+    AgentTools --> ToolExecution[Tool Execution]
+    ToolExecution --> ExternalAPIs[External APIs]
+    
+    subgraph "Database Tables"
+        ServiceProviders[service_providers]
+        UserCredentials[user_integration_credentials]
+        AgentPermissions[agent_integration_permissions]
+    end
+    
+    Database --> ServiceProviders
+    Database --> UserCredentials
+    Database --> AgentPermissions
+```
+
+## Integration Lifecycle
+
+### 1. **Provider Registration**
+```sql
+-- Example: Register new OAuth provider
+INSERT INTO service_providers (
+  name, display_name, provider_type,
+  authorization_endpoint, token_endpoint,
+  scopes_supported, configuration_metadata
+) VALUES (
+  'new_oauth_service',
+  'New OAuth Service',
+  'oauth',
+  'https://api.service.com/oauth/authorize',
+  'https://api.service.com/oauth/token',
+  '["read", "write", "admin"]'::jsonb,
+  '{
+    "client_id_required": true,
+    "pkce_required": true,
+    "user_info_endpoint": "https://api.service.com/user"
+  }'::jsonb
+);
+```
+
+### 2. **User Connection**
+```typescript
+// OAuth connection flow
+const connection = await createOAuthConnection({
+  userId: user.id,
+  providerName: 'gmail',
+  authorizationCode: code,
+  scopes: ['https://www.googleapis.com/auth/gmail.send'],
+  connectionName: 'Primary Gmail'
+});
+
+// API key connection flow
+const connection = await createAPIKeyConnection({
+  userId: user.id,
+  providerName: 'serper_api',
+  apiKey: 'sk-...',
+  connectionName: 'Web Search API'
+});
+```
+
+### 3. **Permission Grant**
+```typescript
+// Grant agent permission to use integration
+await grantAgentIntegrationPermission({
+  agentId: agent.id,
+  connectionId: connection.id,
+  allowedScopes: ['https://www.googleapis.com/auth/gmail.send'],
+  permissionLevel: 'custom'
+});
+```
+
+### 4. **Tool Discovery**
+```typescript
+// Agent discovers available tools based on permissions
+const tools = await getAgentTools(agentId, userId);
+// Returns tools like: gmail_send_email, web_search, etc.
+```
+
+### 5. **Tool Execution**
+```typescript
+// Agent executes tool with encrypted credentials
+const result = await executeAgentTool({
+  agentId,
+  toolName: 'gmail_send_email',
+  parameters: {
+    to: 'user@example.com',
+    subject: 'Hello',
+    body: 'Test message'
+  }
+});
+```
+
+## Security Architecture
+
+### Multi-Layer Security Model
+
+```mermaid
+graph TD
+    Request[Tool Execution Request] --> Auth[Authentication Check]
+    Auth --> Permission[Permission Validation]
+    Permission --> Scope[Scope Verification]
+    Scope --> Vault[Credential Retrieval]
+    Vault --> API[External API Call]
+    API --> Audit[Audit Logging]
+    
+    Auth --> |Fail| Reject[Request Rejected]
+    Permission --> |Fail| Reject
+    Scope --> |Fail| Reject
+    Vault --> |Fail| Reject
+```
+
+### Security Controls
+
+1. **Authentication**: Supabase Auth with JWT tokens
+2. **Authorization**: Row Level Security (RLS) policies
+3. **Permission Validation**: Agent-specific permission checks
+4. **Scope Verification**: OAuth scope and capability validation
+5. **Credential Protection**: Supabase Vault encryption
+6. **Audit Logging**: Complete operation tracking
+7. **Rate Limiting**: Provider-specific rate limits enforced
+
+## Performance Optimization
+
+### Caching Strategy
+
+```typescript
+class IntegrationCache {
+  private toolsCache = new Map<string, CachedTools>();
+  private credentialsCache = new Map<string, CachedCredentials>();
+  
+  // Cache tool discovery results
+  async getAgentTools(agentId: string): Promise<Tool[]> {
+    const cached = this.toolsCache.get(agentId);
+    if (cached && !this.isExpired(cached)) {
+      return cached.tools;
+    }
+    
+    const tools = await this.fetchAgentTools(agentId);
+    this.toolsCache.set(agentId, {
+      tools,
+      expires: Date.now() + (60 * 60 * 1000) // 1 hour
+    });
+    
+    return tools;
+  }
+  
+  // Cache credentials for 5 minutes
+  async getCredentials(connectionId: string): Promise<Credentials> {
+    const cached = this.credentialsCache.get(connectionId);
+    if (cached && !this.isExpired(cached)) {
+      return cached.credentials;
+    }
+    
+    const credentials = await this.fetchCredentials(connectionId);
+    this.credentialsCache.set(connectionId, {
+      credentials,
+      expires: Date.now() + (5 * 60 * 1000) // 5 minutes
+    });
+    
+    return credentials;
+  }
+}
+```
+
+### Database Optimization
+
+```sql
+-- Strategic indexes for integration queries
+CREATE INDEX idx_user_integration_credentials_active 
+ON user_integration_credentials (user_id, connection_status) 
+WHERE connection_status = 'active';
+
+CREATE INDEX idx_agent_integration_permissions_lookup 
+ON agent_integration_permissions (agent_id, is_active, connection_id);
+
+-- Partial indexes for performance
+CREATE INDEX idx_service_providers_oauth 
+ON service_providers (name, display_name) 
+WHERE provider_type = 'oauth' AND is_active = true;
+```
+
+## Integration Patterns
+
+### OAuth Integration Pattern
+
+```typescript
+export class OAuthIntegrationPattern {
+  async initializeConnection(
+    providerName: string,
+    userId: string,
+    scopes: string[]
+  ): Promise<string> {
+    // Generate authorization URL with PKCE
+    const { authUrl, codeVerifier } = await this.generateAuthUrl(
+      providerName, scopes
+    );
+    
+    // Store code verifier for later verification
+    await this.storeCodeVerifier(userId, providerName, codeVerifier);
+    
+    return authUrl;
+  }
+  
+  async completeConnection(
+    providerName: string,
+    userId: string,
+    authCode: string
+  ): Promise<string> {
+    // Exchange authorization code for tokens
+    const tokens = await this.exchangeCodeForTokens(
+      providerName, authCode, userId
+    );
+    
+    // Store tokens in vault
+    const vaultIds = await this.storeTokensInVault(
+      tokens, userId, providerName
+    );
+    
+    // Create database connection record
+    return await this.createConnectionRecord(
+      userId, providerName, vaultIds, tokens.scope
+    );
+  }
+}
+```
+
+### API Key Integration Pattern
+
+```typescript
+export class APIKeyIntegrationPattern {
+  async createConnection(
+    providerName: string,
+    userId: string,
+    apiKey: string,
+    connectionName?: string
+  ): Promise<string> {
+    // Validate API key with provider
+    await this.validateAPIKey(providerName, apiKey);
+    
+    // Store API key in vault
+    const vaultId = await this.storeAPIKeyInVault(
+      apiKey, userId, providerName
+    );
+    
+    // Create database connection record
+    return await this.createConnectionRecord(
+      userId, providerName, vaultId, connectionName
+    );
+  }
+  
+  async testConnection(connectionId: string): Promise<boolean> {
+    // Retrieve API key from vault
+    const apiKey = await this.getAPIKeyFromVault(connectionId);
+    
+    // Test with provider
+    return await this.testAPIKeyWithProvider(connectionId, apiKey);
+  }
+}
+```
+
+## Error Handling
+
+### Integration Error Types
+
+```typescript
+export enum IntegrationErrorType {
+  AUTHENTICATION_FAILED = 'authentication_failed',
+  AUTHORIZATION_DENIED = 'authorization_denied',
+  TOKEN_EXPIRED = 'token_expired',
+  INVALID_SCOPE = 'invalid_scope',
+  RATE_LIMITED = 'rate_limited',
+  PROVIDER_UNAVAILABLE = 'provider_unavailable',
+  INVALID_CONFIGURATION = 'invalid_configuration'
+}
+
+export class IntegrationError extends Error {
+  constructor(
+    public type: IntegrationErrorType,
+    public message: string,
+    public providerName: string,
+    public retryable: boolean = false
+  ) {
+    super(message);
+  }
+}
+```
+
+### Automatic Recovery
+
+```typescript
+export class IntegrationRecoveryService {
+  async handleTokenExpiration(connectionId: string): Promise<boolean> {
+    try {
+      // Attempt token refresh
+      await this.refreshOAuthToken(connectionId);
+      return true;
+    } catch (error) {
+      // Mark connection as expired, requiring user re-authorization
+      await this.markConnectionExpired(connectionId);
+      return false;
+    }
+  }
+  
+  async handleRateLimit(
+    providerName: string,
+    retryAfter: number
+  ): Promise<void> {
+    // Implement exponential backoff
+    await this.scheduleRetry(providerName, retryAfter);
+  }
+}
+```
+
+## Monitoring and Analytics
+
+### Integration Health Metrics
+
+```sql
+-- Monitor integration health
+CREATE VIEW integration_health_metrics AS
+SELECT 
+  sp.name as provider_name,
+  sp.display_name,
+  COUNT(uic.id) as total_connections,
+  COUNT(CASE WHEN uic.connection_status = 'active' THEN 1 END) as active_connections,
+  COUNT(CASE WHEN uic.connection_status = 'expired' THEN 1 END) as expired_connections,
+  COUNT(CASE WHEN uic.connection_status = 'error' THEN 1 END) as error_connections,
+  AVG(CASE WHEN uic.connection_status = 'active' THEN 1.0 ELSE 0.0 END) as health_score
+FROM service_providers sp
+LEFT JOIN user_integration_credentials uic ON uic.service_provider_id = sp.id
+WHERE sp.is_active = true
+GROUP BY sp.id, sp.name, sp.display_name
+ORDER BY health_score DESC;
+```
+
+### Usage Analytics
+
+```sql
+-- Track integration usage patterns
+CREATE VIEW integration_usage_analytics AS
+SELECT 
+  sp.name as provider_name,
+  COUNT(DISTINCT aip.agent_id) as agents_using,
+  COUNT(DISTINCT uic.user_id) as users_connected,
+  SUM(aip.usage_count) as total_tool_executions,
+  AVG(aip.usage_count) as avg_executions_per_agent,
+  MAX(aip.last_used_at) as last_activity
+FROM service_providers sp
+JOIN user_integration_credentials uic ON uic.service_provider_id = sp.id
+JOIN agent_integration_permissions aip ON aip.connection_id = uic.id
+WHERE aip.is_active = true
+GROUP BY sp.id, sp.name
+ORDER BY total_tool_executions DESC;
+```
+
+## Future Enhancements
+
+### Planned Integrations
+- **Slack**: Workspace messaging and automation
+- **GitHub**: Repository management and CI/CD
+- **Zapier**: Universal app connectivity
+- **Discord**: Community management
+- **Notion**: Knowledge management
+- **Airtable**: Database and workflow automation
+
+### Architecture Improvements
+- **Webhook Support**: Real-time event processing
+- **GraphQL APIs**: More efficient data fetching
+- **Custom Authentication**: Support for proprietary auth methods
+- **Integration Marketplace**: User-contributed integrations
+
+## Related Documentation
+
+- **[OAuth Flow Protocol](oauth_flow_protocol.mdc)** - Detailed OAuth implementation
+- **[API Key Integration Protocol](api_key_integration_protocol.mdc)** - API key handling patterns
+- **[SMTP Integration Protocol](smtp_integration_protocol.mdc)** - Email server connections
+- **[Integration Security Protocols](integration_security_protocols.mdc)** - Security best practices
+- **[Database Schema Overview](../01_database/schema_overview.mdc)** - Database architecture
+- **[Integrations Page UI](../05_ui_components/integrations_page.mdc)** - User interface patterns
+
+---
+
+**Last Updated**: September 17, 2025  
+**Architecture Version**: Production  
+**Supported Integrations**: 15+ providers, 50+ tools

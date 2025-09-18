@@ -39,7 +39,7 @@ This protocol provides comprehensive guidance for implementing a unified credent
 
 ### Unified Storage Architecture
 
-Both credential types use a single `user_oauth_connections` table with a `credential_type` discriminator field. This approach:
+Both credential types use a single `user_integration_credentials` table with a `credential_type` discriminator field. This approach:
 - Reduces code duplication
 - Simplifies permission management
 - Maintains consistent data patterns
@@ -57,38 +57,40 @@ CREATE TYPE "public"."connection_credential_type_enum" AS ENUM (
 );
 ```
 
-#### OAuth Providers Table
+#### Service Providers Table
 ```sql
-CREATE TABLE "public"."oauth_providers" (
+CREATE TABLE "public"."service_providers" (
     "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "name" TEXT NOT NULL UNIQUE,
     "display_name" TEXT NOT NULL,
-    "authorization_url" TEXT,
-    "token_url" TEXT,
-    "user_info_url" TEXT,
-    "scopes" JSONB DEFAULT '[]'::jsonb,
-    "configuration" JSONB DEFAULT '{}'::jsonb,
-    "is_enabled" BOOLEAN DEFAULT true,
+    "provider_type" provider_type NOT NULL, -- 'oauth', 'api_key', 'smtp'
+    "authorization_endpoint" TEXT,
+    "token_endpoint" TEXT,
+    "scopes_supported" JSONB DEFAULT '[]'::jsonb,
+    "configuration_metadata" JSONB DEFAULT '{}'::jsonb,
+    "is_active" BOOLEAN DEFAULT true,
     "created_at" TIMESTAMPTZ DEFAULT now(),
     "updated_at" TIMESTAMPTZ DEFAULT now()
 );
 ```
 
-#### Unified Connections Table
+#### Unified Integration Credentials Table
 ```sql
-CREATE TABLE "public"."user_oauth_connections" (
+CREATE TABLE "public"."user_integration_credentials" (
     "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "user_id" UUID NOT NULL REFERENCES auth.users(id),
-    "oauth_provider_id" UUID NOT NULL REFERENCES oauth_providers(id),
-    "external_user_id" TEXT NOT NULL,
+    "service_provider_id" UUID NOT NULL REFERENCES service_providers(id),
+    "external_user_id" TEXT,
     "external_username" TEXT,
-    "connection_name" TEXT,
-    "scopes_granted" JSONB DEFAULT '[]'::jsonb NOT NULL,
+    "connection_name" TEXT NOT NULL,
+    "scopes_granted" JSONB DEFAULT '[]'::jsonb,
     "credential_type" connection_credential_type_enum DEFAULT 'oauth' NOT NULL,
     
-    -- Token storage (encrypted)
-    "vault_access_token_id" UUID,
-    "vault_refresh_token_id" UUID,
+    -- SECURE: Only vault UUIDs stored
+    "vault_access_token_id" TEXT,
+    "vault_refresh_token_id" TEXT,
+    "encrypted_access_token" TEXT, -- DEPRECATED: Always NULL
+    "encrypted_refresh_token" TEXT, -- DEPRECATED: Always NULL
     "token_expires_at" TIMESTAMPTZ,
     
     -- Status and metadata
@@ -98,35 +100,28 @@ CREATE TABLE "public"."user_oauth_connections" (
     "updated_at" TIMESTAMPTZ DEFAULT now(),
     
     -- Constraints
-    CONSTRAINT "chk_credential_type_consistency" CHECK (
-        (
-            -- OAuth connections require access token when active
-            (credential_type = 'oauth' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
-            OR
-            -- API key connections require access token when active
-            (credential_type = 'api_key' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
-            OR
-            -- Non-active connections have no token requirements
-            (connection_status != 'active')
-        )
+    CONSTRAINT "chk_vault_storage_required" CHECK (
+        (credential_type = 'api_key' AND vault_access_token_id IS NOT NULL AND connection_status = 'active')
+        OR (credential_type = 'oauth' AND vault_access_token_id IS NOT NULL AND connection_status = 'active')
+        OR (connection_status != 'active')
     )
 );
 ```
 
 ### 2. Essential Indexes
 ```sql
-CREATE INDEX "idx_user_oauth_connections_credential_type" 
-ON "user_oauth_connections" ("credential_type", "connection_status");
+CREATE INDEX "idx_user_integration_credentials_credential_type" 
+ON "user_integration_credentials" ("credential_type", "connection_status");
 
-CREATE INDEX "idx_user_oauth_connections_user_provider" 
-ON "user_oauth_connections" ("user_id", "oauth_provider_id", "connection_status");
+CREATE INDEX "idx_user_integration_credentials_user_provider" 
+ON "user_integration_credentials" ("user_id", "service_provider_id", "connection_status");
 ```
 
 ### 3. RPC Functions
 
 #### Get User Connections
 ```sql
-CREATE OR REPLACE FUNCTION public.get_user_oauth_connections(p_user_id UUID DEFAULT auth.uid())
+CREATE OR REPLACE FUNCTION public.get_user_integration_credentials(p_user_id UUID DEFAULT auth.uid())
 RETURNS TABLE(
     connection_id UUID,
     provider_name TEXT,
@@ -146,21 +141,21 @@ AS $$
 BEGIN
     RETURN QUERY
     SELECT 
-        uoc.id as connection_id,
-        op.name as provider_name,
-        op.display_name as provider_display_name,
-        uoc.external_username,
-        uoc.connection_name,
-        uoc.scopes_granted,
-        uoc.connection_status,
-        uoc.credential_type::TEXT as credential_type,
-        uoc.token_expires_at,
-        uoc.created_at,
-        uoc.updated_at
-    FROM user_oauth_connections uoc
-    INNER JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
-    WHERE uoc.user_id = p_user_id
-    ORDER BY uoc.created_at DESC;
+        uic.id as connection_id,
+        sp.name as provider_name,
+        sp.display_name as provider_display_name,
+        uic.external_username,
+        uic.connection_name,
+        uic.scopes_granted,
+        uic.connection_status,
+        uic.credential_type::TEXT as credential_type,
+        uic.token_expires_at,
+        uic.created_at,
+        uic.updated_at
+    FROM user_integration_credentials uic
+    INNER JOIN service_providers sp ON sp.id = uic.service_provider_id
+    WHERE uic.user_id = p_user_id
+    ORDER BY uic.created_at DESC;
 END;
 $$;
 ```
@@ -172,10 +167,10 @@ $$;
 **OAuth-Specific Queries:**
 ```javascript
 const { data: oauthConnections } = await supabase
-  .from('user_oauth_connections')
+  .from('user_integration_credentials')
   .select(`
     *,
-    oauth_providers!inner(name, display_name)
+    service_providers!inner(name, display_name)
   `)
   .eq('user_id', userId)
   .eq('credential_type', 'oauth')
@@ -185,10 +180,10 @@ const { data: oauthConnections } = await supabase
 **API Key-Specific Queries:**
 ```javascript
 const { data: apiKeyConnections } = await supabase
-  .from('user_oauth_connections')
+  .from('user_integration_credentials')
   .select(`
     *,
-    oauth_providers!inner(name, configuration)
+    service_providers!inner(name, configuration_metadata)
   `)
   .eq('user_id', userId)
   .eq('credential_type', 'api_key')
@@ -202,8 +197,8 @@ const { data: apiKeyConnections } = await supabase
 async function refreshOAuthToken(supabase, userId, connectionId) {
   // 1. Validate connection exists and is OAuth type
   const { data: connection } = await supabase
-    .from('user_oauth_connections')
-    .select('credential_type, vault_refresh_token_id, oauth_providers!inner(name)')
+    .from('user_integration_credentials')
+    .select('credential_type, vault_refresh_token_id, service_providers!inner(name)')
     .eq('id', connectionId)
     .eq('user_id', userId)
     .single();
@@ -245,17 +240,17 @@ class FunctionCallingManager {
 
   async getOAuthTools(agentId, userId) {
     const { data: permissions } = await this.supabaseClient
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select(`
         *,
-        user_oauth_connections!inner(
+        user_integration_credentials!inner(
           credential_type,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', agentId)
-      .eq('user_oauth_connections.user_id', userId)
-      .eq('user_oauth_connections.credential_type', 'oauth')
+      .eq('user_integration_credentials.user_id', userId)
+      .eq('user_integration_credentials.credential_type', 'oauth')
       .eq('is_active', true);
 
     return this.buildToolsFromPermissions(permissions);
@@ -263,17 +258,17 @@ class FunctionCallingManager {
 
   async getAPIKeyTools(agentId, userId) {
     const { data: permissions } = await this.supabaseClient
-      .from('agent_oauth_permissions')
+      .from('agent_integration_permissions')
       .select(`
         *,
-        user_oauth_connections!inner(
+        user_integration_credentials!inner(
           credential_type,
-          oauth_providers!inner(name)
+          service_providers!inner(name)
         )
       `)
       .eq('agent_id', agentId)
-      .eq('user_oauth_connections.user_id', userId)
-      .eq('user_oauth_connections.credential_type', 'api_key')
+      .eq('user_integration_credentials.user_id', userId)
+      .eq('user_integration_credentials.credential_type', 'api_key')
       .eq('is_active', true);
 
     return this.buildToolsFromPermissions(permissions);
@@ -405,10 +400,10 @@ async function setupOAuthIntegration(userId, providerId, tokens, scopes) {
   
   // 2. Create connection record
   const { error } = await supabase
-    .from('user_oauth_connections')
+    .from('user_integration_credentials')
     .insert({
       user_id: userId,
-      oauth_provider_id: providerId,
+      service_provider_id: providerId,
       external_user_id: tokens.user_id,
       external_username: tokens.username,
       connection_name: `${providerName} Connection`,
@@ -432,10 +427,10 @@ async function setupAPIKeyIntegration(userId, providerId, apiKey, connectionName
   
   // 2. Create connection record
   const { error } = await supabase
-    .from('user_oauth_connections')
+    .from('user_integration_credentials')
     .insert({
       user_id: userId,
-      oauth_provider_id: providerId,
+      service_provider_id: providerId,
       external_user_id: userId, // Required field
       external_username: connectionName,
       connection_name: connectionName,
@@ -572,27 +567,27 @@ BEGIN;
 CREATE TYPE connection_credential_type_enum AS ENUM ('oauth', 'api_key');
 
 -- 2. Add credential_type column with default
-ALTER TABLE user_oauth_connections 
+ALTER TABLE user_integration_credentials 
 ADD COLUMN credential_type connection_credential_type_enum DEFAULT 'oauth' NOT NULL;
 
 -- 3. Update existing records based on provider patterns
-UPDATE user_oauth_connections 
+UPDATE user_integration_credentials 
 SET credential_type = 'api_key'
-WHERE oauth_provider_id IN (
-    SELECT id FROM oauth_providers 
+WHERE service_provider_id IN (
+    SELECT id FROM service_providers 
     WHERE name IN ('api_key_provider_1', 'api_key_provider_2', ...)
 );
 
 -- 4. Handle invalid states
-UPDATE user_oauth_connections 
+UPDATE user_integration_credentials 
 SET connection_status = 'error'
 WHERE connection_status = 'active' AND vault_access_token_id IS NULL;
 
 -- 5. Update constraints
-ALTER TABLE user_oauth_connections 
+ALTER TABLE user_integration_credentials 
 DROP CONSTRAINT IF EXISTS old_token_constraint;
 
-ALTER TABLE user_oauth_connections 
+ALTER TABLE user_integration_credentials 
 ADD CONSTRAINT chk_credential_type_consistency CHECK (
     (
         (credential_type = 'oauth' AND connection_status = 'active' AND vault_access_token_id IS NOT NULL)
@@ -604,8 +599,8 @@ ADD CONSTRAINT chk_credential_type_consistency CHECK (
 );
 
 -- 6. Update indexes
-CREATE INDEX idx_user_oauth_connections_credential_type 
-ON user_oauth_connections (credential_type, connection_status);
+CREATE INDEX idx_user_integration_credentials_credential_type 
+ON user_integration_credentials (credential_type, connection_status);
 
 COMMIT;
 ```
@@ -615,17 +610,17 @@ COMMIT;
 ```sql
 -- Validation: Check credential type distribution
 SELECT credential_type, COUNT(*) as count
-FROM user_oauth_connections
+FROM user_integration_credentials
 GROUP BY credential_type;
 
 -- Validation: Check for invalid states
 SELECT COUNT(*) as invalid_connections
-FROM user_oauth_connections
+FROM user_integration_credentials
 WHERE connection_status = 'active' AND vault_access_token_id IS NULL;
 
 -- Validation: Check API keys with refresh tokens (should be 0)
 SELECT COUNT(*) as api_keys_with_refresh_tokens
-FROM user_oauth_connections
+FROM user_integration_credentials
 WHERE credential_type = 'api_key' AND vault_refresh_token_id IS NOT NULL;
 ```
 
@@ -751,11 +746,11 @@ class SecureCredentialManager {
 ```sql
 -- Row Level Security Policies
 CREATE POLICY "Users can only access their own connections" 
-ON user_oauth_connections 
+ON user_integration_credentials 
 FOR ALL USING (user_id = auth.uid());
 
 CREATE POLICY "Service role can manage all connections" 
-ON user_oauth_connections 
+ON user_integration_credentials 
 FOR ALL USING (auth.role() = 'service_role');
 ```
 

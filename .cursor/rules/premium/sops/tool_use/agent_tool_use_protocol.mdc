@@ -77,58 +77,67 @@ Tool providers are external services that expose functionality:
 
 ### Core Tables
 
-#### `oauth_providers`
-Stores OAuth provider configurations.
+#### `service_providers`
+Stores unified service provider configurations for both OAuth and API key integrations.
 ```sql
-CREATE TABLE oauth_providers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT UNIQUE NOT NULL,           -- e.g., 'gmail', 'slack'
-  display_name TEXT NOT NULL,          -- e.g., 'Gmail', 'Slack'
-  client_id TEXT NOT NULL,             -- OAuth client ID
-  auth_url TEXT NOT NULL,              -- OAuth authorization URL
-  token_url TEXT NOT NULL,             -- OAuth token exchange URL
-  available_scopes JSONB NOT NULL,     -- Array of available OAuth scopes
-  icon_url TEXT,                       -- Provider icon for UI
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE service_providers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT UNIQUE NOT NULL,           -- e.g., 'gmail', 'microsoft-outlook', 'smtp'
+  display_name TEXT NOT NULL,          -- e.g., 'Gmail', 'Microsoft Outlook', 'SMTP'
+  provider_type provider_type NOT NULL, -- 'oauth', 'api_key', 'smtp'
+  authorization_endpoint TEXT,         -- OAuth authorization URL
+  token_endpoint TEXT,                 -- OAuth token exchange URL
+  scopes_supported JSONB DEFAULT '[]'::jsonb, -- Array of available OAuth scopes
+  configuration_metadata JSONB,        -- Provider-specific configuration
+  is_active BOOLEAN DEFAULT true,      -- Whether provider is enabled
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
-#### `user_oauth_connections`
-Links users to their OAuth connections with encrypted tokens.
+#### `user_integration_credentials`
+Links users to their service integrations with encrypted credentials (replaces user_oauth_connections).
 ```sql
-CREATE TABLE user_oauth_connections (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE user_integration_credentials (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  oauth_provider_id UUID REFERENCES oauth_providers(id),
-  encrypted_access_token TEXT NOT NULL,    -- Encrypted using Supabase Vault
-  encrypted_refresh_token TEXT,            -- Encrypted refresh token
+  service_provider_id UUID REFERENCES service_providers(id),
+  credential_type credential_type DEFAULT 'oauth' NOT NULL, -- 'oauth', 'api_key'
+  
+  -- SECURE: Only vault UUIDs stored
+  vault_access_token_id TEXT,    -- Vault UUID for token/key
+  vault_refresh_token_id TEXT,   -- Vault UUID for refresh token (OAuth only)
+  encrypted_access_token TEXT,   -- DEPRECATED: Always NULL in new system
+  encrypted_refresh_token TEXT,  -- DEPRECATED: Always NULL in new system
+  
+  connection_name TEXT NOT NULL,
+  connection_status TEXT DEFAULT 'active',
+  connection_metadata JSONB,
+  scopes_granted JSONB,           -- Array of granted OAuth scopes
   token_expires_at TIMESTAMPTZ,
-  granted_scopes JSONB NOT NULL,           -- Array of granted OAuth scopes
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, oauth_provider_id)
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, service_provider_id, connection_name)
 );
 ```
 
-#### `agent_oauth_permissions`
-Controls which agents have access to which OAuth scopes.
+#### `agent_integration_permissions`
+Controls which agents have access to which integration scopes (replaces agent_oauth_permissions).
 ```sql
-CREATE TABLE agent_oauth_permissions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE agent_integration_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
-  user_oauth_connection_id UUID REFERENCES user_oauth_connections(id) ON DELETE CASCADE,
+  connection_id UUID REFERENCES user_integration_credentials(id) ON DELETE CASCADE,
   granted_by_user_id UUID REFERENCES auth.users(id),
-  permission_level TEXT CHECK (permission_level IN ('read_only', 'full_access', 'custom')),
+  permission_level TEXT DEFAULT 'custom' CHECK (permission_level IN ('read_only', 'full_access', 'custom')),
   allowed_scopes JSONB NOT NULL,           -- Subset of granted_scopes from connection
-  granted_at TIMESTAMPTZ DEFAULT NOW(),
+  granted_at TIMESTAMPTZ DEFAULT now(),
   expires_at TIMESTAMPTZ,
   is_active BOOLEAN DEFAULT true,
   usage_count INTEGER DEFAULT 0,
   last_used_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
@@ -153,45 +162,62 @@ CREATE TABLE tool_execution_logs (
 
 ### RPC Functions
 
-#### `get_gmail_tools(p_agent_id, p_user_id)`
-Returns available Gmail tools based on granted permissions.
+#### `get_agent_integration_permissions(p_agent_id)`
+Returns integration permissions for an agent based on the new schema.
 ```sql
-CREATE OR REPLACE FUNCTION get_gmail_tools(
-    p_agent_id UUID,
-    p_user_id UUID
-) RETURNS JSONB AS $$
-DECLARE
-    v_allowed_scopes JSONB;
-    v_tools JSONB = '[]'::jsonb;
-BEGIN
-    -- Get allowed scopes for agent
-    SELECT aop.allowed_scopes INTO v_allowed_scopes
-    FROM agent_oauth_permissions aop
-    JOIN user_oauth_connections uoc ON uoc.id = aop.user_oauth_connection_id
-    JOIN oauth_providers op ON op.id = uoc.oauth_provider_id
-    WHERE aop.agent_id = p_agent_id
-    AND uoc.user_id = p_user_id
-    AND op.name = 'gmail'
-    AND aop.is_active = true;
-    
-    -- Build tools array based on granted scopes
-    -- Implementation details...
-    
-    RETURN v_tools;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+CREATE OR REPLACE FUNCTION get_agent_integration_permissions(p_agent_id UUID)
+RETURNS TABLE (
+    permission_id UUID,
+    agent_id UUID,
+    connection_id UUID,
+    connection_name TEXT,
+    external_username TEXT,
+    provider_name TEXT,
+    provider_display_name TEXT,
+    allowed_scopes JSONB,
+    is_active BOOLEAN,
+    permission_level TEXT,
+    granted_at TIMESTAMPTZ,
+    granted_by_user_id UUID
+) 
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+    SELECT 
+        aip.id AS permission_id,
+        aip.agent_id,
+        uic.id AS connection_id,
+        uic.connection_name,
+        uic.connection_metadata->>'external_username' AS external_username,
+        sp.name AS provider_name,
+        sp.display_name AS provider_display_name,
+        aip.allowed_scopes,
+        aip.is_active,
+        aip.permission_level,
+        aip.granted_at,
+        aip.granted_by_user_id
+    FROM agent_integration_permissions aip
+    INNER JOIN user_integration_credentials uic ON uic.id = aip.connection_id
+    INNER JOIN service_providers sp ON sp.id = uic.service_provider_id
+    WHERE aip.agent_id = p_agent_id
+    AND aip.is_active = true
+    AND uic.connection_status = 'active'
+    ORDER BY aip.granted_at DESC;
+$$;
 ```
 
 ## Permission System
 
-### OAuth Scope Management
+### Integration Permission Management
 
-The permission system uses OAuth scopes to control tool access:
+The permission system uses a unified approach for both OAuth scopes and API key access:
 
-1. **Scope Definition**: Each tool defines required OAuth scopes
-2. **User Grant**: Users grant scopes when connecting accounts
-3. **Agent Assignment**: Users assign specific scopes to agents
-4. **Runtime Validation**: System validates scopes before tool execution
+1. **Permission Definition**: Each tool defines required scopes or capabilities
+2. **User Connection**: Users connect accounts via OAuth or provide API keys
+3. **Agent Assignment**: Users assign specific permissions to agents through `agent_integration_permissions`
+4. **Runtime Validation**: System validates permissions before tool execution using the new schema
 
 ### Permission Flow
 
@@ -199,22 +225,22 @@ The permission system uses OAuth scopes to control tool access:
 sequenceDiagram
     participant User
     participant UI
-    participant OAuth Provider
+    participant ServiceProvider
     participant Database
     participant Agent
     
-    User->>UI: Connect Gmail Account
-    UI->>OAuth Provider: Initiate OAuth Flow
-    OAuth Provider->>User: Request Permissions
-    User->>OAuth Provider: Grant Permissions
-    OAuth Provider->>UI: Return Auth Code
-    UI->>Database: Store Connection & Scopes
+    User->>UI: Connect Service Account
+    UI->>ServiceProvider: Initiate OAuth/API Key Flow
+    ServiceProvider->>User: Request Permissions (OAuth only)
+    User->>ServiceProvider: Grant Permissions/Provide API Key
+    ServiceProvider->>UI: Return Auth Code/Confirm API Key
+    UI->>Database: Store in user_integration_credentials with vault encryption
     
-    User->>UI: Grant Gmail Access to Agent
-    UI->>Database: Create agent_oauth_permissions
+    User->>UI: Grant Service Access to Agent
+    UI->>Database: Create agent_integration_permissions
     
     Agent->>Database: Request Available Tools
-    Database->>Agent: Return Tools Based on Permissions
+    Database->>Agent: Return Tools Based on Integration Permissions
 ```
 
 ## Tool Definition & Registration
@@ -325,7 +351,7 @@ sequenceDiagram
     Chat UI->>Chat Function: POST /chat
     
     Chat Function->>FunctionCallingManager: getAvailableTools(agentId, userId)
-    FunctionCallingManager->>Database: Check agent_oauth_permissions
+    FunctionCallingManager->>Database: Check agent_integration_permissions
     Database-->>FunctionCallingManager: Return allowed_scopes
     FunctionCallingManager-->>Chat Function: Return [send_email tool]
     
@@ -615,17 +641,27 @@ export async function handleCallback(code: string, state: string) {
   // Exchange code for tokens
   const tokens = await exchangeCodeForTokens(code);
   
-  // Encrypt tokens
-  const encryptedAccessToken = await encryptToken(tokens.access_token);
-  const encryptedRefreshToken = await encryptToken(tokens.refresh_token);
+  // Store tokens securely in Supabase Vault
+  const accessTokenVaultId = await createVaultSecret(
+    tokens.access_token,
+    `gmail_access_token_${userId}`,
+    'Gmail access token'
+  );
+  const refreshTokenVaultId = await createVaultSecret(
+    tokens.refresh_token,
+    `gmail_refresh_token_${userId}`,
+    'Gmail refresh token'
+  );
   
   // Store connection
-  await supabase.from('user_oauth_connections').insert({
+  await supabase.from('user_integration_credentials').insert({
     user_id: userId,
-    oauth_provider_id: gmailProviderId,
-    encrypted_access_token: encryptedAccessToken,
-    encrypted_refresh_token: encryptedRefreshToken,
-    granted_scopes: tokens.scope.split(' '),
+    service_provider_id: gmailProviderId,
+    credential_type: 'oauth',
+    vault_access_token_id: accessTokenVaultId,
+    vault_refresh_token_id: refreshTokenVaultId,
+    connection_name: 'Gmail Account',
+    scopes_granted: tokens.scope.split(' '),
     token_expires_at: new Date(Date.now() + tokens.expires_in * 1000),
   });
 }
@@ -636,9 +672,9 @@ export async function handleCallback(code: string, state: string) {
 ```typescript
 // Frontend: AgentEdit component
 async function grantOAuthPermissions(agentId: string, connectionId: string, scopes: string[]) {
-  const { error } = await supabase.from('agent_oauth_permissions').insert({
+  const { error } = await supabase.from('agent_integration_permissions').insert({
     agent_id: agentId,
-    user_oauth_connection_id: connectionId,
+    connection_id: connectionId,
     granted_by_user_id: user.id,
     permission_level: 'custom',
     allowed_scopes: scopes,
@@ -859,9 +895,9 @@ Key technical features:
    ```javascript
    // Lists all agents with Gmail permissions
    const agents = await supabase
-     .from('agent_oauth_permissions')
-     .select('*, agents(*), user_oauth_connections(*)')
-     .eq('user_oauth_connections.oauth_providers.name', 'gmail');
+     .from('agent_integration_permissions')
+     .select('*, agents(*), user_integration_credentials(*)')
+     .eq('user_integration_credentials.service_providers.name', 'gmail');
    ```
 
 2. **diagnose_gmail_tools.js**
@@ -885,7 +921,7 @@ Key technical features:
    ```javascript
    // Verifies database schema integrity
    async function checkSchema() {
-     const tables = ['oauth_providers', 'user_oauth_connections', 'agent_oauth_permissions'];
+     const tables = ['service_providers', 'user_integration_credentials', 'agent_integration_permissions'];
      
      for (const table of tables) {
        const columns = await getTableColumns(table);
@@ -898,12 +934,12 @@ Key technical features:
 
 1. **"I don't have the required Gmail permissions"**
    - Check `allowed_scopes` column exists (not `granted_scopes`)
-   - Verify agent_oauth_permissions record is active
+   - Verify agent_integration_permissions record is active
    - Run diagnostics script for detailed info
 
 2. **Tools not appearing in chat**
    - Ensure OAuth connection is active
-   - Verify oauth_providers entry exists
+   - Verify service_providers entry exists
    - Check chat function logs
 
 3. **Token expiration errors**
@@ -917,7 +953,7 @@ Key technical features:
 
 To add a new provider (e.g., Slack):
 
-1. Add provider to `oauth_providers` table
+1. Add provider to `service_providers` table
 2. Implement OAuth flow in `supabase/functions/slack-oauth`
 3. Define tools in `SLACK_MCP_TOOLS`
 4. Add execution logic in `FunctionCallingManager`

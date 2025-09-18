@@ -1,0 +1,561 @@
+---
+description: API key integration patterns, security, and management for services using key-based authentication
+globs: []
+alwaysApply: false
+---
+
+# API Key Integration Protocol
+
+## Overview
+
+API key integrations provide a simpler alternative to OAuth for services that use key-based authentication. Agentopia securely manages API keys through Supabase Vault with comprehensive validation and error handling.
+
+## API Key Integration Flow
+
+### 1. Key Validation and Storage
+
+```typescript
+export async function createAPIKeyConnection(
+  userId: string,
+  providerName: string,
+  apiKey: string,
+  connectionName?: string
+) {
+  // Get provider configuration
+  const provider = await getProviderByName(providerName);
+  if (!provider || provider.provider_type !== 'api_key') {
+    throw new Error(`Invalid API key provider: ${providerName}`);
+  }
+  
+  // Validate API key with provider
+  await validateAPIKey(provider, apiKey);
+  
+  // Store API key in Vault
+  const vaultKeyId = await supabase.rpc('create_vault_secret', {
+    p_secret: apiKey,
+    p_name: `${providerName}_apikey_${userId}_${Date.now()}`,
+    p_description: `${providerName} API key for user ${userId}`
+  });
+  
+  // Create connection record
+  const { data: connection } = await supabase
+    .from('user_integration_credentials')
+    .insert({
+      user_id: userId,
+      service_provider_id: provider.id,
+      credential_type: 'api_key',
+      vault_access_token_id: vaultKeyId,
+      connection_name: connectionName || provider.display_name,
+      connection_status: 'active',
+      connection_metadata: {
+        created_at: new Date().toISOString(),
+        last_validated: new Date().toISOString()
+      }
+    })
+    .select()
+    .single();
+  
+  return connection;
+}
+```
+
+### 2. API Key Validation
+
+```typescript
+async function validateAPIKey(provider: ServiceProvider, apiKey: string): Promise<void> {
+  const config = provider.configuration_metadata;
+  const baseUrl = config.base_url;
+  const testEndpoint = config.test_endpoint || '/';
+  
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    
+    // Set API key header based on provider configuration
+    if (config.api_key_header) {
+      const prefix = config.api_key_prefix || '';
+      headers[config.api_key_header] = `${prefix}${apiKey}`;
+    }
+    
+    // Add User-Agent if required
+    if (config.requires_user_agent) {
+      headers['User-Agent'] = 'Agentopia/1.0';
+    }
+    
+    const response = await fetch(`${baseUrl}${testEndpoint}`, {
+      method: 'GET',
+      headers
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Question: The API key appears to be invalid or expired. Please check your API key and try again.');
+      }
+      
+      if (response.status === 429) {
+        throw new Error('Question: The API service is currently rate limited. Please try again in a few minutes.');
+      }
+      
+      throw new Error(`API validation failed with status ${response.status}`);
+    }
+    
+  } catch (error) {
+    if (error.message.includes('Question:')) {
+      throw error;
+    }
+    
+    throw new Error(`Question: Unable to validate the API key. Please ensure the key is correct and the service is accessible.`);
+  }
+}
+```
+
+## Provider-Specific Implementations
+
+### Web Search APIs
+
+```typescript
+// Serper API configuration
+const serperConfig = {
+  name: 'serper_api',
+  display_name: 'Serper API',
+  provider_type: 'api_key',
+  configuration_metadata: {
+    api_key_header: 'X-API-KEY',
+    base_url: 'https://google.serper.dev',
+    test_endpoint: '/search?q=test',
+    rate_limits: {
+      requests_per_minute: 60,
+      requests_per_hour: 2500
+    },
+    supported_endpoints: [
+      '/search',
+      '/images', 
+      '/news',
+      '/places'
+    ]
+  }
+};
+
+// Brave Search API configuration  
+const braveSearchConfig = {
+  name: 'brave_search',
+  display_name: 'Brave Search',
+  provider_type: 'api_key',
+  configuration_metadata: {
+    api_key_header: 'X-Subscription-Token',
+    base_url: 'https://api.search.brave.com/res/v1',
+    test_endpoint: '/web/search?q=test',
+    rate_limits: {
+      requests_per_minute: 60,
+      requests_per_hour: 2000
+    }
+  }
+};
+```
+
+### Email Service APIs
+
+```typescript
+// SendGrid API configuration
+const sendgridConfig = {
+  name: 'sendgrid',
+  display_name: 'SendGrid',
+  provider_type: 'api_key',
+  configuration_metadata: {
+    api_key_header: 'Authorization',
+    api_key_prefix: 'Bearer ',
+    base_url: 'https://api.sendgrid.com/v3',
+    test_endpoint: '/user/profile',
+    rate_limits: {
+      requests_per_second: 10,
+      requests_per_minute: 600
+    }
+  }
+};
+
+// Mailgun API configuration
+const mailgunConfig = {
+  name: 'mailgun',
+  display_name: 'Mailgun',
+  provider_type: 'api_key',
+  configuration_metadata: {
+    api_key_header: 'Authorization',
+    api_key_prefix: 'Basic ',
+    base_url: 'https://api.mailgun.net/v3',
+    requires_domain: true,
+    test_endpoint: '/domains',
+    rate_limits: {
+      requests_per_minute: 300
+    }
+  }
+};
+```
+
+### AI Service APIs
+
+```typescript
+// OpenAI API configuration
+const openaiConfig = {
+  name: 'openai_api',
+  display_name: 'OpenAI API',
+  provider_type: 'api_key',
+  configuration_metadata: {
+    api_key_header: 'Authorization',
+    api_key_prefix: 'Bearer ',
+    base_url: 'https://api.openai.com/v1',
+    test_endpoint: '/models',
+    rate_limits: {
+      requests_per_minute: 60,
+      requests_per_day: 1000
+    },
+    supported_models: [
+      'gpt-4',
+      'gpt-3.5-turbo',
+      'text-embedding-ada-002'
+    ]
+  }
+};
+```
+
+## API Key Retrieval and Usage
+
+### Secure Key Retrieval
+
+```typescript
+export async function getAPIKeyForAgent(
+  agentId: string,
+  providerName: string
+): Promise<string> {
+  // Get agent's permission for this provider
+  const { data: permission } = await supabase
+    .from('agent_integration_permissions')
+    .select(`
+      allowed_scopes,
+      user_integration_credentials!inner(
+        vault_access_token_id,
+        service_providers!inner(name)
+      )
+    `)
+    .eq('agent_id', agentId)
+    .eq('user_integration_credentials.service_providers.name', providerName)
+    .eq('is_active', true)
+    .single();
+  
+  if (!permission) {
+    throw new Error(`Question: No ${providerName} API key found. Please add your ${providerName} API key in the integration settings.`);
+  }
+  
+  // Decrypt API key from Vault
+  const { data: apiKey, error } = await supabase.rpc('vault_decrypt', {
+    vault_id: permission.user_integration_credentials.vault_access_token_id
+  });
+  
+  if (error || !apiKey) {
+    throw new Error(`Question: Unable to retrieve ${providerName} API key. Please check your integration settings.`);
+  }
+  
+  return apiKey;
+}
+```
+
+### Rate Limiting Implementation
+
+```typescript
+class APIRateLimiter {
+  private rateLimits = new Map<string, {
+    requests: number[];
+    limits: {
+      per_minute?: number;
+      per_hour?: number;
+      per_day?: number;
+    };
+  }>();
+  
+  async checkRateLimit(providerName: string, userId: string): Promise<boolean> {
+    const key = `${providerName}_${userId}`;
+    const now = Date.now();
+    
+    const provider = await getProviderByName(providerName);
+    const limits = provider.configuration_metadata.rate_limits;
+    
+    if (!limits) return true;
+    
+    let rateLimitData = this.rateLimits.get(key);
+    if (!rateLimitData) {
+      rateLimitData = { requests: [], limits };
+      this.rateLimits.set(key, rateLimitData);
+    }
+    
+    // Clean old requests
+    const oneMinute = 60 * 1000;
+    const oneHour = 60 * oneMinute;
+    const oneDay = 24 * oneHour;
+    
+    rateLimitData.requests = rateLimitData.requests.filter(timestamp => {
+      return now - timestamp < oneDay;
+    });
+    
+    // Check limits
+    if (limits.per_minute) {
+      const recentRequests = rateLimitData.requests.filter(t => now - t < oneMinute);
+      if (recentRequests.length >= limits.per_minute) {
+        throw new Error(`Question: The ${providerName} service is rate limited. Please wait a minute before trying again.`);
+      }
+    }
+    
+    if (limits.per_hour) {
+      const hourlyRequests = rateLimitData.requests.filter(t => now - t < oneHour);
+      if (hourlyRequests.length >= limits.per_hour) {
+        throw new Error(`Question: You've reached the hourly limit for ${providerName}. Please try again later.`);
+      }
+    }
+    
+    if (limits.per_day) {
+      const dailyRequests = rateLimitData.requests.filter(t => now - t < oneDay);
+      if (dailyRequests.length >= limits.per_day) {
+        throw new Error(`Question: You've reached the daily limit for ${providerName}. Please try again tomorrow.`);
+      }
+    }
+    
+    // Record this request
+    rateLimitData.requests.push(now);
+    return true;
+  }
+}
+```
+
+## Error Handling Patterns
+
+### API Key Error Enhancement
+
+```typescript
+export function enhanceAPIKeyError(providerName: string, error: any): string {
+  const errorMessage = error.message || error.toString();
+  const lowerError = errorMessage.toLowerCase();
+  
+  // Authentication errors
+  if (lowerError.includes('unauthorized') || lowerError.includes('401')) {
+    return `Question: Your ${providerName} API key appears to be invalid. Please check and update your API key in the integration settings.`;
+  }
+  
+  if (lowerError.includes('forbidden') || lowerError.includes('403')) {
+    return `Question: Your ${providerName} API key doesn't have the required permissions. Please check your API key permissions or upgrade your plan.`;
+  }
+  
+  // Rate limiting
+  if (lowerError.includes('rate limit') || lowerError.includes('429')) {
+    return `Question: The ${providerName} service is currently rate limited. Please try again in a few minutes.`;
+  }
+  
+  // Quota exceeded
+  if (lowerError.includes('quota') || lowerError.includes('limit exceeded')) {
+    return `Question: You've reached your ${providerName} usage limit. Please check your account quota or upgrade your plan.`;
+  }
+  
+  // Service unavailable
+  if (lowerError.includes('503') || lowerError.includes('service unavailable')) {
+    return `Question: The ${providerName} service is temporarily unavailable. Please try again later.`;
+  }
+  
+  // Network errors
+  if (lowerError.includes('network') || lowerError.includes('timeout')) {
+    return `Question: Unable to connect to ${providerName}. Please check your internet connection and try again.`;
+  }
+  
+  // Generic API key error
+  if (lowerError.includes('api key')) {
+    return `Question: There's an issue with your ${providerName} API key. Please verify it's correct in the integration settings.`;
+  }
+  
+  // Return enhanced error with context
+  return `Question: There was an issue with the ${providerName} service. ${errorMessage}`;
+}
+```
+
+## Security Best Practices
+
+### API Key Validation Rules
+
+```typescript
+export function validateAPIKeyFormat(providerName: string, apiKey: string): boolean {
+  const patterns: Record<string, RegExp> = {
+    openai_api: /^sk-[a-zA-Z0-9]{48}$/,
+    serper_api: /^[a-f0-9]{32}$/,
+    sendgrid: /^SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}$/,
+    brave_search: /^BSA[a-zA-Z0-9]{32}$/
+  };
+  
+  const pattern = patterns[providerName];
+  if (!pattern) {
+    // No specific pattern, accept any non-empty string
+    return apiKey.trim().length > 0;
+  }
+  
+  return pattern.test(apiKey);
+}
+```
+
+### Secure Headers Implementation
+
+```typescript
+export function buildAPIHeaders(
+  provider: ServiceProvider,
+  apiKey: string,
+  additionalHeaders: Record<string, string> = {}
+): Record<string, string> {
+  const config = provider.configuration_metadata;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...additionalHeaders
+  };
+  
+  // Set API key header
+  if (config.api_key_header) {
+    const prefix = config.api_key_prefix || '';
+    headers[config.api_key_header] = `${prefix}${apiKey}`;
+  }
+  
+  // Add required headers
+  if (config.requires_user_agent) {
+    headers['User-Agent'] = 'Agentopia/1.0';
+  }
+  
+  // Add provider-specific headers
+  if (config.additional_headers) {
+    Object.assign(headers, config.additional_headers);
+  }
+  
+  return headers;
+}
+```
+
+## Testing and Validation
+
+### API Key Connection Testing
+
+```typescript
+export async function testAPIKeyConnection(connectionId: string): Promise<{
+  success: boolean;
+  message: string;
+  details?: any;
+}> {
+  try {
+    // Get connection details
+    const { data: connection } = await supabase
+      .from('user_integration_credentials')
+      .select(`
+        vault_access_token_id,
+        service_providers!inner(name, configuration_metadata)
+      `)
+      .eq('id', connectionId)
+      .single();
+    
+    if (!connection) {
+      return { success: false, message: 'Connection not found' };
+    }
+    
+    // Decrypt API key
+    const { data: apiKey } = await supabase.rpc('vault_decrypt', {
+      vault_id: connection.vault_access_token_id
+    });
+    
+    // Test the connection
+    const provider = connection.service_providers;
+    const config = provider.configuration_metadata;
+    
+    const headers = buildAPIHeaders(provider, apiKey);
+    const testUrl = `${config.base_url}${config.test_endpoint || '/'}`;
+    
+    const response = await fetch(testUrl, {
+      method: 'GET',
+      headers,
+      timeout: 10000 // 10 second timeout
+    });
+    
+    if (response.ok) {
+      // Update connection status
+      await supabase
+        .from('user_integration_credentials')
+        .update({
+          connection_status: 'active',
+          connection_metadata: {
+            last_tested: new Date().toISOString(),
+            test_result: 'success'
+          }
+        })
+        .eq('id', connectionId);
+      
+      return {
+        success: true,
+        message: `${provider.name} connection is working correctly`,
+        details: {
+          status: response.status,
+          headers: Object.fromEntries(response.headers.entries())
+        }
+      };
+    } else {
+      return {
+        success: false,
+        message: `Connection test failed with status ${response.status}`,
+        details: { status: response.status }
+      };
+    }
+    
+  } catch (error) {
+    return {
+      success: false,
+      message: `Connection test failed: ${error.message}`,
+      details: { error: error.message }
+    };
+  }
+}
+```
+
+## Monitoring and Analytics
+
+### Usage Tracking
+
+```typescript
+export async function trackAPIUsage(
+  userId: string,
+  providerName: string,
+  endpoint: string,
+  success: boolean,
+  responseTime: number
+) {
+  await supabase.from('api_usage_logs').insert({
+    user_id: userId,
+    provider_name: providerName,
+    endpoint: endpoint,
+    success: success,
+    response_time_ms: responseTime,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Usage analytics query
+export async function getAPIUsageAnalytics(userId: string, days: number = 30) {
+  const { data } = await supabase
+    .from('api_usage_logs')
+    .select('provider_name, success, response_time_ms, timestamp')
+    .eq('user_id', userId)
+    .gte('timestamp', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString())
+    .order('timestamp', { ascending: false });
+  
+  return data;
+}
+```
+
+## Related Documentation
+
+- **[Integration Architecture](integration_architecture.mdc)** - Overall integration system
+- **[Service Providers Schema](../01_database/service_providers_schema.mdc)** - Provider configuration
+- **[Integration Credentials Schema](../01_database/integration_credentials_schema.mdc)** - Credential storage
+- **[Vault Security Schema](../01_database/vault_security_schema.mdc)** - API key encryption
+
+---
+
+**Last Updated**: September 17, 2025  
+**Supported APIs**: Web search, email services, AI APIs, custom services  
+**Security**: Vault encryption, rate limiting, validation

@@ -1,0 +1,662 @@
+---
+description: Dynamic tool discovery and registration system for agent tool availability
+globs: []
+alwaysApply: false
+---
+
+# Tool Discovery Protocol
+
+## Overview
+
+Agentopia's tool discovery system dynamically determines which tools are available to each agent based on user integrations, agent permissions, and tool configurations. This ensures agents only see tools they can actually use while maintaining security and performance.
+
+## Discovery Architecture
+
+### Core Components
+
+```mermaid
+graph TB
+    Agent[Agent Request] --> Discovery[Tool Discovery Engine]
+    Discovery --> Internal[Internal Tools Check]
+    Discovery --> Integration[Integration Tools Check]
+    Discovery --> Permission[Permission Validation]
+    
+    Internal --> ToolCatalog[(Tool Catalog)]
+    Integration --> UserCreds[(User Integration Credentials)]
+    Integration --> ServiceProviders[(Service Providers)]
+    Permission --> AgentPerms[(Agent Integration Permissions)]
+    
+    Discovery --> Cache[Tool Cache]
+    Cache --> Response[Available Tools Response]
+```
+
+### Tool Categories
+
+1. **Internal Tools**: Built-in functionality (contacts, media library, reasoning)
+2. **Integration Tools**: External service tools (Gmail, web search, Slack)
+3. **MCP Tools**: Tools from connected MCP servers
+4. **Custom Tools**: User-defined or plugin tools
+
+## Discovery Implementation
+
+### Main Discovery Function
+
+```typescript
+// File: supabase/functions/get-agent-tools/index.ts
+export async function getAgentTools(agentId: string, userId: string): Promise<Tool[]> {
+  const discoveredTools: Tool[] = [];
+  
+  // 1. Discover internal tools (always available)
+  const internalTools = await discoverInternalTools();
+  discoveredTools.push(...internalTools);
+  
+  // 2. Discover integration tools based on user connections and agent permissions
+  const integrationTools = await discoverIntegrationTools(agentId, userId);
+  discoveredTools.push(...integrationTools);
+  
+  // 3. Discover MCP server tools
+  const mcpTools = await discoverMCPTools(agentId, userId);
+  discoveredTools.push(...mcpTools);
+  
+  // 4. Apply tool filtering and categorization
+  const filteredTools = await filterAndCategorizeTools(discoveredTools, agentId);
+  
+  // 5. Cache the results
+  await cacheToolsForAgent(agentId, filteredTools);
+  
+  return filteredTools;
+}
+```
+
+### Internal Tools Discovery
+
+```typescript
+async function discoverInternalTools(): Promise<Tool[]> {
+  // Get all active internal tools from catalog
+  const { data: internalTools } = await supabase
+    .from('tool_catalog')
+    .select('*')
+    .eq('category', 'internal')
+    .eq('is_active', true)
+    .order('display_name');
+  
+  return internalTools.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.tool_name,
+      description: tool.description,
+      parameters: tool.function_schema.function.parameters
+    },
+    metadata: {
+      category: tool.category,
+      provider: 'internal',
+      display_name: tool.display_name,
+      status: 'active'
+    }
+  }));
+}
+
+// Internal tools include:
+const INTERNAL_TOOLS = [
+  'search_contacts',
+  'get_contact_details', 
+  'add_contact',
+  'update_contact',
+  'get_media_library',
+  'search_media_library',
+  'upload_document',
+  'reprocess_document',
+  'reasoning_execute_chain',
+  'reasoning_inductive',
+  'reasoning_deductive',
+  'reasoning_abductive'
+];
+```
+
+### Integration Tools Discovery
+
+```typescript
+async function discoverIntegrationTools(agentId: string, userId: string): Promise<Tool[]> {
+  // Get all active integration permissions for this agent
+  const { data: permissions } = await supabase
+    .from('agent_integration_permissions')
+    .select(`
+      allowed_scopes,
+      user_integration_credentials!inner(
+        connection_status,
+        credential_type,
+        service_providers!inner(
+          name,
+          display_name,
+          provider_type,
+          is_active
+        )
+      )
+    `)
+    .eq('agent_id', agentId)
+    .eq('is_active', true)
+    .eq('user_integration_credentials.connection_status', 'active')
+    .eq('user_integration_credentials.service_providers.is_active', true);
+  
+  const integrationTools: Tool[] = [];
+  
+  for (const permission of permissions || []) {
+    const provider = permission.user_integration_credentials.service_providers;
+    
+    // Get tools for this provider
+    const providerTools = await getToolsForProvider(provider.name, permission.allowed_scopes);
+    
+    // Add metadata and status
+    const enrichedTools = providerTools.map(tool => ({
+      ...tool,
+      metadata: {
+        ...tool.metadata,
+        provider: provider.name,
+        provider_display_name: provider.display_name,
+        provider_type: provider.provider_type,
+        status: 'active',
+        scopes_available: permission.allowed_scopes
+      }
+    }));
+    
+    integrationTools.push(...enrichedTools);
+  }
+  
+  return integrationTools;
+}
+```
+
+### Provider-Specific Tool Discovery
+
+```typescript
+async function getToolsForProvider(providerName: string, allowedScopes: string[]): Promise<Tool[]> {
+  // Get tools from catalog for this provider
+  const { data: catalogTools } = await supabase
+    .from('tool_catalog')
+    .select('*')
+    .eq('provider_name', providerName)
+    .eq('is_active', true);
+  
+  if (!catalogTools) return [];
+  
+  // Filter tools based on available scopes
+  const availableTools = catalogTools.filter(tool => {
+    if (!tool.required_scopes || tool.required_scopes.length === 0) {
+      return true; // No specific scopes required
+    }
+    
+    // Check if agent has all required scopes
+    return tool.required_scopes.every((scope: string) => 
+      allowedScopes.includes(scope)
+    );
+  });
+  
+  return availableTools.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.tool_name,
+      description: tool.description,
+      parameters: tool.function_schema.function.parameters
+    },
+    metadata: {
+      category: tool.category,
+      display_name: tool.display_name,
+      required_scopes: tool.required_scopes || [],
+      tool_id: tool.id
+    }
+  }));
+}
+
+// Provider tool mappings
+const PROVIDER_TOOLS = {
+  gmail: [
+    'gmail_send_email',
+    'gmail_read_emails', 
+    'gmail_search_emails',
+    'gmail_email_actions'
+  ],
+  serper_api: [
+    'web_search',
+    'news_search',
+    'scrape_and_summarize'
+  ],
+  slack: [
+    'slack_send_message',
+    'slack_list_channels',
+    'slack_create_channel'
+  ],
+  sendgrid: [
+    'sendgrid_send_email',
+    'sendgrid_email_templates',
+    'sendgrid_email_stats'
+  ]
+};
+```
+
+### MCP Tools Discovery
+
+```typescript
+async function discoverMCPTools(agentId: string, userId: string): Promise<Tool[]> {
+  // Get active MCP connections for this user
+  const { data: mcpConnections } = await supabase
+    .from('agent_mcp_connections')
+    .select(`
+      mcp_server_url,
+      connection_status,
+      capabilities
+    `)
+    .eq('agent_id', agentId)
+    .eq('connection_status', 'connected');
+  
+  const mcpTools: Tool[] = [];
+  
+  for (const connection of mcpConnections || []) {
+    try {
+      // Query MCP server for available tools
+      const tools = await queryMCPServerTools(connection.mcp_server_url);
+      
+      const enrichedTools = tools.map(tool => ({
+        ...tool,
+        metadata: {
+          ...tool.metadata,
+          provider: 'mcp',
+          mcp_server: connection.mcp_server_url,
+          status: 'active',
+          source: 'mcp_server'
+        }
+      }));
+      
+      mcpTools.push(...enrichedTools);
+      
+    } catch (error) {
+      console.error(`Failed to discover tools from MCP server ${connection.mcp_server_url}:`, error);
+    }
+  }
+  
+  return mcpTools;
+}
+
+async function queryMCPServerTools(serverUrl: string): Promise<Tool[]> {
+  // Connect to MCP server and request tool list
+  const mcpClient = new MCPClient(serverUrl);
+  await mcpClient.connect();
+  
+  const tools = await mcpClient.listTools();
+  await mcpClient.disconnect();
+  
+  return tools;
+}
+```
+
+## Tool Status Determination
+
+### Status Categories
+
+```typescript
+export enum ToolStatus {
+  ACTIVE = 'active',              // Tool is ready to use
+  INACTIVE = 'inactive',          // Tool is disabled
+  CONFIGURATION_REQUIRED = 'configuration_required', // Needs setup
+  PERMISSION_REQUIRED = 'permission_required',       // Needs user permission
+  CONNECTION_ERROR = 'connection_error',              // Service unavailable
+  EXPIRED = 'expired'             // Credentials expired
+}
+```
+
+### Status Determination Logic
+
+```typescript
+function determineToolStatus(
+  tool: any,
+  userConnections: any[],
+  agentPermissions: any[]
+): ToolStatus {
+  
+  // Internal tools are always active
+  if (tool.category === 'internal') {
+    return ToolStatus.ACTIVE;
+  }
+  
+  // Check if user has connection for this provider
+  const connection = userConnections.find(conn => 
+    conn.service_providers.name === tool.provider_name
+  );
+  
+  if (!connection) {
+    return ToolStatus.CONFIGURATION_REQUIRED;
+  }
+  
+  // Check connection status
+  if (connection.connection_status === 'expired') {
+    return ToolStatus.EXPIRED;
+  }
+  
+  if (connection.connection_status !== 'active') {
+    return ToolStatus.CONNECTION_ERROR;
+  }
+  
+  // Check if agent has permission
+  const permission = agentPermissions.find(perm => 
+    perm.connection_id === connection.id
+  );
+  
+  if (!permission || !permission.is_active) {
+    return ToolStatus.PERMISSION_REQUIRED;
+  }
+  
+  // Check required scopes
+  if (tool.required_scopes && tool.required_scopes.length > 0) {
+    const hasAllScopes = tool.required_scopes.every((scope: string) =>
+      permission.allowed_scopes.includes(scope)
+    );
+    
+    if (!hasAllScopes) {
+      return ToolStatus.PERMISSION_REQUIRED;
+    }
+  }
+  
+  return ToolStatus.ACTIVE;
+}
+```
+
+## Tool Filtering and Categorization
+
+### Category-Based Organization
+
+```typescript
+async function filterAndCategorizeTools(tools: Tool[], agentId: string): Promise<Tool[]> {
+  const categorizedTools = {
+    communication: [],
+    search: [],
+    productivity: [],
+    development: [],
+    internal: [],
+    ai: [],
+    other: []
+  };
+  
+  for (const tool of tools) {
+    const category = tool.metadata?.category || 'other';
+    const status = await determineToolStatus(tool, agentId);
+    
+    const enrichedTool = {
+      ...tool,
+      metadata: {
+        ...tool.metadata,
+        status,
+        category,
+        last_updated: new Date().toISOString()
+      }
+    };
+    
+    if (categorizedTools[category]) {
+      categorizedTools[category].push(enrichedTool);
+    } else {
+      categorizedTools.other.push(enrichedTool);
+    }
+  }
+  
+  // Flatten back to single array with category metadata
+  return Object.entries(categorizedTools).flatMap(([category, tools]) =>
+    tools.map(tool => ({
+      ...tool,
+      metadata: { ...tool.metadata, category }
+    }))
+  );
+}
+```
+
+### Tool Prioritization
+
+```typescript
+function prioritizeTools(tools: Tool[]): Tool[] {
+  return tools.sort((a, b) => {
+    // Priority order: active > configuration_required > permission_required > others
+    const statusPriority = {
+      'active': 1,
+      'configuration_required': 2,
+      'permission_required': 3,
+      'expired': 4,
+      'connection_error': 5,
+      'inactive': 6
+    };
+    
+    const aPriority = statusPriority[a.metadata?.status] || 10;
+    const bPriority = statusPriority[b.metadata?.status] || 10;
+    
+    if (aPriority !== bPriority) {
+      return aPriority - bPriority;
+    }
+    
+    // Secondary sort by category importance
+    const categoryPriority = {
+      'communication': 1,
+      'search': 2,
+      'productivity': 3,
+      'internal': 4,
+      'ai': 5,
+      'development': 6,
+      'other': 7
+    };
+    
+    const aCatPriority = categoryPriority[a.metadata?.category] || 10;
+    const bCatPriority = categoryPriority[b.metadata?.category] || 10;
+    
+    if (aCatPriority !== bCatPriority) {
+      return aCatPriority - bCatPriority;
+    }
+    
+    // Final sort by display name
+    return (a.metadata?.display_name || a.function.name).localeCompare(
+      b.metadata?.display_name || b.function.name
+    );
+  });
+}
+```
+
+## Caching Strategy
+
+### Tool Cache Implementation
+
+```typescript
+interface ToolCache {
+  agent_id: string;
+  tools: Tool[];
+  expires_at: string;
+  cache_version: string;
+}
+
+async function cacheToolsForAgent(agentId: string, tools: Tool[]): Promise<void> {
+  const cacheEntry = {
+    agent_id: agentId,
+    tools: tools,
+    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+    cache_version: generateCacheVersion(),
+    updated_at: new Date().toISOString()
+  };
+  
+  await supabase
+    .from('mcp_tools_cache')
+    .upsert(cacheEntry, { onConflict: 'agent_id' });
+}
+
+async function getCachedTools(agentId: string): Promise<Tool[] | null> {
+  const { data: cached } = await supabase
+    .from('mcp_tools_cache')
+    .select('*')
+    .eq('agent_id', agentId)
+    .single();
+  
+  if (!cached) return null;
+  
+  // Check if cache is still valid
+  if (new Date(cached.expires_at) < new Date()) {
+    return null;
+  }
+  
+  return cached.tools;
+}
+
+function generateCacheVersion(): string {
+  // Version based on current timestamp and random component
+  return `v${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+```
+
+### Cache Invalidation
+
+```typescript
+export async function invalidateToolCache(agentId?: string, userId?: string): Promise<void> {
+  if (agentId) {
+    // Invalidate specific agent cache
+    await supabase
+      .from('mcp_tools_cache')
+      .delete()
+      .eq('agent_id', agentId);
+  } else if (userId) {
+    // Invalidate all agent caches for user
+    const { data: agents } = await supabase
+      .from('agents')
+      .select('id')
+      .eq('user_id', userId);
+    
+    if (agents) {
+      const agentIds = agents.map(agent => agent.id);
+      await supabase
+        .from('mcp_tools_cache')
+        .delete()
+        .in('agent_id', agentIds);
+    }
+  }
+}
+
+// Trigger cache invalidation on relevant changes
+export async function handleIntegrationChange(userId: string, changeType: string): Promise<void> {
+  console.log(`Integration change detected for user ${userId}: ${changeType}`);
+  
+  // Invalidate tool cache for all user's agents
+  await invalidateToolCache(undefined, userId);
+  
+  // Optionally trigger background refresh
+  if (changeType === 'connection_added' || changeType === 'permission_granted') {
+    // Trigger background tool discovery refresh
+    await triggerBackgroundToolRefresh(userId);
+  }
+}
+```
+
+## Performance Optimization
+
+### Batch Tool Discovery
+
+```typescript
+export async function batchDiscoverTools(agentIds: string[]): Promise<Map<string, Tool[]>> {
+  const results = new Map<string, Tool[]>();
+  
+  // Process in batches to avoid overwhelming the database
+  const batchSize = 10;
+  for (let i = 0; i < agentIds.length; i += batchSize) {
+    const batch = agentIds.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (agentId) => {
+      const { data: agent } = await supabase
+        .from('agents')
+        .select('user_id')
+        .eq('id', agentId)
+        .single();
+      
+      if (agent) {
+        const tools = await getAgentTools(agentId, agent.user_id);
+        return { agentId, tools };
+      }
+      
+      return { agentId, tools: [] };
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    batchResults.forEach(({ agentId, tools }) => {
+      results.set(agentId, tools);
+    });
+  }
+  
+  return results;
+}
+```
+
+### Query Optimization
+
+```typescript
+// Optimized query to get all necessary data in one request
+async function getAgentToolData(agentId: string, userId: string) {
+  const { data } = await supabase
+    .from('agents')
+    .select(`
+      id,
+      user_id,
+      agent_integration_permissions!inner(
+        allowed_scopes,
+        is_active,
+        user_integration_credentials!inner(
+          connection_status,
+          credential_type,
+          service_providers!inner(
+            name,
+            display_name,
+            provider_type,
+            is_active
+          )
+        )
+      )
+    `)
+    .eq('id', agentId)
+    .eq('user_id', userId)
+    .eq('agent_integration_permissions.is_active', true)
+    .eq('agent_integration_permissions.user_integration_credentials.connection_status', 'active');
+  
+  return data;
+}
+```
+
+## Error Handling
+
+### Discovery Error Types
+
+```typescript
+export enum DiscoveryErrorType {
+  AGENT_NOT_FOUND = 'agent_not_found',
+  PERMISSION_DENIED = 'permission_denied', 
+  SERVICE_UNAVAILABLE = 'service_unavailable',
+  CACHE_ERROR = 'cache_error',
+  MCP_CONNECTION_FAILED = 'mcp_connection_failed'
+}
+
+export function handleDiscoveryError(error: any, context: any): string {
+  if (error.code === 'PGRST116') {
+    return 'Question: The agent was not found. Please ensure you have access to this agent.';
+  }
+  
+  if (error.message?.includes('permission')) {
+    return 'Question: You don\'t have permission to view tools for this agent.';
+  }
+  
+  if (error.message?.includes('connection')) {
+    return 'Question: Unable to connect to some services. Some tools may not be available.';
+  }
+  
+  return `Tool discovery error: ${error.message}`;
+}
+```
+
+## Related Documentation
+
+- **[Tool Execution Protocol](tool_execution_protocol.mdc)** - How discovered tools are executed
+- **[Universal Tool Executor](../06_backend_services/universal_tool_executor.mdc)** - Tool routing system
+- **[Agent Permissions Schema](../01_database/agent_permissions_schema.mdc)** - Permission validation
+- **[Integration Architecture](../02_integrations/integration_architecture.mdc)** - Integration system
+- **[MCP Overview](../04_mcp/mcp_overview.mdc)** - MCP tool discovery
+
+---
+
+**Last Updated**: September 17, 2025  
+**Cache TTL**: 1 hour for optimal performance  
+**Discovery Time**: < 100ms for cached results, < 500ms for fresh discovery

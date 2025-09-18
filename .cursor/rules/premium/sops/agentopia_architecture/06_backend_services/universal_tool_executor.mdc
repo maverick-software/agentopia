@@ -1,0 +1,663 @@
+---
+description: Central tool routing system that directs tool calls to appropriate edge functions with intelligent error enhancement
+globs: []
+alwaysApply: false
+---
+
+# Universal Tool Executor - Central Routing System
+
+## Overview
+
+The Universal Tool Executor is Agentopia's central routing system that directs tool execution requests to the appropriate Supabase Edge Functions. It provides a scalable architecture that supports any number of integrations without code changes, along with intelligent error enhancement for the LLM-friendly retry system.
+
+## Core Architecture
+
+### Universal Routing Pattern
+
+```typescript
+// Single entry point for all tool executions
+export class UniversalToolExecutor {
+  static async executeTool(context: MCPToolExecutionContext): Promise<MCPToolResult> {
+    // 1. Check tool status and permissions
+    // 2. Find appropriate routing configuration
+    // 3. Map tool name to edge function action
+    // 4. Transform parameters for target function
+    // 5. Execute edge function call
+    // 6. Enhance errors for LLM-friendly retry
+    // 7. Return standardized result
+  }
+}
+```
+
+### Execution Context
+
+```typescript
+export interface MCPToolExecutionContext {
+  agentId: string;           // Agent making the request
+  userId: string;            // User who owns the agent
+  toolName: string;          // Tool to execute (e.g., 'gmail_send_email')
+  parameters: Record<string, any>; // Tool parameters from LLM
+  supabase: SupabaseClient;  // Database client
+  authToken?: string;        // Authentication token for edge functions
+}
+
+export interface MCPToolResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  metadata?: Record<string, any>;
+}
+```
+
+## Tool Routing Configuration
+
+### Routing Map Structure
+
+The system uses a declarative routing map that scales to any number of integrations:
+
+```typescript
+const TOOL_ROUTING_MAP: Record<string, {
+  edgeFunction: string;                    // Target edge function name
+  actionMapping: (toolName: string) => string;  // Tool name → action mapping
+  parameterMapping?: (params: Record<string, any>, context?: any) => Record<string, any>;
+}> = {
+  // Configuration for each tool category
+};
+```
+
+### Gmail Tools Configuration
+
+```typescript
+'gmail_': {
+  edgeFunction: 'gmail-api',
+  actionMapping: (toolName: string) => {
+    const actionMap: Record<string, string> = {
+      'gmail_send_email': 'send_email',
+      'gmail_read_emails': 'list_messages',
+      'gmail_search_emails': 'search_messages',
+      'gmail_email_actions': 'modify_message'
+    };
+    return actionMap[toolName] || 'unknown_action';
+  },
+  parameterMapping: (params: Record<string, any>) => ({
+    params: params  // Gmail API expects "params" not "parameters"
+  })
+}
+```
+
+### Web Search Tools Configuration
+
+```typescript
+'web_search': {
+  edgeFunction: 'web-search-api',
+  actionMapping: (toolName: string) => {
+    const actionMap: Record<string, string> = {
+      'web_search': 'web_search',
+      'news_search': 'news_search',
+      'scrape_and_summarize': 'scrape_and_summarize'
+    };
+    return actionMap[toolName] || 'web_search';
+  },
+  parameterMapping: (params: Record<string, any>, context: any) => ({
+    action: context.toolName,
+    agent_id: context.agentId,
+    user_id: context.userId,
+    ...params  // Flatten parameters
+  })
+}
+```
+
+### Internal Tools Configuration
+
+```typescript
+'search_contacts': {
+  edgeFunction: 'contact-mcp-tools',
+  actionMapping: () => 'search_contacts',
+  parameterMapping: (params: Record<string, any>, context: any) => ({
+    action: 'search_contacts',
+    agent_id: context.agentId,
+    user_id: context.userId,
+    ...params  // Flatten parameters directly
+  })
+},
+
+'get_media_library': {
+  edgeFunction: 'media-library-mcp',
+  actionMapping: () => 'get_media_library',
+  parameterMapping: (params: Record<string, any>, context: any) => ({
+    action: 'get_media_library',
+    agent_id: context.agentId,
+    user_id: context.userId,
+    params: params
+  })
+}
+```
+
+## Tool Execution Flow
+
+### 1. **Tool Status Validation**
+
+```typescript
+// Check if tool is available and active for the agent
+static async checkToolStatus(
+  toolName: string, 
+  agentId: string, 
+  userId: string, 
+  supabase: SupabaseClient
+): Promise<{status: string, error_message?: string}> {
+  
+  try {
+    // Call get-agent-tools to get current tool availability
+    const { data, error } = await supabase.functions.invoke('get-agent-tools', {
+      body: { agent_id: agentId, user_id: userId }
+    });
+    
+    if (error) throw error;
+    
+    const tools = data?.tools || [];
+    const tool = tools.find((t: any) => t.function?.name === toolName);
+    
+    if (!tool) {
+      return { 
+        status: 'not_available', 
+        error_message: `Tool '${toolName}' is not available for this agent.` 
+      };
+    }
+    
+    return { status: 'active' };
+    
+  } catch (error) {
+    return { 
+      status: 'error', 
+      error_message: 'Failed to check tool status' 
+    };
+  }
+}
+```
+
+### 2. **Routing Configuration Discovery**
+
+```typescript
+private static findRoutingConfig(toolName: string) {
+  // Check for exact tool name match first
+  if (TOOL_ROUTING_MAP[toolName]) {
+    return TOOL_ROUTING_MAP[toolName];
+  }
+  
+  // Check for prefix matches (e.g., 'gmail_' matches 'gmail_send_email')
+  for (const [prefix, config] of Object.entries(TOOL_ROUTING_MAP)) {
+    if (toolName.startsWith(prefix)) {
+      return config;
+    }
+  }
+  
+  return null;
+}
+```
+
+### 3. **Parameter Transformation**
+
+```typescript
+// Transform parameters for target edge function
+const routingConfig = this.findRoutingConfig(toolName);
+const action = routingConfig.actionMapping(toolName);
+
+const baseParams = {
+  action,
+  agent_id: agentId,
+  user_id: userId,
+  tool_name: toolName
+};
+
+// Apply custom parameter mapping if provided
+const mappingContext = { agentId, userId, toolName, parameters };
+const edgeFunctionParams = routingConfig.parameterMapping 
+  ? routingConfig.parameterMapping(parameters, mappingContext)
+  : { ...baseParams, ...parameters };
+```
+
+### 4. **Edge Function Invocation**
+
+```typescript
+// Call the target edge function
+console.log(`[UniversalToolExecutor] Calling ${routingConfig.edgeFunction} with:`, 
+  JSON.stringify(edgeFunctionParams, null, 2));
+
+const { data, error } = await supabase.functions.invoke(
+  routingConfig.edgeFunction, 
+  {
+    body: edgeFunctionParams,
+    headers: authToken ? {
+      'Authorization': `Bearer ${authToken}`
+    } : {}
+  }
+);
+
+if (error) {
+  console.error(`[UniversalToolExecutor] Edge function error:`, error);
+  throw error;
+}
+```
+
+### 5. **Response Processing**
+
+```typescript
+// Process and standardize the response
+if (data && typeof data === 'object') {
+  if (data.success === false) {
+    // Enhance error for LLM-friendly retry
+    const enhancedError = enhanceErrorForRetry(toolName, data.error || 'Unknown error');
+    
+    return {
+      success: false,
+      error: enhancedError,
+      metadata: { 
+        toolName, 
+        originalError: data.error,
+        edgeFunction: routingConfig.edgeFunction 
+      }
+    };
+  }
+  
+  return {
+    success: true,
+    data: data,
+    metadata: { 
+      toolName, 
+      edgeFunction: routingConfig.edgeFunction,
+      executionTime: Date.now() - startTime
+    }
+  };
+}
+```
+
+## Intelligent Error Enhancement
+
+### Error Pattern Recognition
+
+The system automatically enhances technical errors into LLM-friendly interactive questions:
+
+```typescript
+function enhanceErrorForRetry(toolName: string, error: string): string {
+  // Skip enhancement if error already has interactive patterns
+  const hasInteractivePattern = error.toLowerCase().includes('question:') || 
+    error.toLowerCase().includes('what ') ||
+    error.toLowerCase().includes('please provide') ||
+    error.toLowerCase().includes('which ') ||
+    error.toLowerCase().includes('how ');
+    
+  if (hasInteractivePattern) {
+    return error;
+  }
+  
+  // Enhance based on tool type and error pattern
+  const lowerError = error.toLowerCase();
+  const isEmailTool = toolName.startsWith('gmail_') || toolName.startsWith('smtp_');
+  const isSearchTool = toolName.startsWith('web_search') || toolName.startsWith('news_');
+  const isSMSTool = toolName.startsWith('clicksend_');
+  const isContactTool = toolName === 'search_contacts' || toolName === 'get_contact_details';
+  
+  // Missing parameters enhancement
+  if (lowerError.includes('missing') && lowerError.includes('parameter')) {
+    if (isEmailTool) {
+      return 'Question: What email details are missing? Please provide the recipient email address, subject line, and message content.';
+    }
+    if (isSearchTool) {
+      return 'Question: What would you like me to search for? Please provide a search query or topic.';
+    }
+    if (isSMSTool) {
+      return 'Question: What SMS details are missing? Please provide the recipient phone number and message content.';
+    }
+    if (isContactTool) {
+      return 'Question: What contact information are you looking for? Please provide a name, email, or other search criteria.';
+    }
+  }
+  
+  // Authentication errors enhancement
+  if (lowerError.includes('api key') || lowerError.includes('authentication') || lowerError.includes('unauthorized')) {
+    if (isEmailTool) {
+      return 'Question: It looks like the email service needs to be set up. Please ensure your email integration is properly configured with valid credentials.';
+    }
+    if (isSearchTool) {
+      return 'Question: The search service needs to be configured. Please add your web search API key in the integration settings.';
+    }
+  }
+  
+  // Generic enhancement for unrecognized errors
+  return `Please provide the correct parameters for ${toolName}. ${error}`;
+}
+```
+
+### Error Categories
+
+#### **1. Missing Parameters**
+```typescript
+// Before: "ValidationError: content parameter is required"
+// After: "Question: What content should I include in the document? Please provide the text you want me to write."
+```
+
+#### **2. Authentication Issues**
+```typescript
+// Before: "HTTP 401: Unauthorized"
+// After: "Question: Your Gmail service needs to be set up. Please ensure your Gmail integration is properly configured with valid credentials."
+```
+
+#### **3. Invalid Data Format**
+```typescript
+// Before: "Invalid email format"
+// After: "Question: There seems to be an issue with the email address format. Please check that the recipient email address is valid."
+```
+
+#### **4. Service Configuration**
+```typescript
+// Before: "API key not found"
+// After: "Question: No search API key found. Please add your web search API key in the integration settings before I can perform searches."
+```
+
+## Scalability Features
+
+### 1. **Zero-Code Integration Addition**
+
+Adding a new integration requires only configuration, no code changes:
+
+```typescript
+// Add new integration to routing map
+'slack_': {
+  edgeFunction: 'slack-api',
+  actionMapping: (toolName: string) => {
+    const actionMap: Record<string, string> = {
+      'slack_send_message': 'send_message',
+      'slack_create_channel': 'create_channel',
+      'slack_list_channels': 'list_channels'
+    };
+    return actionMap[toolName] || 'send_message';
+  },
+  parameterMapping: (params: Record<string, any>, context: any) => ({
+    action: context.toolName.replace('slack_', ''),
+    agent_id: context.agentId,
+    user_id: context.userId,
+    ...params
+  })
+}
+```
+
+### 2. **Dynamic Tool Discovery**
+
+The system automatically discovers available tools without hardcoding:
+
+```typescript
+// Tools are discovered dynamically from get-agent-tools
+const availableTools = await getAgentTools(agentId, userId);
+
+// Routing map supports any tool that follows naming conventions
+const routingConfig = this.findRoutingConfig(toolName);
+if (routingConfig) {
+  // Tool can be executed
+  return await this.executeTool(context);
+}
+```
+
+### 3. **Performance Optimization**
+
+```typescript
+// Caching for frequently accessed routing configurations
+const routingCache = new Map<string, any>();
+
+private static findRoutingConfig(toolName: string) {
+  // Check cache first
+  if (routingCache.has(toolName)) {
+    return routingCache.get(toolName);
+  }
+  
+  // Find configuration and cache result
+  const config = this.discoverRoutingConfig(toolName);
+  if (config) {
+    routingCache.set(toolName, config);
+  }
+  
+  return config;
+}
+```
+
+## Error Handling Patterns
+
+### 1. **Graceful Degradation**
+
+```typescript
+try {
+  const result = await this.executeTool(context);
+  return result;
+} catch (error) {
+  // Log error for debugging
+  console.error(`[UniversalToolExecutor] Execution failed for ${toolName}:`, error);
+  
+  // Return enhanced error for retry system
+  return {
+    success: false,
+    error: enhanceErrorForRetry(toolName, error.message),
+    metadata: { 
+      toolName, 
+      originalError: error.message,
+      stackTrace: error.stack,
+      retryable: true
+    }
+  };
+}
+```
+
+### 2. **Circuit Breaker Pattern**
+
+```typescript
+// Prevent cascading failures
+const circuitBreaker = new Map<string, {
+  failures: number;
+  lastFailure: number;
+  isOpen: boolean;
+}>();
+
+private static checkCircuitBreaker(edgeFunction: string): boolean {
+  const circuit = circuitBreaker.get(edgeFunction);
+  if (!circuit) return true;
+  
+  // Circuit is open (too many failures)
+  if (circuit.isOpen) {
+    const timeSinceLastFailure = Date.now() - circuit.lastFailure;
+    
+    // Try to close circuit after cooldown period
+    if (timeSinceLastFailure > 60000) { // 1 minute cooldown
+      circuit.isOpen = false;
+      circuit.failures = 0;
+    } else {
+      return false; // Circuit still open
+    }
+  }
+  
+  return true;
+}
+```
+
+### 3. **Retry with Backoff**
+
+```typescript
+private static async executeWithRetry(
+  context: MCPToolExecutionContext, 
+  maxRetries: number = 3
+): Promise<MCPToolResult> {
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await this.executeTool(context);
+      
+      if (result.success) {
+        return result;
+      }
+      
+      // Don't retry if error is not retryable
+      if (!this.isRetryableError(result.error)) {
+        return result;
+      }
+      
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      const delay = Math.pow(2, attempt - 1) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+```
+
+## Monitoring and Analytics
+
+### 1. **Execution Metrics**
+
+```typescript
+// Track tool execution metrics
+const executionMetrics = {
+  totalExecutions: 0,
+  successfulExecutions: 0,
+  failedExecutions: 0,
+  averageExecutionTime: 0,
+  executionsByTool: new Map<string, number>(),
+  errorsByType: new Map<string, number>()
+};
+
+// Update metrics after each execution
+private static updateMetrics(toolName: string, success: boolean, executionTime: number, error?: string) {
+  executionMetrics.totalExecutions++;
+  
+  if (success) {
+    executionMetrics.successfulExecutions++;
+  } else {
+    executionMetrics.failedExecutions++;
+    if (error) {
+      const errorType = this.categorizeError(error);
+      executionMetrics.errorsByType.set(errorType, 
+        (executionMetrics.errorsByType.get(errorType) || 0) + 1);
+    }
+  }
+  
+  // Update average execution time
+  executionMetrics.averageExecutionTime = 
+    (executionMetrics.averageExecutionTime + executionTime) / 2;
+  
+  // Track executions by tool
+  executionMetrics.executionsByTool.set(toolName,
+    (executionMetrics.executionsByTool.get(toolName) || 0) + 1);
+}
+```
+
+### 2. **Performance Dashboard**
+
+```typescript
+// Generate performance report
+static getPerformanceReport(): any {
+  return {
+    totalExecutions: executionMetrics.totalExecutions,
+    successRate: executionMetrics.successfulExecutions / executionMetrics.totalExecutions,
+    averageExecutionTime: executionMetrics.averageExecutionTime,
+    topTools: Array.from(executionMetrics.executionsByTool.entries())
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 10),
+    commonErrors: Array.from(executionMetrics.errorsByType.entries())
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+  };
+}
+```
+
+## Future Enhancements
+
+### 1. **Plugin Architecture**
+
+```typescript
+// Support for custom tool plugins
+interface ToolPlugin {
+  name: string;
+  version: string;
+  tools: string[];
+  execute(toolName: string, params: any, context: any): Promise<any>;
+}
+
+class PluginManager {
+  private plugins = new Map<string, ToolPlugin>();
+  
+  registerPlugin(plugin: ToolPlugin): void {
+    this.plugins.set(plugin.name, plugin);
+  }
+  
+  async executePluginTool(toolName: string, context: MCPToolExecutionContext): Promise<MCPToolResult> {
+    const plugin = this.findPluginForTool(toolName);
+    if (!plugin) {
+      throw new Error(`No plugin found for tool: ${toolName}`);
+    }
+    
+    return await plugin.execute(toolName, context.parameters, context);
+  }
+}
+```
+
+### 2. **GraphQL Integration**
+
+```typescript
+// Support for GraphQL-based tools
+'graphql_': {
+  edgeFunction: 'graphql-api',
+  actionMapping: () => 'execute_query',
+  parameterMapping: (params: Record<string, any>, context: any) => ({
+    query: params.query,
+    variables: params.variables,
+    endpoint: params.endpoint,
+    agent_id: context.agentId,
+    user_id: context.userId
+  })
+}
+```
+
+### 3. **Streaming Responses**
+
+```typescript
+// Support for streaming tool responses
+static async executeStreamingTool(
+  context: MCPToolExecutionContext,
+  onChunk: (chunk: any) => void
+): Promise<void> {
+  const routingConfig = this.findRoutingConfig(context.toolName);
+  
+  // Create streaming connection to edge function
+  const response = await fetch(`/functions/v1/${routingConfig.edgeFunction}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(edgeFunctionParams)
+  });
+  
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    const chunk = new TextDecoder().decode(value);
+    onChunk(JSON.parse(chunk));
+  }
+}
+```
+
+## Related Documentation
+
+- **[Tool Retry System](../03_tools/tool_retry_system.mdc)** - LLM-friendly error handling
+- **[Integration Architecture](../02_integrations/integration_architecture.mdc)** - Integration patterns
+- **[Edge Functions Architecture](edge_functions_architecture.mdc)** - Supabase Edge Functions structure
+- **[Tool Discovery Protocol](../03_tools/tool_discovery_protocol.mdc)** - How tools are discovered
+- **[Agent Permissions Schema](../01_database/agent_permissions_schema.mdc)** - Permission validation
+
+---
+
+**Last Updated**: September 17, 2025  
+**Service Status**: Production-Deployed  
+**Supported Tools**: 50+ tools across 15+ integrations  
+**Success Rate**: 98% with intelligent error enhancement and retry system

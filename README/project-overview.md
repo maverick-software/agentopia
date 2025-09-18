@@ -35,6 +35,7 @@ Agentopia is a comprehensive platform for creating, managing, and deploying AI a
 - **Microsoft 365 Suite**: Complete integration with Outlook, Teams, and OneDrive
 - **Web Research**: Multi-provider web search with content summarization
 - **Discord Integration**: Optional Discord bot functionality with mentions and responses
+- **Temporary Chat Links**: Anonymous public chat links for employee check-ins, customer support, and feedback collection
 
 ### 🛠️ Advanced Tool Capabilities
 - **MCP Integration**: Model Context Protocol support for universal tool connectivity

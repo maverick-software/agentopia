@@ -48,6 +48,7 @@ Production deployment and operations:
 - **[Integrations](integrations.md)** - Overview of all integration capabilities and setup processes
 - **[Email Integrations](email-integrations.md)** - Gmail, SMTP, SendGrid, Mailgun, and Microsoft Outlook
 - **[Microsoft 365](microsoft-365.md)** - Outlook, Teams, and OneDrive integration suite
+- **[Temporary Chat Links](temporary-chat-links.md)** - Anonymous public chat links for employee check-ins, customer support, and feedback collection
 - **[Web Research](web-research.md)** - Search providers, content scraping, and AI summarization
 - **[Tool Infrastructure](tool-infrastructure.md)** - MCP protocol, function calling, and tool execution
 - **[Zapier MCP](zapier-mcp.md)** - Universal tool connectivity through Model Context Protocol

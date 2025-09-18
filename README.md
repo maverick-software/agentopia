@@ -48,6 +48,7 @@ For detailed setup instructions, see the **[Getting Started Guide](README/gettin
 - **MCP Tool Infrastructure**: Scalable Model Context Protocol implementation
 - Contact management system with agent-based permissions
 - Advanced task scheduling and multi-step workflows
+- **Temporary Chat Links**: Anonymous public chat links for employee check-ins, customer support, and feedback collection
 - Professional UI with light/dark theme support
 
 ### 🔄 Active Development

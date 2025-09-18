@@ -1,0 +1,734 @@
+---
+description: Integration setup and management UI for connecting external services to Agentopia
+globs: []
+alwaysApply: false
+---
+
+# Integrations Page - Service Connection Management
+
+## Overview
+
+The Integrations Page provides a comprehensive interface for users to connect, manage, and monitor their external service integrations. It supports OAuth, API key, and SMTP connections with real-time status monitoring and permission management.
+
+## Component Architecture
+
+### Main Page Structure
+
+```typescript
+// File: src/pages/IntegrationsPage.tsx
+export function IntegrationsPage() {
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [availableIntegrations, setAvailableIntegrations] = useState<Integration[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showSetupModal, setShowSetupModal] = useState<boolean>(false);
+  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+
+  return (
+    <div className="container mx-auto p-6">
+      {/* Header */}
+      <IntegrationsHeader 
+        onSearch={setSearchQuery}
+        onCategoryChange={setSelectedCategory}
+      />
+      
+      {/* Connected Services */}
+      <ConnectedServices 
+        connections={connections}
+        onManage={handleManageConnection}
+        onRemove={handleRemoveConnection}
+      />
+      
+      {/* Available Integrations */}
+      <AvailableIntegrations
+        integrations={filteredIntegrations}
+        onConnect={handleConnectIntegration}
+      />
+      
+      {/* Setup Modal */}
+      {showSetupModal && (
+        <IntegrationSetupModal
+          integration={selectedIntegration}
+          onClose={() => setShowSetupModal(false)}
+          onSuccess={handleConnectionSuccess}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+## Connected Services Section
+
+### Connection Status Display
+
+```typescript
+interface Connection {
+  id: string;
+  provider_name: string;
+  provider_display_name: string;
+  connection_name: string;
+  connection_status: 'active' | 'expired' | 'error';
+  credential_type: 'oauth' | 'api_key' | 'smtp';
+  scopes_granted?: string[];
+  created_at: string;
+  last_used_at?: string;
+  metadata: Record<string, any>;
+}
+
+export function ConnectedServices({ connections, onManage, onRemove }) {
+  return (
+    <div className="mb-8">
+      <h2 className="text-xl font-semibold mb-4">Connected Services</h2>
+      
+      {connections.length === 0 ? (
+        <EmptyState message="No services connected yet" />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {connections.map(connection => (
+            <ConnectionCard
+              key={connection.id}
+              connection={connection}
+              onManage={() => onManage(connection)}
+              onRemove={() => onRemove(connection)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Connection Card Component
+
+```typescript
+export function ConnectionCard({ connection, onManage, onRemove }) {
+  const statusConfig = {
+    active: { color: 'green', icon: CheckCircle, text: 'Connected' },
+    expired: { color: 'yellow', icon: AlertTriangle, text: 'Expired' },
+    error: { color: 'red', icon: XCircle, text: 'Error' }
+  };
+  
+  const status = statusConfig[connection.connection_status];
+  
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-3">
+          <ProviderIcon provider={connection.provider_name} />
+          <div>
+            <h3 className="font-medium">{connection.provider_display_name}</h3>
+            <p className="text-sm text-gray-500">{connection.connection_name}</p>
+          </div>
+        </div>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onClick={onManage}>
+              <Settings className="h-4 w-4 mr-2" />
+              Manage
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => testConnection(connection.id)}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Test Connection
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={onRemove}
+              className="text-red-600"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      
+      {/* Status Indicator */}
+      <div className={`flex items-center space-x-2 text-sm text-${status.color}-600`}>
+        <status.icon className="h-4 w-4" />
+        <span>{status.text}</span>
+      </div>
+      
+      {/* Connection Details */}
+      <div className="mt-3 space-y-1 text-xs text-gray-500">
+        <div>Type: {connection.credential_type.toUpperCase()}</div>
+        {connection.scopes_granted && (
+          <div>Permissions: {connection.scopes_granted.length} scopes</div>
+        )}
+        <div>Connected: {formatDate(connection.created_at)}</div>
+        {connection.last_used_at && (
+          <div>Last used: {formatRelativeTime(connection.last_used_at)}</div>
+        )}
+      </div>
+      
+      {/* OAuth Scope Display */}
+      {connection.credential_type === 'oauth' && connection.scopes_granted && (
+        <div className="mt-3">
+          <div className="text-xs font-medium text-gray-700 mb-1">Permissions:</div>
+          <div className="flex flex-wrap gap-1">
+            {connection.scopes_granted.slice(0, 3).map(scope => (
+              <Badge key={scope} variant="secondary" className="text-xs">
+                {formatScopeName(scope)}
+              </Badge>
+            ))}
+            {connection.scopes_granted.length > 3 && (
+              <Badge variant="outline" className="text-xs">
+                +{connection.scopes_granted.length - 3} more
+              </Badge>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+```
+
+## Available Integrations Section
+
+### Integration Categories
+
+```typescript
+const INTEGRATION_CATEGORIES = {
+  all: 'All Services',
+  communication: 'Communication',
+  productivity: 'Productivity', 
+  search: 'Search & Web',
+  email: 'Email Services',
+  ai: 'AI Services',
+  development: 'Development',
+  storage: 'Storage & Files'
+};
+
+export function IntegrationsHeader({ onSearch, onCategoryChange }) {
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold">Integrations</h1>
+        <Button onClick={() => window.open('/docs/integrations', '_blank')}>
+          <HelpCircle className="h-4 w-4 mr-2" />
+          Documentation
+        </Button>
+      </div>
+      
+      <div className="flex items-center space-x-4">
+        {/* Search */}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search integrations..."
+            className="pl-10"
+            onChange={(e) => onSearch(e.target.value)}
+          />
+        </div>
+        
+        {/* Category Filter */}
+        <Select onValueChange={onCategoryChange} defaultValue="all">
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(INTEGRATION_CATEGORIES).map(([key, label]) => (
+              <SelectItem key={key} value={key}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+```
+
+### Available Integrations Grid
+
+```typescript
+export function AvailableIntegrations({ integrations, onConnect }) {
+  const groupedIntegrations = groupBy(integrations, 'category');
+  
+  return (
+    <div>
+      <h2 className="text-xl font-semibold mb-4">Available Integrations</h2>
+      
+      {Object.entries(groupedIntegrations).map(([category, categoryIntegrations]) => (
+        <div key={category} className="mb-8">
+          <h3 className="text-lg font-medium mb-3 capitalize">
+            {INTEGRATION_CATEGORIES[category] || category}
+          </h3>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {categoryIntegrations.map(integration => (
+              <IntegrationCard
+                key={integration.id}
+                integration={integration}
+                onConnect={() => onConnect(integration)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Integration Card Component
+
+```typescript
+export function IntegrationCard({ integration, onConnect }) {
+  const isConnected = integration.connection_status === 'connected';
+  
+  return (
+    <Card className="p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center space-x-3">
+          <integration.icon className="h-8 w-8" />
+          <div>
+            <h4 className="font-medium">{integration.name}</h4>
+            <p className="text-xs text-gray-500 uppercase">
+              {integration.provider_type}
+            </p>
+          </div>
+        </div>
+        
+        {isConnected && (
+          <Badge variant="secondary" className="text-xs">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Connected
+          </Badge>
+        )}
+      </div>
+      
+      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+        {integration.description}
+      </p>
+      
+      {/* Available Tools */}
+      <div className="mb-4">
+        <div className="text-xs font-medium text-gray-700 mb-1">
+          Available Tools:
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {integration.tools.slice(0, 3).map(tool => (
+            <Badge key={tool} variant="outline" className="text-xs">
+              {formatToolName(tool)}
+            </Badge>
+          ))}
+          {integration.tools.length > 3 && (
+            <Badge variant="outline" className="text-xs">
+              +{integration.tools.length - 3}
+            </Badge>
+          )}
+        </div>
+      </div>
+      
+      {/* Connect Button */}
+      <Button 
+        onClick={onConnect}
+        className="w-full"
+        variant={isConnected ? "outline" : "default"}
+        disabled={isConnected}
+      >
+        {isConnected ? (
+          <>
+            <Settings className="h-4 w-4 mr-2" />
+            Manage
+          </>
+        ) : (
+          <>
+            <Plus className="h-4 w-4 mr-2" />
+            Connect
+          </>
+        )}
+      </Button>
+    </Card>
+  );
+}
+```
+
+## Integration Setup Modals
+
+### Dynamic Modal Routing
+
+```typescript
+export function IntegrationSetupModal({ integration, onClose, onSuccess }) {
+  const [step, setStep] = useState<'info' | 'setup' | 'permissions' | 'complete'>('info');
+  
+  // Dynamically load the appropriate setup component
+  const SetupComponent = useMemo(() => {
+    switch (integration.provider_type) {
+      case 'oauth':
+        return OAuthSetupFlow;
+      case 'api_key':
+        return APIKeySetupFlow;
+      case 'smtp':
+        return SMTPSetupFlow;
+      default:
+        return GenericSetupFlow;
+    }
+  }, [integration.provider_type]);
+  
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center space-x-2">
+            <integration.icon className="h-5 w-5" />
+            <span>Connect {integration.name}</span>
+          </DialogTitle>
+        </DialogHeader>
+        
+        <SetupComponent
+          integration={integration}
+          currentStep={step}
+          onStepChange={setStep}
+          onSuccess={onSuccess}
+          onCancel={onClose}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+### OAuth Setup Flow
+
+```typescript
+export function OAuthSetupFlow({ integration, currentStep, onStepChange, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  
+  const handleOAuthConnect = async () => {
+    setLoading(true);
+    
+    try {
+      // Get OAuth authorization URL
+      const { data, error } = await supabase.functions.invoke('oauth-handler', {
+        body: {
+          provider: integration.id,
+          action: 'get_auth_url',
+          scopes: integration.scopes,
+          redirect_uri: `${window.location.origin}/integrations/callback`
+        }
+      });
+      
+      if (error) throw error;
+      
+      // Redirect to OAuth provider
+      window.location.href = data.auth_url;
+      
+    } catch (error) {
+      toast.error(`Failed to connect ${integration.name}: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div className="space-y-4">
+      {currentStep === 'info' && (
+        <div>
+          <p className="text-sm text-gray-600 mb-4">
+            {integration.description}
+          </p>
+          
+          <div className="mb-4">
+            <h4 className="text-sm font-medium mb-2">Permissions Requested:</h4>
+            <ul className="text-sm text-gray-600 space-y-1">
+              {integration.scopes.map(scope => (
+                <li key={scope} className="flex items-center">
+                  <CheckCircle className="h-3 w-3 mr-2 text-green-500" />
+                  {formatScopeDescription(scope)}
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          <div className="flex justify-end space-x-3">
+            <Button variant="outline" onClick={() => onClose()}>
+              Cancel
+            </Button>
+            <Button onClick={() => onStepChange('setup')}>
+              Continue
+            </Button>
+          </div>
+        </div>
+      )}
+      
+      {currentStep === 'setup' && (
+        <div>
+          <p className="text-sm text-gray-600 mb-4">
+            You'll be redirected to {integration.name} to authorize the connection.
+          </p>
+          
+          <div className="flex justify-end space-x-3">
+            <Button variant="outline" onClick={() => onStepChange('info')}>
+              Back
+            </Button>
+            <Button onClick={handleOAuthConnect} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Connect {integration.name}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### API Key Setup Flow
+
+```typescript
+export function APIKeySetupFlow({ integration, onSuccess }) {
+  const [apiKey, setApiKey] = useState('');
+  const [connectionName, setConnectionName] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const handleSaveAPIKey = async () => {
+    if (!apiKey.trim()) {
+      toast.error('Please enter your API key');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('integration-setup', {
+        body: {
+          provider: integration.id,
+          credential_type: 'api_key',
+          api_key: apiKey,
+          connection_name: connectionName || integration.name
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success(`${integration.name} connected successfully!`);
+      onSuccess(data.connection);
+      
+    } catch (error) {
+      toast.error(`Failed to connect ${integration.name}: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="connection-name">Connection Name</Label>
+        <Input
+          id="connection-name"
+          placeholder={integration.name}
+          value={connectionName}
+          onChange={(e) => setConnectionName(e.target.value)}
+        />
+      </div>
+      
+      <div>
+        <Label htmlFor="api-key">API Key</Label>
+        <Input
+          id="api-key"
+          type="password"
+          placeholder="Enter your API key..."
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+        />
+        {integration.api_key_help && (
+          <p className="text-xs text-gray-500 mt-1">
+            {integration.api_key_help}
+          </p>
+        )}
+      </div>
+      
+      <div className="flex justify-end space-x-3">
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSaveAPIKey} 
+          disabled={loading || !apiKey.trim()}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Testing...
+            </>
+          ) : (
+            'Save API Key'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+## Connection Management
+
+### Connection Testing
+
+```typescript
+async function testConnection(connectionId: string): Promise<void> {
+  try {
+    const { data, error } = await supabase.functions.invoke('test-connection', {
+      body: { connection_id: connectionId }
+    });
+    
+    if (error) throw error;
+    
+    if (data.success) {
+      toast.success('Connection test successful!');
+    } else {
+      toast.error(`Connection test failed: ${data.message}`);
+    }
+    
+  } catch (error) {
+    toast.error(`Connection test failed: ${error.message}`);
+  }
+}
+```
+
+### Permission Management
+
+```typescript
+export function ConnectionPermissionsModal({ connection, onClose, onUpdate }) {
+  const [agentPermissions, setAgentPermissions] = useState<AgentPermission[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  useEffect(() => {
+    loadAgentPermissions();
+  }, [connection.id]);
+  
+  const loadAgentPermissions = async () => {
+    const { data } = await supabase
+      .from('agent_integration_permissions')
+      .select(`
+        id,
+        agent_id,
+        allowed_scopes,
+        is_active,
+        agents!inner(name, avatar_url)
+      `)
+      .eq('connection_id', connection.id);
+    
+    setAgentPermissions(data || []);
+  };
+  
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Manage Agent Permissions</DialogTitle>
+          <DialogDescription>
+            Control which agents can access your {connection.provider_display_name} connection
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {agentPermissions.map(permission => (
+            <AgentPermissionRow
+              key={permission.id}
+              permission={permission}
+              connection={connection}
+              onUpdate={loadAgentPermissions}
+            />
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+## State Management
+
+### Integration Store
+
+```typescript
+// Using Zustand for state management
+interface IntegrationsStore {
+  connections: Connection[];
+  availableIntegrations: Integration[];
+  loading: boolean;
+  
+  loadConnections: () => Promise<void>;
+  loadAvailableIntegrations: () => Promise<void>;
+  addConnection: (connection: Connection) => void;
+  removeConnection: (connectionId: string) => void;
+  updateConnection: (connectionId: string, updates: Partial<Connection>) => void;
+}
+
+export const useIntegrationsStore = create<IntegrationsStore>((set, get) => ({
+  connections: [],
+  availableIntegrations: [],
+  loading: false,
+  
+  loadConnections: async () => {
+    set({ loading: true });
+    
+    const { data } = await supabase
+      .from('user_integration_credentials')
+      .select(`
+        *,
+        service_providers!inner(name, display_name, provider_type)
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    set({ connections: data || [], loading: false });
+  },
+  
+  addConnection: (connection) => {
+    set(state => ({
+      connections: [connection, ...state.connections]
+    }));
+  },
+  
+  removeConnection: (connectionId) => {
+    set(state => ({
+      connections: state.connections.filter(c => c.id !== connectionId)
+    }));
+  },
+  
+  updateConnection: (connectionId, updates) => {
+    set(state => ({
+      connections: state.connections.map(c => 
+        c.id === connectionId ? { ...c, ...updates } : c
+      )
+    }));
+  }
+}));
+```
+
+## Related Documentation
+
+- **[Integration Architecture](../02_integrations/integration_architecture.mdc)** - Backend integration system
+- **[OAuth Flow Protocol](../02_integrations/oauth_flow_protocol.mdc)** - OAuth implementation
+- **[API Key Integration Protocol](../02_integrations/api_key_integration_protocol.mdc)** - API key handling
+- **[Service Providers Schema](../01_database/service_providers_schema.mdc)** - Database schema
+- **[Agent Chat Page](agent_chat_page.mdc)** - Main agent interface
+
+---
+
+**Last Updated**: September 17, 2025  
+**UI Framework**: React with TypeScript, Tailwind CSS, Shadcn UI  
+**State Management**: Zustand with Supabase real-time subscriptions

@@ -1,0 +1,297 @@
+---
+description: Detailed schema documentation for the service_providers table and related provider management functionality
+globs: []
+alwaysApply: false
+---
+
+# Service Providers Schema
+
+## Overview
+
+The `service_providers` table is the central registry for all external services that Agentopia can integrate with. It supports OAuth providers (Gmail, Microsoft), API key services (web search, email), and SMTP servers in a unified schema.
+
+## Table Definition
+
+```sql
+CREATE TABLE service_providers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT UNIQUE NOT NULL,           -- e.g., 'gmail', 'microsoft-outlook', 'smtp'
+  display_name TEXT NOT NULL,          -- e.g., 'Gmail', 'Microsoft Outlook', 'SMTP'
+  provider_type provider_type NOT NULL, -- 'oauth', 'api_key', 'smtp'
+  authorization_endpoint TEXT,         -- OAuth authorization URL
+  token_endpoint TEXT,                 -- OAuth token exchange URL
+  scopes_supported JSONB DEFAULT '[]'::jsonb, -- Array of available OAuth scopes
+  configuration_metadata JSONB,        -- Provider-specific configuration
+  is_active BOOLEAN DEFAULT true,      -- Whether provider is enabled
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+## Provider Types
+
+### OAuth Providers (`provider_type = 'oauth'`)
+
+OAuth providers require user authorization flows and support token refresh.
+
+**Example: Gmail Provider**
+```sql
+INSERT INTO service_providers (name, display_name, provider_type, authorization_endpoint, token_endpoint, scopes_supported, configuration_metadata) VALUES (
+  'gmail',
+  'Gmail',
+  'oauth',
+  'https://accounts.google.com/o/oauth2/v2/auth',
+  'https://oauth2.googleapis.com/token',
+  '[
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.compose"
+  ]'::jsonb,
+  '{
+    "client_id_required": true,
+    "pkce_required": true,
+    "refresh_token_support": true,
+    "user_info_endpoint": "https://www.googleapis.com/oauth2/v2/userinfo",
+    "revoke_endpoint": "https://oauth2.googleapis.com/revoke"
+  }'::jsonb
+);
+```
+
+**Required Fields for OAuth:**
+- `authorization_endpoint`: Where to redirect users for authorization
+- `token_endpoint`: Where to exchange authorization codes for tokens
+- `scopes_supported`: Array of OAuth scopes this provider supports
+- `configuration_metadata.client_id_required`: Whether client ID is needed
+- `configuration_metadata.pkce_required`: Whether PKCE is required
+- `configuration_metadata.refresh_token_support`: Whether refresh tokens are supported
+
+### API Key Providers (`provider_type = 'api_key'`)
+
+API key providers use simple key-based authentication without user authorization flows.
+
+**Example: Serper API Provider**
+```sql
+INSERT INTO service_providers (name, display_name, provider_type, configuration_metadata) VALUES (
+  'serper_api',
+  'Serper API',
+  'api_key',
+  '{
+    "api_key_header": "X-API-KEY",
+    "base_url": "https://google.serper.dev",
+    "rate_limits": {
+      "requests_per_minute": 60,
+      "requests_per_hour": 2500
+    },
+    "supported_endpoints": [
+      "/search",
+      "/images",
+      "/news",
+      "/places"
+    ]
+  }'::jsonb
+);
+```
+
+**Required Fields for API Key:**
+- `configuration_metadata.api_key_header`: HTTP header name for API key
+- `configuration_metadata.base_url`: Base URL for API requests
+- `configuration_metadata.rate_limits`: Rate limiting information
+
+### SMTP Providers (`provider_type = 'smtp'`)
+
+SMTP providers handle direct email server connections.
+
+**Example: Generic SMTP Provider**
+```sql
+INSERT INTO service_providers (name, display_name, provider_type, configuration_metadata) VALUES (
+  'smtp',
+  'SMTP Server',
+  'smtp',
+  '{
+    "default_port": 587,
+    "supports_tls": true,
+    "supports_ssl": true,
+    "authentication_required": true,
+    "connection_timeout": 30000
+  }'::jsonb
+);
+```
+
+## Indexes and Constraints
+
+```sql
+-- Unique constraint on provider name
+CREATE UNIQUE INDEX idx_service_providers_name ON service_providers (name);
+
+-- Index for active providers
+CREATE INDEX idx_service_providers_active ON service_providers (is_active) WHERE is_active = true;
+
+-- Index for provider type filtering
+CREATE INDEX idx_service_providers_type ON service_providers (provider_type, is_active);
+
+-- JSONB index for configuration queries
+CREATE INDEX idx_service_providers_config ON service_providers USING GIN (configuration_metadata);
+```
+
+## RLS Policies
+
+```sql
+-- Service providers are globally readable but only admin-manageable
+CREATE POLICY "Service providers are publicly readable"
+ON service_providers FOR SELECT
+TO authenticated
+USING (is_active = true);
+
+CREATE POLICY "Only service role can manage providers"
+ON service_providers FOR ALL
+TO service_role
+USING (true);
+```
+
+## Common Queries
+
+### Get All Active OAuth Providers
+```sql
+SELECT id, name, display_name, authorization_endpoint, scopes_supported
+FROM service_providers 
+WHERE provider_type = 'oauth' 
+AND is_active = true
+ORDER BY display_name;
+```
+
+### Get Provider by Name
+```sql
+SELECT * FROM service_providers 
+WHERE name = $1 AND is_active = true;
+```
+
+### Get Providers by Type
+```sql
+SELECT * FROM service_providers 
+WHERE provider_type = $1 AND is_active = true
+ORDER BY display_name;
+```
+
+## Configuration Metadata Patterns
+
+### OAuth Configuration
+```json
+{
+  "client_id_required": true,
+  "client_secret_required": true,
+  "pkce_required": true,
+  "refresh_token_support": true,
+  "user_info_endpoint": "https://api.provider.com/user",
+  "revoke_endpoint": "https://api.provider.com/revoke",
+  "additional_auth_params": {
+    "access_type": "offline",
+    "prompt": "consent"
+  }
+}
+```
+
+### API Key Configuration
+```json
+{
+  "api_key_header": "Authorization",
+  "api_key_prefix": "Bearer ",
+  "base_url": "https://api.provider.com",
+  "rate_limits": {
+    "requests_per_minute": 100,
+    "requests_per_hour": 1000
+  },
+  "supported_endpoints": ["/search", "/analyze"],
+  "requires_user_agent": true
+}
+```
+
+### SMTP Configuration
+```json
+{
+  "default_port": 587,
+  "ssl_port": 465,
+  "supports_tls": true,
+  "supports_ssl": true,
+  "authentication_methods": ["PLAIN", "LOGIN", "CRAM-MD5"],
+  "connection_timeout": 30000,
+  "max_message_size": 26214400
+}
+```
+
+## Management Functions
+
+### Add New Provider
+```sql
+CREATE OR REPLACE FUNCTION add_service_provider(
+  p_name TEXT,
+  p_display_name TEXT,
+  p_provider_type provider_type,
+  p_authorization_endpoint TEXT DEFAULT NULL,
+  p_token_endpoint TEXT DEFAULT NULL,
+  p_scopes_supported JSONB DEFAULT '[]'::jsonb,
+  p_configuration_metadata JSONB DEFAULT '{}'::jsonb
+) RETURNS UUID AS $$
+DECLARE
+  v_provider_id UUID;
+BEGIN
+  INSERT INTO service_providers (
+    name, display_name, provider_type, authorization_endpoint, 
+    token_endpoint, scopes_supported, configuration_metadata
+  ) VALUES (
+    p_name, p_display_name, p_provider_type, p_authorization_endpoint,
+    p_token_endpoint, p_scopes_supported, p_configuration_metadata
+  ) RETURNING id INTO v_provider_id;
+  
+  RETURN v_provider_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### Update Provider Configuration
+```sql
+CREATE OR REPLACE FUNCTION update_provider_config(
+  p_provider_id UUID,
+  p_configuration_metadata JSONB
+) RETURNS BOOLEAN AS $$
+BEGIN
+  UPDATE service_providers 
+  SET 
+    configuration_metadata = p_configuration_metadata,
+    updated_at = now()
+  WHERE id = p_provider_id;
+  
+  RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+## Validation Rules
+
+### Provider Name Validation
+- Must be lowercase
+- Only alphanumeric characters, hyphens, and underscores
+- Must be unique across all providers
+
+### OAuth Provider Requirements
+- Must have `authorization_endpoint` and `token_endpoint`
+- `scopes_supported` must be non-empty array
+- Configuration must include `client_id_required` boolean
+
+### API Key Provider Requirements
+- Configuration must include `api_key_header`
+- Configuration must include `base_url`
+- Rate limits should be specified when known
+
+## Related Documentation
+
+- **[Integration Credentials Schema](integration_credentials_schema.mdc)** - How credentials link to providers
+- **[OAuth Flow Protocol](../02_integrations/oauth_flow_protocol.mdc)** - OAuth implementation details
+- **[API Key Integration Protocol](../02_integrations/api_key_integration_protocol.mdc)** - API key handling
+- **[Adding New Integrations](../08_development/adding_new_integrations.mdc)** - Developer guide
+
+---
+
+**Last Updated**: September 17, 2025  
+**Schema Version**: Production  
+**Migration History**: Created in migration 20250107000000_create_service_providers.sql

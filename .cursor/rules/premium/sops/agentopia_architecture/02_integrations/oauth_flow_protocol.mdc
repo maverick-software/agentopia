@@ -1,0 +1,326 @@
+---
+description: OAuth 2.0 implementation patterns and flows for secure service integration
+globs: []
+alwaysApply: false
+---
+
+# OAuth Flow Protocol
+
+## Overview
+
+Agentopia implements OAuth 2.0 with PKCE (Proof Key for Code Exchange) for secure user authorization with external services. This protocol ensures users maintain control over their data while enabling agents to perform authorized actions.
+
+## OAuth 2.0 with PKCE Flow
+
+### 1. Authorization Initiation
+
+```typescript
+// Generate PKCE parameters
+const codeVerifier = generateCodeVerifier();
+const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+// Build authorization URL
+const authUrl = new URL(provider.authorization_endpoint);
+authUrl.searchParams.set('client_id', clientId);
+authUrl.searchParams.set('response_type', 'code');
+authUrl.searchParams.set('scope', requestedScopes.join(' '));
+authUrl.searchParams.set('redirect_uri', redirectUri);
+authUrl.searchParams.set('state', encodeState({ userId, provider }));
+authUrl.searchParams.set('code_challenge', codeChallenge);
+authUrl.searchParams.set('code_challenge_method', 'S256');
+
+// Redirect user to OAuth provider
+window.location.href = authUrl.toString();
+```
+
+### 2. Authorization Code Exchange
+
+```typescript
+// Handle OAuth callback
+export async function handleOAuthCallback(
+  code: string, 
+  state: string, 
+  provider: ServiceProvider
+) {
+  // Verify state parameter
+  const stateData = verifyState(state);
+  
+  // Retrieve stored code verifier
+  const codeVerifier = await getStoredCodeVerifier(stateData.userId, provider.name);
+  
+  // Exchange code for tokens
+  const tokenResponse = await fetch(provider.token_endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      code: code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier
+    })
+  });
+  
+  if (!tokenResponse.ok) {
+    throw new Error('Token exchange failed');
+  }
+  
+  const tokens = await tokenResponse.json();
+  
+  // Store tokens securely in Vault
+  return await storeOAuthTokens(stateData.userId, provider.name, tokens);
+}
+```
+
+### 3. Token Storage
+
+```typescript
+async function storeOAuthTokens(
+  userId: string,
+  providerName: string,
+  tokens: {
+    access_token: string;
+    refresh_token?: string;
+    expires_in: number;
+    scope: string;
+  }
+) {
+  // Store access token in Vault
+  const vaultAccessId = await supabase.rpc('create_vault_secret', {
+    p_secret: tokens.access_token,
+    p_name: `${providerName}_access_${userId}_${Date.now()}`,
+    p_description: `${providerName} access token for user ${userId}`
+  });
+  
+  // Store refresh token in Vault if provided
+  let vaultRefreshId = null;
+  if (tokens.refresh_token) {
+    vaultRefreshId = await supabase.rpc('create_vault_secret', {
+      p_secret: tokens.refresh_token,
+      p_name: `${providerName}_refresh_${userId}_${Date.now()}`,
+      p_description: `${providerName} refresh token for user ${userId}`
+    });
+  }
+  
+  // Create connection record
+  const { data: connection } = await supabase
+    .from('user_integration_credentials')
+    .insert({
+      user_id: userId,
+      service_provider_id: (await getProviderByName(providerName)).id,
+      credential_type: 'oauth',
+      vault_access_token_id: vaultAccessId,
+      vault_refresh_token_id: vaultRefreshId,
+      connection_name: `${providerName} Account`,
+      scopes_granted: tokens.scope.split(' '),
+      token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+    })
+    .select()
+    .single();
+  
+  return connection;
+}
+```
+
+## Provider-Specific Implementations
+
+### Gmail OAuth
+
+```typescript
+const gmailOAuthConfig = {
+  authorization_endpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  token_endpoint: 'https://oauth2.googleapis.com/token',
+  scopes: [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.modify'
+  ],
+  additional_params: {
+    access_type: 'offline',
+    prompt: 'consent'
+  }
+};
+```
+
+### Microsoft OAuth
+
+```typescript
+const microsoftOAuthConfig = {
+  authorization_endpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  token_endpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  scopes: [
+    'https://graph.microsoft.com/Mail.Read',
+    'https://graph.microsoft.com/Mail.Send',
+    'https://graph.microsoft.com/Mail.ReadWrite'
+  ]
+};
+```
+
+## Token Refresh Implementation
+
+```typescript
+export async function refreshOAuthToken(connectionId: string) {
+  // Get connection details
+  const { data: connection } = await supabase
+    .from('user_integration_credentials')
+    .select(`
+      vault_refresh_token_id,
+      service_providers!inner(name, token_endpoint)
+    `)
+    .eq('id', connectionId)
+    .single();
+  
+  if (!connection.vault_refresh_token_id) {
+    throw new Error('No refresh token available');
+  }
+  
+  // Decrypt refresh token
+  const refreshToken = await supabase.rpc('vault_decrypt', {
+    vault_id: connection.vault_refresh_token_id
+  });
+  
+  // Request new access token
+  const response = await fetch(connection.service_providers.token_endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken.data,
+      client_id: getClientId(connection.service_providers.name)
+    })
+  });
+  
+  if (!response.ok) {
+    // Mark connection as expired
+    await supabase
+      .from('user_integration_credentials')
+      .update({ connection_status: 'expired' })
+      .eq('id', connectionId);
+    
+    throw new Error('Token refresh failed - user must re-authorize');
+  }
+  
+  const tokens = await response.json();
+  
+  // Store new access token
+  const newVaultAccessId = await supabase.rpc('create_vault_secret', {
+    p_secret: tokens.access_token,
+    p_name: `${connection.service_providers.name}_access_${connectionId}_${Date.now()}`,
+    p_description: `Refreshed access token`
+  });
+  
+  // Update connection record
+  await supabase
+    .from('user_integration_credentials')
+    .update({
+      vault_access_token_id: newVaultAccessId,
+      token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      connection_status: 'active',
+      connection_metadata: {
+        ...connection.connection_metadata,
+        last_token_refresh: new Date().toISOString()
+      }
+    })
+    .eq('id', connectionId);
+}
+```
+
+## Security Best Practices
+
+### State Parameter Validation
+
+```typescript
+function generateState(data: any): string {
+  const stateData = {
+    ...data,
+    timestamp: Date.now(),
+    nonce: crypto.randomUUID()
+  };
+  
+  return btoa(JSON.stringify(stateData));
+}
+
+function verifyState(state: string): any {
+  try {
+    const stateData = JSON.parse(atob(state));
+    
+    // Check timestamp (expire after 10 minutes)
+    if (Date.now() - stateData.timestamp > 10 * 60 * 1000) {
+      throw new Error('State expired');
+    }
+    
+    return stateData;
+  } catch (error) {
+    throw new Error('Invalid state parameter');
+  }
+}
+```
+
+### PKCE Implementation
+
+```typescript
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+```
+
+## Error Handling
+
+### OAuth Error Types
+
+```typescript
+export enum OAuthErrorType {
+  ACCESS_DENIED = 'access_denied',
+  INVALID_REQUEST = 'invalid_request',
+  INVALID_CLIENT = 'invalid_client',
+  INVALID_GRANT = 'invalid_grant',
+  UNAUTHORIZED_CLIENT = 'unauthorized_client',
+  UNSUPPORTED_GRANT_TYPE = 'unsupported_grant_type',
+  INVALID_SCOPE = 'invalid_scope'
+}
+
+export function handleOAuthError(error: string, description?: string): string {
+  switch (error) {
+    case OAuthErrorType.ACCESS_DENIED:
+      return 'Question: You declined to authorize the connection. Would you like to try connecting again?';
+    
+    case OAuthErrorType.INVALID_SCOPE:
+      return 'Question: Some requested permissions are not available. Please contact support if this continues.';
+    
+    case OAuthErrorType.INVALID_CLIENT:
+      return 'Question: There was a configuration issue. Please try again or contact support.';
+    
+    default:
+      return `OAuth error: ${description || error}`;
+  }
+}
+```
+
+## Related Documentation
+
+- **[Integration Architecture](integration_architecture.mdc)** - Overall integration system
+- **[Service Providers Schema](../01_database/service_providers_schema.mdc)** - Provider configuration
+- **[Integration Credentials Schema](../01_database/integration_credentials_schema.mdc)** - Credential storage
+- **[Vault Security Schema](../01_database/vault_security_schema.mdc)** - Token encryption
+
+---
+
+**Last Updated**: September 17, 2025  
+**OAuth Version**: 2.0 with PKCE  
+**Security**: Enterprise-grade with Vault encryption

@@ -1,0 +1,657 @@
+---
+description: AgentChatPage component architecture, features, and implementation patterns for the main agent conversation interface
+globs: []
+alwaysApply: false
+---
+
+# Agent Chat Page - Main Conversation Interface
+
+## Overview
+
+The `AgentChatPage` is Agentopia's primary user interface for agent conversations. It provides a comprehensive chat experience with real-time messaging, tool execution feedback, file attachments, conversation management, and extensive agent configuration options.
+
+## Component Architecture
+
+### Core Structure
+
+```typescript
+// Main component with extracted sub-components
+import { ConversationSelector, SidebarConversations } from '../components/chat/ConversationComponents';
+import { MessageList, ChatStarterScreen } from '../components/chat/MessageComponents';
+import { ChatInput } from '../components/chat/ChatInput';
+import { ChatHeader } from '../components/chat/ChatHeader';
+import { ChatModals } from '../components/chat/ChatModals';
+
+export function AgentChatPage() {
+  // State management and business logic
+  return (
+    <div className="flex h-screen bg-background">
+      {/* Sidebar for conversations */}
+      <SidebarConversations />
+      
+      {/* Main chat area */}
+      <div className="flex-1 flex flex-col">
+        <ChatHeader />
+        <MessageList />
+        <ChatInput />
+      </div>
+      
+      {/* Modal dialogs */}
+      <ChatModals />
+    </div>
+  );
+}
+```
+
+### State Management
+
+The component uses extensive state management for different aspects of the chat experience:
+
+```typescript
+// Core agent and message state
+const [agent, setAgent] = useState<Agent | null>(null);
+const [messages, setMessages] = useState<Message[]>([]);
+const [input, setInput] = useState('');
+const [loading, setLoading] = useState(true);
+const [sending, setSending] = useState(false);
+
+// Modal states for agent configuration
+const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
+const [showAboutMeModal, setShowAboutMeModal] = useState(false);
+const [showHowIThinkModal, setShowHowIThinkModal] = useState(false);
+const [showWhatIKnowModal, setShowWhatIKnowModal] = useState(false);
+const [showToolsModal, setShowToolsModal] = useState(false);
+const [showChannelsModal, setShowChannelsModal] = useState(false);
+const [showTasksModal, setShowTasksModal] = useState(false);
+const [showHistoryModal, setShowHistoryModal] = useState(false);
+const [showProcessModal, setShowProcessModal] = useState(false);
+const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
+
+// File upload and attachment state
+const [uploading, setUploading] = useState(false);
+const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+const [attachedDocuments, setAttachedDocuments] = useState<AttachedDocument[]>([]);
+
+// Conversation management
+const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+const [isTemporaryConversation, setIsTemporaryConversation] = useState(false);
+
+// Feature toggles (persisted per agent)
+const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
+  const key = `agent_${agentId}_reasoning_enabled`;
+  return localStorage.getItem(key) === 'true';
+});
+const [webSearchEnabled, setWebSearchEnabled] = useState<boolean>(() => {
+  const key = `agent_${agentId}_web_search_enabled`;
+  return localStorage.getItem(key) === 'true';
+});
+```
+
+## Key Features
+
+### 1. **Real-Time Messaging**
+
+```typescript
+// Real-time subscription for live message updates
+useEffect(() => {
+  if (!selectedConversationId || isTemporaryConversation) return;
+
+  const subscription = supabase
+    .channel(`conversation_${selectedConversationId}`)
+    .on('postgres_changes', 
+      { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'chat_messages',
+        filter: `conversation_id=eq.${selectedConversationId}`
+      },
+      (payload) => {
+        const newMessage = payload.new as Message;
+        setMessages(prev => [...prev, newMessage]);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(subscription);
+  };
+}, [selectedConversationId, isTemporaryConversation]);
+```
+
+### 2. **Tool Execution with Visual Feedback**
+
+The chat interface provides real-time feedback during tool execution:
+
+```typescript
+// AI processing state management
+const [aiState, setAiState] = useState<AIState>('idle');
+const [toolExecutions, setToolExecutions] = useState<ToolExecutionStatus[]>([]);
+
+// Tool execution with progress tracking
+const executeTools = async (toolCalls: any[]) => {
+  setAiState('executing_tools');
+  
+  for (const tool of toolCalls) {
+    // Add tool to execution list
+    setToolExecutions(prev => [...prev, {
+      name: tool.function.name,
+      status: 'executing',
+      startTime: Date.now()
+    }]);
+    
+    try {
+      const result = await executeAgentTool(tool);
+      
+      // Update tool status
+      setToolExecutions(prev => prev.map(t => 
+        t.name === tool.function.name 
+          ? { ...t, status: 'completed', result }
+          : t
+      ));
+    } catch (error) {
+      setToolExecutions(prev => prev.map(t => 
+        t.name === tool.function.name 
+          ? { ...t, status: 'error', error: error.message }
+          : t
+      ));
+    }
+  }
+  
+  setAiState('idle');
+};
+```
+
+### 3. **File Upload and Attachments**
+
+```typescript
+// File upload with progress tracking
+const handleFileUpload = async (files: FileList) => {
+  setUploading(true);
+  
+  for (const file of Array.from(files)) {
+    const fileId = generateId();
+    
+    // Add to attached documents with uploading status
+    setAttachedDocuments(prev => [...prev, {
+      id: fileId,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      uploadStatus: 'uploading'
+    }]);
+    
+    try {
+      // Upload file to storage
+      const { data, error } = await supabase.storage
+        .from('agent-documents')
+        .upload(`${user.id}/${fileId}`, file, {
+          onUploadProgress: (progress) => {
+            setUploadProgress(prev => ({
+              ...prev,
+              [fileId]: (progress.loaded / progress.total) * 100
+            }));
+          }
+        });
+      
+      if (error) throw error;
+      
+      // Update document status
+      setAttachedDocuments(prev => prev.map(doc => 
+        doc.id === fileId 
+          ? { ...doc, uploadStatus: 'completed' }
+          : doc
+      ));
+      
+    } catch (error) {
+      setAttachedDocuments(prev => prev.map(doc => 
+        doc.id === fileId 
+          ? { ...doc, uploadStatus: 'error' }
+          : doc
+      ));
+    }
+  }
+  
+  setUploading(false);
+};
+```
+
+### 4. **Conversation Management**
+
+```typescript
+// URL-based conversation routing
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+  const urlConvId = params.get('conv');
+  
+  if (urlConvId) {
+    // Load existing conversation
+    setSelectedConversationId(urlConvId);
+    setIsTemporaryConversation(false);
+    loadConversationMessages(urlConvId);
+  } else {
+    // Create temporary conversation
+    const tempId = generateTemporaryId();
+    setSelectedConversationId(tempId);
+    setIsTemporaryConversation(true);
+    
+    // Update URL without triggering navigation
+    const newUrl = `${location.pathname}?conv=${tempId}`;
+    window.history.replaceState({}, '', newUrl);
+  }
+}, [agentId, location.search]);
+
+// Persist temporary conversation when first message is sent
+const persistTemporaryConversation = async (tempId: string) => {
+  const { data, error } = await supabase
+    .from('chat_conversations')
+    .insert({
+      id: tempId,
+      user_id: user.id,
+      agent_id: agentId,
+      title: generateConversationTitle(messages[0]?.content),
+      created_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+  
+  if (!error) {
+    setIsTemporaryConversation(false);
+  }
+  
+  return data;
+};
+```
+
+### 5. **Agent Configuration Modals**
+
+The page provides extensive agent configuration through modal dialogs:
+
+```typescript
+// Modal management for agent settings
+const agentSettingsModalProps = {
+  isOpen: showAgentSettingsModal,
+  onClose: () => setShowAgentSettingsModal(false),
+  agent,
+  initialTab: agentSettingsInitialTab,
+  onAgentUpdate: (updatedAgent: Agent) => {
+    setAgent(updatedAgent);
+    updateAgent(updatedAgent);
+  }
+};
+
+// Quick access modal triggers
+const openAgentSettings = (tab: string) => {
+  setAgentSettingsInitialTab(tab);
+  setShowAgentSettingsModal(true);
+};
+```
+
+## Component Breakdown
+
+### ChatHeader Component
+
+```typescript
+// Located in: src/components/chat/ChatHeader.tsx
+export function ChatHeader({ agent, onMenuAction, onToolCacheRefresh }) {
+  return (
+    <header className="border-b bg-white px-4 py-3">
+      <div className="flex items-center justify-between">
+        {/* Agent info and navigation */}
+        <div className="flex items-center space-x-3">
+          <AgentAvatar agent={agent} />
+          <AgentInfo agent={agent} />
+        </div>
+        
+        {/* Action menu and tools */}
+        <div className="flex items-center space-x-2">
+          <ToolCacheRefreshButton onClick={onToolCacheRefresh} />
+          <AgentActionMenu onAction={onMenuAction} />
+        </div>
+      </div>
+    </header>
+  );
+}
+```
+
+### ChatInput Component
+
+```typescript
+// Located in: src/components/chat/ChatInput.tsx
+export function ChatInput({ 
+  value, 
+  onChange, 
+  onSubmit, 
+  onFileUpload, 
+  uploading, 
+  attachedDocuments,
+  reasoningEnabled,
+  webSearchEnabled,
+  onToggleReasoning,
+  onToggleWebSearch
+}) {
+  return (
+    <div className="border-t bg-white p-4">
+      {/* File attachments display */}
+      <AttachedDocuments documents={attachedDocuments} />
+      
+      {/* Input area */}
+      <div className="flex items-end space-x-2">
+        <FileUploadButton onUpload={onFileUpload} />
+        <VoiceInputButton onVoiceInput={handleVoiceInput} />
+        
+        <div className="flex-1">
+          <textarea
+            value={value}
+            onChange={onChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your message..."
+            className="w-full resize-none rounded-lg border p-3"
+            rows={1}
+          />
+        </div>
+        
+        <div className="flex flex-col space-y-1">
+          <ToggleButton 
+            enabled={reasoningEnabled} 
+            onToggle={onToggleReasoning}
+            label="Reasoning"
+          />
+          <ToggleButton 
+            enabled={webSearchEnabled} 
+            onToggle={onToggleWebSearch}
+            label="Web Search"
+          />
+          <SendButton onSend={onSubmit} disabled={!value.trim()} />
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### MessageList Component
+
+```typescript
+// Located in: src/components/chat/MessageComponents.tsx
+export function MessageList({ messages, aiState, toolExecutions }) {
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      {messages.length === 0 ? (
+        <ChatStarterScreen agent={agent} />
+      ) : (
+        <div className="space-y-4">
+          {messages.map(message => (
+            <MessageBubble 
+              key={message.id} 
+              message={message} 
+            />
+          ))}
+          
+          {/* AI thinking indicator */}
+          {aiState !== 'idle' && (
+            <AIThinkingIndicator 
+              state={aiState} 
+              toolExecutions={toolExecutions}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Performance Optimizations
+
+### 1. **Message Virtualization**
+
+```typescript
+// For large conversation histories
+import { FixedSizeList as List } from 'react-window';
+
+const VirtualizedMessageList = ({ messages }) => {
+  const renderMessage = useCallback(({ index, style }) => (
+    <div style={style}>
+      <MessageBubble message={messages[index]} />
+    </div>
+  ), [messages]);
+
+  return (
+    <List
+      height={600}
+      itemCount={messages.length}
+      itemSize={100}
+      itemData={messages}
+    >
+      {renderMessage}
+    </List>
+  );
+};
+```
+
+### 2. **Optimized Re-renders**
+
+```typescript
+// Memoized components to prevent unnecessary re-renders
+const MessageBubble = memo(({ message }: { message: Message }) => {
+  return (
+    <div className={`message-bubble ${message.role}`}>
+      <MessageContent content={message.content} />
+      <MessageTimestamp timestamp={message.created_at} />
+    </div>
+  );
+});
+
+const ChatInput = memo(({ value, onChange, onSubmit, ...props }) => {
+  // Component implementation
+});
+```
+
+### 3. **Debounced Input**
+
+```typescript
+// Debounced typing indicators and auto-save
+const debouncedTyping = useCallback(
+  debounce((isTyping: boolean) => {
+    // Send typing indicator to other users
+    broadcastTypingStatus(isTyping);
+  }, 300),
+  []
+);
+
+const debouncedSave = useCallback(
+  debounce((draft: string) => {
+    // Auto-save draft message
+    saveDraftMessage(selectedConversationId, draft);
+  }, 1000),
+  [selectedConversationId]
+);
+```
+
+## Error Handling
+
+### 1. **Connection Errors**
+
+```typescript
+const [connectionError, setConnectionError] = useState<string | null>(null);
+
+useEffect(() => {
+  const handleConnectionError = (error: any) => {
+    setConnectionError('Connection lost. Attempting to reconnect...');
+    
+    // Attempt reconnection
+    setTimeout(() => {
+      supabase.realtime.connect();
+    }, 2000);
+  };
+
+  supabase.realtime.on('error', handleConnectionError);
+  
+  return () => {
+    supabase.realtime.off('error', handleConnectionError);
+  };
+}, []);
+```
+
+### 2. **Message Send Failures**
+
+```typescript
+const sendMessage = async (content: string) => {
+  const tempMessage = {
+    id: generateTempId(),
+    content,
+    role: 'user',
+    status: 'sending'
+  };
+  
+  setMessages(prev => [...prev, tempMessage]);
+  
+  try {
+    const result = await supabase
+      .from('chat_messages')
+      .insert({
+        conversation_id: selectedConversationId,
+        content,
+        role: 'user',
+        user_id: user.id
+      });
+    
+    if (result.error) throw result.error;
+    
+    // Update message status to sent
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempMessage.id 
+        ? { ...msg, status: 'sent' }
+        : msg
+    ));
+    
+  } catch (error) {
+    // Mark message as failed with retry option
+    setMessages(prev => prev.map(msg => 
+      msg.id === tempMessage.id 
+        ? { ...msg, status: 'failed', error: error.message }
+        : msg
+    ));
+  }
+};
+```
+
+## Accessibility Features
+
+### 1. **Keyboard Navigation**
+
+```typescript
+// Comprehensive keyboard shortcuts
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.ctrlKey || e.metaKey) {
+    switch (e.key) {
+      case 'Enter':
+        e.preventDefault();
+        handleSendMessage();
+        break;
+      case 'k':
+        e.preventDefault();
+        setShowAgentSettingsModal(true);
+        break;
+      case '/':
+        e.preventDefault();
+        focusMessageInput();
+        break;
+    }
+  }
+};
+```
+
+### 2. **Screen Reader Support**
+
+```typescript
+// ARIA labels and live regions
+<div 
+  role="log" 
+  aria-live="polite" 
+  aria-label="Chat messages"
+  className="messages-container"
+>
+  {messages.map(message => (
+    <div 
+      key={message.id}
+      role="article"
+      aria-label={`${message.role} message`}
+      tabIndex={0}
+    >
+      <MessageContent content={message.content} />
+    </div>
+  ))}
+</div>
+
+<div 
+  role="status" 
+  aria-live="assertive"
+  className="sr-only"
+>
+  {aiState === 'thinking' && 'Agent is thinking...'}
+  {aiState === 'executing_tools' && 'Agent is executing tools...'}
+</div>
+```
+
+## Mobile Responsiveness
+
+### 1. **Responsive Layout**
+
+```css
+/* Mobile-first responsive design */
+.chat-container {
+  @apply flex h-screen;
+}
+
+.sidebar {
+  @apply hidden md:flex md:w-80;
+}
+
+.main-chat {
+  @apply flex-1 flex flex-col;
+}
+
+.chat-input {
+  @apply p-2 md:p-4;
+}
+
+.message-bubble {
+  @apply max-w-xs md:max-w-md lg:max-w-lg;
+}
+```
+
+### 2. **Touch Interactions**
+
+```typescript
+// Touch-friendly interactions
+const handleTouchStart = (e: TouchEvent) => {
+  touchStartY = e.touches[0].clientY;
+};
+
+const handleTouchMove = (e: TouchEvent) => {
+  const touchY = e.touches[0].clientY;
+  const deltaY = touchStartY - touchY;
+  
+  // Pull-to-refresh for loading older messages
+  if (deltaY < -50 && scrollTop === 0) {
+    loadOlderMessages();
+  }
+};
+```
+
+## Related Documentation
+
+- **[Chat Input Component](chat_input_component.mdc)** - Detailed input component documentation
+- **[Message Components](message_components.mdc)** - Message display and formatting
+- **[Agent Settings Modals](agent_settings_modals.mdc)** - Configuration dialog implementations
+- **[Real-time Chat System](../06_backend_services/realtime_chat_system.mdc)** - Backend chat infrastructure
+- **[Tool Execution Protocol](../03_tools/tool_execution_protocol.mdc)** - Tool execution integration
+- **[File Upload System](../06_backend_services/file_upload_system.mdc)** - File handling backend
+
+---
+
+**Last Updated**: September 17, 2025  
+**Component Status**: Production-Ready  
+**Lines of Code**: ~1,674 (following refactoring for maintainability)  
+**Key Features**: Real-time messaging, tool execution feedback, file attachments, conversation management
