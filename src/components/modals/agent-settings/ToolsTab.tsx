@@ -22,7 +22,8 @@ import {
   Settings,
   Plus,
   Key,
-  ScanText
+  ScanText,
+  MessageCircle
 } from 'lucide-react';
 
 interface ToolsTabProps {
@@ -36,11 +37,12 @@ interface ToolSettings {
   web_search_enabled: boolean;
   document_creation_enabled: boolean;
   ocr_processing_enabled: boolean;
+  temporary_chat_links_enabled: boolean;
 }
 
 interface CredentialModalState {
   isOpen: boolean;
-  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | null;
+  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links' | null;
   selectedProvider: string;
   availableProviders: any[];
   availableCredentials: any[];
@@ -59,13 +61,15 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
     voice_enabled: false,
     web_search_enabled: false,
     document_creation_enabled: false,
-    ocr_processing_enabled: false
+    ocr_processing_enabled: false,
+    temporary_chat_links_enabled: false
   });
   const [selectedCredentials, setSelectedCredentials] = useState<{
     web_search?: string;
     voice?: string;
     document_creation?: string;
     ocr_processing?: string;
+    temporary_chat_links?: string;
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -97,14 +101,16 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
         voice_enabled: toolSettings.voice_enabled || false,
         web_search_enabled: toolSettings.web_search_enabled || false,
         document_creation_enabled: toolSettings.document_creation_enabled || false,
-        ocr_processing_enabled: toolSettings.ocr_processing_enabled || false
+        ocr_processing_enabled: toolSettings.ocr_processing_enabled || false,
+        temporary_chat_links_enabled: toolSettings.temporary_chat_links_enabled || false
       });
       
       setSelectedCredentials({
         web_search: toolSettings.web_search_credential || '',
         voice: toolSettings.voice_credential || '',
         document_creation: toolSettings.document_creation_credential || '',
-        ocr_processing: toolSettings.ocr_processing_credential || ''
+        ocr_processing: toolSettings.ocr_processing_credential || '',
+        temporary_chat_links: toolSettings.temporary_chat_links_credential || ''
       });
     }
   }, [agentData]);
@@ -148,19 +154,26 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       { id: 'google_docs', name: 'Google Docs', description: 'Create and edit Google Documents', requiresApiKey: false, requiresOAuth: true },
       { id: 'microsoft_office', name: 'Microsoft Office', description: 'Create and edit Office documents', requiresApiKey: false, requiresOAuth: true },
       { id: 'notion', name: 'Notion', description: 'Create and manage Notion pages', requiresApiKey: true, requiresOAuth: false }
+    ],
+    temporary_chat_links: [
+      { id: 'temporary_chat_internal', name: 'Temporary Chat Links', description: 'Create public chat links for anonymous users', requiresApiKey: false, requiresOAuth: false }
     ]
   };
 
   const handleToggle = async (tool: keyof ToolSettings, enabled: boolean) => {
     if (enabled) {
       // Check if credentials exist for this tool
-      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing';
-      const availableCredentials = getAvailableCredentials(toolType);
+      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links';
       
-      if (availableCredentials.length === 0) {
-        // Open credential selection modal
-        openCredentialModal(toolType);
-        return;
+      // Temporary chat links don't require external credentials, so skip credential check
+      if (toolType !== 'temporary_chat_links') {
+        const availableCredentials = getAvailableCredentials(toolType);
+        
+        if (availableCredentials.length === 0) {
+          // Open credential selection modal
+          openCredentialModal(toolType);
+          return;
+        }
       }
     }
     
@@ -236,7 +249,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
     }
   };
 
-  const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing') => {
+  const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links') => {
     // Get provider names for this tool type
     const configProviders = providerConfigs[toolType] || [];
     const providerNames = configProviders.map(p => p.id);
@@ -407,7 +420,8 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       'web_search': ['serper_api', 'serpapi', 'brave_search'],
       'voice': ['elevenlabs'],
       'document_creation': ['google_docs', 'microsoft_office', 'notion'],
-      'ocr_processing': ['ocr_space', 'mistral_ai']
+      'ocr_processing': ['ocr_space', 'mistral_ai'],
+      'temporary_chat_links': ['temporary_chat_internal']
     };
     
     return connections.filter(c => 
@@ -456,6 +470,16 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       requiresApi: 'OCR API (OCR.space or Mistral AI)',
       availableCredentials: getAvailableCredentials('ocr_processing'),
       toolType: 'ocr_processing' as const
+    },
+    {
+      id: 'temporary_chat_links_enabled' as keyof ToolSettings,
+      name: 'Temporary Chat Links',
+      description: 'Create public chat links for anonymous users (employee check-ins, customer support)',
+      icon: MessageCircle,
+      enabled: settings.temporary_chat_links_enabled,
+      requiresApi: 'Built-in (No API required)',
+      availableCredentials: getAvailableCredentials('temporary_chat_links'),
+      toolType: 'temporary_chat_links' as const
     }
   ];
 

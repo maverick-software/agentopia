@@ -120,3 +120,34 @@ export async function hasAgentContactPermissions(agentId: string, userId: string
   }
 }
 
+/**
+ * Checks if agent has temporary chat links enabled in settings
+ */
+export async function hasTemporaryChatLinksEnabled(agentId: string, userId: string): Promise<boolean> {
+  console.log(`[DatabaseService] Checking for temporary chat links setting for agent ${agentId}, user ${userId}`);
+  
+  try {
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .select('metadata')
+      .eq('id', agentId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (error) {
+      console.error('[DatabaseService] Error fetching agent metadata:', error);
+      return false;
+    }
+
+    const metadata = agent?.metadata || {};
+    const settings = metadata.settings || {};
+    const isEnabled = settings.temporary_chat_links_enabled === true;
+    
+    console.log(`[DatabaseService] Temporary chat links enabled: ${isEnabled}`);
+    return isEnabled;
+  } catch (error) {
+    console.error('[DatabaseService] Error checking temporary chat links setting:', error);
+    return false;
+  }
+}
+

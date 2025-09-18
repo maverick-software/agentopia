@@ -259,6 +259,85 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+  // Temporary Chat Links tools
+  if (toolName === 'create_temporary_chat_link') {
+    return {
+      ...baseSchema,
+      properties: {
+        title: { type: 'string', description: 'Title for the temporary chat link' },
+        description: { type: 'string', description: 'Description of the chat purpose (optional)' },
+        welcome_message: { type: 'string', description: 'Welcome message for users (optional)' },
+        expires_in_hours: { type: 'number', description: 'How many hours until the link expires', default: 24 },
+        max_sessions: { type: 'number', description: 'Maximum number of chat sessions allowed', default: 1 },
+        max_messages_per_session: { type: 'number', description: 'Maximum messages per session', default: 100 },
+        session_timeout_minutes: { type: 'number', description: 'Session timeout in minutes', default: 30 },
+        rate_limit_per_minute: { type: 'number', description: 'Rate limit per minute', default: 10 },
+        allowed_domains: { type: 'array', items: { type: 'string' }, description: 'Allowed domains (optional)' },
+        ui_customization: { type: 'object', description: 'UI customization options (optional)' }
+      },
+      required: ['title', 'expires_in_hours']
+    };
+  }
+
+  if (toolName === 'list_temporary_chat_links') {
+    return {
+      ...baseSchema,
+      properties: {
+        include_inactive: { type: 'boolean', description: 'Include inactive links', default: false },
+        limit: { type: 'number', description: 'Maximum number of links to return', default: 20 },
+        offset: { type: 'number', description: 'Number of links to skip', default: 0 }
+      },
+      required: []
+    };
+  }
+
+  if (toolName === 'update_temporary_chat_link') {
+    return {
+      ...baseSchema,
+      properties: {
+        link_id: { type: 'string', description: 'ID of the link to update' },
+        title: { type: 'string', description: 'New title (optional)' },
+        description: { type: 'string', description: 'New description (optional)' },
+        is_active: { type: 'boolean', description: 'Set active status (optional)' },
+        max_sessions: { type: 'number', description: 'Update max sessions (optional)' }
+      },
+      required: ['link_id']
+    };
+  }
+
+  if (toolName === 'delete_temporary_chat_link') {
+    return {
+      ...baseSchema,
+      properties: {
+        link_id: { type: 'string', description: 'ID of the link to delete' }
+      },
+      required: ['link_id']
+    };
+  }
+
+  if (toolName === 'get_temporary_chat_analytics') {
+    return {
+      ...baseSchema,
+      properties: {
+        days_back: { type: 'number', description: 'Number of days to look back', default: 30 },
+        include_session_details: { type: 'boolean', description: 'Include detailed session info', default: false }
+      },
+      required: []
+    };
+  }
+
+  if (toolName === 'manage_temporary_chat_session') {
+    return {
+      ...baseSchema,
+      properties: {
+        session_id: { type: 'string', description: 'ID of the session to manage' },
+        action: { type: 'string', enum: ['end', 'extend', 'get_status'], description: 'Action to perform' },
+        extend_minutes: { type: 'number', description: 'Minutes to extend session (for extend action)' }
+      },
+      required: ['session_id', 'action']
+    };
+  }
+
     // Handle Contact Management tools
     if (toolName === 'search_contacts') {
       return {

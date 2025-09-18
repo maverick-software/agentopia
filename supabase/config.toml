@@ -5,6 +5,26 @@ import_map = "./functions/mcp-server-utils/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/mcp-server-utils/index.ts"
+
+[functions.temporary-chat-mcp]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/temporary-chat-mcp/index.ts"
+
+[functions.temporary-chat-api]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/temporary-chat-api/index.ts"
+
+[functions.temporary-chat-events]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/temporary-chat-events/index.ts"
+
+[functions.temporary-chat-handler]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/temporary-chat-handler/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/mcp-server-utils/*.html" ]

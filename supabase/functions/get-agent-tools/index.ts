@@ -19,8 +19,9 @@ import { getCredentialStatus } from './credential-utils.ts';
 import { generateParametersForCapability } from './tool-generator.ts';
 import { 
   getAgentPermissions, 
-  getServiceProviders, 
-  hasAgentDocuments
+  getServiceProviders,
+  hasAgentDocuments,
+  hasTemporaryChatLinksEnabled
 } from './database-service.ts';
 
 serve(async (req) => {
@@ -207,6 +208,48 @@ serve(async (req) => {
       }
 
       providersProcessed.add('Media Library');
+    }
+
+    // Check for internal tools (Temporary Chat Links)
+    console.log(`[GetAgentTools] Checking for internal tools (Temporary Chat Links)...`);
+    
+    let hasTempChatEnabled = false;
+    try {
+      hasTempChatEnabled = await hasTemporaryChatLinksEnabled(agent_id, user_id);
+    } catch (error) {
+      console.warn(`[GetAgentTools] Error checking for temporary chat links setting:`, error);
+    }
+
+    if (hasTempChatEnabled) {
+      console.log(`[GetAgentTools] Agent has temporary chat links enabled, adding Temporary Chat MCP tools`);
+      
+      const tempChatTools = [
+        'create_temporary_chat_link',
+        'list_temporary_chat_links',
+        'update_temporary_chat_link',
+        'delete_temporary_chat_link',
+        'get_temporary_chat_analytics',
+        'manage_temporary_chat_session'
+      ];
+
+      console.log(`[GetAgentTools] Tools: ${tempChatTools.join(', ')}`);
+      console.log(`[GetAgentTools] Added ${tempChatTools.length} Temporary Chat MCP tools`);
+      console.log(`[GetAgentTools] Providers: Temporary Chat Links`);
+
+      for (const toolName of tempChatTools) {
+        const parameters = generateParametersForCapability(toolName);
+        
+        tools.push({
+          name: toolName,
+          description: `${toolName} - Temporary Chat Links`,
+          parameters,
+          status: 'active',
+          provider_name: 'Temporary Chat Links',
+          connection_name: 'Internal'
+        });
+      }
+
+      providersProcessed.add('Temporary Chat Links');
     }
 
     // Contact Management tools are now handled through the standard integration system
