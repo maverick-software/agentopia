@@ -86,12 +86,23 @@ This WBS follows the standard project phases: Research → Planning → Design �
 
 ## Phase 3: Design
 
-### 3.1 Database Schema Design
-- [ ] **REQUIRED READING BEFORE STARTING: [research/3.1_database_schema_design.md]**
-- [ ] **Plan Review & Alignment: [To be completed during research]**
-- [ ] **Future Intent: [To be completed during research]**
-- [ ] **Cautionary Notes: [To be completed during research]**
-- [ ] **Backups: [To be completed during research]**
+### 3.1 Database Implementation
+- [x] **REQUIRED READING BEFORE STARTING: [research/2.1_database_schema_planning.md]**
+- [x] **Plan Review & Alignment: 6 migration files successfully created and applied. Service provider registered, core tables created, indexes optimized, RLS policies implemented**
+- [x] **Future Intent: Production-ready database with 46 indexes, 7 RLS policies, 16 functions, automated cleanup, Vault integration for secure token storage**
+- [x] **Cautionary Notes: Fixed UUID compatibility for Vault integration. Removed NOW() functions from index predicates. All migrations tested and applied successfully**
+- [x] **Backups: Migration files archived, database state verified, rollback procedures documented**
+
+---
+
+## Phase 4: Development
+
+### 4.1 Edge Functions Development
+- [ ] **REQUIRED READING BEFORE STARTING: [research/2.2_api_endpoint_planning.md]**
+- [ ] **Plan Review & Alignment: Create 4 Edge Functions - MCP tools, public API, SSE events, message handler**
+- [ ] **Future Intent: Complete serverless backend for temporary chat functionality with proper authentication and real-time capabilities**
+- [ ] **Cautionary Notes: Must configure verify_jwt=false for public endpoints. Test SSE connections thoroughly. Ensure proper error handling**
+- [ ] **Backups: Backup existing Edge Function configurations before deployment**
 
 ### 3.2 Edge Function Architecture Design
 - [ ] **REQUIRED READING BEFORE STARTING: [research/3.2_edge_function_design.md]**
