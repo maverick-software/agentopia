@@ -5,6 +5,22 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
+/**
+ * Get the base URL for the frontend application
+ * Handles both local development and production environments
+ */
+function getBaseUrl(): string {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  
+  // Check if we're in local development
+  if (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1')) {
+    return 'http://localhost:5173'
+  }
+  
+  // Production environment
+  return 'https://agentopia.netlify.app'
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -28,10 +44,7 @@ interface MCPToolResponse {
 
 serve(async (req) => {
   console.log(`[temporary-chat-mcp] === REQUEST START ===`)
-  console.log(`[temporary-chat-mcp] Method: ${req.method}`)
-  console.log(`[temporary-chat-mcp] URL: ${req.url}`)
-  console.log(`[temporary-chat-mcp] Headers:`, Object.fromEntries(req.headers.entries()))
-
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     console.log(`[temporary-chat-mcp] Handling CORS preflight`)
@@ -39,67 +52,55 @@ serve(async (req) => {
   }
 
   try {
-    console.log(`[temporary-chat-mcp] Environment check:`)
-    console.log(`[temporary-chat-mcp] SUPABASE_URL: ${Deno.env.get('SUPABASE_URL') ? 'configured' : 'missing'}`)
-    console.log(`[temporary-chat-mcp] SUPABASE_SERVICE_ROLE_KEY: ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ? 'configured' : 'missing'}`)
-
-    // Initialize Supabase client with service role for database operations
+    console.log(`[temporary-chat-mcp] Initializing...`)
+    
+    // Test basic functionality first
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    console.log(`[temporary-chat-mcp] Supabase client initialized`)
-
-    let requestBody;
-    try {
-      requestBody = await req.json();
-      console.log(`[temporary-chat-mcp] Request body parsed:`, JSON.stringify(requestBody, null, 2))
-    } catch (parseError) {
-      console.error(`[temporary-chat-mcp] Failed to parse request body:`, parseError)
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Invalid JSON in request body',
-          details: parseError.message
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400
-        }
-      )
-    }
+    console.log(`[temporary-chat-mcp] Parsing request body...`)
+    const requestBody = await req.json()
+    console.log(`[temporary-chat-mcp] Request body:`, JSON.stringify(requestBody, null, 2))
 
     const { action, agent_id, user_id, tool_name, ...parameters } = requestBody as MCPToolRequest
 
-    console.log(`[temporary-chat-mcp] Processing ${action || tool_name} for agent ${agent_id}, user ${user_id}`)
-    console.log(`[temporary-chat-mcp] Parameters:`, JSON.stringify(parameters, null, 2))
+    console.log(`[temporary-chat-mcp] Action: ${action || tool_name}`)
+    console.log(`[temporary-chat-mcp] Agent: ${agent_id}`)
+    console.log(`[temporary-chat-mcp] User: ${user_id}`)
 
     // Route to appropriate handler based on action/tool_name
     let result: MCPToolResponse
 
     switch (action || tool_name) {
       case 'create_temporary_chat_link':
+        console.log(`[temporary-chat-mcp] Calling createTemporaryChatLink`)
         result = await createTemporaryChatLink(supabase, { agent_id, user_id, ...parameters })
         break
 
       case 'list_temporary_chat_links':
+        console.log(`[temporary-chat-mcp] Calling listTemporaryChatLinks`)
         result = await listTemporaryChatLinks(supabase, { agent_id, user_id, ...parameters })
         break
 
       case 'update_temporary_chat_link':
+        console.log(`[temporary-chat-mcp] Calling updateTemporaryChatLink`)
         result = await updateTemporaryChatLink(supabase, { user_id, ...parameters })
         break
 
       case 'delete_temporary_chat_link':
+        console.log(`[temporary-chat-mcp] Calling deleteTemporaryChatLink`)
         result = await deleteTemporaryChatLink(supabase, { user_id, ...parameters })
         break
 
       case 'get_temporary_chat_analytics':
+        console.log(`[temporary-chat-mcp] Calling getTemporaryChatAnalytics`)
         result = await getTemporaryChatAnalytics(supabase, { agent_id, user_id, ...parameters })
         break
 
       case 'manage_temporary_chat_session':
+        console.log(`[temporary-chat-mcp] Calling manageTemporaryChatSession`)
         result = await manageTemporaryChatSession(supabase, { user_id, ...parameters })
         break
 
@@ -249,28 +250,36 @@ async function createTemporaryChatLink(
 
     console.log(`[createTemporaryChatLink] Token generated successfully: ${tokenResult}`)
 
-    // Calculate expiration time
-    const expiresAt = new Date()
-    expiresAt.setHours(expiresAt.getHours() + params.expires_in_hours)
+    // Calculate expiration time with buffer to ensure it's after created_at
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + (params.expires_in_hours * 60 * 60 * 1000))
+    
+    console.log(`[createTemporaryChatLink] Current time: ${now.toISOString()}`)
+    console.log(`[createTemporaryChatLink] Expires at: ${expiresAt.toISOString()}`)
+    console.log(`[createTemporaryChatLink] Hours difference: ${(expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60)}`)
 
     // Create the temporary chat link
+    const insertData = {
+      agent_id: params.agent_id,
+      user_id: params.user_id,
+      vault_link_token_id: tokenResult,
+      title: params.title,
+      description: params.description || null,
+      welcome_message: params.welcome_message || null,
+      expires_at: expiresAt.toISOString(),
+      max_sessions: params.max_sessions || 1,
+      max_messages_per_session: params.max_messages_per_session || 100,
+      session_timeout_minutes: params.session_timeout_minutes || 30,
+      rate_limit_per_minute: params.rate_limit_per_minute || 10,
+      allowed_domains: params.allowed_domains || null,
+      ui_customization: params.ui_customization || {}
+    }
+    
+    console.log(`[createTemporaryChatLink] Inserting data:`, JSON.stringify(insertData, null, 2))
+    
     const { data: link, error: linkError } = await supabase
       .from('temporary_chat_links')
-      .insert({
-        agent_id: params.agent_id,
-        user_id: params.user_id,
-        vault_link_token_id: tokenResult,
-        title: params.title,
-        description: params.description || null,
-        welcome_message: params.welcome_message || null,
-        expires_at: expiresAt.toISOString(),
-        max_sessions: params.max_sessions || 1,
-        max_messages_per_session: params.max_messages_per_session || 100,
-        session_timeout_minutes: params.session_timeout_minutes || 30,
-        rate_limit_per_minute: params.rate_limit_per_minute || 10,
-        allowed_domains: params.allowed_domains || null,
-        ui_customization: params.ui_customization || {}
-      })
+      .insert(insertData)
       .select('id, title, expires_at, max_sessions, created_at')
       .single()
 
@@ -282,11 +291,21 @@ async function createTemporaryChatLink(
     }
 
     // Get the actual token for the response (decrypt from vault)
-    const { data: actualToken, error: decryptError } = await supabase
-      .rpc('vault.decrypt_secret', { secret_id: tokenResult })
-
-    if (decryptError) {
-      console.warn('Could not decrypt token for response, but link created successfully')
+    console.log(`[createTemporaryChatLink] Attempting to decrypt token: ${tokenResult}`)
+    
+    let actualToken = null;
+    try {
+      const { data: decryptedToken, error: decryptError } = await supabase
+        .rpc('vault_decrypt', { vault_id: tokenResult })
+      
+      if (decryptError) {
+        console.error(`[createTemporaryChatLink] Vault decrypt error:`, decryptError)
+      } else {
+        actualToken = decryptedToken;
+        console.log(`[createTemporaryChatLink] Token decrypted successfully: ${actualToken?.substring(0, 20)}...`)
+      }
+    } catch (vaultError) {
+      console.error(`[createTemporaryChatLink] Vault access error:`, vaultError)
     }
 
     return {
@@ -298,7 +317,7 @@ async function createTemporaryChatLink(
         expires_at: link.expires_at,
         max_sessions: link.max_sessions,
         created_at: link.created_at,
-        public_url: actualToken ? `${Deno.env.get('SITE_URL') || 'https://your-domain.com'}/temp-chat/${actualToken}` : null,
+        public_url: actualToken ? `${getBaseUrl()}/temp-chat/${actualToken}` : null,
         token_hint: actualToken ? actualToken.substring(0, 8) + '...' : 'Token created securely'
       },
       metadata: {

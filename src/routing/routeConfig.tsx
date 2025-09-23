@@ -73,6 +73,7 @@ import { MicrosoftOutlookCallbackPage } from '../pages/integrations/MicrosoftOut
 import GraphSettingsPage from '../pages/GraphSettingsPage';
 import { ChatsPage } from '../pages/ChatsPage';
 import ContactsPage from '../pages/ContactsPage';
+import { TempChatPage } from '../pages/TempChatPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
@@ -82,6 +83,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/login', element: LoginPage, protection: 'public', layout: false },
   { path: '/register', element: RegisterPage, protection: 'public', layout: false },
   { path: '/unauthorized', element: UnauthorizedPage, protection: 'public', layout: false },
+  { path: '/temp-chat/:token', element: TempChatPage, protection: 'public', layout: false },
 
   // Protected routes (require layout)
 
