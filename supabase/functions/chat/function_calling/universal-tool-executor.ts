@@ -390,6 +390,79 @@ const TOOL_ROUTING_MAP: Record<string, {
       user_id: context.userId,
       ...params  // Flatten parameters directly into the body
     })
+  },
+
+  // Temporary Chat Links tools
+  'create_temporary_chat_link': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'create_temporary_chat_link',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'create_temporary_chat_link',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      ...params
+    })
+  },
+
+  'list_temporary_chat_links': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'list_temporary_chat_links',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'list_temporary_chat_links',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      ...params
+    })
+  },
+
+  'update_temporary_chat_link': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'update_temporary_chat_link',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'update_temporary_chat_link',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      ...params
+    })
+  },
+
+  'delete_temporary_chat_link': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'delete_temporary_chat_link',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'delete_temporary_chat_link',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      ...params
+    })
+  },
+
+  'get_temporary_chat_analytics': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'get_temporary_chat_analytics',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_temporary_chat_analytics',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      ...params
+    })
+  },
+
+  'manage_temporary_chat_session': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'manage_temporary_chat_session',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'manage_temporary_chat_session',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      ...params
+    })
   }
 };
 

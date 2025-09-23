@@ -25,6 +25,11 @@ entrypoint = "./functions/temporary-chat-events/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/temporary-chat-handler/index.ts"
+
+[functions.debug-temp-chat]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/debug-temp-chat/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/mcp-server-utils/*.html" ]

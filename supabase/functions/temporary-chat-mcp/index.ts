@@ -27,21 +27,53 @@ interface MCPToolResponse {
 }
 
 serve(async (req) => {
+  console.log(`[temporary-chat-mcp] === REQUEST START ===`)
+  console.log(`[temporary-chat-mcp] Method: ${req.method}`)
+  console.log(`[temporary-chat-mcp] URL: ${req.url}`)
+  console.log(`[temporary-chat-mcp] Headers:`, Object.fromEntries(req.headers.entries()))
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
+    console.log(`[temporary-chat-mcp] Handling CORS preflight`)
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    console.log(`[temporary-chat-mcp] Environment check:`)
+    console.log(`[temporary-chat-mcp] SUPABASE_URL: ${Deno.env.get('SUPABASE_URL') ? 'configured' : 'missing'}`)
+    console.log(`[temporary-chat-mcp] SUPABASE_SERVICE_ROLE_KEY: ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ? 'configured' : 'missing'}`)
+
     // Initialize Supabase client with service role for database operations
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, agent_id, user_id, tool_name, ...parameters } = await req.json() as MCPToolRequest
+    console.log(`[temporary-chat-mcp] Supabase client initialized`)
 
-    console.log(`[temporary-chat-mcp] Processing ${action} for tool ${tool_name}`)
+    let requestBody;
+    try {
+      requestBody = await req.json();
+      console.log(`[temporary-chat-mcp] Request body parsed:`, JSON.stringify(requestBody, null, 2))
+    } catch (parseError) {
+      console.error(`[temporary-chat-mcp] Failed to parse request body:`, parseError)
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid JSON in request body',
+          details: parseError.message
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
+        }
+      )
+    }
+
+    const { action, agent_id, user_id, tool_name, ...parameters } = requestBody as MCPToolRequest
+
+    console.log(`[temporary-chat-mcp] Processing ${action || tool_name} for agent ${agent_id}, user ${user_id}`)
+    console.log(`[temporary-chat-mcp] Parameters:`, JSON.stringify(parameters, null, 2))
 
     // Route to appropriate handler based on action/tool_name
     let result: MCPToolResponse
@@ -72,6 +104,7 @@ serve(async (req) => {
         break
 
       default:
+        console.warn(`[temporary-chat-mcp] Unknown action: ${action || tool_name}`)
         result = {
           success: false,
           error: `Unknown action: ${action || tool_name}`,
@@ -86,6 +119,9 @@ serve(async (req) => {
         }
     }
 
+    console.log(`[temporary-chat-mcp] Result:`, JSON.stringify(result, null, 2))
+    console.log(`[temporary-chat-mcp] === REQUEST END ===`)
+
     return new Response(
       JSON.stringify(result),
       { 
@@ -95,14 +131,26 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[temporary-chat-mcp] Error:', error)
+    console.error('[temporary-chat-mcp] CRITICAL ERROR:', error)
+    console.error('[temporary-chat-mcp] Error stack:', error.stack)
+    console.error('[temporary-chat-mcp] Error name:', error.name)
+    console.error('[temporary-chat-mcp] Error message:', error.message)
+    
+    const errorResponse = {
+      success: false,
+      error: error.message || 'Internal server error',
+      metadata: { 
+        timestamp: new Date().toISOString(),
+        error_type: error.name,
+        stack: error.stack
+      }
+    };
+
+    console.log(`[temporary-chat-mcp] Error response:`, JSON.stringify(errorResponse, null, 2))
+    console.log(`[temporary-chat-mcp] === REQUEST END (ERROR) ===`)
     
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || 'Internal server error',
-        metadata: { timestamp: new Date().toISOString() }
-      }),
+      JSON.stringify(errorResponse),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500
@@ -132,16 +180,27 @@ async function createTemporaryChatLink(
     ui_customization?: Record<string, any>
   }
 ): Promise<MCPToolResponse> {
+  console.log(`[createTemporaryChatLink] Starting with params:`, JSON.stringify(params, null, 2))
+  
   try {
     // Validate required parameters
     if (!params.agent_id || !params.user_id || !params.title || !params.expires_in_hours) {
+      console.error(`[createTemporaryChatLink] Missing required parameters`)
+      console.error(`[createTemporaryChatLink] agent_id: ${params.agent_id}`)
+      console.error(`[createTemporaryChatLink] user_id: ${params.user_id}`)
+      console.error(`[createTemporaryChatLink] title: ${params.title}`)
+      console.error(`[createTemporaryChatLink] expires_in_hours: ${params.expires_in_hours}`)
+      
       return {
         success: false,
         error: 'Missing required parameters: agent_id, user_id, title, expires_in_hours'
       }
     }
 
+    console.log(`[createTemporaryChatLink] Parameters validated successfully`)
+
     // Verify user owns the agent
+    console.log(`[createTemporaryChatLink] Verifying agent ownership`)
     const { data: agent, error: agentError } = await supabase
       .from('agents')
       .select('id, name, user_id')
@@ -149,23 +208,46 @@ async function createTemporaryChatLink(
       .eq('user_id', params.user_id)
       .single()
 
-    if (agentError || !agent) {
+    if (agentError) {
+      console.error(`[createTemporaryChatLink] Agent query error:`, agentError)
+      return {
+        success: false,
+        error: `Agent verification failed: ${agentError.message}`
+      }
+    }
+
+    if (!agent) {
+      console.error(`[createTemporaryChatLink] Agent not found for id: ${params.agent_id}, user: ${params.user_id}`)
       return {
         success: false,
         error: 'Agent not found or not owned by user'
       }
     }
 
+    console.log(`[createTemporaryChatLink] Agent verified: ${agent.name} (${agent.id})`)
+
     // Generate secure token using database function
+    console.log(`[createTemporaryChatLink] Generating secure token`)
     const { data: tokenResult, error: tokenError } = await supabase
       .rpc('generate_temp_chat_token')
 
-    if (tokenError || !tokenResult) {
+    if (tokenError) {
+      console.error(`[createTemporaryChatLink] Token generation error:`, tokenError)
       return {
         success: false,
-        error: 'Failed to generate secure token'
+        error: `Failed to generate secure token: ${tokenError.message}`
       }
     }
+
+    if (!tokenResult) {
+      console.error(`[createTemporaryChatLink] Token generation returned null`)
+      return {
+        success: false,
+        error: 'Failed to generate secure token - null result'
+      }
+    }
+
+    console.log(`[createTemporaryChatLink] Token generated successfully: ${tokenResult}`)
 
     // Calculate expiration time
     const expiresAt = new Date()
