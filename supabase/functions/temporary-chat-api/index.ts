@@ -56,6 +56,10 @@ serve(async (req) => {
     switch (path) {
       case '/temporary-chat-api/validate':
       case '/validate':
+        return await handleValidateLinkToken(req, supabase)
+      
+      case '/temporary-chat-api/validate-session':
+      case '/validate-session':
         return await handleValidateSession(req, supabase)
       
       case '/temporary-chat-api/create-session':
@@ -111,6 +115,152 @@ serve(async (req) => {
 // =============================================================================
 // ENDPOINT HANDLERS
 // =============================================================================
+
+async function handleValidateLinkToken(req: Request, supabase: any): Promise<Response> {
+  try {
+    const { token } = await req.json()
+    
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: 'Missing token parameter' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`[temporary-chat-api] Validating link token: ${token.substring(0, 8)}...`)
+    console.log(`[temporary-chat-api] Token length: ${token.length}, contains newline: ${token.includes('\n')}`)
+
+    // Query all active temporary_chat_links to find the matching token
+    const { data: allLinks, error: linkError } = await supabase
+      .from('temporary_chat_links')
+      .select(`
+        id,
+        title,
+        description,
+        welcome_message,
+        expires_at,
+        max_sessions,
+        max_messages_per_session,
+        session_timeout_minutes,
+        is_active,
+        session_count,
+        vault_link_token_id,
+        agent_id,
+        agents(name)
+      `)
+      .eq('is_active', true)
+
+    if (linkError) {
+      console.error('[temporary-chat-api] Link query error:', linkError)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Failed to validate chat link',
+          details: linkError.message 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!allLinks || allLinks.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'No active chat links found' 
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Find the matching link by decrypting and comparing tokens
+    let linkData = null;
+    for (const link of allLinks) {
+      try {
+        const { data: decryptedToken, error: decryptError } = await supabase
+          .rpc('vault_decrypt', { vault_id: link.vault_link_token_id })
+
+        // Remove ALL whitespace and newlines for comparison
+        const cleanDecrypted = decryptedToken?.replace(/[\r\n\s]/g, '');
+        const cleanToken = token?.replace(/[\r\n\s]/g, '');
+        
+        if (!decryptError && cleanDecrypted && cleanDecrypted === cleanToken) {
+          linkData = link;
+          break;
+        }
+      } catch (err) {
+        console.warn(`[temporary-chat-api] Failed to decrypt token for link ${link.id}:`, err)
+        continue;
+      }
+    }
+
+    if (!linkData) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid or expired chat link' 
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Check if link has expired
+    const now = new Date()
+    const expiresAt = new Date(linkData.expires_at)
+    if (expiresAt < now) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Chat link has expired' 
+        }),
+        { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Check if max sessions reached
+    if (linkData.session_count >= linkData.max_sessions) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Maximum number of chat sessions reached' 
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`[temporary-chat-api] Link token validated successfully: ${linkData.title}`)
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          link: {
+            id: linkData.id,
+            title: linkData.title,
+            description: linkData.description,
+            welcome_message: linkData.welcome_message,
+            agent_name: linkData.agents?.name || 'AI Assistant',
+            expires_at: linkData.expires_at,
+            max_messages_per_session: linkData.max_messages_per_session,
+            session_timeout_minutes: linkData.session_timeout_minutes,
+            is_active: linkData.is_active
+          }
+        }
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+
+  } catch (error) {
+    console.error('[temporary-chat-api] Link validation error:', error)
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Failed to validate chat link',
+        details: error.message 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+}
 
 async function handleValidateSession(req: Request, supabase: any): Promise<Response> {
   try {

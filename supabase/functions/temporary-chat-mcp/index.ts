@@ -10,15 +10,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
  * Handles both local development and production environments
  */
 function getBaseUrl(): string {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  // For now, always use localhost for development testing
+  // TODO: Add proper environment detection later
+  return 'http://localhost:5173'
   
-  // Check if we're in local development
-  if (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1')) {
-    return 'http://localhost:5173'
-  }
-  
-  // Production environment
-  return 'https://agentopia.netlify.app'
+  // Commented out production logic for now
+  // const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  // return 'https://agentopia.netlify.app'
 }
 
 const corsHeaders = {
@@ -301,7 +299,8 @@ async function createTemporaryChatLink(
       if (decryptError) {
         console.error(`[createTemporaryChatLink] Vault decrypt error:`, decryptError)
       } else {
-        actualToken = decryptedToken;
+        // Remove ALL newlines and whitespace from the token
+        actualToken = decryptedToken?.replace(/[\r\n\s]/g, '');
         console.log(`[createTemporaryChatLink] Token decrypted successfully: ${actualToken?.substring(0, 20)}...`)
       }
     } catch (vaultError) {
@@ -317,7 +316,7 @@ async function createTemporaryChatLink(
         expires_at: link.expires_at,
         max_sessions: link.max_sessions,
         created_at: link.created_at,
-        public_url: actualToken ? `${getBaseUrl()}/temp-chat/${actualToken}` : null,
+        public_url: actualToken ? `${getBaseUrl()}/temp-chat/${actualToken.trim()}` : null,
         token_hint: actualToken ? actualToken.substring(0, 8) + '...' : 'Token created securely'
       },
       metadata: {
