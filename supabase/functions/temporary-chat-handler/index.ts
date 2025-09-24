@@ -26,19 +26,29 @@ interface RateLimitCheck {
 }
 
 serve(async (req) => {
+  console.log('[temporary-chat-handler] === REQUEST START ===')
+  console.log(`[temporary-chat-handler] Method: ${req.method}`)
+  console.log(`[temporary-chat-handler] URL: ${req.url}`)
+  console.log(`[temporary-chat-handler] Headers:`, Object.fromEntries(req.headers.entries()))
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
+    console.log('[temporary-chat-handler] Handling CORS preflight')
     return new Response('ok', { headers: corsHeaders })
   }
 
   if (req.method !== 'POST') {
+    console.log('[temporary-chat-handler] Method not allowed:', req.method)
     return new Response(
       JSON.stringify({ error: 'Method not allowed' }),
       { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
+  console.log('[temporary-chat-handler] Processing POST request')
+
   try {
+    console.log('[temporary-chat-handler] Parsing request body...')
     const { 
       session_token, 
       message, 
@@ -46,8 +56,16 @@ serve(async (req) => {
       metadata = {} 
     }: SendMessageRequest = await req.json()
 
+    console.log(`[temporary-chat-handler] Request parsed:`, {
+      session_token: session_token ? `${session_token.substring(0, 8)}...` : 'null',
+      message: message ? `${message.substring(0, 50)}...` : 'null',
+      message_type,
+      metadata
+    })
+
     // Validate required parameters
     if (!session_token || !message) {
+      console.log('[temporary-chat-handler] Missing required parameters')
       return new Response(
         JSON.stringify({ error: 'Missing required parameters: session_token, message' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -71,12 +89,23 @@ serve(async (req) => {
     )
 
     // Validate session and get session info
+    console.log(`[temporary-chat-handler] Calling validate_temp_chat_session with token: ${session_token.substring(0, 8)}...`)
+    
     const { data: sessionData, error: validationError } = await supabase.rpc('validate_temp_chat_session', {
       p_session_token: session_token
     })
 
+    console.log(`[temporary-chat-handler] Validation result:`, {
+      error: validationError,
+      dataLength: sessionData?.length,
+      firstRow: sessionData?.[0],
+      isValid: sessionData?.[0]?.is_valid
+    })
+
     if (validationError || !sessionData?.[0]?.is_valid) {
       console.log(`[temporary-chat-handler] Invalid session: ${session_token.substring(0, 8)}...`)
+      console.log(`[temporary-chat-handler] Validation error:`, validationError)
+      console.log(`[temporary-chat-handler] Session data:`, sessionData)
       return new Response(
         JSON.stringify({ 
           error: 'Invalid or expired session',
@@ -296,6 +325,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[temporary-chat-handler] Global error:', error)
+    console.error('[temporary-chat-handler] Error stack:', error.stack)
+    console.error('[temporary-chat-handler] Error name:', error.name)
+    console.error('[temporary-chat-handler] Error message:', error.message)
     
     return new Response(
       JSON.stringify({ 
@@ -308,6 +340,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     )
+  } finally {
+    console.log('[temporary-chat-handler] === REQUEST END ===')
   }
 })
 

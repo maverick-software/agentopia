@@ -146,16 +146,30 @@ export const TempChatPage: React.FC = () => {
 
     try {
       // Send message to temporary-chat-handler
+      // Note: We need to include the anon key even for public functions due to Supabase gateway requirements
+      console.log('Sending message with session token:', session.session_token.substring(0, 8) + '...');
+      console.log('Using URL:', `${supabaseUrl.replace('/rest/v1', '')}/functions/v1/temporary-chat-handler`);
+      
       const response = await fetch(`${supabaseUrl.replace('/rest/v1', '')}/functions/v1/temporary-chat-handler`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
         },
         body: JSON.stringify({
           session_token: session.session_token,
           message: userMessage.content
         })
       });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
 
       const result = await response.json();
 
