@@ -216,3 +216,4 @@ supabase/functions/chat/function_calling/universal-tool-executor.ts # Add routin
 - Data handling practices
 - Privacy considerations
 - API key management guide
+

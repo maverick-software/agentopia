@@ -575,3 +575,4 @@ describe('QuickChartSetupModal', () => {
 - Test API key validation (optional)
 - Test connection creation and storage
 - Test error handling scenarios
+

@@ -90,18 +90,25 @@ export const TempChatPage: React.FC = () => {
 
   const createChatSession = async () => {
     try {
+      console.log('Creating chat session for token:', token?.substring(0, 8) + '...');
+      
       const response = await fetch(`${supabaseUrl.replace('/rest/v1', '')}/functions/v1/temporary-chat-api/create-session`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ link_token: token })
       });
 
       const result = await response.json();
+      console.log('Session creation result:', result);
+      console.log('Result structure:', JSON.stringify(result, null, 2));
 
       if (result.success) {
-        setSession(result.data.session);
+        // Handle both possible response formats
+        const sessionData = result.data?.session || result.session || result;
+        setSession(sessionData);
+        console.log('Session set successfully:', sessionData);
         
         // Add welcome message if available
         if (linkData?.welcome_message) {
@@ -112,9 +119,14 @@ export const TempChatPage: React.FC = () => {
             timestamp: new Date().toISOString()
           }]);
         }
+      } else {
+        console.error('Session creation failed:', result.error);
+        console.error('Full error response:', JSON.stringify(result, null, 2));
+        setError(result.error || 'Failed to create chat session');
       }
     } catch (err) {
       console.error('Error creating chat session:', err);
+      setError('Failed to create chat session');
     }
   };
 

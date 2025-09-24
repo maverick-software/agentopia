@@ -284,3 +284,4 @@ SELECT * FROM integrations WHERE display_name = 'QuickChart.io';
 - Unique constraint on tool_catalog.tool_name
 - JSON schema validation for configuration_metadata
 - Required fields must be NOT NULL
+

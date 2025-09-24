@@ -246,3 +246,4 @@ src/integrations/quickchart/
 1. Unit tests for chart generation
 2. Integration tests for API calls
 3. E2E tests for user workflow
+

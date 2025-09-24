@@ -398,12 +398,17 @@ async function handleCreateSession(req: Request, supabase: any): Promise<Respons
     return new Response(
       JSON.stringify({
         success: true,
-        session_id: sessionData.session_id,
-        session_token: sessionData.session_token,
-        conversation_id: sessionData.conversation_id,
-        agent_id: sessionData.agent_id,
-        agent_name: sessionData.agent_name,
-        created_at: new Date().toISOString()
+        data: {
+          session: {
+            id: sessionData.session_id,
+            session_token: sessionData.session_token,
+            conversation_id: sessionData.conversation_id,
+            agent_id: sessionData.agent_id,
+            agent_name: sessionData.agent_name,
+            message_count: 0,
+            status: 'active'
+          }
+        }
       }),
       { 
         status: 201, 
