@@ -3,7 +3,7 @@ import { Bot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-export function LoginPage() {
+function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { signIn, error, clearError } = useAuth();
@@ -88,3 +88,5 @@ export function LoginPage() {
     </div>
   );
 }
+
+export default LoginPage;

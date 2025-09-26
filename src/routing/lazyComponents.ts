@@ -2,7 +2,7 @@ import { lazy } from 'react';
 
 // This file centralizes the lazy loading definitions for page components. 
 
-export const LoginPage = lazy(() => import('../pages/LoginPage').then(module => ({ default: module.LoginPage })));
+export const LoginPage = lazy(() => import('../pages/LoginPage'));
 export const RegisterPage = lazy(() => import('../pages/RegisterPage').then(module => ({ default: module.RegisterPage })));
 
 // DashboardPage is imported directly in AppRouter.tsx and routeConfig.tsx.

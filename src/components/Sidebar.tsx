@@ -64,7 +64,6 @@ const navItems: NavItem[] = [
     label: 'Agents',
     isCustom: true
   },
-  { to: '/projects', icon: FolderKanban, label: 'Projects' },
   { to: '/media', icon: Library, label: 'Media' },
   { to: '/contacts', icon: UserCheck, label: 'Contacts' },
   { to: '/integrations', icon: Plug, label: 'Integrations' },
