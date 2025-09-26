@@ -1,7 +1,9 @@
 // src/hooks/useChatChannels.ts
 import { useState, useCallback, useEffect } from 'react';
 import { useSupabaseClient } from './useSupabaseClient';
-import { type ChatChannel } from '../types/chat';
+import type { Database } from '../types/database.types';
+
+type ChatChannel = Database['public']['Tables']['chat_channels']['Row'];
 import { useAuth } from '../contexts/AuthContext';
 
 export const useChatChannels = (workspaceId: string | null) => {

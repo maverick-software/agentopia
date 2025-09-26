@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Agent } from '../types';
@@ -124,32 +124,33 @@ export function useAgents(): UseAgentsReturn {
 
     setLoading(true);
     setError(null);
-    try {
-      // Exclude id from update payload if it exists on agentData
-      const { id, ...rawUpdateData } = agentData; // Only destructure 'id'
-      
-      // Clean and validate update data
-      const updateData: any = {};
-      
-      // Only include defined values to avoid null/undefined issues
-      Object.keys(rawUpdateData).forEach(key => {
-        const value = rawUpdateData[key as keyof typeof rawUpdateData];
-        if (value !== undefined) {
-          // Special handling for boolean fields
-          if (key === 'active') {
-            updateData[key] = Boolean(value);
-          } else if (key === 'metadata') {
-            // Ensure metadata is valid JSON
-            updateData[key] = value && typeof value === 'object' ? value : {};
-          } else if (typeof value === 'string' && value.trim() === '') {
-            // Convert empty strings to null for optional text fields
-            updateData[key] = null;
-          } else {
-            updateData[key] = value;
-          }
+    
+    // Exclude id from update payload if it exists on agentData
+    const { id, ...rawUpdateData } = agentData; // Only destructure 'id'
+    
+    // Clean and validate update data
+    const updateData: any = {};
+    
+    // Only include defined values to avoid null/undefined issues
+    Object.keys(rawUpdateData).forEach(key => {
+      const value = rawUpdateData[key as keyof typeof rawUpdateData];
+      if (value !== undefined) {
+        // Special handling for boolean fields
+        if (key === 'active') {
+          updateData[key] = Boolean(value);
+        } else if (key === 'metadata') {
+          // Ensure metadata is valid JSON
+          updateData[key] = value && typeof value === 'object' ? value : {};
+        } else if (typeof value === 'string' && value.trim() === '') {
+          // Convert empty strings to null for optional text fields
+          updateData[key] = null;
+        } else {
+          updateData[key] = value;
         }
-      });
-      
+      }
+    });
+    
+    try {
       // Add updated_at timestamp
       updateData.updated_at = new Date().toISOString();
       
