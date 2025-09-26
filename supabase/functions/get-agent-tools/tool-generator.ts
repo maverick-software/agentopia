@@ -395,6 +395,63 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+  // ClickSend SMS tools
+  if (toolName === 'clicksend_send_sms') {
+    return {
+      ...baseSchema,
+      properties: {
+        to: { type: 'string', description: 'Recipient phone number in international format (e.g., +1234567890)' },
+        message: { type: 'string', description: 'SMS message text content (up to 1600 characters)' },
+        from: { type: 'string', description: 'Sender phone number or short code (optional)' }
+      },
+      required: ['to', 'message']
+    };
+  }
+
+  if (toolName === 'clicksend_send_mms') {
+    return {
+      ...baseSchema,
+      properties: {
+        to: { type: 'string', description: 'Recipient phone number in international format (e.g., +1234567890)' },
+        body: { type: 'string', description: 'MMS message text content' },
+        media_url: { type: 'string', description: 'URL of media file to attach (image, video, etc.)' },
+        subject: { type: 'string', description: 'MMS subject line (optional)' },
+        from: { type: 'string', description: 'Sender phone number or short code (optional)' }
+      },
+      required: ['to', 'body', 'media_url']
+    };
+  }
+
+  if (toolName === 'clicksend_get_balance') {
+    return {
+      ...baseSchema,
+      properties: {},
+      required: []
+    };
+  }
+
+  if (toolName === 'clicksend_get_sms_history') {
+    return {
+      ...baseSchema,
+      properties: {
+        page: { type: 'number', description: 'Page number for pagination (default: 1)', default: 1 },
+        limit: { type: 'number', description: 'Number of records per page (1-1000, default: 50)', default: 50 }
+      },
+      required: []
+    };
+  }
+
+  if (toolName === 'clicksend_get_delivery_receipts') {
+    return {
+      ...baseSchema,
+      properties: {
+        page: { type: 'number', description: 'Page number for pagination (default: 1)', default: 1 },
+        limit: { type: 'number', description: 'Number of records per page (1-1000, default: 50)', default: 50 }
+      },
+      required: []
+    };
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,

@@ -183,27 +183,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setError(null);
     try {
+      // Validate fullName is not empty
+      if (!fullName || fullName.trim().length === 0) {
+        throw new Error('Full name is required for registration.');
+      }
+
       const { data: authData, error: signUpError } = await supabase.auth.signUp({ 
           email, 
-          password 
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim()
+            }
+          }
       });
       if (signUpError) throw signUpError;
       if (!authData.user) throw new Error('Sign up successful but no user data returned.');
 
       console.log(`[AuthContext] User ${authData.user.id} signed up. Creating profile...`);
-      const { error: profileError } = await supabase
+      
+      // Check if profile already exists (in case of automatic trigger)
+      const { data: existingProfile } = await supabase
         .from('profiles')
-        .insert({ 
-            id: authData.user.id,
-            full_name: fullName 
-        });
+        .select('id')
+        .eq('id', authData.user.id)
+        .single();
 
-      if (profileError) {
-        console.error('[AuthContext] CRITICAL: Profile creation failed after sign up:', profileError);
-        throw new Error(`Account created, but failed to initialize profile: ${profileError.message}. Please contact support.`);
+      if (!existingProfile) {
+        // Only create profile if it doesn't exist
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({ 
+              id: authData.user.id,
+              full_name: fullName.trim(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+          });
+
+        if (profileError) {
+          console.error('[AuthContext] CRITICAL: Profile creation failed after sign up:', profileError);
+          throw new Error(`Account created, but failed to initialize profile: ${profileError.message}. Please contact support.`);
+        }
+        
+        console.log(`[AuthContext] Profile created successfully for user ${authData.user.id}`);
+      } else {
+        console.log(`[AuthContext] Profile already exists for user ${authData.user.id} (created by trigger)`);
       }
-
-      console.log(`[AuthContext] Profile created successfully for user ${authData.user.id}`);
 
     } catch (err: any) {
       console.error('[AuthContext] Sign up or profile creation error:', err);

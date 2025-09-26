@@ -110,9 +110,15 @@ export function useAgents(): UseAgentsReturn {
   }, [user]);
 
   const updateAgent = useCallback(async (agentId: string, agentData: Partial<Agent>): Promise<Agent | null> => {
-    if (!user) {
+    if (!user || !user.id) {
       console.error('No authenticated user for updateAgent');
       setError({ message: 'User not authenticated', code: 'AUTH_ERROR' } as PostgrestError);
+      return null;
+    }
+    
+    if (!agentId || typeof agentId !== 'string') {
+      console.error('Invalid agent ID provided');
+      setError({ message: 'Invalid agent ID', code: 'INVALID_AGENT_ID' } as PostgrestError);
       return null;
     }
 
@@ -120,11 +126,36 @@ export function useAgents(): UseAgentsReturn {
     setError(null);
     try {
       // Exclude id from update payload if it exists on agentData
-      const { id, ...updateData } = agentData; // Only destructure 'id'
+      const { id, ...rawUpdateData } = agentData; // Only destructure 'id'
+      
+      // Clean and validate update data
+      const updateData: any = {};
+      
+      // Only include defined values to avoid null/undefined issues
+      Object.keys(rawUpdateData).forEach(key => {
+        const value = rawUpdateData[key as keyof typeof rawUpdateData];
+        if (value !== undefined) {
+          // Special handling for boolean fields
+          if (key === 'active') {
+            updateData[key] = Boolean(value);
+          } else if (key === 'metadata') {
+            // Ensure metadata is valid JSON
+            updateData[key] = value && typeof value === 'object' ? value : {};
+          } else if (typeof value === 'string' && value.trim() === '') {
+            // Convert empty strings to null for optional text fields
+            updateData[key] = null;
+          } else {
+            updateData[key] = value;
+          }
+        }
+      });
+      
+      // Add updated_at timestamp
+      updateData.updated_at = new Date().toISOString();
       
       const { data, error: updateError } = await supabase
         .from('agents')
-        .update(updateData as any)
+        .update(updateData)
         .eq('id', agentId)
         .eq('user_id', user.id) // Ensure we only update agents owned by current user
         .select('*')
@@ -144,6 +175,9 @@ export function useAgents(): UseAgentsReturn {
       return data || null;
     } catch (err) {
       console.error(`Error updating agent ${agentId}:`, err);
+      console.error('Update payload was:', JSON.stringify(updateData, null, 2));
+      console.error('User ID:', user?.id);
+      console.error('Agent ID:', agentId);
       setError(err as PostgrestError);
       return null;
     } finally {

@@ -269,15 +269,6 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </div>
           
           <div className="space-y-1">
-            {/* Create Agent Button */}
-            <button
-              onClick={() => setShowCreateAgentModal(true)}
-              className="flex items-center space-x-2 rounded-md transition-colors py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent w-full px-3"
-            >
-              <Plus className="w-4 h-4 flex-shrink-0" />
-              {!isCollapsed && <span className="font-medium truncate">Create Agent</span>}
-            </button>
-
             {visibleNavItems.map((item) => {
               if (item.isCustom && item.label === 'Agents') {
                 return <AgentsNavRenderer key={item.to} isCollapsed={isCollapsed} />;

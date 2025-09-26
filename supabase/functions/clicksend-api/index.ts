@@ -171,12 +171,22 @@ serve(async (req) => {
     // Extract parameters - handle both direct params and nested input structure
     let parameters: any;
     if (params?.input && typeof params.input === 'string') {
+      // Try to parse as JSON first, but if it fails, treat as plain text message
       try {
         parameters = JSON.parse(params.input);
-        console.log(`[ClickSend] Parsed parameters from input field:`, JSON.stringify(parameters, null, 2));
+        console.log(`[ClickSend] Parsed parameters from input field as JSON:`, JSON.stringify(parameters, null, 2));
       } catch (e) {
-        console.error(`[ClickSend] Failed to parse input field:`, e);
-        parameters = params;
+        console.log(`[ClickSend] Input field is not JSON, treating as plain text message:`, params.input);
+        // If parsing fails and this is an SMS action, treat input as the message content
+        if (action === 'send_sms') {
+          parameters = {
+            message: params.input,
+            // Try to extract phone number from other params if available
+            to: params.to || params.phone || params.phone_number
+          };
+        } else {
+          parameters = params;
+        }
       }
     } else {
       parameters = params || {};
@@ -375,19 +385,33 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('[ClickSend] Error:', error);
 
-    // Log failed operation
+    // Log failed operation - fix variable scope issue
     try {
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
+      // Parse the body to get agent_id and action if they exist
+      let logAgentId = null;
+      let logAction = 'unknown';
+      let logParameters = {};
+      
+      try {
+        const requestBody = await req.clone().json();
+        logAgentId = requestBody.agent_id || null;
+        logAction = requestBody.action || 'unknown';
+        logParameters = requestBody.params || {};
+      } catch (parseError) {
+        console.warn('[ClickSend] Could not parse request body for error logging:', parseError);
+      }
+
       await supabase.from('tool_execution_logs').insert({
-        agent_id: agent_id || null,
+        agent_id: logAgentId,
         user_id: null, // We may not have user context in error cases
-        tool_name: `clicksend_${action || 'unknown'}`,
+        tool_name: `clicksend_${logAction}`,
         tool_provider: 'clicksend',
-        parameters: parameters || {},
+        parameters: logParameters,
         success: false,
         error_message: error.message,
         execution_time_ms: Date.now() - startTime,
@@ -417,22 +441,33 @@ serve(async (req) => {
 
 // Action handlers
 async function handleSendSMS(client: ClickSendClient, params: any): Promise<any> {
-  // Handle both 'body' and 'message' field names for flexibility
-  let { to, body, message, from } = params;
-  const messageText = body || message;
+  // Handle multiple possible field names for flexibility
+  let { to, body, message, phone, phone_number, text, content, from } = params;
+  
+  // Try to find phone number from various possible field names
+  const phoneNumber = to || phone || phone_number;
+  
+  // Try to find message text from various possible field names
+  const messageText = message || body || text || content;
+
+  console.log(`[ClickSend] SMS Parameters - Phone: ${phoneNumber}, Message: ${messageText ? messageText.substring(0, 50) + '...' : 'undefined'}`);
 
   // Validate required parameters with intelligent error messages
   const missingParams = [];
-  if (!to) missingParams.push('to (phone number)');
+  if (!phoneNumber) missingParams.push('to (phone number)');
   if (!messageText) missingParams.push('message or body (SMS text content)');
   
   if (missingParams.length > 0) {
     throw new Error(`Missing required parameters: ${missingParams.join(', ')}. Please provide: ${
-      !to ? 'a phone number in international format (e.g., +1234567890)' : ''
-    }${!to && !messageText ? ' and ' : ''}${
+      !phoneNumber ? 'a phone number in international format (e.g., +1234567890)' : ''
+    }${!phoneNumber && !messageText ? ' and ' : ''}${
       !messageText ? 'the SMS message text' : ''
     }.`);
   }
+  
+  // Use the found values
+  to = phoneNumber;
+  const finalMessageText = messageText;
 
   // Auto-fix common phone number format issues (assume USA +1 if not specified)
   if (to && !to.startsWith('+')) {
@@ -453,15 +488,15 @@ async function handleSendSMS(client: ClickSendClient, params: any): Promise<any>
 
   // Validate phone number format
   if (!validatePhoneNumber(to)) {
-    throw new Error(`Invalid phone number format. The number "${params.to}" was processed as "${to}". Please provide a valid phone number. For US numbers, use formats like: +1234567890, 1234567890, (123) 456-7890, or 123-456-7890.`);
+    throw new Error(`Invalid phone number format. The number "${phoneNumber}" was processed as "${to}". Please provide a valid phone number. For US numbers, use formats like: +1234567890, 1234567890, (123) 456-7890, or 123-456-7890.`);
   }
 
   // Validate SMS body
-  if (!validateSMSBody(messageText)) {
+  if (!validateSMSBody(finalMessageText)) {
     throw new Error('SMS message must be between 1 and 1600 characters');
   }
 
-  return await client.sendSMS(to, messageText, from);
+  return await client.sendSMS(to, finalMessageText, from);
 }
 
 async function handleSendMMS(client: ClickSendClient, params: any): Promise<any> {
