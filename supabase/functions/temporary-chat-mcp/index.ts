@@ -10,34 +10,70 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
  * Dynamically detects environment based on request headers and Supabase URL
  */
 function getBaseUrl(req?: Request): string {
+  console.log(`[getBaseUrl] Starting URL detection...`);
+  
   // Try to get origin from request headers first (most reliable)
   if (req) {
-    const origin = req.headers.get('origin') || req.headers.get('referer');
+    const origin = req.headers.get('origin');
+    const referer = req.headers.get('referer');
+    const host = req.headers.get('host');
+    
+    console.log(`[getBaseUrl] Headers - Origin: ${origin}, Referer: ${referer}, Host: ${host}`);
+    
+    // Try origin header first
     if (origin) {
       try {
         const url = new URL(origin);
+        console.log(`[getBaseUrl] Origin hostname: ${url.hostname}`);
+        
         // Only use trusted domains
         if (url.hostname === 'localhost' || 
             url.hostname === '127.0.0.1' || 
             url.hostname.endsWith('.netlify.app') ||
-            url.hostname.endsWith('.agentopia.com')) {
+            url.hostname.endsWith('.agentopia.com') ||
+            url.hostname.endsWith('.vercel.app')) {
+          console.log(`[getBaseUrl] Using origin: ${origin}`);
           return origin;
         }
       } catch (e) {
-        console.log(`[temporary-chat-mcp] Invalid origin header: ${origin}`);
+        console.log(`[getBaseUrl] Invalid origin header: ${origin}`, e);
+      }
+    }
+    
+    // Try referer header as fallback
+    if (referer) {
+      try {
+        const url = new URL(referer);
+        const baseUrl = `${url.protocol}//${url.host}`;
+        console.log(`[getBaseUrl] Referer hostname: ${url.hostname}, base: ${baseUrl}`);
+        
+        // Only use trusted domains
+        if (url.hostname === 'localhost' || 
+            url.hostname === '127.0.0.1' || 
+            url.hostname.endsWith('.netlify.app') ||
+            url.hostname.endsWith('.agentopia.com') ||
+            url.hostname.endsWith('.vercel.app')) {
+          console.log(`[getBaseUrl] Using referer base: ${baseUrl}`);
+          return baseUrl;
+        }
+      } catch (e) {
+        console.log(`[getBaseUrl] Invalid referer header: ${referer}`, e);
       }
     }
   }
   
   // Fallback to environment detection
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  console.log(`[getBaseUrl] Supabase URL: ${supabaseUrl}`);
   
   // Local development detection
   if (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1')) {
+    console.log(`[getBaseUrl] Detected local development environment`);
     return 'http://localhost:5173';
   }
   
-  // Production environment
+  // Production environment fallback
+  console.log(`[getBaseUrl] Using production fallback`);
   return 'https://agentopia.netlify.app';
 }
 
@@ -96,7 +132,7 @@ serve(async (req) => {
     switch (action || tool_name) {
       case 'create_temporary_chat_link':
         console.log(`[temporary-chat-mcp] Calling createTemporaryChatLink`)
-        result = await createTemporaryChatLink(supabase, { agent_id, user_id, ...parameters })
+        result = await createTemporaryChatLink(supabase, req, { agent_id, user_id, ...parameters })
         break
 
       case 'list_temporary_chat_links':
@@ -185,7 +221,8 @@ serve(async (req) => {
 // =============================================================================
 
 async function createTemporaryChatLink(
-  supabase: any, 
+  supabase: any,
+  req: Request,
   params: {
     agent_id: string
     user_id: string
