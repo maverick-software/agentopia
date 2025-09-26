@@ -12,7 +12,7 @@ export class MCPProvider implements ToolProvider {
   private toolsCache: Map<string, OpenAIFunction[]> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
   private toolMetadataMap: Map<string, { connectionId: string; toolName: string }> = new Map();
-  private readonly CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+  private readonly CACHE_DURATION = 0; // Caching disabled for immediate tool updates
 
   constructor(supabase: SupabaseClient, authToken: string = '') {
     this.supabase = supabase;

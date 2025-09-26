@@ -91,7 +91,7 @@ export class GmailProvider implements ToolProvider {
   private authToken: string;
   private toolsCache: Map<string, OpenAIFunction[]> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_DURATION = 0; // Caching disabled for immediate tool updates
 
   constructor(supabase: SupabaseClient, authToken: string = '') {
     this.supabase = supabase;
