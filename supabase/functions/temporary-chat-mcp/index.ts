@@ -189,10 +189,10 @@ async function createTemporaryChatLink(
   params: {
     agent_id: string
     user_id: string
-    title: string
+    title?: string
     description?: string
     welcome_message?: string
-    expires_in_hours: number
+    expires_in_hours?: number
     max_sessions?: number
     max_messages_per_session?: number
     session_timeout_minutes?: number
@@ -204,17 +204,15 @@ async function createTemporaryChatLink(
   console.log(`[createTemporaryChatLink] Starting with params:`, JSON.stringify(params, null, 2))
   
   try {
-    // Validate required parameters
-    if (!params.agent_id || !params.user_id || !params.title || !params.expires_in_hours) {
+    // Validate required parameters (only agent_id and user_id are truly required)
+    if (!params.agent_id || !params.user_id) {
       console.error(`[createTemporaryChatLink] Missing required parameters`)
       console.error(`[createTemporaryChatLink] agent_id: ${params.agent_id}`)
       console.error(`[createTemporaryChatLink] user_id: ${params.user_id}`)
-      console.error(`[createTemporaryChatLink] title: ${params.title}`)
-      console.error(`[createTemporaryChatLink] expires_in_hours: ${params.expires_in_hours}`)
       
       return {
         success: false,
-        error: 'Missing required parameters: agent_id, user_id, title, expires_in_hours'
+        error: 'Missing required parameters: agent_id, user_id'
       }
     }
 
@@ -247,6 +245,10 @@ async function createTemporaryChatLink(
 
     console.log(`[createTemporaryChatLink] Agent verified: ${agent.name} (${agent.id})`)
 
+    // Generate defaults for missing parameters
+    const defaults = generateTemporaryChatDefaults(agent.name, params)
+    console.log(`[createTemporaryChatLink] Generated defaults:`, JSON.stringify(defaults, null, 2))
+
     // Generate secure token using database function
     console.log(`[createTemporaryChatLink] Generating secure token`)
     const { data: tokenResult, error: tokenError } = await supabase
@@ -272,27 +274,27 @@ async function createTemporaryChatLink(
 
     // Calculate expiration time with buffer to ensure it's after created_at
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + (params.expires_in_hours * 60 * 60 * 1000))
+    const expiresAt = new Date(now.getTime() + (defaults.expires_in_hours * 60 * 60 * 1000))
     
     console.log(`[createTemporaryChatLink] Current time: ${now.toISOString()}`)
     console.log(`[createTemporaryChatLink] Expires at: ${expiresAt.toISOString()}`)
     console.log(`[createTemporaryChatLink] Hours difference: ${(expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60)}`)
 
-    // Create the temporary chat link
+    // Create the temporary chat link using defaults
     const insertData = {
       agent_id: params.agent_id,
       user_id: params.user_id,
       vault_link_token_id: tokenResult,
-      title: params.title,
-      description: params.description || null,
-      welcome_message: params.welcome_message || null,
+      title: defaults.title,
+      description: defaults.description,
+      welcome_message: defaults.welcome_message,
       expires_at: expiresAt.toISOString(),
-      max_sessions: params.max_sessions || 1,
-      max_messages_per_session: params.max_messages_per_session || 100,
-      session_timeout_minutes: params.session_timeout_minutes || 30,
-      rate_limit_per_minute: params.rate_limit_per_minute || 10,
-      allowed_domains: params.allowed_domains || null,
-      ui_customization: params.ui_customization || {}
+      max_sessions: defaults.max_sessions,
+      max_messages_per_session: defaults.max_messages_per_session,
+      session_timeout_minutes: defaults.session_timeout_minutes,
+      rate_limit_per_minute: defaults.rate_limit_per_minute,
+      allowed_domains: defaults.allowed_domains,
+      ui_customization: defaults.ui_customization
     }
     
     console.log(`[createTemporaryChatLink] Inserting data:`, JSON.stringify(insertData, null, 2))
@@ -854,6 +856,27 @@ async function manageTemporaryChatSession(
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
+
+function generateTemporaryChatDefaults(agentName: string, params: any) {
+  // Generate a randomized sequence for the title
+  const randomSequence = Math.random().toString(36).substring(2, 8).toUpperCase()
+  
+  // Create defaults based on your specifications
+  const defaults = {
+    title: params.title || `${agentName} temp_chat ${randomSequence}`,
+    description: params.description || 'A temporary chat',
+    welcome_message: params.welcome_message || `This is a temporary chat. It will end in ${params.expires_in_hours || 1} hour${(params.expires_in_hours || 1) > 1 ? 's' : ''}.`,
+    expires_in_hours: params.expires_in_hours || 1, // 60 minutes by default
+    max_sessions: params.max_sessions || 1, // 1 concurrent chat session, can be reopened until expired
+    max_messages_per_session: params.max_messages_per_session || 100, // 100 default
+    session_timeout_minutes: params.session_timeout_minutes || 60, // Same as expiry time (60 minutes)
+    rate_limit_per_minute: params.rate_limit_per_minute || 10, // Default is 10
+    allowed_domains: params.allowed_domains || null, // No restrictions
+    ui_customization: params.ui_customization || {}
+  }
+  
+  return defaults
+}
 
 function getStatusForLink(link: any): string {
   const now = new Date()

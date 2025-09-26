@@ -264,18 +264,18 @@ export function generateParametersForCapability(toolName: string) {
     return {
       ...baseSchema,
       properties: {
-        title: { type: 'string', description: 'Title for the temporary chat link' },
+        title: { type: 'string', description: 'Title for the temporary chat link (optional - will auto-generate if not provided)' },
         description: { type: 'string', description: 'Description of the chat purpose (optional)' },
         welcome_message: { type: 'string', description: 'Welcome message for users (optional)' },
-        expires_in_hours: { type: 'number', description: 'How many hours until the link expires', default: 24 },
-        max_sessions: { type: 'number', description: 'Maximum number of chat sessions allowed', default: 1 },
-        max_messages_per_session: { type: 'number', description: 'Maximum messages per session', default: 100 },
-        session_timeout_minutes: { type: 'number', description: 'Session timeout in minutes', default: 30 },
-        rate_limit_per_minute: { type: 'number', description: 'Rate limit per minute', default: 10 },
+        expires_in_hours: { type: 'number', description: 'How many hours until the link expires (default: 1 hour)', default: 1 },
+        max_sessions: { type: 'number', description: 'Maximum number of chat sessions allowed (default: 1)', default: 1 },
+        max_messages_per_session: { type: 'number', description: 'Maximum messages per session (default: 100)', default: 100 },
+        session_timeout_minutes: { type: 'number', description: 'Session timeout in minutes (default: 60)', default: 60 },
+        rate_limit_per_minute: { type: 'number', description: 'Rate limit per minute (default: 10)', default: 10 },
         allowed_domains: { type: 'array', items: { type: 'string' }, description: 'Allowed domains (optional)' },
         ui_customization: { type: 'object', description: 'UI customization options (optional)' }
       },
-      required: ['title', 'expires_in_hours']
+      required: []
     };
   }
 
