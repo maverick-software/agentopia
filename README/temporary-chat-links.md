@@ -250,12 +250,41 @@ Combine with Agentopia's task scheduling for automated workflows:
 - Supabase Edge Functions enabled
 - Email integration configured (optional)
 
-### Setup Steps
+### Setup Steps (For System Administrators)
 1. **Database Migration**: Run temporary chat schema migrations
+   ```bash
+   supabase db push --include-all
+   ```
+
 2. **Edge Function Deployment**: Deploy the four Edge Functions
-3. **MCP Tool Registration**: Add tools to Universal Tool Executor
-4. **Frontend Integration**: Add management interface to admin panel
-5. **Security Configuration**: Configure rate limits and security settings
+   ```bash
+   supabase functions deploy temporary-chat-mcp
+   supabase functions deploy temporary-chat-api
+   supabase functions deploy temporary-chat-events
+   supabase functions deploy temporary-chat-handler
+   ```
+
+3. **MCP Tool Registration**: Tools are automatically registered in the Universal Tool Executor
+4. **Frontend Integration**: The feature is integrated into the agent settings modal
+5. **Security Configuration**: Default rate limits and security settings are production-ready
+
+### User Setup (For Agent Owners)
+1. **Enable the Feature**: 
+   - Open your agent in the chat interface
+   - Click the settings icon (gear) in the top-right corner
+   - Navigate to the "Tools" tab
+   - Enable "Temporary Chat Links" toggle
+   - The system will automatically configure the necessary tools
+
+2. **Create Your First Link**: 
+   - In your agent chat, ask: "Create a temporary chat link for customer support"
+   - The agent will generate a secure URL you can share
+   - Example response: `Your temporary chat link: https://agentopia.netlify.app/temp-chat/abc123...`
+
+3. **Share and Monitor**: 
+   - Share the URL via email, website, or any communication channel
+   - Monitor conversations in your regular agent chat history
+   - All anonymous messages are clearly marked and tracked
 
 ### Testing
 ```bash

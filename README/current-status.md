@@ -54,6 +54,14 @@ This document provides an up-to-date overview of Agentopia's development status,
 - **Agent Training**: Document assignment and knowledge integration
 - **MCP Tools**: Specialized agent tools for document interaction
 
+### 💬 Temporary Chat Links
+**Status**: **COMPLETE & PRODUCTION-READY**
+- **Anonymous Public Access**: Secure temporary chat links for customer support and feedback
+- **Agent-Specific Links**: Each link connects to a specific agent with customizable settings
+- **Rate Limiting**: Configurable message limits and session timeouts for abuse prevention
+- **Enterprise Security**: Vault-encrypted tokens with secure session management
+- **Real-time Messaging**: Server-sent events for live chat interactions
+
 ### ⏰ Task Automation System
 **Status**: **COMPLETE & PRODUCTION-READY**
 - **Task Scheduling**: Comprehensive cron-based scheduling system

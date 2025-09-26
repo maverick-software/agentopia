@@ -121,6 +121,32 @@ const TOOL_ROUTING_MAP: Record<string, {
       user_id: context.userId,
       ...params
     })
+  },
+  
+  // Temporary Chat Links tools
+  'create_temporary_chat_link': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'create_temporary_chat_link'
+  },
+  'list_temporary_chat_links': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'list_temporary_chat_links'
+  },
+  'update_temporary_chat_link': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'update_temporary_chat_link'
+  },
+  'delete_temporary_chat_link': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'delete_temporary_chat_link'
+  },
+  'get_temporary_chat_analytics': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'get_temporary_chat_analytics'
+  },
+  'manage_temporary_chat_session': {
+    edgeFunction: 'temporary-chat-mcp',
+    actionMapping: () => 'manage_temporary_chat_session'
   }
 };
 ```
@@ -168,7 +194,7 @@ To add a new tool to the routing system:
 The Tool Discovery System (`get-agent-tools/index.ts`) automatically discovers and registers tools based on:
 
 1. **Integration Permissions**: Tools from connected services (Gmail, Outlook, etc.)
-2. **Internal Tools**: Built-in tools like Media Library and Contact Management
+2. **Internal Tools**: Built-in tools like Media Library, Contact Management, and Temporary Chat Links
 3. **Agent Permissions**: Role-based access control
 
 ### Integration-Based Discovery

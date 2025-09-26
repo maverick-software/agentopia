@@ -481,6 +481,7 @@ async function logOperation(
 
 async function handleSendEmail(
   supabase: any,
+  supabaseAdmin: any,
   smtpManager: SMTPManager,
   agentId: string,
   userId: string,
@@ -555,7 +556,7 @@ async function handleSendEmail(
         if (result.data.vault_access_token_id) {
           console.log('[SMTP-API] Decrypting password from vault ID:', result.data.vault_access_token_id);
           
-          const { data: decryptedData, error: vaultError } = await supabase
+          const { data: decryptedData, error: vaultError } = await supabaseAdmin
             .rpc('vault_decrypt', { vault_id: result.data.vault_access_token_id });
             
           if (vaultError || !decryptedData) {
@@ -904,7 +905,7 @@ serve(async (req) => {
       throw new Error('Missing authorization header');
     }
 
-    // Create Supabase client
+    // Create Supabase client for user operations
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -913,6 +914,12 @@ serve(async (req) => {
           headers: { Authorization: authHeader } 
         } 
       }
+    );
+    
+    // Create service role client for vault operations
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
     let result: SMTPResponse;
@@ -923,7 +930,7 @@ serve(async (req) => {
         if (!agent_id) {
           throw new Error('agent_id is required for send_email action');
         }
-        result = await handleSendEmail(supabase, smtpManager, agent_id, user_id, params);
+        result = await handleSendEmail(supabase, supabaseAdmin, smtpManager, agent_id, user_id, params);
         break;
 
              case 'test_connection':

@@ -50,6 +50,37 @@ Comprehensive Mailgun API integration:
 - **Inbound Routing**: Process incoming emails with smart routing
 - **Agent Authorization**: Granular permission management
 
+## 💬 Temporary Chat Links
+
+### Anonymous Public Chat Access
+Secure temporary chat links that allow anonymous users to interact with specific agents:
+
+- **Agent-Specific Links**: Each link connects directly to a designated agent
+- **Customizable Settings**: Configure message limits, session timeouts, and expiration dates
+- **Rate Limiting**: Built-in protection against abuse with configurable limits per session
+- **Enterprise Security**: All tokens encrypted using Supabase Vault with zero plain-text storage
+
+### Features
+- **Public URL Generation**: Create shareable links for customer support, employee check-ins, and feedback collection
+- **Session Management**: Automatic session creation and validation with secure token handling
+- **Real-time Messaging**: Server-sent events for live chat interactions
+- **Message Persistence**: All conversations stored in the main chat system for agent reference
+- **Analytics Ready**: Built-in support for tracking link usage and conversation metrics
+
+### Setup Process
+1. Enable "Temporary Chat Links" in agent settings modal
+2. Create links with custom titles and settings using MCP tools
+3. Share generated URLs with customers or employees
+4. Monitor conversations through the main agent interface
+
+### Agent Tools Available
+- `create_temporary_chat_link`: Generate new temporary chat links
+- `list_temporary_chat_links`: View all active links for an agent
+- `update_temporary_chat_link`: Modify link settings and expiration
+- `delete_temporary_chat_link`: Remove links and end access
+- `get_temporary_chat_analytics`: View usage statistics and metrics
+- `manage_temporary_chat_session`: Control active chat sessions
+
 ## 🔍 Web Research Capabilities
 
 ### Supported Providers
@@ -170,6 +201,7 @@ Standard pattern for implementing new integrations:
 - **Mailgun**: Full API integration with validation and analytics
 - **Web Search**: Multi-provider support with AI summarization
 - **Zapier MCP**: Universal tool connectivity with 8,000+ apps
+- **Temporary Chat Links**: Anonymous public chat access with enterprise security
 
 ### 🔧 Technical Achievements
 - **Enterprise Security**: Zero plain-text storage with vault encryption

@@ -7,16 +7,38 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 /**
  * Get the base URL for the frontend application
- * Handles both local development and production environments
+ * Dynamically detects environment based on request headers and Supabase URL
  */
-function getBaseUrl(): string {
-  // For now, always use localhost for development testing
-  // TODO: Add proper environment detection later
-  return 'http://localhost:5173'
+function getBaseUrl(req?: Request): string {
+  // Try to get origin from request headers first (most reliable)
+  if (req) {
+    const origin = req.headers.get('origin') || req.headers.get('referer');
+    if (origin) {
+      try {
+        const url = new URL(origin);
+        // Only use trusted domains
+        if (url.hostname === 'localhost' || 
+            url.hostname === '127.0.0.1' || 
+            url.hostname.endsWith('.netlify.app') ||
+            url.hostname.endsWith('.agentopia.com')) {
+          return origin;
+        }
+      } catch (e) {
+        console.log(`[temporary-chat-mcp] Invalid origin header: ${origin}`);
+      }
+    }
+  }
   
-  // Commented out production logic for now
-  // const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-  // return 'https://agentopia.netlify.app'
+  // Fallback to environment detection
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  
+  // Local development detection
+  if (supabaseUrl.includes('localhost') || supabaseUrl.includes('127.0.0.1')) {
+    return 'http://localhost:5173';
+  }
+  
+  // Production environment
+  return 'https://agentopia.netlify.app';
 }
 
 const corsHeaders = {
@@ -316,7 +338,7 @@ async function createTemporaryChatLink(
         expires_at: link.expires_at,
         max_sessions: link.max_sessions,
         created_at: link.created_at,
-        public_url: actualToken ? `${getBaseUrl()}/temp-chat/${actualToken.trim()}` : null,
+        public_url: actualToken ? `${getBaseUrl(req)}/temp-chat/${actualToken.trim()}` : null,
         token_hint: actualToken ? actualToken.substring(0, 8) + '...' : 'Token created securely'
       },
       metadata: {

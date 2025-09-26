@@ -75,9 +75,10 @@ export function generateMessageId(): string {
 
 /**
  * Generate a conversation-specific ID
+ * Note: Returns pure UUID format for database compatibility
  */
 export function generateConversationId(): string {
-  return generatePrefixedId('conv');
+  return generateId(); // Use pure UUID format for database compatibility
 }
 
 // ============================

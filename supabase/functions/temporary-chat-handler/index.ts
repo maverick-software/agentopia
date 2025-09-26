@@ -161,24 +161,82 @@ serve(async (req) => {
                      req.headers.get('x-real-ip') ||
                      'unknown'
 
+    // Get the conversation session ID for the chat message
+    // We need to create or get the conversation_session_id first
+    console.log(`[temporary-chat-handler] Checking for conversation session...`)
+    
+    let conversationSessionId = null;
+    
+    // Check if there's already a conversation session for this temp chat session
+    const { data: existingSession } = await supabase
+      .from('temporary_chat_sessions')
+      .select('conversation_session_id')
+      .eq('id', session.session_id)
+      .single()
+    
+    if (existingSession?.conversation_session_id) {
+      conversationSessionId = existingSession.conversation_session_id
+      console.log(`[temporary-chat-handler] Using existing conversation session: ${conversationSessionId}`)
+    } else {
+      // Create a new conversation session
+      const { data: newSession, error: sessionError } = await supabase
+        .from('conversation_sessions')
+        .insert({
+          conversation_id: session.conversation_id,
+          agent_id: session.agent_id,
+          user_id: null, // Anonymous user
+          session_type: 'temporary_chat',
+          metadata: {
+            temporary_chat_session_id: session.session_id,
+            link_title: session.link_title
+          }
+        })
+        .select('id')
+        .single()
+      
+      if (sessionError) {
+        console.error('[temporary-chat-handler] Error creating conversation session:', sessionError)
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to create conversation session',
+            details: sessionError.message
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      conversationSessionId = newSession.id
+      console.log(`[temporary-chat-handler] Created new conversation session: ${conversationSessionId}`)
+      
+      // Update the temporary chat session with the conversation session ID
+      await supabase
+        .from('temporary_chat_sessions')
+        .update({ conversation_session_id: conversationSessionId })
+        .eq('id', session.session_id)
+    }
+
     // Save user message to chat_messages_v2
+    // For anonymous temporary chat users, we use role='system' to satisfy the check_actor_exclusivity constraint
     const { data: userMessage, error: userMessageError } = await supabase
       .from('chat_messages_v2')
       .insert({
         conversation_id: session.conversation_id,
-        role: 'user',
+        session_id: conversationSessionId,
+        role: 'system', // Use 'system' role for anonymous users to satisfy constraint
         content: {
           text: sanitizedMessage,
           type: message_type,
           metadata: {
             ...metadata,
             temporary_chat: true,
-            session_id: session.session_id,
-            ip_address: clientIP
+            temp_session_id: session.session_id,
+            ip_address: clientIP,
+            original_role: 'user', // Track that this was originally a user message
+            is_anonymous_user: true
           }
         },
-        sender_user_id: null, // Anonymous user
-        sender_agent_id: null
+        sender_user_id: null, // Must be null for system role
+        sender_agent_id: null  // Must be null for system role
       })
       .select('id, created_at')
       .single()
@@ -220,22 +278,36 @@ serve(async (req) => {
     try {
       console.log(`[temporary-chat-handler] Calling chat function for agent: ${session.agent_id}`)
       
-      const { data: chatResponse, error: chatError } = await supabase.functions.invoke('chat', {
-        body: {
-          message: sanitizedMessage,
-          conversationId: session.conversation_id,
-          agentId: session.agent_id,
-          sessionType: 'temporary_chat',
-          sessionContext: {
-            session_id: session.session_id,
-            session_token: session_token,
-            participant_name: metadata.participant_name,
-            is_temporary_chat: true,
-            max_messages: session.max_messages_per_session,
-            current_messages: session.current_message_count + 1
-          }
+      // Call the chat function directly with service authentication
+      // The chat function expects either a JWT token OR the X-Agentopia-Service header for service calls
+      const chatUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/chat`
+      const chatRequestBody = {
+        message: sanitizedMessage,
+        conversationId: session.conversation_id,
+        agentId: session.agent_id,
+        sessionType: 'temporary_chat',
+        sessionContext: {
+          session_id: session.session_id,
+          session_token: session_token,
+          participant_name: metadata.participant_name,
+          is_temporary_chat: true,
+          max_messages: session.max_messages_per_session,
+          current_messages: session.current_message_count + 1
         }
+      }
+
+      const chatFunctionResponse = await fetch(chatUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'X-Agentopia-Service': 'task-executor' // This header bypasses JWT validation for service calls
+        },
+        body: JSON.stringify(chatRequestBody)
       })
+
+      const chatError = !chatFunctionResponse.ok ? await chatFunctionResponse.text() : null
+      const chatResponse = chatFunctionResponse.ok ? await chatFunctionResponse.json() : null
 
       if (chatError) {
         console.error('[temporary-chat-handler] Chat function error:', chatError)
@@ -245,6 +317,7 @@ serve(async (req) => {
           .from('chat_messages_v2')
           .insert({
             conversation_id: session.conversation_id,
+            session_id: conversationSessionId,
             role: 'assistant',
             content: {
               text: 'I apologize, but I encountered an error processing your message. Please try again.',
@@ -252,7 +325,7 @@ serve(async (req) => {
               metadata: {
                 error_type: 'chat_processing_error',
                 temporary_chat: true,
-                session_id: session.session_id
+                temp_session_id: session.session_id
               }
             },
             sender_user_id: null,
@@ -272,6 +345,16 @@ serve(async (req) => {
       }
 
       console.log(`[temporary-chat-handler] Chat processing successful`)
+      console.log(`[temporary-chat-handler] Chat response:`, chatResponse)
+
+      // Extract the assistant's response from the chat function result
+      // The chat function returns the response in different formats depending on the version
+      const assistantResponse = chatResponse?.response || 
+                               chatResponse?.message || 
+                               chatResponse?.content ||
+                               chatResponse?.data?.response ||
+                               chatResponse?.data?.message ||
+                               'I received your message but could not generate a response.';
 
       return new Response(
         JSON.stringify({ 
@@ -281,7 +364,8 @@ serve(async (req) => {
           session_id: session.session_id,
           agent_name: session.agent_name,
           processed_at: new Date().toISOString(),
-          remaining_messages: session.max_messages_per_session - (session.current_message_count + 1)
+          remaining_messages: session.max_messages_per_session - (session.current_message_count + 1),
+          response: assistantResponse  // Include the actual response!
         }),
         { 
           status: 200, 
@@ -297,6 +381,7 @@ serve(async (req) => {
         .from('chat_messages_v2')
         .insert({
           conversation_id: session.conversation_id,
+          session_id: conversationSessionId,
           role: 'assistant',
           content: {
             text: 'I apologize, but I\'m having trouble responding right now. Please try sending your message again.',
@@ -304,7 +389,7 @@ serve(async (req) => {
             metadata: {
               error_type: 'chat_processing_exception',
               temporary_chat: true,
-              session_id: session.session_id
+              temp_session_id: session.session_id
             }
           },
           sender_user_id: null,

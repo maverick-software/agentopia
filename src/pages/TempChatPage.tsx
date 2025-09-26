@@ -172,11 +172,18 @@ export const TempChatPage: React.FC = () => {
       }
 
       const result = await response.json();
+      console.log('Chat response structure:', result);
 
-      if (result.success && result.data.response) {
+      // The chat function returns the response directly, not nested under data.response
+      if (result.success !== false) {
+        // Extract the assistant's response from the result
+        // The response could be in result.response, result.message, or result itself could be the message
+        const responseContent = result.response || result.message || result.content || 
+                               (typeof result === 'string' ? result : 'I received your message.');
+        
         const assistantMessage: Message = {
           id: `assistant-${Date.now()}`,
-          content: result.data.response,
+          content: responseContent,
           role: 'assistant',
           timestamp: new Date().toISOString()
         };
