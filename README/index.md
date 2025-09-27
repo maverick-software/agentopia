@@ -1,12 +1,12 @@
-# Agentopia Documentation Index
+# Gofr Agents Documentation Index
 
-Welcome to the comprehensive Agentopia documentation. This modular documentation system provides detailed information about every aspect of the platform, organized by topic for easy navigation and maintenance.
+Welcome to the comprehensive Gofr Agents documentation. This modular documentation system provides detailed information about every aspect of the platform, organized by topic for easy navigation and maintenance.
 
 ## 📖 How to Use This Documentation
 
 ### For New Users
 Start with these essential guides:
-1. [Project Overview](project-overview.md) - Understanding Agentopia's capabilities
+1. [Project Overview](project-overview.md) - Understanding Gofr Agents' capabilities
 2. [Getting Started](getting-started.md) - Installation and setup
 3. [Design System](design-system.md) - UI themes and components
 
@@ -74,7 +74,7 @@ Production deployment and operations:
 
 ## 🎯 Quick Reference by Use Case
 
-### Setting Up Agentopia
+### Setting Up Gofr Agents
 1. [Getting Started](getting-started.md) - Installation and basic setup
 2. [Security Updates](security-updates.md) - Security configuration
 3. [Database Schema](database-schema.md) - Database setup and migrations
@@ -157,7 +157,7 @@ Production deployment and operations:
 
 ---
 
-This documentation system represents a comprehensive knowledge base for Agentopia, designed to support users, developers, and administrators at every level. Each document provides deep, actionable information while maintaining clear organization and cross-references to related topics.
+This documentation system represents a comprehensive knowledge base for Gofr Agents, designed to support users, developers, and administrators at every level. Each document provides deep, actionable information while maintaining clear organization and cross-references to related topics.
 
 **Last Updated**: September 11, 2025  
 **Documentation Version**: 2.0 (Modular Architecture)  

@@ -1,6 +1,6 @@
 # Integrations & External Services
 
-Agentopia provides comprehensive integration capabilities allowing agents to connect with external services, APIs, and tools through secure, standardized protocols.
+Gofr Agents provides comprehensive integration capabilities allowing agents to connect with external services, APIs, and tools through secure, standardized protocols.
 
 ## 📧 Email Integrations
 

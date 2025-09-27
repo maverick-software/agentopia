@@ -580,7 +580,7 @@ export class StatusSyncService extends MCPService {
           method: 'GET',
           signal: controller.signal,
           headers: {
-            'User-Agent': 'Agentopia-StatusSync/1.0'
+            'User-Agent': 'Gofr-Agents-StatusSync/1.0'
           }
         });
         

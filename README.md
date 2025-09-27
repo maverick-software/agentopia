@@ -1,6 +1,6 @@
-# Agentopia - Agent Creation & Collaboration Platform
+# Gofr Agents - Agent Creation & Collaboration Platform
 
-Agentopia allows users to create, configure, and manage AI agents via a web UI. These agents can collaborate within Workspaces, interact with Discord, leverage external tools (MCP), and access knowledge bases (RAG).
+Gofr Agents allows users to create, configure, and manage AI agents via a web UI. These agents can collaborate within Workspaces, interact with Discord, leverage external tools (MCP), and access knowledge bases (RAG).
 
 ## 📚 Documentation
 
@@ -21,7 +21,7 @@ All documentation has been organized into topic-specific guides in the **[README
 ```bash
 # Clone and install
 git clone <repository-url>
-cd Agentopia
+cd gofr-agents
 npm install
 
 # Set up environment
@@ -68,7 +68,7 @@ We welcome contributions! Please see our documentation for:
 
 ### 🛠️ For Tool Developers
 
-Agentopia uses a sophisticated MCP (Model Context Protocol) infrastructure that makes it easy to add new tools and integrations:
+Gofr Agents uses a sophisticated MCP (Model Context Protocol) infrastructure that makes it easy to add new tools and integrations:
 
 - **Universal Tool Execution**: Single pathway for all tool types with automatic routing
 - **Dynamic Discovery**: Tools are automatically discovered and registered based on permissions  

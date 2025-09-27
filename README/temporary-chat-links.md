@@ -1,6 +1,6 @@
 # Temporary Chat Links
 
-Agentopia's Temporary Chat Links feature enables agents to create secure, time-limited public chat interfaces that can be shared via email, SMS, or other channels without requiring user authentication.
+Gofr Agents' Temporary Chat Links feature enables agents to create secure, time-limited public chat interfaces that can be shared via email, SMS, or other channels without requiring user authentication.
 
 ## Overview
 
@@ -34,7 +34,7 @@ Temporary Chat Links provide a powerful way to extend your AI agents' reach beyo
 ## Architecture
 
 ### Database Schema
-The system extends Agentopia's existing chat infrastructure with two new tables:
+The system extends Gofr Agents' existing chat infrastructure with two new tables:
 
 - **`temporary_chat_links`**: Stores link configuration, expiration, and usage tracking
 - **`temporary_chat_sessions`**: Manages individual chat sessions with security metadata
@@ -120,7 +120,7 @@ The public chat interface provides a clean, focused experience:
 ## Integration with Existing Systems
 
 ### MCP Tool Integration
-Temporary chat tools integrate seamlessly with Agentopia's Universal Tool Executor:
+Temporary chat tools integrate seamlessly with Gofr Agents' Universal Tool Executor:
 
 ```typescript
 // Available MCP tools
@@ -144,7 +144,7 @@ Links can be distributed through existing integrations:
 - **Microsoft Teams**: Integration with Teams workflows
 
 ### Agent Scheduling
-Combine with Agentopia's task scheduling for automated workflows:
+Combine with Gofr Agents' task scheduling for automated workflows:
 
 ```javascript
 // Example: Daily check-in automation
@@ -246,7 +246,7 @@ Combine with Agentopia's task scheduling for automated workflows:
 ## Getting Started
 
 ### Prerequisites
-- Agentopia installation with MCP tool support
+- Gofr Agents installation with MCP tool support
 - Supabase Edge Functions enabled
 - Email integration configured (optional)
 
@@ -313,6 +313,6 @@ npm run test:temp-chat:integration
 
 ---
 
-Temporary Chat Links represent a significant expansion of Agentopia's capabilities, enabling AI agents to serve users beyond the traditional authenticated experience while maintaining enterprise-grade security and compliance standards.
+Temporary Chat Links represent a significant expansion of Gofr Agents' capabilities, enabling AI agents to serve users beyond the traditional authenticated experience while maintaining enterprise-grade security and compliance standards.
 
 

@@ -622,7 +622,7 @@ export function SettingsModal({
                 This will remove the connection between your agent and Discord. Your Discord bot will remain intact on Discord's platform, but it will no longer be linked to this agent.
               </p>
               <ul className="list-disc pl-5 mb-4 text-xs text-gray-400 space-y-1">
-                <li>All Discord connection credentials will be removed from Agentopia</li>
+                <li>All Discord connection credentials will be removed from Gofr Agents</li>
                 <li>The agent's Discord worker will be stopped if currently running</li>
                 <li>Your Discord server selection will be reset</li>
                 <li>Your Discord bot application on Discord will remain untouched</li>

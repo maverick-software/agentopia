@@ -8,7 +8,7 @@ import {
 import { delay } from "https://deno.land/std@0.217.0/async/delay.ts";
 import { MCPManager } from './manager.ts';
 import { MCPClient } from './client.ts';
-import { MCPServerConfig, MCPServerCapabilities, AgentopiaContextData, ServerResourceUpdate } from './types.ts';
+import { MCPServerConfig, MCPServerCapabilities, GofrAgentsContextData, ServerResourceUpdate } from './types.ts';
 import { MCPConnectionError } from './errors.ts';
 
 // --- Mock MCPClient --- 
@@ -23,7 +23,7 @@ class MockMCPClient {
     connectAttempts: number = 0;
     disconnectAttempts: number = 0;
     sendContextAttempts: number = 0;
-    sendContextArgs: AgentopiaContextData[][] = [];
+    sendContextArgs: GofrAgentsContextData[][] = [];
     _capabilities: MCPServerCapabilities | null = null;
     _connectShouldError: Error | null = null;
     _sendContextShouldError: Error | null = null;
@@ -53,7 +53,7 @@ class MockMCPClient {
         this._isConnected = false;
     }
 
-    async sendContext(contextData: AgentopiaContextData[]): Promise<any> {
+    async sendContext(contextData: GofrAgentsContextData[]): Promise<any> {
         this.sendContextAttempts++;
         this.sendContextArgs.push(contextData);
         await delay(1);
@@ -188,7 +188,7 @@ Deno.test({ name: "MCPManager - processContext success with multiple servers", a
     mockClient1.setSendContextResponse(response1);
     mockClient2.setSendContextResponse(response2);
 
-    const context: AgentopiaContextData[] = [
+    const context: GofrAgentsContextData[] = [
         { type: 'userInput', content: 'Hello', timestamp: 't1' },
         { type: 'agentContext', id: 'a1', name: 'Agent', personality: 'Test' },
     ];
@@ -232,7 +232,7 @@ Deno.test({ name: "MCPManager - processContext handles server connect error", as
     const response2 = { resources: [{ type: 'server2Data', id: 's2', content: 'S2 Only' }] };
     mockClient2.setSendContextResponse(response2);
 
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Test', timestamp: 't' }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Test', timestamp: 't' }];
     const results = await manager.processContext(context);
 
     // Assertions
@@ -266,7 +266,7 @@ Deno.test({ name: "MCPManager - processContext handles server sendContext error"
     const response2 = { resources: [{ type: 'server2Data', id: 's2', content: 'S2 Only' }] };
     mockClient2.setSendContextResponse(response2);
 
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Test', timestamp: 't' }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Test', timestamp: 't' }];
     const results = await manager.processContext(context);
 
     // Assertions
@@ -296,7 +296,7 @@ Deno.test({ name: "MCPManager - processContext skips send if no relevant context
     mockClient1.setSendContextResponse({ resources: [] });
 
     // Context only contains userInput
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Test', timestamp: 't' }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Test', timestamp: 't' }];
     const results = await manager.processContext(context);
 
     // Assertions

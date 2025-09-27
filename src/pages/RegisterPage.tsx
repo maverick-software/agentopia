@@ -163,7 +163,7 @@ export function RegisterPage() {
         <div className="flex flex-col items-center mb-8">
           <Bot className="w-12 h-12 text-indigo-500 mb-4" />
           <h2 className="text-center text-3xl font-extrabold text-white mb-2">
-            Create your Agentopia Account
+            Create your Gofr Agents Account
           </h2>
           <p className="text-sm text-gray-400">Step {currentStep} of 3</p> 
           {/* TODO: Add progress bar/indicator */} 
@@ -238,11 +238,11 @@ export function RegisterPage() {
         {currentStep === 3 && (
            <form onSubmit={handleStep3Submit} className="space-y-6">
              <h3 className="text-xl font-semibold text-white text-center">Platform Usage</h3>
-             <p className="text-gray-400 text-center text-sm">Tell us how you plan to use Agentopia.</p>
+             <p className="text-gray-400 text-center text-sm">Tell us how you plan to use Gofr Agents.</p>
              
              {/* Usage Reason Radio Buttons */}
              <div className="mt-4">
-               <label className="block text-sm font-medium text-gray-300 mb-3">How do you plan to use Agentopia?</label>
+               <label className="block text-sm font-medium text-gray-300 mb-3">How do you plan to use Gofr Agents?</label>
                <div className="space-y-3">
                  <div className="flex items-start">
                    <div className="flex items-center h-5">
@@ -349,7 +349,7 @@ export function RegisterPage() {
              </div>
 
               <div>
-                  <label htmlFor="hopesGoals" className="block text-sm font-medium text-gray-300 mb-1">What do you hope Agentopia will help you achieve?</label>
+                  <label htmlFor="hopesGoals" className="block text-sm font-medium text-gray-300 mb-1">What do you hope Gofr Agents will help you achieve?</label>
                   <textarea id="hopesGoals" name="hopesGoals" rows={4} className={inputClasses} placeholder="e.g., Automate customer support, build custom AI assistants for clients..." value={formData.hopesGoals || ''} onChange={handleInputChange}></textarea>
               </div>
              <div className="flex justify-between">

@@ -3,19 +3,19 @@
 // --- Core MCP Structures (Based on https://modelcontextprotocol.io/specification/) ---
 
 /**
- * Represents information about the host application (Agentopia)
+ * Represents information about the host application (Gofr Agents)
  */
 export interface MCPHostInformation {
-  name: string; // e.g., "Agentopia"
-  version: string; // Agentopia version
+  name: string; // e.g., "Gofr Agents"
+  version: string; // Gofr Agents version
   // Potentially add agent-specific info if needed by servers
 }
 
 /**
- * Represents information about the client connector (within Agentopia)
+ * Represents information about the client connector (within Gofr Agents)
  */
 export interface MCPClientInformation {
-  name: string; // e.g., "Agentopia-MCP-Connector"
+  name: string; // e.g., "Gofr-Agents-MCP-Connector"
   version: string; // Connector version
 }
 
@@ -36,12 +36,12 @@ export interface MCPServerCapabilities {
  * Represents client-reported capabilities
  */
 export interface MCPClientCapabilities {
-  // Features the Agentopia client supports
-  sampling?: boolean | object; // e.g., if Agentopia allows server-initiated sampling
-  // Potentially other capabilities Agentopia offers to servers
+  // Features the Gofr Agents client supports
+  sampling?: boolean | object; // e.g., if Gofr Agents allows server-initiated sampling
+  // Potentially other capabilities Gofr Agents offers to servers
 }
 
-// --- Agentopia-Specific Context Data Sent to Server ---
+// --- Gofr Agents-Specific Context Data Sent to Server ---
 
 /**
  * Structure for packaging Agent context sent via mcp/resources or similar
@@ -75,9 +75,9 @@ export interface UserInputResource {
 }
 
 /**
- * Union type for context data Agentopia might send
+ * Union type for context data Gofr Agents might send
  */
-export type AgentopiaContextData = AgentContextResource | ConversationHistoryResource | UserInputResource; // Add more as needed
+export type GofrAgentsContextData = AgentContextResource | ConversationHistoryResource | UserInputResource; // Add more as needed
 
 // --- Data Structures for Server Responses ---
 
@@ -92,7 +92,7 @@ export interface ServerResourceUpdate {
 }
 
 /**
- * Example: Server requesting tool execution (Less common for Agentopia client)
+ * Example: Server requesting tool execution (Less common for Gofr Agents client)
  */
 export interface ServerToolCallRequest {
   toolName: string;
@@ -101,7 +101,7 @@ export interface ServerToolCallRequest {
 }
 
 /**
- * Example: Response from Agentopia after executing a tool (If Agentopia exposes tools)
+ * Example: Response from Gofr Agents after executing a tool (If Gofr Agents exposes tools)
  */
 export interface ClientToolExecutionResult {
   // Correlation ID from request

@@ -10,7 +10,7 @@ import {
 import { delay } from "https://deno.land/std@0.217.0/async/delay.ts";
 import { MCPClient } from './client.ts';
 import { MCPTransport } from './transport.ts';
-import { MCPServerConfig, MCPServerCapabilities, AgentopiaContextData } from './types.ts';
+import { MCPServerConfig, MCPServerCapabilities, GofrAgentsContextData } from './types.ts';
 import { MCPConnectionError, MCPHandshakeError, MCPTimeoutError, MCPRequestError } from './errors.ts';
 
 // --- Mock MCPTransport --- 
@@ -282,7 +282,7 @@ Deno.test("MCPClient - sendContext success", async () => {
     await client.connect();
     mockTransport.resetMockState(); // Reset after connect
 
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Hello', timestamp: new Date().toISOString() }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Hello', timestamp: new Date().toISOString() }];
     const expectedResponse = { status: "received" };
     mockTransport.setSendRequestResponse('mcp/provideResources', expectedResponse);
 
@@ -301,7 +301,7 @@ Deno.test("MCPClient - sendContext fails if server doesn\'t support resources", 
     await client.connect();
     mockTransport.resetMockState();
 
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Hello', timestamp: new Date().toISOString() }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Hello', timestamp: new Date().toISOString() }];
     
     // sendContext should not throw, but return null (or similar)
     const response = await client.sendContext(context);
@@ -316,7 +316,7 @@ Deno.test("MCPClient - sendContext retries on send error", async () => {
     await client.connect();
     mockTransport.resetMockState();
 
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Hi', timestamp: 't1' }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Hi', timestamp: 't1' }];
     const expectedResponse = { status: "ok finally" };
     const sendError = new MCPRequestError("Temporary send glitch");
 
@@ -341,7 +341,7 @@ Deno.test("MCPClient - sendContext fails after max retries (send error)", async 
     await client.connect();
     mockTransport.resetMockState();
 
-    const context: AgentopiaContextData[] = [{ type: 'userInput', content: 'Again', timestamp: 't2' }];
+    const context: GofrAgentsContextData[] = [{ type: 'userInput', content: 'Again', timestamp: 't2' }];
     const sendError = new MCPRequestError("Persistent send failure");
     mockTransport.setSendRequestShouldError(sendError);
 

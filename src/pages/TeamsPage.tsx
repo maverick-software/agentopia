@@ -96,7 +96,7 @@ export const TeamsPage: React.FC = () => {
           <div className="flex-1">
             <h2 className="text-lg font-semibold text-foreground mb-2">Organize Your Agents Like Your Company</h2>
             <p className="text-muted-foreground mb-4">
-              Teams in Agentopia mirror your organizational structure, allowing you to group agents based on departments, 
+              Teams in Gofr Agents mirror your organizational structure, allowing you to group agents based on departments, 
               projects, or functional areas. This alignment helps maintain clear responsibilities and streamlined workflows 
               that match how your company operates.
             </p>

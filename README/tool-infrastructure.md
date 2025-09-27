@@ -1,6 +1,6 @@
 # Tool Infrastructure - MCP Protocol & Function Calling
 
-This document provides comprehensive information about Agentopia's tool infrastructure, including the Model Context Protocol (MCP) implementation, function calling system, and how to develop, register, and deploy new tools.
+This document provides comprehensive information about Gofr Agents' tool infrastructure, including the Model Context Protocol (MCP) implementation, function calling system, and how to develop, register, and deploy new tools.
 
 ## 📋 Table of Contents
 
@@ -19,7 +19,7 @@ This document provides comprehensive information about Agentopia's tool infrastr
 
 ## Overview
 
-Agentopia uses a sophisticated tool infrastructure based on the Model Context Protocol (MCP) to enable AI agents to interact with external services and internal systems. This system provides:
+Gofr Agents uses a sophisticated tool infrastructure based on the Model Context Protocol (MCP) to enable AI agents to interact with external services and internal systems. This system provides:
 
 - **Universal Tool Execution**: Single execution pathway for all tool types
 - **Dynamic Tool Discovery**: Automatic tool registration and availability checking
@@ -897,7 +897,7 @@ supabase functions deploy get-agent-tools
 supabase functions deploy chat
 ```
 
-This example demonstrates the complete process of adding a new MCP tool to Agentopia's infrastructure.
+This example demonstrates the complete process of adding a new MCP tool to Gofr Agents' infrastructure.
 
 ---
 

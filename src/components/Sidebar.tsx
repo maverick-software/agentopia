@@ -263,7 +263,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           <div className={`flex items-center mb-3 transition-all duration-300 ${isCollapsed ? 'justify-center mt-4' : 'justify-start px-2'}`}>
             <Bot size={isCollapsed ? 20 : 18} className="text-icon-agents" />
             <span className={`ml-2 text-lg font-semibold text-sidebar-foreground transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
-              Agentopia
+              Gofr Agents
             </span>
           </div>
           

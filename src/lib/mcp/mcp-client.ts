@@ -104,7 +104,7 @@ export class MCPClient {
           }
         },
         clientInfo: {
-          name: 'Agentopia',
+          name: 'Gofr Agents',
           version: '1.0.0'
         }
       }
@@ -212,7 +212,7 @@ export class MCPClient {
             }
           },
           clientInfo: {
-            name: 'Agentopia',
+            name: 'Gofr Agents',
             version: '1.0.0'
           }
         }

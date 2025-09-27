@@ -1,6 +1,6 @@
 /**
  * Service to sync droplet names from DigitalOcean API
- * Ensures consistency between DigitalOcean and Agentopia database
+ * Ensures consistency between DigitalOcean and Gofr Agents database
  */
 
 import { supabase } from '../../lib/supabase.ts';

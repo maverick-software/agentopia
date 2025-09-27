@@ -365,7 +365,7 @@ BEGIN
     'communication_channels', COALESCE(channels_data, '[]'::jsonb),
     'interaction_history', COALESCE(interactions_data, '[]'::jsonb),
     'group_memberships', COALESCE(groups_data, '[]'::jsonb),
-    'data_controller', 'Agentopia Platform',
+    'data_controller', 'Gofr Agents Platform',
     'export_reason', 'GDPR Article 15 - Right of Access'
   );
   

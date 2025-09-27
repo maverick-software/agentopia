@@ -1,5 +1,5 @@
 /**
- * Agentopia Integrations
+ * Gofr Agents Integrations
  * Centralized export for all integration modules
  */
 

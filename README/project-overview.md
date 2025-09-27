@@ -1,6 +1,6 @@
 # Project Overview
 
-Agentopia is a comprehensive platform for creating, managing, and deploying AI agents that can collaborate within workspaces, integrate with external tools, and provide intelligent assistance across various domains.
+Gofr Agents is a comprehensive platform for creating, managing, and deploying AI agents that can collaborate within workspaces, integrate with external tools, and provide intelligent assistance across various domains.
 
 ## Goals
 
@@ -167,4 +167,4 @@ Agentopia is a comprehensive platform for creating, managing, and deploying AI a
 
 ---
 
-This overview provides the foundation for understanding Agentopia's capabilities and architecture. For detailed implementation information, see the specific topic guides in this README folder.
+This overview provides the foundation for understanding Gofr Agents' capabilities and architecture. For detailed implementation information, see the specific topic guides in this README folder.

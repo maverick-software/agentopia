@@ -1,21 +1,21 @@
 import { MCPTransport } from './transport.ts';
-import { MCPServerConfig, MCPServerCapabilities, MCPClientInformation, MCPHostInformation, AgentopiaContextData, MCPClientCapabilities, AgentopiaContextResource } from './types.ts';
+import { MCPServerConfig, MCPServerCapabilities, MCPClientInformation, MCPHostInformation, GofrAgentsContextData, MCPClientCapabilities, AgentContextResource } from './types.ts';
 import { MCPConnectionError, MCPHandshakeError, MCPTimeoutError, MCPRequestError, MCPError } from './errors.ts'; // Import custom errors
 // TODO: Import logger type if using a shared logger
 
-// Placeholder for getting Agentopia version, etc.
-const AGENTOPIA_VERSION = '0.1.0'; // Replace with actual versioning
+// Placeholder for getting Gofr Agents version, etc.
+const GOFR_AGENTS_VERSION = '0.1.0'; // Replace with actual versioning
 const CONNECTOR_VERSION = '0.1.0';
 
 const DEFAULT_CLIENT_INFO: MCPClientInformation = {
-    name: 'Agentopia-MCP-Connector',
+    name: 'Gofr-Agents-MCP-Connector',
     version: CONNECTOR_VERSION,
 };
 
 // Placeholder - This should be passed in or dynamically determined
 const DEFAULT_HOST_INFO: MCPHostInformation = {
-    name: 'Agentopia',
-    version: AGENTOPIA_VERSION,
+    name: 'Gofr Agents',
+    version: GOFR_AGENTS_VERSION,
 };
 
 export class MCPClient {
@@ -121,7 +121,7 @@ export class MCPClient {
      * Sends context data to the server using appropriate MCP methods based on capabilities.
      * Assumes connection is established.
      */
-    async sendContext(contextData: AgentopiaContextData[]): Promise<any> {
+    async sendContext(contextData: GofrAgentsContextData[]): Promise<any> {
         console.log(`${this.logPrefix} sendContext() called with ${contextData.length} context items.`);
         if (!this.capabilities || !this.transport.isConnected()) {
              console.log(`${this.logPrefix} Not connected or capabilities unknown. Ensuring connection before sending context...`);

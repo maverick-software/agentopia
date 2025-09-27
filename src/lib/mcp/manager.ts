@@ -1,6 +1,6 @@
 // src/lib/mcp/manager.ts
 import { MCPClient } from './client.ts';
-import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults, ServerResourceUpdate, MCPServerCapabilities } from './types.ts';
+import { MCPServerConfig, GofrAgentsContextData, AggregatedMCPResults, ServerResourceUpdate, MCPServerCapabilities } from './types.ts';
 // TODO: Import logger type
 
 /**
@@ -31,7 +31,7 @@ export class MCPManager {
      * Processes context data by sending it to configured Toolboxes/Deployed Services sequentially based on priority.
      * Aggregates results.
      */
-    async processContext(contextData: AgentopiaContextData[]): Promise<AggregatedMCPResults> {
+    async processContext(contextData: GofrAgentsContextData[]): Promise<AggregatedMCPResults> {
         console.log(`${this.logPrefix} processContext() called with ${contextData.length} context items.`);
         const aggregatedResults: AggregatedMCPResults = {
             resources: [],
@@ -96,9 +96,9 @@ export class MCPManager {
      * Filters context data based on server capabilities.
      */
     private filterContextForServer(
-        allContext: AgentopiaContextData[],
+        allContext: GofrAgentsContextData[],
         capabilities: MCPServerCapabilities | null
-    ): AgentopiaContextData[] {
+    ): GofrAgentsContextData[] {
         console.log(`${this.logPrefix} filterContextForServer called. Capabilities:`, capabilities);
         if (!capabilities || !capabilities.resources) {
              console.warn(`${this.logPrefix} Server does not advertise resource support ('capabilities.resources' is falsy). Sending no context.`);
@@ -112,7 +112,7 @@ export class MCPManager {
             supportedTypes = new Set((capabilities.resources as any).supportedTypes as string[]);
              console.log(`${this.logPrefix} Server explicitly supports resource types:`, Array.from(supportedTypes));
         } else if (capabilities.resources === true) {
-            // If `resources: true`, assume it supports all known Agentopia types by default
+            // If `resources: true`, assume it supports all known Gofr Agents types by default
             supportedTypes = new Set(['agentContext', 'conversationHistory', 'userInput']);
              console.log(`${this.logPrefix} Server has 'resources: true'. Assuming support for default types:`, Array.from(supportedTypes));
         } else {
