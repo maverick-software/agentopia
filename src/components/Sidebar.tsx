@@ -8,8 +8,7 @@ import {
   User as UserIcon,
   Server, Key, Zap, Plus, MessageSquarePlus,
   MoreVertical, Pencil, Archive, Trash2,
-  Network, FileText, HelpCircle, Crown, CreditCard, Shield,
-  UserCheck, Library, Plug
+  Network, FileText, HelpCircle, Crown, CreditCard, Shield
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -64,10 +63,6 @@ const navItems: NavItem[] = [
     label: 'Agents',
     isCustom: true
   },
-  { to: '/media', icon: Library, label: 'Media' },
-  { to: '/contacts', icon: UserCheck, label: 'Contacts' },
-  { to: '/integrations', icon: Plug, label: 'Integrations' },
-  { to: '/teams', icon: Users, label: 'Teams' },
 ];
 
 // Component to render a single NavLink or a collapsible parent item

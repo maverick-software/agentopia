@@ -99,6 +99,27 @@ export function useAgents(): UseAgentsReturn {
         .single(); // Return the created record
 
       if (insertError) throw insertError;
+
+      // Create default LLM preferences for the new agent
+      if (data) {
+        const { error: llmPrefsError } = await supabase
+          .from('agent_llm_preferences')
+          .insert({
+            agent_id: data.id,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            params: {},
+            embedding_model: 'text-embedding-3-small'
+          });
+
+        if (llmPrefsError) {
+          console.error('Error creating LLM preferences for agent:', data.id, llmPrefsError);
+          // Don't throw error - agent is already created
+        } else {
+          console.log('LLM preferences created successfully for agent:', data.id);
+        }
+      }
+
       return data || null;
     } catch (err) {
       console.error('Error creating agent:', err);

@@ -42,6 +42,7 @@ import { IntegrationsTab } from './agent-settings/IntegrationsTab';
 import { SourcesTab } from './agent-settings/SourcesTab';
 import { TeamTab } from './agent-settings/TeamTab';
 import ContactsTab from './agent-settings/ContactsTab';
+import { ZapierMCPTab } from './agent-settings/ZapierMCPTab';
 
 interface AgentSettingsModalProps {
   isOpen: boolean;
@@ -55,10 +56,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 
 interface TabConfig {
   id: TabId;
@@ -151,6 +152,12 @@ const TABS: TabConfig[] = [
     label: 'Automations',
     icon: Zap,
     description: 'Automated actions and triggers'
+  },
+  {
+    id: 'zapier-mcp',
+    label: 'Zapier MCP',
+    icon: Zap,
+    description: 'MCP server connections and tools'
   }
 ];
 
@@ -207,6 +214,8 @@ export function AgentSettingsModal({
         return <TeamTab {...commonProps} />;
       case 'contacts':
         return <ContactsTab agent={{ id: agentId, name: agentData?.name || 'Agent', user_id: '' }} />;
+      case 'zapier-mcp':
+        return <ZapierMCPTab {...commonProps} />;
       default:
         return <GeneralTab {...commonProps} />;
     }

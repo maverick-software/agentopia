@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -101,11 +101,14 @@ export function IntegrationsPage() {
   const { connections: gmailConnections } = useGmailConnection();
 
   // Handle URL parameters to auto-open specific provider modals
+  const processedUrlRef = useRef<string | null>(null);
+  
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const providerParam = searchParams.get('provider');
     
-    if (providerParam && !showSetupModal && integrations.length > 0) {
+    // Only process if we haven't already processed this provider parameter
+    if (providerParam && providerParam !== processedUrlRef.current && integrations.length > 0) {
       // Find the integration by provider name
       const integration = integrations.find(int => {
         const providerName = providerNameForIntegration(int.name);
@@ -114,6 +117,7 @@ export function IntegrationsPage() {
       
       if (integration) {
         console.log('[IntegrationsPage] Auto-opening modal for provider:', providerParam);
+        processedUrlRef.current = providerParam; // Mark as processed
         setSelectedIntegration(integration);
         setShowSetupModal(true);
         
@@ -123,7 +127,12 @@ export function IntegrationsPage() {
         window.history.replaceState({}, '', newUrl.toString());
       }
     }
-  }, [location.search, integrations, showSetupModal]);
+    
+    // Reset processed URL when there's no provider parameter
+    if (!providerParam) {
+      processedUrlRef.current = null;
+    }
+  }, [location.search, integrations]);
 
   const handleClearCache = async () => {
     if (!user?.id) {

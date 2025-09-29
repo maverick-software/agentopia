@@ -234,8 +234,26 @@ export function AgentEdit() {
 
         if (insertError) throw new Error(insertError.message);
         
-        // If creating new agent, update the URL to edit mode
+        // Create default LLM preferences for the new agent
         if (data) {
+          const { error: llmPrefsError } = await supabase
+            .from('agent_llm_preferences')
+            .insert({
+              agent_id: data.id,
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              params: {},
+              embedding_model: 'text-embedding-3-small'
+            });
+
+          if (llmPrefsError) {
+            console.error('Error creating LLM preferences for agent:', data.id, llmPrefsError);
+            // Don't throw error - agent is already created
+          } else {
+            console.log('LLM preferences created successfully for agent:', data.id);
+          }
+
+          // If creating new agent, update the URL to edit mode
           navigate(`/agents/${data.id}`, { replace: true });
         }
       }

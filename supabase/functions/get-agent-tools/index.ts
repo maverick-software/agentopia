@@ -255,6 +255,41 @@ serve(async (req) => {
     // Contact Management tools are now handled through the standard integration system
     // They will be processed automatically with other integrations above
 
+    // Check for Zapier MCP tools
+    console.log(`[GetAgentTools] Checking for Zapier MCP tools...`);
+    
+    try {
+      const { data: mcpTools, error: mcpError } = await supabase
+        .rpc('get_agent_mcp_tools', { p_agent_id: agent_id });
+
+      if (mcpError) {
+        console.warn(`[GetAgentTools] Error fetching MCP tools:`, mcpError);
+      } else if (mcpTools && mcpTools.length > 0) {
+        console.log(`[GetAgentTools] Found ${mcpTools.length} MCP tools for agent ${agent_id}`);
+        
+        for (const mcpTool of mcpTools) {
+          if (mcpTool.openai_schema && mcpTool.tool_name) {
+            tools.push({
+              name: mcpTool.tool_name,
+              description: mcpTool.openai_schema.description || `${mcpTool.tool_name} - MCP Tool`,
+              parameters: mcpTool.openai_schema.parameters || {},
+              status: 'active',
+              provider_name: 'Zapier MCP',
+              connection_name: mcpTool.connection_name || 'MCP Server'
+            });
+          }
+        }
+
+        console.log(`[GetAgentTools] Added ${mcpTools.length} Zapier MCP tools`);
+        console.log(`[GetAgentTools] MCP Tools: ${mcpTools.map(t => t.tool_name).join(', ')}`);
+        providersProcessed.add('Zapier MCP');
+      } else {
+        console.log(`[GetAgentTools] No MCP tools found for agent ${agent_id}`);
+      }
+    } catch (mcpError) {
+      console.warn(`[GetAgentTools] Error checking for MCP tools:`, mcpError);
+    }
+
     console.log(`[GetAgentTools] Retrieved ${tools.length} tools from ${providersProcessed.size} providers`);
     console.log(`[GetAgentTools] Providers: ${Array.from(providersProcessed).join(', ')}`);
 

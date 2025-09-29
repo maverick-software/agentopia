@@ -48,7 +48,7 @@ export function AgentChatPage() {
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
-  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team'>('general');
+  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp'>('general');
   
   // Real-time message subscription
   const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);

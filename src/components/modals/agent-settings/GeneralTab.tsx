@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { MODEL_CARDS, getModelsByProvider, getAllProviders, getModelCard } from '@/lib/llm/modelRegistry';
 
 const MBTI_TYPES = [
   { type: 'INTJ', name: 'The Architect', description: 'Imaginative and strategic thinkers with a plan for everything' },
@@ -57,17 +58,46 @@ interface GeneralTabProps {
 
 export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabProps) {
   const [name, setName] = useState(agentData?.name || '');
-  const [role, setRole] = useState(agentData?.role || '');
   const [description, setDescription] = useState(agentData?.description || '');
-  const [model, setModel] = useState(agentData?.model || 'gpt-4');
+  const [provider, setProvider] = useState<string>('openai');
+  const [model, setModel] = useState<string>('gpt-4o-mini');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingPreferences, setLoadingPreferences] = useState(true);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const supabase = useSupabaseClient();
+
+  // Load agent LLM preferences
+  useEffect(() => {
+    const loadLLMPreferences = async () => {
+      if (!agentId) return;
+      
+      setLoadingPreferences(true);
+      try {
+        const { data, error } = await supabase
+          .from('agent_llm_preferences')
+          .select('provider, model, params, embedding_model')
+          .eq('agent_id', agentId)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+          console.error('Error loading LLM preferences:', error);
+        } else if (data) {
+          setProvider(data.provider || 'openai');
+          setModel(data.model || 'gpt-4o-mini');
+        }
+      } catch (error) {
+        console.error('Error loading LLM preferences:', error);
+      } finally {
+        setLoadingPreferences(false);
+      }
+    };
+
+    loadLLMPreferences();
+  }, [agentId, supabase]);
 
   useEffect(() => {
     setName(agentData?.name || '');
-    setRole(agentData?.role || '');
     setDescription(agentData?.description || '');
-    setModel(agentData?.model || 'gpt-4');
   }, [agentData]);
 
   const handleSave = async () => {
@@ -76,28 +106,65 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
       return;
     }
 
+    if (!description.trim()) {
+      toast.error('Agent description is required');
+      return;
+    }
+
     setIsLoading(true);
+    setSaveState('saving');
+    
     try {
-      const { data, error } = await supabase
+      // Update basic agent info
+      const { data: agentData, error: agentError } = await supabase
         .from('agents')
         .update({
           name: name.trim(),
-          role: role.trim() || null,
-          description: description.trim() || null,
-          model: model,
+          description: description.trim(),
           updated_at: new Date().toISOString()
         })
         .eq('id', agentId)
         .select()
         .single();
 
-      if (error) throw error;
+      if (agentError) throw agentError;
 
+      // Update or create LLM preferences
+      const { error: prefsError } = await supabase
+        .from('agent_llm_preferences')
+        .upsert({
+          agent_id: agentId,
+          provider: provider,
+          model: model,
+          params: {},
+          embedding_model: 'text-embedding-3-small', // Default embedding model
+          updated_at: new Date().toISOString()
+        });
+
+      if (prefsError) throw prefsError;
+
+      // Success state
+      setSaveState('success');
       toast.success('Agent details updated successfully');
-      onAgentUpdated?.(data);
+      onAgentUpdated?.(agentData);
+
+      // Reset to idle after 2 seconds
+      setTimeout(() => {
+        setSaveState('idle');
+      }, 2000);
+
     } catch (error) {
       console.error('Error updating agent:', error);
+      console.error('Error details:', error);
+      
+      // Error state
+      setSaveState('error');
       toast.error('Failed to update agent details');
+
+      // Reset to idle after 3 seconds
+      setTimeout(() => {
+        setSaveState('idle');
+      }, 3000);
     } finally {
       setIsLoading(false);
     }
@@ -105,9 +172,8 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
 
   const hasChanges = 
     name !== (agentData?.name || '') ||
-    role !== (agentData?.role || '') ||
     description !== (agentData?.description || '') ||
-    model !== (agentData?.model || 'gpt-4');
+    !loadingPreferences; // Always allow saving if preferences are loaded
 
   return (
     <div className="space-y-6">
@@ -138,27 +204,10 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
           </p>
         </div>
 
-        {/* Role */}
-        <div className="space-y-2">
-          <Label htmlFor="agent-role" className="text-sm font-medium">
-            Role
-          </Label>
-          <Input
-            id="agent-role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            placeholder="e.g., Customer Support Agent, Research Assistant"
-            className="w-full"
-          />
-          <p className="text-xs text-muted-foreground">
-            Optional role or title that describes the agent's primary function.
-          </p>
-        </div>
-
         {/* Description */}
         <div className="space-y-2">
           <Label htmlFor="agent-description" className="text-sm font-medium">
-            Description
+            Description <span className="text-destructive">*</span>
           </Label>
           <Textarea
             id="agent-description"
@@ -177,28 +226,76 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
           <CardHeader>
             <CardTitle>Language Model</CardTitle>
             <CardDescription>
-              Choose the language model that powers your agent's responses.
+              Choose the language model provider and specific model that powers your agent's responses.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="model-select">Model Selection</Label>
-              <Select value={model} onValueChange={setModel}>
-                <SelectTrigger className="max-w-md">
-                  <SelectValue placeholder="Select a model..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
-                  <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                  <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                  <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Different models have varying capabilities and response styles.
-              </p>
-            </div>
+            {loadingPreferences ? (
+              <div className="flex items-center space-x-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Loading model preferences...</span>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-select">Provider</Label>
+                  <Select value={provider} onValueChange={(value) => {
+                    setProvider(value);
+                    // Reset to first available model for the new provider
+                    const providerModels = getModelsByProvider(value as any);
+                    if (providerModels.length > 0) {
+                      setModel(providerModels[0].id);
+                    }
+                  }}>
+                    <SelectTrigger className="max-w-md">
+                      <SelectValue placeholder="Select a provider..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAllProviders().map((prov) => (
+                        <SelectItem key={prov} value={prov}>
+                          {prov === 'openai' && 'OpenAI'}
+                          {prov === 'anthropic' && 'Anthropic (Claude)'}
+                          {prov === 'google' && 'Google (Gemini)'}
+                          {prov === 'mistral' && 'Mistral AI'}
+                          {prov === 'groq' && 'Groq'}
+                          {prov === 'openrouter' && 'OpenRouter'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="model-select">Model</Label>
+                  <Select value={model} onValueChange={setModel}>
+                    <SelectTrigger className="max-w-md">
+                      <SelectValue placeholder="Select a model..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getModelsByProvider(provider as any).map((modelCard) => (
+                        <SelectItem key={modelCard.id} value={modelCard.id}>
+                          <div className="flex items-center space-x-2">
+                            <span>{modelCard.displayName}</span>
+                            {modelCard.category && (
+                              <Badge variant="secondary" className="text-xs">
+                                {modelCard.category}
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {getModelCard(model) && (
+                    <p className="text-xs text-muted-foreground">
+                      Context: {getModelCard(model)?.context.toLocaleString()} tokens • 
+                      Tools: {getModelCard(model)?.supportsTools ? 'Supported' : 'Not supported'} • 
+                      Streaming: {getModelCard(model)?.supportsStreaming ? 'Supported' : 'Not supported'}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -231,28 +328,45 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
         )}
       </div>
 
-      {/* Save Button - Fixed at bottom */}
-      {hasChanges && (
-        <div className="flex items-center justify-end pt-6 border-t border-border">
-          <Button
-            onClick={handleSave}
-            disabled={isLoading || !name.trim()}
-            size="sm"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-        </div>
-      )}
+      {/* Save Button - Always visible with enhanced animations */}
+      <div className="flex items-center justify-end pt-6 border-t border-border">
+        <Button
+          onClick={handleSave}
+          disabled={isLoading || !name.trim() || saveState === 'saving'}
+          size="sm"
+          className={`transition-all duration-300 transform ${
+            saveState === 'success' 
+              ? 'bg-green-600 hover:bg-green-700 text-white scale-105' 
+              : saveState === 'error'
+              ? 'bg-red-600 hover:bg-red-700 text-white scale-105'
+              : saveState === 'saving'
+              ? 'scale-95'
+              : 'hover:scale-105'
+          }`}
+        >
+          {saveState === 'saving' ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : saveState === 'success' ? (
+            <>
+              <Check className="w-4 h-4 mr-2 animate-bounce" />
+              Saved!
+            </>
+          ) : saveState === 'error' ? (
+            <>
+              <X className="w-4 h-4 mr-2 animate-pulse" />
+              Save Failed
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4 mr-2" />
+              {hasChanges ? 'Save Changes' : 'No Changes'}
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChannelPermissions } from '../channels/useChannelPermissions';
 import { useAgentIntegrationPermissions } from '@/integrations/_shared/hooks/useAgentIntegrationPermissions';
+import { StandaloneIntegrationSetupModal } from './StandaloneIntegrationSetupModal';
 import { toast } from 'react-hot-toast';
 import { 
   Mail, 
@@ -58,6 +59,12 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     selectedProvider: '',
     availableProviders: [] as any[],
     availableCredentials: [] as any[]
+  });
+  
+  const [integrationSetupModal, setIntegrationSetupModal] = useState({
+    isOpen: false,
+    providerName: '',
+    channelType: null as 'email' | 'sms' | null
   });
   const [newApiKey, setNewApiKey] = useState('');
   const [newBotToken, setNewBotToken] = useState('');
@@ -123,14 +130,18 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
 
   const handleToggle = async (channel: keyof ChannelSettings, enabled: boolean) => {
     if (enabled && channel === 'email_enabled') {
-      // Open email provider selection modal
-      await openEmailProviderModal();
+      // Only open modal if it's not already open to prevent reopening loop
+      if (!credentialModal.isOpen) {
+        await openEmailProviderModal();
+      }
       return;
     }
     
     if (enabled && channel === 'sms_enabled') {
-      // Open SMS provider selection modal
-      await openSmsProviderModal();
+      // Only open modal if it's not already open to prevent reopening loop
+      if (!credentialModal.isOpen) {
+        await openSmsProviderModal();
+      }
       return;
     }
     
@@ -149,7 +160,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     try {
       const channelType = channel.replace('_enabled', '');
       const providerMap: Record<string, string[]> = {
-        email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'],
+        email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'], // Include for cleanup of existing permissions
         sms: ['twilio', 'aws_sns', 'clicksend_sms'],
         slack: ['slack'],
         discord: ['discord'],
@@ -485,14 +496,31 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
     setCredentialModal(prev => ({ ...prev, selectedProvider: providerId }));
   };
 
+  const handleIntegrationSetupComplete = async (connection: any) => {
+    // Close the integration setup modal
+    setIntegrationSetupModal({ isOpen: false, providerName: '', channelType: null });
+    
+    // Refresh permissions to show the new connection
+    await refetchPermissions();
+    
+    // Show success message
+    toast.success(`${connection.provider_name} integration setup completed!`);
+  };
+
+  const handleIntegrationSetupClose = () => {
+    setIntegrationSetupModal({ isOpen: false, providerName: '', channelType: null });
+  };
+
   const handleCreateNewCredential = (providerId: string) => {
-    // Close this modal and redirect to integrations page for setup
+    // Close credential selection modal and open integration setup modal
     setCredentialModal(prev => ({ ...prev, isOpen: false }));
-    toast(`Please set up ${providerId} credentials in the Integrations page first`, {
-      icon: 'ℹ️',
-      duration: 4000,
+    
+    // Open the standalone integration setup modal
+    setIntegrationSetupModal({
+      isOpen: true,
+      providerName: providerId,
+      channelType: credentialModal.channelType
     });
-    // You could also open the specific provider setup modal here
   };
 
   const handleCreateCredential = async () => {
@@ -620,7 +648,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   // Function to get connected providers for a channel
   const getConnectedProviders = (channelType: string): string[] => {
     const providerMap: Record<string, string[]> = {
-      email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+      email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'],
       sms: ['twilio', 'aws_sns', 'clicksend_sms'],
       slack: ['slack'],
       discord: ['discord'],
@@ -638,7 +666,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
   const hasCredentialsForChannel = async (channelType: string): Promise<boolean> => {
     try {
       const providerMap: Record<string, string[]> = {
-        email: ['gmail', 'smtp', 'sendgrid', 'mailgun'],
+        email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'],
         sms: ['twilio', 'aws_sns', 'clicksend_sms'],
         slack: ['slack'],
         discord: ['discord'],
@@ -671,7 +699,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       enabled: settings.email_enabled,
       requiresAuth: 'API or OAuth',
       providers: getConnectedProviders('email'),
-      status: settings.email_enabled ? 'configured' : 'not_configured'
+      status: (settings.email_enabled && getConnectedProviders('email').length > 0) ? 'configured' : 'not_configured'
     },
     {
       id: 'sms_enabled' as keyof ChannelSettings,
@@ -681,7 +709,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       enabled: settings.sms_enabled,
       requiresAuth: 'API',
       providers: getConnectedProviders('sms'),
-      status: settings.sms_enabled ? 'configured' : 'not_configured'
+      status: (settings.sms_enabled && getConnectedProviders('sms').length > 0) ? 'configured' : 'not_configured'
     },
     {
       id: 'slack_enabled' as keyof ChannelSettings,
@@ -691,7 +719,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       enabled: settings.slack_enabled,
       requiresAuth: 'OAuth',
       providers: getConnectedProviders('slack'),
-      status: settings.slack_enabled ? 'configured' : 'not_configured'
+      status: settings.slack_enabled ? 'configured' : 'not_configured',
+      disabled: true // Not yet implemented
     },
     {
       id: 'discord_enabled' as keyof ChannelSettings,
@@ -701,7 +730,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       enabled: settings.discord_enabled,
       requiresAuth: 'Bot Token',
       providers: getConnectedProviders('discord'),
-      status: settings.discord_enabled ? 'configured' : 'not_configured'
+      status: settings.discord_enabled ? 'configured' : 'not_configured',
+      disabled: true // Not yet implemented
     },
     {
       id: 'telegram_enabled' as keyof ChannelSettings,
@@ -711,7 +741,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       enabled: settings.telegram_enabled,
       requiresAuth: 'Bot Token',
       providers: getConnectedProviders('telegram'),
-      status: settings.telegram_enabled ? 'configured' : 'not_configured'
+      status: settings.telegram_enabled ? 'configured' : 'not_configured',
+      disabled: true // Not yet implemented
     },
     {
       id: 'whatsapp_enabled' as keyof ChannelSettings,
@@ -721,7 +752,8 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
       enabled: settings.whatsapp_enabled,
       requiresAuth: 'API',
       providers: getConnectedProviders('whatsapp'),
-      status: settings.whatsapp_enabled ? 'configured' : 'not_configured'
+      status: settings.whatsapp_enabled ? 'configured' : 'not_configured',
+      disabled: true // Not yet implemented
     }
   ];
 
@@ -738,14 +770,17 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
         {channels.map((channel) => {
           const Icon = channel.icon;
           const isConfigured = channel.status === 'configured';
+          const isDisabled = (channel as any).disabled;
           
           return (
-            <Card key={channel.id}>
+            <Card key={channel.id} className={isDisabled ? 'opacity-50' : ''}>
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
                     <div className={`p-2 rounded-lg ${
-                      channel.enabled && isConfigured
+                      isDisabled
+                        ? 'bg-muted text-muted-foreground/50'
+                        : channel.enabled && isConfigured
                         ? 'bg-primary/10 text-primary'
                         : 'bg-muted text-muted-foreground'
                     }`}>
@@ -753,8 +788,12 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium">{channel.name}</h4>
-                        {isConfigured ? (
+                        <h4 className={`font-medium ${isDisabled ? 'text-muted-foreground' : ''}`}>{channel.name}</h4>
+                        {isDisabled ? (
+                          <Badge variant="outline" className="text-xs text-muted-foreground border-muted">
+                            Coming Soon
+                          </Badge>
+                        ) : isConfigured ? (
                           <Badge variant="outline" className="text-xs text-green-600 border-green-200">
                             <CheckCircle className="w-3 h-3 mr-1" />
                             Configured
@@ -767,22 +806,24 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">
-                        {channel.description}
+                        {isDisabled ? 'This integration is coming soon and not yet available.' : channel.description}
                       </p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs text-muted-foreground">
-                          Providers:
-                        </p>
-                        {channel.providers.map((provider, index) => (
-                          <Badge key={provider} variant="secondary" className="text-xs">
-                            {provider}
-                          </Badge>
-                        ))}
-                      </div>
+                      {!isDisabled && (
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground">
+                            Providers:
+                          </p>
+                          {channel.providers.map((provider, index) => (
+                            <Badge key={provider} variant="secondary" className="text-xs">
+                              {provider}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {!isConfigured && (
+                    {!isConfigured && !isDisabled && (
                       <Button variant="outline" size="sm">
                         <ExternalLink className="w-4 h-4 mr-1" />
                         Configure
@@ -793,6 +834,7 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
                         id={channel.id}
                         checked={channel.enabled}
                         onCheckedChange={(checked) => handleToggle(channel.id, checked)}
+                        disabled={isDisabled}
                       />
                       <Label htmlFor={channel.id} className="sr-only">
                         Toggle {channel.name}
@@ -987,6 +1029,15 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Standalone Integration Setup Modal */}
+      <StandaloneIntegrationSetupModal
+        isOpen={integrationSetupModal.isOpen}
+        onClose={handleIntegrationSetupClose}
+        onComplete={handleIntegrationSetupComplete}
+        providerName={integrationSetupModal.providerName}
+        channelType={integrationSetupModal.channelType}
+      />
     </div>
   );
 }

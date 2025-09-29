@@ -81,6 +81,25 @@ serve(async (req) => {
 
     console.log('Agent created successfully:', newAgent)
 
+    // Create default LLM preferences for the new agent
+    const { error: llmPrefsError } = await supabase
+      .from('agent_llm_preferences')
+      .insert({
+        agent_id: newAgent.id,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        params: {},
+        embedding_model: 'text-embedding-3-small'
+      })
+
+    if (llmPrefsError) {
+      console.error('Error creating LLM preferences:', llmPrefsError)
+      // Don't throw error here - agent is already created, just log the warning
+      console.warn('Agent created but LLM preferences failed to create')
+    } else {
+      console.log('LLM preferences created successfully for agent:', newAgent.id)
+    }
+
     // The database trigger should automatically grant reasoning permissions
     // Let's verify they were created
     await new Promise(resolve => setTimeout(resolve, 1000)) // Wait for trigger

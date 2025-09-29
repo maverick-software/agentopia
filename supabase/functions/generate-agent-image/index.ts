@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import OpenAI from 'https://deno.land/x/openai@v4.28.0/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,107 +39,107 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { 
-      theme, 
-      gender, 
-      hairColor, 
-      eyeColor, 
-      customInstructions,
-      agentName 
-    } = await req.json()
+    const { agentId, prompt: userPrompt } = await req.json()
 
-    if (!theme) {
-      throw new Error('Theme is required')
+    if (!agentId) {
+      throw new Error('Agent ID is required')
     }
 
-    // Build image prompt based on theme and attributes
-    let prompt = ''
-    
-    switch (theme) {
-      case 'professional':
-        prompt = 'Professional headshot portrait, business attire, confident expression, clean background, high quality, photorealistic'
-        break
-      case 'business-casual':
-        prompt = 'Business casual portrait, smart casual clothing, friendly approachable expression, modern office background, professional lighting'
-        break
-      case 'futuristic':
-        prompt = 'Futuristic sci-fi character portrait, high-tech aesthetic, sleek modern design, digital elements, cyberpunk style, professional quality'
-        break
-      case 'alien':
-        prompt = 'Friendly alien character portrait, otherworldly features, unique alien characteristics, colorful and imaginative, professional digital art'
-        break
-      case 'animal':
-        prompt = 'Anthropomorphic animal character portrait, professional anthropomorphic design, friendly expression, high quality digital art'
-        break
-      case 'custom':
-        prompt = customInstructions || 'Professional character portrait, unique design, high quality digital art'
-        break
-      default:
-        prompt = 'Professional character portrait, friendly expression, clean background, high quality'
+    if (!userPrompt) {
+      throw new Error('Prompt is required')
     }
 
-    // Add physical attributes if specified
-    if (gender && gender !== 'neutral') {
-      prompt += `, ${gender} character`
-    }
-    
-    if (hairColor) {
-      prompt += `, ${hairColor.toLowerCase()} hair`
-    }
-    
-    if (eyeColor) {
-      prompt += `, ${eyeColor.toLowerCase()} eyes`
-    }
-
-    // Add quality and style modifiers
-    prompt += ', portrait orientation, centered composition, professional lighting, high resolution, detailed, clean, modern style'
+    // Use the prompt as provided by the frontend (already includes quality modifiers)
+    const prompt = userPrompt
 
     console.log('Generated image prompt:', prompt)
 
-    // Generate image using OpenAI DALL-E API
+    // Generate image using OpenAI SDK with gpt-image-1 model
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiApiKey) {
       throw new Error('OpenAI API key not configured')
     }
 
-    const openaiResponse = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: prompt,
-        n: 1,
-        size: '1024x1024',
-        quality: 'standard',
-        style: 'natural'
-      }),
+    const openai = new OpenAI({
+      apiKey: openaiApiKey,
     })
 
-    if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json()
-      throw new Error(`OpenAI API error: ${errorData.error?.message || openaiResponse.statusText}`)
+    const result = await openai.images.generate({
+      model: "gpt-image-1",
+      prompt: prompt
+    })
+
+    console.log('OpenAI response structure:', JSON.stringify(result, null, 2))
+
+    // Extract base64 image data from the response
+    if (!result.data || result.data.length === 0) {
+      throw new Error('No image generated in response')
     }
 
-    const openaiData = await openaiResponse.json()
-    const imageUrl = openaiData.data[0]?.url
-
-    if (!imageUrl) {
-      throw new Error('Failed to generate image')
+    const imageBase64 = result.data[0].b64_json
+    if (!imageBase64) {
+      console.error('No b64_json in response:', result.data[0])
+      throw new Error('Failed to generate image - no base64 data received')
     }
 
-    console.log('Generated image URL:', imageUrl)
+    console.log('Generated image base64 length:', imageBase64.length)
 
-    // Optionally, you could download and store the image in Supabase Storage here
-    // For now, we'll return the OpenAI URL directly
+    // Convert base64 to blob and upload to Media Library system
+    const imageBuffer = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0))
+    const timestamp = Date.now()
+    const fileName = `avatar-${agentId}-${timestamp}.png`
+    const storagePath = `${user.id}/avatars/${fileName}`
+    
+    // Upload to media-library bucket (existing system)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('media-library')
+      .upload(storagePath, imageBuffer, {
+        contentType: 'image/png',
+        upsert: true // Allow overwriting existing files
+      })
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError)
+      throw new Error(`Failed to upload image: ${uploadError.message}`)
+    }
+
+    // Create entry in media_library table for proper tracking
+    const { data: mediaEntry, error: mediaError } = await supabase
+      .from('media_library')
+      .insert({
+        user_id: user.id,
+        file_name: fileName,
+        display_name: `Avatar for Agent ${agentId}`,
+        file_type: 'image/png',
+        file_size: imageBuffer.length,
+        file_extension: 'png',
+        storage_bucket: 'media-library',
+        storage_path: storagePath,
+        category: 'avatars',
+        description: `AI-generated avatar created with prompt: ${prompt}`,
+        tags: ['avatar', 'ai-generated', 'agent'],
+        processing_status: 'completed'
+      })
+      .select()
+      .single()
+
+    if (mediaError) {
+      console.error('Media library entry creation error:', mediaError)
+      // Continue anyway - the file is uploaded, just not tracked in media library
+    }
+
+    // Get the public URL for the uploaded image
+    const { data: { publicUrl } } = supabase.storage
+      .from('media-library')
+      .getPublicUrl(storagePath)
+
+    console.log('Generated and uploaded image URL:', publicUrl)
 
     return new Response(
       JSON.stringify({
-        success: true,
-        imageUrl: imageUrl,
-        prompt: prompt
+        mediaLibraryId: mediaEntry?.id,
+        storagePath: storagePath,
+        fileName: fileName
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -151,7 +152,6 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({
-        success: false,
         error: error.message
       }),
       {

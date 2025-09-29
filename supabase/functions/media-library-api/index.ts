@@ -64,7 +64,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 interface MediaUploadRequest {
-  action: 'upload' | 'process' | 'search' | 'get_content' | 'list_documents' | 'assign_to_agent' | 'get_categories' | 'get_signed_url';
+  action: 'upload' | 'process' | 'search' | 'get_content' | 'list_documents' | 'assign_to_agent' | 'get_categories' | 'get_signed_url' | 'delete';
   file_name?: string;
   file_type?: string;
   file_size?: number;
@@ -1463,6 +1463,10 @@ serve(async (req) => {
       case 'get_signed_url':
         result = await handleGetSignedUrl(supabase, user.id, body);
         break;
+        
+      case 'delete':
+        result = await handleDeleteDocument(supabase, user.id, body);
+        break;
 
       default:
         throw new Error(`Unknown action: ${action}`);
@@ -1490,3 +1494,68 @@ serve(async (req) => {
     );
   }
 });
+
+async function handleDeleteDocument(
+  supabase: any,
+  userId: string,
+  request: MediaUploadRequest
+): Promise<MediaLibraryResponse> {
+  try {
+    const { document_id } = request;
+    
+    if (!document_id) {
+      throw new Error('document_id is required for deletion');
+    }
+
+    // First, get the document details to get the storage path
+    const { data: mediaFile, error: fetchError } = await supabase
+      .from('media_library')
+      .select('storage_path, file_name')
+      .eq('id', document_id)
+      .eq('user_id', userId)
+      .single();
+    
+    if (fetchError || !mediaFile) {
+      throw new Error('Media file not found or access denied');
+    }
+
+    // Delete from storage bucket
+    const { error: storageError } = await supabase.storage
+      .from('media-library')
+      .remove([mediaFile.storage_path]);
+    
+    if (storageError) {
+      console.error('Storage deletion error:', storageError);
+      // Continue with database deletion even if storage fails
+    }
+
+    // Delete from database
+    const { error: dbError } = await supabase
+      .from('media_library')
+      .delete()
+      .eq('id', document_id)
+      .eq('user_id', userId);
+    
+    if (dbError) {
+      throw new Error(`Failed to delete document from database: ${dbError.message}`);
+    }
+
+    return {
+      success: true,
+      data: {
+        document_id,
+        deleted_file: mediaFile.file_name,
+        storage_path: mediaFile.storage_path
+      },
+      metadata: {
+        action_performed: 'document_deleted'
+      }
+    };
+  } catch (error: any) {
+    console.error('[MediaLibrary] Delete document error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
