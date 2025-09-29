@@ -365,10 +365,15 @@ Remember: ALWAYS use blank lines between elements for readability!`
     // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
     const authToken = (context as any)?.request_options?.auth?.token || '';
     console.log(`[FunctionCalling] Auth token available: ${!!authToken}`);
+    console.log(`[FunctionCalling] Context - agent_id: ${context.agent_id}, user_id: ${context.user_id}`);
     const fcm = new FunctionCallingManager(this.supabase as any, authToken);
     const availableTools = (context.agent_id && context.user_id)
       ? await fcm.getAvailableTools(context.agent_id, context.user_id)
       : [];
+    
+    if (!context.agent_id || !context.user_id) {
+      console.warn(`[FunctionCalling] Missing context - agent_id: ${!!context.agent_id}, user_id: ${!!context.user_id} - cannot fetch tools`);
+    }
 
     // Nudge awareness: briefly declare available tools and guidelines in a system message
     if (availableTools.length > 0) {

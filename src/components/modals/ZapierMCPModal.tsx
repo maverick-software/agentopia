@@ -144,9 +144,25 @@ export function ZapierMCPModal({
     setSaving(true);
     
     try {
+      // Generate a unique connection name if one already exists
+      let connectionName = 'My Zapier Connection';
+      
+      // Check if this agent already has a connection with this name
+      const existingConnections = await manager.getAgentConnections(agentId);
+      const existingNames = existingConnections.map(c => c.connection_name);
+      
+      // If the default name exists, append a number
+      if (existingNames.includes(connectionName)) {
+        let counter = 2;
+        while (existingNames.includes(`${connectionName} ${counter}`)) {
+          counter++;
+        }
+        connectionName = `${connectionName} ${counter}`;
+      }
+      
       await manager.createConnection(
         agentId,
-        'Zapier MCP Server', // Default name since each agent has only one
+        connectionName,
         serverUrl.trim()
       );
       

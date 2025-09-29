@@ -181,6 +181,7 @@ async function handler(req: Request): Promise<Response> {
     
     // Verify the JWT token unless invoked by approved service
     let token: string | undefined;
+    let authenticatedUserId: string | undefined;
     const isServiceCall = !!serviceHeader && serviceHeader === 'task-executor';
     if (!isServiceCall) {
       try {
@@ -195,6 +196,7 @@ async function handler(req: Request): Promise<Response> {
             },
           });
         }
+        authenticatedUserId = user.id;
       } catch (_authErr) {
         return new Response(JSON.stringify({ error: 'Authentication failed' }), {
           status: 401,
@@ -257,11 +259,18 @@ async function handler(req: Request): Promise<Response> {
       
       // Process regular request
       log.info('Processing standard request');
+      
+      // Ensure user_id is set from authenticated user
+      if (!body.context) body.context = {};
+      if (!body.context.user_id && authenticatedUserId) {
+        body.context.user_id = authenticatedUserId;
+      }
+      
       // Ensure conversation record + AI title (only for first user message flows)
       try {
         const convId = body?.context?.conversation_id;
         const agentId = body?.context?.agent_id || body?.message?.context?.agent_id;
-        const userId = body?.context?.user_id || body?.message?.context?.user_id;
+        const userId = body?.context?.user_id || authenticatedUserId;
         const userText = (body?.message?.content?.text ?? '') as string;
         if (convId && agentId && userId && userText) {
           await ensureConversationSession(convId, agentId, userId, userText);

@@ -6,6 +6,12 @@ import {
 } from '@/components/ui/dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import { 
   User, 
@@ -38,7 +44,6 @@ import { MemoryTab } from './agent-settings/MemoryTab';
 import { MediaTab } from './agent-settings/MediaTab';
 import { ToolsTab } from './agent-settings/ToolsTab';
 import { ChannelsTab } from './agent-settings/ChannelsTab';
-import { IntegrationsTab } from './agent-settings/IntegrationsTab';
 import { SourcesTab } from './agent-settings/SourcesTab';
 import { TeamTab } from './agent-settings/TeamTab';
 import ContactsTab from './agent-settings/ContactsTab';
@@ -56,16 +61,19 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 
 interface TabConfig {
   id: TabId;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   description: string;
+  disabled?: boolean;
+  comingSoon?: boolean;
+  standOut?: boolean;
 }
 
 const TABS: TabConfig[] = [
@@ -74,12 +82,6 @@ const TABS: TabConfig[] = [
     label: 'General',
     icon: Settings,
     description: 'Name, role, and description'
-  },
-  {
-    id: 'schedule',
-    label: 'Schedule',
-    icon: Calendar,
-    description: 'Tasks and automation'
   },
   {
     id: 'identity',
@@ -118,12 +120,6 @@ const TABS: TabConfig[] = [
     description: 'Email, SMS, and messaging'
   },
   {
-    id: 'integrations',
-    label: 'Integrations',
-    icon: Plug,
-    description: 'Third-party connections'
-  },
-  {
     id: 'sources',
     label: 'Sources',
     icon: FolderOpen,
@@ -142,22 +138,33 @@ const TABS: TabConfig[] = [
     description: 'Contact access and permissions'
   },
   {
+    id: 'zapier-mcp',
+    label: 'Zapier MCP',
+    icon: Zap,
+    description: 'MCP server connections and tools'
+  },
+  {
+    id: 'schedule',
+    label: 'Schedule',
+    icon: Calendar,
+    description: 'Tasks and automation',
+    standOut: true
+  },
+  {
     id: 'workflows',
     label: 'Workflows',
     icon: GitBranch,
-    description: 'Process automation and task flows'
+    description: 'Process automation and task flows',
+    disabled: true,
+    comingSoon: true
   },
   {
     id: 'automations',
     label: 'Automations',
     icon: Zap,
-    description: 'Automated actions and triggers'
-  },
-  {
-    id: 'zapier-mcp',
-    label: 'Zapier MCP',
-    icon: Zap,
-    description: 'MCP server connections and tools'
+    description: 'Automated actions and triggers',
+    disabled: true,
+    comingSoon: true
   }
 ];
 
@@ -206,8 +213,6 @@ export function AgentSettingsModal({
         return <ToolsTab {...commonProps} />;
       case 'channels':
         return <ChannelsTab {...commonProps} />;
-      case 'integrations':
-        return <IntegrationsTab {...commonProps} />;
       case 'sources':
         return <SourcesTab {...commonProps} />;
       case 'team':
@@ -246,27 +251,66 @@ export function AgentSettingsModal({
                 {TABS.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
+                  const isDisabled = tab.disabled;
+                  const isStandOut = tab.standOut;
                   
-                  return (
+                  const tabButton = (
                     <button
                       key={tab.id}
-                      onClick={() => handleTabChange(tab.id)}
+                      onClick={() => !isDisabled && handleTabChange(tab.id)}
+                      disabled={isDisabled}
                       className={cn(
                         "w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors",
-                        isActive
+                        isDisabled
+                          ? "opacity-50 cursor-not-allowed text-muted-foreground"
+                          : isStandOut
+                          ? isActive
+                            ? "bg-primary dark:bg-primary text-primary-foreground dark:text-primary-foreground"
+                            : "hover:bg-muted dark:hover:bg-muted text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                          : isActive
                           ? "bg-primary dark:bg-primary text-primary-foreground dark:text-primary-foreground"
                           : "hover:bg-muted dark:hover:bg-muted text-muted-foreground dark:text-muted-foreground hover:text-foreground dark:hover:text-foreground"
                       )}
                     >
                       <div className="flex items-center space-x-2.5">
-                        <Icon className="h-4 w-4" />
-                        <div className="font-medium text-sm">{tab.label}</div>
+                        <Icon className={cn(
+                          "h-4 w-4",
+                          isStandOut && !isActive && "text-blue-600 dark:text-blue-400"
+                        )} />
+                        <div className={cn(
+                          "font-medium text-sm",
+                          isStandOut && "font-semibold"
+                        )}>
+                          {tab.label}
+                        </div>
+                        {tab.comingSoon && (
+                          <div className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                            Soon
+                          </div>
+                        )}
                       </div>
-                      {isActive && (
+                      {isActive && !isDisabled && (
                         <ChevronRight className="h-3.5 w-3.5" />
                       )}
                     </button>
                   );
+
+                  if (tab.comingSoon && isDisabled) {
+                    return (
+                      <TooltipProvider key={tab.id}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            {tabButton}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Coming Soon</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  }
+
+                  return tabButton;
                 })}
               </div>
             </div>

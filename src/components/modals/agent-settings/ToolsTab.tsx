@@ -406,6 +406,16 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       }, 2000);
       
       setHasChanges(false);
+      
+      // Call onAgentUpdated to update parent state
+      if (onAgentUpdated) {
+        // Make sure we include the id field
+        onAgentUpdated({ 
+          id: agentId,
+          ...agentData, 
+          metadata: updatedMetadata 
+        });
+      }
     } catch (error) {
       console.error('Error updating tool settings:', error);
       toast.error('Failed to update tool settings');

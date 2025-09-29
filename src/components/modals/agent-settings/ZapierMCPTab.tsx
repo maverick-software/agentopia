@@ -61,9 +61,15 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
       setLoading(true);
       setError(null);
       
-      // Get agent connections
+      // Get agent connections (filter for Zapier type only)
       const connections = await manager.getAgentConnections(agentId);
-      const activeConnection = connections.find(c => c.is_active) || connections[0] || null;
+      const zapierConnections = connections.filter(c => c.connection_type === 'zapier');
+      
+      // Prefer active connection, otherwise get the most recent one
+      const activeConnection = zapierConnections.find(c => c.is_active) || 
+                              zapierConnections.sort((a, b) => 
+                                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                              )[0] || null;
       setConnection(activeConnection);
       
       // Get tools if connection exists
@@ -231,9 +237,14 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
                   <div>
                     <h5 className="font-medium text-sm mb-1">Server URL</h5>
-                    <p className="text-sm text-muted-foreground font-mono break-all">
-                      {connection.server_url}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground font-mono">
+                        ••••••••••••••••••••
+                      </p>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        🔒 <span>Encrypted</span>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <h5 className="font-medium text-sm mb-1">Tools Available</h5>

@@ -21,7 +21,9 @@ import {
   getAgentPermissions, 
   getServiceProviders,
   hasAgentDocuments,
-  hasTemporaryChatLinksEnabled
+  hasTemporaryChatLinksEnabled,
+  hasAdvancedReasoningEnabled,
+  supabase
 } from './database-service.ts';
 
 serve(async (req) => {
@@ -100,6 +102,10 @@ serve(async (req) => {
     const tools: ToolDefinition[] = [];
     const providersProcessed = new Set<string>();
 
+    // Check if Advanced Reasoning is enabled once, outside the loops
+    const reasoningEnabled = await hasAdvancedReasoningEnabled(agent_id, user_id);
+    console.log(`[GetAgentTools] Advanced Reasoning enabled: ${reasoningEnabled}`);
+
     // Process each authorized tool to generate MCP tools
     for (const toolData of authorizedTools) {
       if (!toolData.user_integration_credentials) {
@@ -149,6 +155,16 @@ serve(async (req) => {
           
           // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
           const normalizedToolName = normalizeToolName(providerPrefixedName);
+          
+          // Skip reasoning tools if Advanced Reasoning is disabled
+          // Check for any tool that starts with internal_system_ and contains reasoning
+          if (!reasoningEnabled && (
+            normalizedToolName.includes('reasoning') || 
+            normalizedToolName.startsWith('internal_system_')
+          )) {
+            console.log(`[GetAgentTools] Skipping reasoning tool ${normalizedToolName} - Advanced Reasoning is disabled`);
+            continue;
+          }
           
           // Generate tool parameters
           const parameters = generateParametersForCapability(normalizedToolName);

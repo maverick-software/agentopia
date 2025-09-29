@@ -16,6 +16,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 });
 
+// Export supabase client for use in other parts of the function
+export { supabase };
+
 /**
  * Fetches agent integration permissions with user credentials
  */
@@ -147,6 +150,48 @@ export async function hasTemporaryChatLinksEnabled(agentId: string, userId: stri
     return isEnabled;
   } catch (error) {
     console.error('[DatabaseService] Error checking temporary chat links setting:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if agent has advanced reasoning enabled
+ */
+export async function hasAdvancedReasoningEnabled(agentId: string, userId: string): Promise<boolean> {
+  console.log(`[DatabaseService] Checking for advanced reasoning setting for agent ${agentId}, user ${userId}`);
+  
+  try {
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .select('metadata, reasoning_config')
+      .eq('id', agentId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !agent) {
+      console.log(`[DatabaseService] Agent not found or error:`, error);
+      return false;
+    }
+
+    // Check both locations where reasoning might be enabled
+    // UI stores in metadata.settings.reasoning_enabled
+    // Database trigger uses reasoning_config.enabled
+    const metadata = agent?.metadata || {};
+    const settings = metadata.settings || {};
+    const reasoningConfig = agent?.reasoning_config || {};
+    
+    const reasoningEnabledInMetadata = settings.reasoning_enabled;
+    const reasoningEnabledInConfig = reasoningConfig.enabled === true;
+    
+    // Use metadata setting if it's explicitly set (true or false), otherwise fall back to reasoning_config
+    const reasoningEnabled = reasoningEnabledInMetadata !== undefined 
+      ? reasoningEnabledInMetadata === true
+      : reasoningEnabledInConfig;
+    
+    console.log(`[DatabaseService] Advanced reasoning enabled: ${reasoningEnabled} (metadata: ${reasoningEnabledInMetadata}, config: ${reasoningEnabledInConfig})`);
+    return reasoningEnabled;
+  } catch (error) {
+    console.error(`[DatabaseService] Error checking advanced reasoning:`, error);
     return false;
   }
 }

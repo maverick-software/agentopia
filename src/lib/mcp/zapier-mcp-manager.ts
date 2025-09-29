@@ -15,7 +15,9 @@ export interface AgentMCPConnection {
   id: string;
   agent_id: string;
   connection_name: string;
-  server_url: string;
+  server_url: string; // DEPRECATED: Use vault_server_url_id for new connections
+  vault_server_url_id?: string; // Vault UUID for encrypted URL storage
+  server_url_deprecated?: string; // Migration field
   connection_type: string;
   is_active: boolean;
   auth_config: Record<string, any>;
@@ -50,6 +52,26 @@ export class ZapierMCPManager {
   ) {}
 
   /**
+   * Securely get the server URL for an MCP connection
+   * This method handles both vault-encrypted URLs and legacy plain text URLs
+   */
+  private async getConnectionServerUrl(connectionId: string): Promise<string> {
+    const { data: serverUrl, error } = await this.supabase.rpc('get_mcp_server_url', {
+      connection_id: connectionId
+    });
+
+    if (error) {
+      throw new Error(`Failed to retrieve server URL: ${error.message}`);
+    }
+
+    if (!serverUrl) {
+      throw new Error('Server URL not found for connection');
+    }
+
+    return serverUrl;
+  }
+
+  /**
    * Get all MCP connections for an agent
    */
   async getAgentConnections(agentId: string): Promise<AgentMCPConnection[]> {
@@ -75,38 +97,31 @@ export class ZapierMCPManager {
     serverUrl: string,
     authConfig: Record<string, any> = {}
   ): Promise<AgentMCPConnection> {
-    // Validate URL format
-    if (!this.isValidUrl(serverUrl)) {
-      throw new Error('Invalid server URL format');
+    try {
+      const { data, error } = await this.supabase.functions.invoke('create-mcp-connection', {
+        body: {
+          agentId,
+          connectionName,
+          serverUrl,
+          authConfig
+        }
+      });
+
+      if (error) {
+        throw new Error(`Edge function error: ${error.message}`);
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Connection creation failed');
+      }
+
+      console.log(`[ZapierMCPManager] Successfully created MCP connection: ${connectionName}`);
+      return data.connection;
+      
+    } catch (error: any) {
+      console.error(`[ZapierMCPManager] Failed to create connection:`, error);
+      throw new Error(`Connection creation failed: ${error.message}`);
     }
-
-    // Test connection before saving
-    const testResult = await this.testConnection(serverUrl);
-    if (!testResult.success) {
-      throw new Error(`Connection test failed: ${testResult.error}`);
-    }
-
-    const { data, error } = await this.supabase
-      .from('agent_mcp_connections')
-      .insert({
-        agent_id: agentId,
-        connection_name: connectionName,
-        server_url: serverUrl,
-        connection_type: 'zapier',
-        auth_config: authConfig,
-        is_active: true
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to create MCP connection: ${error.message}`);
-    }
-
-    // Discover and cache tools
-    await this.refreshConnectionTools(data.id);
-
-    return data;
   }
 
   /**
@@ -242,46 +257,20 @@ export class ZapierMCPManager {
     }
 
     try {
-      const client = new MCPClient(connection.server_url);
-      await client.initialize();
-      
-      // Get all tools (handle pagination if needed)
-      let allTools: MCPTool[] = [];
-      let cursor: string | undefined;
-      
-      do {
-        const { tools, nextCursor } = await client.listTools(cursor);
-        allTools = allTools.concat(tools);
-        cursor = nextCursor;
-      } while (cursor);
+      // Use secure edge function to refresh tools (handles vault decryption server-side)
+      const { data, error } = await this.supabase.functions.invoke('refresh-mcp-tools', {
+        body: { connectionId }
+      });
 
-      await client.disconnect();
-
-      // Clear existing cached tools
-      await this.supabase
-        .from('mcp_tools_cache')
-        .delete()
-        .eq('connection_id', connectionId);
-
-      // Insert new tools
-      if (allTools.length > 0) {
-        const toolsToInsert = allTools.map(tool => ({
-          connection_id: connectionId,
-          tool_name: tool.name,
-          tool_schema: tool,
-          openai_schema: convertMCPToolToOpenAI(tool)
-        }));
-
-        const { error: insertError } = await this.supabase
-          .from('mcp_tools_cache')
-          .insert(toolsToInsert);
-
-        if (insertError) {
-          throw new Error(`Failed to cache tools: ${insertError.message}`);
-        }
+      if (error) {
+        throw new Error(`Edge function error: ${error.message}`);
       }
 
-      console.log(`Refreshed ${allTools.length} tools for connection ${connectionId}`);
+      if (!data.success) {
+        throw new Error(data.error || 'Tool refresh failed');
+      }
+
+      console.log(`[ZapierMCPManager] Successfully refreshed ${data.toolCount || 0} tools for connection ${connectionId}`);
     } catch (error) {
       console.error(`Failed to refresh tools for connection ${connectionId}:`, error);
       
@@ -470,8 +459,9 @@ export class ZapierMCPManager {
       };
     }
 
-    // Test connection
-    const testResult = await this.testConnection(connection.server_url);
+    // Test connection using secure URL retrieval
+    const serverUrl = await this.getConnectionServerUrl(connectionId);
+    const testResult = await this.testConnection(serverUrl);
 
     return {
       isHealthy: testResult.success,

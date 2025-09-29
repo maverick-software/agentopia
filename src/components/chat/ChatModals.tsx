@@ -42,7 +42,7 @@ interface ChatModalsProps {
   agentId: string;
   agent: Agent | null;
   currentProcessingDetails: any;
-  agentSettingsInitialTab: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+  agentSettingsInitialTab: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
   
   // Handlers
   onAgentUpdated: (updatedAgent: Agent) => void;

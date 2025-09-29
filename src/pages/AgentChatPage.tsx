@@ -48,7 +48,7 @@ export function AgentChatPage() {
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
-  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'integrations' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp'>('general');
+  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp'>('general');
   
   // Real-time message subscription
   const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
@@ -1186,8 +1186,13 @@ export function AgentChatPage() {
         }
       };
       // Ensure we do not send nulls for optional string fields
-      if (!agent?.id) delete requestBody.context.agent_id;
-      if (!user?.id) delete requestBody.context.user_id;
+      // Only delete if the value is actually null/undefined, not if the object doesn't exist
+      if (requestBody.context.agent_id === null || requestBody.context.agent_id === undefined) {
+        delete requestBody.context.agent_id;
+      }
+      if (requestBody.context.user_id === null || requestBody.context.user_id === undefined) {
+        delete requestBody.context.user_id;
+      }
       // Only include channel_id if we have a real channel to target
       // (Agent chat is not scoped to a channel)
 
@@ -1665,7 +1670,10 @@ export function AgentChatPage() {
         agent={agent}
         currentProcessingDetails={currentProcessingDetails}
         agentSettingsInitialTab={agentSettingsInitialTab}
-        onAgentUpdated={setAgent}
+        onAgentUpdated={(updatedData) => {
+          // Merge the updated data with existing agent data to prevent losing fields
+          setAgent(prev => prev ? { ...prev, ...updatedData } : updatedData as Agent);
+        }}
         updateAgent={updateAgent}
       />
     </div>
