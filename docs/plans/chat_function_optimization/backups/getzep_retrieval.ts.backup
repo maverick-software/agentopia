@@ -23,22 +23,17 @@ export async function searchGetZepKnowledgeGraph(
   supabase: SupabaseClient
 ): Promise<GetZepSearchResult[]> {
   try {
-    // GUARD CLAUSE #1: Check if account graph is enabled for ANY agent of this user
-    // This is a user-level setting, not agent-level
-    const { data: userAgents } = await supabase
-      .from('agents')
-      .select('id, metadata')
-      .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle();
-    
-    const useAccountGraph = userAgents?.metadata?.settings?.use_account_graph === true;
-    if (!useAccountGraph) {
-      console.log('[GetZepSemantic] Account graph not enabled for user - skipping');
+    // Load Zep SDK dynamically via esm.sh (Deno-friendly)
+    let ZepClientLocal: any = null;
+    try {
+      const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
+      ZepClientLocal = (mod as any)?.default || (mod as any)?.ZepClient || mod;
+    } catch (sdkErr) {
+      console.warn('[GetZepRetrieval] Zep SDK import failed; skipping retrieval:', (sdkErr as any)?.message || sdkErr);
       return [];
     }
-    
-    // GUARD CLAUSE #2: Check for active GetZep connection
+
+    // Get the user's GetZep connection
     const { data: provider } = await supabase
       .from('service_providers')
       .select('id')
@@ -46,7 +41,7 @@ export async function searchGetZepKnowledgeGraph(
       .single();
 
     if (!provider) {
-      console.log('[GetZepSemantic] GetZep provider not configured - skipping');
+      console.warn('[GetZepRetrieval] GetZep provider not found');
       return [];
     }
 
@@ -58,19 +53,8 @@ export async function searchGetZepKnowledgeGraph(
       .eq('connection_status', 'active')
       .maybeSingle();
 
-    // EARLY EXIT: No connection = no search
     if (!connection?.vault_access_token_id) {
-      console.log('[GetZepSemantic] No active GetZep connection - skipping');
-      return [];
-    }
-    
-    // GUARD CLAUSE #2: Only NOW load SDK (expensive operation)
-    let ZepClientLocal: any = null;
-    try {
-      const mod = await import('https://esm.sh/@getzep/zep-cloud@latest');
-      ZepClientLocal = (mod as any)?.default || (mod as any)?.ZepClient || mod;
-    } catch (sdkErr) {
-      console.warn('[GetZepSemantic] SDK import failed; skipping retrieval:', (sdkErr as any)?.message || sdkErr);
+      console.log('[GetZepRetrieval] No active GetZep connection for user');
       return [];
     }
 

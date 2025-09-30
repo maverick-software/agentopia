@@ -2,8 +2,6 @@ import type { AdvancedChatMessage } from '../types/message.types.ts';
 import type { ProcessingContext, ProcessingMetrics } from './types.ts';
 import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling/manager.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
-import { PromptBuilder } from './utils/prompt-builder.ts';
-import { MarkdownFormatter } from './utils/markdown-formatter.ts';
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -15,25 +13,127 @@ export interface MessageHandler {
 }
 
 export class TextMessageHandler implements MessageHandler {
-  private promptBuilder: PromptBuilder;
-  
-  constructor(private openai: any, private supabase: any, private memoryManager?: MemoryManager | null) {
-    this.promptBuilder = new PromptBuilder(supabase);
-  }
-  
+  constructor(private openai: any, private supabase: any, private memoryManager?: MemoryManager | null) {}
   canHandle(message: AdvancedChatMessage): boolean {
     return (message as any).content?.type === 'text';
   }
-  
   /** Normalize tool definitions and drop malformed ones */
   private normalizeTools(tools: any[]): Array<{ name: string; description?: string; parameters: any }> {
-    return MarkdownFormatter.normalizeTools(tools);
+    const normalized: Array<{ name: string; description?: string; parameters: any }> = [];
+    for (const t of tools || []) {
+      const name = t?.name;
+      const params = t?.parameters;
+      if (typeof name === 'string' && params && typeof params === 'object') {
+        normalized.push({ name, description: t?.description || '', parameters: params });
+      } else {
+        try { console.log('[DEBUG] Dropping malformed tool before OpenAI:', JSON.stringify(t)); } catch {}
+      }
+    }
+    return normalized;
   }
   
   private ensureProperMarkdownFormatting(text: string): string {
-    return MarkdownFormatter.ensureProperFormatting(text);
+    // Split text into lines
+    let lines = text.split('\n');
+    let formattedLines: string[] = [];
+    let inCodeBlock = false;
+    let previousWasList = false;
+    let previousWasHeader = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      
+      // Check if we're entering/exiting a code block
+      if (trimmed.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        // Add spacing around code blocks
+        if (i > 0 && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        formattedLines.push(line);
+        if (!inCodeBlock && i < lines.length - 1) {
+          formattedLines.push('');
+        }
+        previousWasList = false;
+        previousWasHeader = false;
+        continue;
+      }
+      
+      // Don't format inside code blocks
+      if (inCodeBlock) {
+        formattedLines.push(line);
+        continue;
+      }
+      
+      // Check if this is a header
+      const isHeader = /^#{1,6}\s/.test(trimmed);
+      
+      // Check if this is a list item
+      const isList = /^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
+      
+      // Add spacing before headers
+      if (isHeader) {
+        if (i > 0 && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        formattedLines.push(line);
+        // Add space after header
+        if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+          formattedLines.push('');
+        }
+        previousWasHeader = true;
+        previousWasList = false;
+        continue;
+      }
+      
+      // Handle list items
+      if (isList) {
+        // Add space before list if previous wasn't a list
+        if (!previousWasList && i > 0 && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        formattedLines.push(line);
+        previousWasList = true;
+        previousWasHeader = false;
+        continue;
+      }
+      
+      // Handle regular paragraphs
+      if (trimmed !== '') {
+        // Add space after list ends
+        if (previousWasList && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        
+        // Add space between paragraphs
+        if (i > 0 && !previousWasHeader && !previousWasList) {
+          const prevLine = formattedLines[formattedLines.length - 1];
+          if (prevLine !== '' && prevLine.trim() !== '') {
+            formattedLines.push('');
+          }
+        }
+        
+        formattedLines.push(line);
+        previousWasList = false;
+        previousWasHeader = false;
+      } else {
+        // Preserve empty lines but don't add duplicates
+        if (formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        previousWasList = false;
+        previousWasHeader = false;
+      }
+    }
+    
+    // Clean up any trailing empty lines
+    while (formattedLines.length > 0 && formattedLines[formattedLines.length - 1] === '') {
+      formattedLines.pop();
+    }
+    
+    return formattedLines.join('\n');
   }
-  
   async handle(message: AdvancedChatMessage, context: ProcessingContext) {
     const startTime = Date.now();
     const msgs: Array<{ role: 'system'|'user'|'assistant'|'tool'; content: string }> = [];
@@ -278,7 +378,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
     // Nudge awareness: briefly declare available tools and guidelines in a system message
     if (availableTools.length > 0) {
       const toolNames = availableTools.map(t => t.name).join(', ');
-      const guidance = this.promptBuilder.buildToolGuidance(toolNames);
+      const guidance = `You have access to the following tools that can help you complete the user's requests:\n\n${toolNames}\n\n=== TOOL USAGE GUIDELINES ===\n1. ALWAYS use tools when the user asks you to take an action (send email, search, create document, etc.)\n2. Tools have prefixes indicating their provider (gmail_, smtp_, microsoft_outlook_, clicksend_, web_search, etc.)\n3. For email-related requests, check which email tools are available and use the appropriate one\n4. For SMS requests, use the clicksend_ tools\n5. For calendar/contacts requests with Outlook, use the microsoft_outlook_ tools\n6. Use web_search tools for internet searches\n7. Only answer directly (without tools) for simple questions or when no relevant tool exists\n\nIMPORTANT: When a user asks you to DO something (not just ask about it), you MUST use the appropriate tool. Do not just describe what you would do - actually use the tool to do it.`;
       msgs.push({ role: 'system', content: guidance });
     }
 
@@ -572,12 +672,6 @@ Remember: ALWAYS use blank lines between elements for readability!`
       }
       
       // Reflect: ask model to produce final answer
-      // Add guidance for clean final response
-      msgs.push({
-        role: 'system',
-        content: this.promptBuilder.buildReflectionGuidance()
-      } as any);
-      
       if (router && useRouter && context.agent_id) {
         const resp2 = await router.chat(context.agent_id, msgs as any, { temperature: 0.5, maxTokens: 1200 });
         completion = {
@@ -636,44 +730,66 @@ Remember: ALWAYS use blank lines between elements for readability!`
 
     // BATCH GUARANTEE (gated): Every message gets enqueued for graph storage
     // ONLY if the agent's centralized graph is enabled.
+    const convId = context.conversation_id || (message as any).conversation_id;
+    console.log(`[TextMessageHandler] Starting graph ingestion check...`);
+    console.log(`[TextMessageHandler] Conversation ID from context: ${context.conversation_id}`);
+    console.log(`[TextMessageHandler] Conversation ID from message: ${(message as any).conversation_id}`);
+    console.log(`[TextMessageHandler] Final conversation_id: ${convId}`);
+    console.log(`[TextMessageHandler] Has memoryManager: ${!!this.memoryManager}`);
+    
     try {
-      // GUARD CLAUSE: Check if graph enabled FIRST before any logging
-      let graphEnabled = false;
-      try {
-        const { data: a } = await (this.supabase as any)
-          .from('agents')
-          .select('metadata')
-          .eq('id', context.agent_id)
-          .maybeSingle();
-        graphEnabled = ((a?.metadata?.settings || {}).use_account_graph === true);
-      } catch (err) {
-        // Silent fail - graph disabled
-        graphEnabled = false;
-      }
-      
-      // EARLY EXIT: If graph disabled, skip to return statement below
-      if (graphEnabled) {
-      
-      // Only NOW get conversation ID and process
-      const convId = context.conversation_id || (message as any).conversation_id;
-      
       if (convId && this.memoryManager) {
-        console.log(`[TextMessageHandler] ✅ Graph enabled - queueing conversation ${convId} for ingestion`);
-        
-        // Ingest the current user message and assistant response
-        const batchConvo: AdvancedChatMessage[] = [
-          message,     // User message
-          processed,   // Assistant response
-        ] as any;
+        console.log(`[TextMessageHandler] Processing conversation ${convId} for graph ingestion`);
+        // Gate on agent setting
+        let graphEnabled = false;
+        try {
+          const { data: a } = await (this.supabase as any)
+            .from('agents')
+            .select('metadata')
+            .eq('id', context.agent_id)
+            .maybeSingle();
+          graphEnabled = ((a?.metadata?.settings || {}).use_account_graph === true);
+          console.log(`[TextMessageHandler] Agent ${context.agent_id} graph enabled: ${graphEnabled}`);
+        } catch (err) {
+          console.error('[TextMessageHandler] Error checking agent settings:', err);
+        }
+        if (!graphEnabled) {
+          console.log('[TextMessageHandler] Graph not enabled, skipping ingestion');
+          return {
+            message: processed,
+            context,
+            metrics: {
+              start_time: startTime,
+              end_time: Date.now(),
+              stages: {},
+              tokens_used: tokensTotal,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              model_used: effectiveModel,
+              memory_searches: 0,
+              tool_executions: toolDetails.length,
+              tool_details: toolDetails,
+              discovered_tools: discoveredToolsForMetrics,
+              tool_requested: toolCalls.length > 0,
+            },
+          } as any;
+        }
+        // Always ingest the current exchange for immediate graph updates
+        console.log(`[TextMessageHandler] Triggering ingestion for current message exchange`);
+        if (true) { // Always ingest every message
+          // Just ingest the current user message and assistant response
+          const batchConvo: AdvancedChatMessage[] = [
+            message,     // User message
+            processed,   // Assistant response
+          ] as any;
 
-        await this.memoryManager.createFromConversation(batchConvo, true);
-      }
+          await this.memoryManager.createFromConversation(batchConvo, true);
+        }
       }
     } catch (ingestionError) {
       console.error('[TextMessageHandler] Graph ingestion error:', ingestionError);
       // best-effort: do not fail the response on batch ingestion errors
     }
-    
     return {
       message: processed,
       context,

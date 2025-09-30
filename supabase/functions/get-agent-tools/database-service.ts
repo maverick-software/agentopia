@@ -163,7 +163,7 @@ export async function hasAdvancedReasoningEnabled(agentId: string, userId: strin
   try {
     const { data: agent, error } = await supabase
       .from('agents')
-      .select('metadata, reasoning_config')
+      .select('metadata')
       .eq('id', agentId)
       .eq('user_id', userId)
       .single();
@@ -173,26 +173,56 @@ export async function hasAdvancedReasoningEnabled(agentId: string, userId: strin
       return false;
     }
 
-    // Check both locations where reasoning might be enabled
-    // UI stores in metadata.settings.reasoning_enabled
-    // Database trigger uses reasoning_config.enabled
+    // Simply check the UI setting - defaults to false if not set
     const metadata = agent?.metadata || {};
     const settings = metadata.settings || {};
-    const reasoningConfig = agent?.reasoning_config || {};
+    const reasoningEnabled = settings.reasoning_enabled === true;
     
-    const reasoningEnabledInMetadata = settings.reasoning_enabled;
-    const reasoningEnabledInConfig = reasoningConfig.enabled === true;
-    
-    // Use metadata setting if it's explicitly set (true or false), otherwise fall back to reasoning_config
-    const reasoningEnabled = reasoningEnabledInMetadata !== undefined 
-      ? reasoningEnabledInMetadata === true
-      : reasoningEnabledInConfig;
-    
-    console.log(`[DatabaseService] Advanced reasoning enabled: ${reasoningEnabled} (metadata: ${reasoningEnabledInMetadata}, config: ${reasoningEnabledInConfig})`);
+    console.log(`[DatabaseService] Advanced reasoning enabled: ${reasoningEnabled} (from metadata.settings.reasoning_enabled: ${settings.reasoning_enabled})`);
     return reasoningEnabled;
   } catch (error) {
     console.error(`[DatabaseService] Error checking advanced reasoning:`, error);
     return false;
+  }
+}
+
+/**
+ * Get all tool settings for an agent
+ */
+export async function getToolSettings(agentId: string, userId: string): Promise<Record<string, boolean>> {
+  console.log(`[DatabaseService] Fetching tool settings for agent ${agentId}, user ${userId}`);
+  
+  try {
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .select('metadata')
+      .eq('id', agentId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !agent) {
+      console.log(`[DatabaseService] Agent not found or error:`, error);
+      return {};
+    }
+
+    const metadata = agent?.metadata || {};
+    const settings = metadata.settings || {};
+    
+    // Return all tool settings, defaulting to false if not set
+    const toolSettings = {
+      voice_enabled: settings.voice_enabled === true,
+      web_search_enabled: settings.web_search_enabled === true,
+      document_creation_enabled: settings.document_creation_enabled === true,
+      ocr_processing_enabled: settings.ocr_processing_enabled === true,
+      temporary_chat_links_enabled: settings.temporary_chat_links_enabled === true,
+      reasoning_enabled: settings.reasoning_enabled === true
+    };
+    
+    console.log(`[DatabaseService] Tool settings:`, toolSettings);
+    return toolSettings;
+  } catch (error) {
+    console.error(`[DatabaseService] Error fetching tool settings:`, error);
+    return {};
   }
 }
 

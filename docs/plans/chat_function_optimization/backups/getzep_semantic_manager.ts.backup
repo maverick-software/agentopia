@@ -218,22 +218,6 @@ export class GetZepSemanticManager {
    * This runs completely independent of episodic memory
    */
   async retrieve(query: string, limit: number = 10): Promise<any[]> {
-    // GUARD CLAUSE: Quick check if graph is enabled BEFORE expensive initialize()
-    try {
-      const { data: agent } = await this.supabase
-        .from('agents')
-        .select('metadata')
-        .eq('id', this.agentId)
-        .maybeSingle();
-      
-      if (!agent?.metadata?.settings?.use_account_graph) {
-        // Silent skip - already logged in getzep_retrieval.ts or will be logged there
-        return [];
-      }
-    } catch {
-      return [];
-    }
-    
     if (!this.config) {
       const initialized = await this.initialize();
       if (!initialized) return [];

@@ -37,8 +37,8 @@ For detailed setup instructions, see the **[Getting Started Guide](README/gettin
 ## 📊 Project Status
 
 **Status**: Production-Ready with Active Development  
-**Last Updated**: September 11, 2025  
-**Documentation Version**: 2.0 (Modular Structure)
+**Last Updated**: September 30, 2025  
+**Documentation Version**: 2.1 (Tool Toggle System & Reasoning Fixes)
 
 ### ✅ Production-Ready Features
 - Complete agent management and workspace collaboration
@@ -51,9 +51,14 @@ For detailed setup instructions, see the **[Getting Started Guide](README/gettin
 - **Temporary Chat Links**: Anonymous public chat links for employee check-ins, customer support, and feedback collection
 - Professional UI with light/dark theme support
 
+### 🎉 Recent Updates (September 2025)
+- **Tool Toggle System**: Complete UI-based control over tool availability with secure defaults
+- **Advanced Reasoning**: Production-ready with dynamic enable/disable functionality
+- **Settings Enforcement**: All tool categories now properly respect UI toggle states
+
 ### 🔄 Active Development
-- Advanced reasoning capabilities
-- Enhanced Microsoft 365 integration
+- Enhanced Microsoft 365 integration (Teams, OneDrive)
+- MCP Management Interface completion
 - Performance optimizations and scaling improvements
 
 For detailed status information, see **[Current Status](README/current-status.md)**.

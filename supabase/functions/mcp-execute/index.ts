@@ -15,8 +15,11 @@ interface MCPExecuteResponse {
 }
 
 Deno.serve(async (req) => {
+  console.log(`[MCP Execute] Incoming request - Method: ${req.method}, URL: ${req.url}`)
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log(`[MCP Execute] CORS preflight request handled`)
     return new Response('ok', { headers: corsHeaders })
   }
 
@@ -25,12 +28,35 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
+    console.log(`[MCP Execute] Supabase URL: ${supabaseUrl}`)
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Parse request body
-    const { connection_id, tool_name, parameters, agent_id }: MCPExecuteRequest = await req.json()
+    const rawBody = await req.text()
+    console.log(`[MCP Execute] Raw request body: ${rawBody}`)
+    
+    let parsedBody: MCPExecuteRequest
+    try {
+      parsedBody = JSON.parse(rawBody)
+    } catch (parseError) {
+      console.error(`[MCP Execute] JSON parse error:`, parseError)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Invalid JSON in request body: ${parseError.message}` 
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+    
+    const { connection_id, tool_name, parameters, agent_id } = parsedBody
+    console.log(`[MCP Execute] Parsed request - connection_id: ${connection_id}, tool_name: ${tool_name}, agent_id: ${agent_id}, parameters:`, parameters)
 
     if (!connection_id || !tool_name || !agent_id) {
+      console.error(`[MCP Execute] Missing required parameters - connection_id: ${!!connection_id}, tool_name: ${!!tool_name}, agent_id: ${!!agent_id}`)
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -43,9 +69,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log(`[MCP Execute] Executing tool ${tool_name} for agent ${agent_id} on connection ${connection_id}`)
+    console.log(`[MCP Execute] ✅ All required parameters present, executing tool ${tool_name} for agent ${agent_id} on connection ${connection_id}`)
 
     // Get the connection details
+    console.log(`[MCP Execute] Fetching connection details from database...`)
     const { data: connection, error: connectionError } = await supabase
       .from('agent_mcp_connections')
       .select('*')
@@ -53,7 +80,10 @@ Deno.serve(async (req) => {
       .eq('agent_id', agent_id)
       .single()
 
+    console.log(`[MCP Execute] Connection query result - data:`, connection, `error:`, connectionError)
+
     if (connectionError || !connection) {
+      console.error(`[MCP Execute] Connection not found or not authorized - error:`, connectionError)
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -66,7 +96,10 @@ Deno.serve(async (req) => {
       )
     }
 
+    console.log(`[MCP Execute] Connection found - is_active: ${connection.is_active}, connection_type: ${connection.connection_type}`)
+
     if (!connection.is_active) {
+      console.error(`[MCP Execute] Connection is not active`)
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -80,9 +113,12 @@ Deno.serve(async (req) => {
     }
 
     // Get the server URL securely using service role
+    console.log(`[MCP Execute] Retrieving server URL from vault for connection ${connection_id}...`)
     const { data: serverUrl, error: urlError } = await supabase.rpc('get_mcp_server_url', {
       connection_id: connection_id
     })
+
+    console.log(`[MCP Execute] Server URL retrieval result - serverUrl: ${serverUrl ? '[REDACTED]' : 'null'}, error:`, urlError)
 
     if (urlError || !serverUrl) {
       console.error(`[MCP Execute] Failed to retrieve server URL: ${urlError?.message}`)
@@ -98,9 +134,43 @@ Deno.serve(async (req) => {
       )
     }
 
+    console.log(`[MCP Execute] ✅ Server URL retrieved successfully, preparing MCP request...`)
+
     // Execute the tool via MCP protocol
     try {
       console.log(`[MCP Execute] Calling MCP server for tool: ${tool_name}`)
+      
+      // Transform parameters for Zapier MCP compatibility
+      // Zapier's "instructions" field is meant for AI interpretation, but OpenAI sends params directly
+      // If we have "instructions" but missing actual parameters, use instructions to infer them
+      let transformedParameters = { ...parameters };
+      
+      if (connection.connection_type === 'zapier' && parameters.instructions && typeof parameters.instructions === 'string') {
+        console.log(`[MCP Execute] Detected Zapier tool with instructions parameter, applying smart parameter transformation...`)
+        
+        // For email search tools, if searchValue is missing, use empty string (gets recent emails)
+        if (tool_name.includes('find_emails') || tool_name.includes('search')) {
+          if (!transformedParameters.searchValue) {
+            transformedParameters.searchValue = '';  // Empty string gets most recent items
+            console.log(`[MCP Execute] Added searchValue: "" for email search (will get recent emails)`)
+          }
+        }
+        
+        // Keep instructions for Zapier's AI to use as context
+        console.log(`[MCP Execute] Transformed parameters:`, transformedParameters)
+      }
+      
+      const mcpRequestBody = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: {
+          name: tool_name,
+          arguments: transformedParameters
+        }
+      }
+      
+      console.log(`[MCP Execute] MCP request body:`, JSON.stringify(mcpRequestBody, null, 2))
       
       const response = await fetch(serverUrl, {
         method: 'POST',
@@ -109,25 +179,22 @@ Deno.serve(async (req) => {
           'Accept': 'application/json, text/event-stream',
           'MCP-Protocol-Version': '2024-11-05'
         },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: Date.now(),
-          method: 'tools/call',
-          params: {
-            name: tool_name,
-            arguments: parameters
-          }
-        })
+        body: JSON.stringify(mcpRequestBody)
       })
+
+      console.log(`[MCP Execute] MCP server response - status: ${response.status}, statusText: ${response.statusText}`)
+      console.log(`[MCP Execute] Response headers:`, Object.fromEntries(response.headers.entries()))
 
       // Handle different response formats (JSON or SSE)
       let mcpResponse
       const contentType = response.headers.get('content-type') || ''
+      console.log(`[MCP Execute] Response content-type: ${contentType}`)
       
       if (contentType.includes('text/event-stream')) {
         // Handle Server-Sent Events format (Zapier MCP uses this)
         const responseText = await response.text()
-        console.log(`[MCP Execute] SSE Response received for tool ${tool_name}`)
+        console.log(`[MCP Execute] SSE Response received for tool ${tool_name}, length: ${responseText.length} chars`)
+        console.log(`[MCP Execute] SSE Response (first 500 chars): ${responseText.substring(0, 500)}`)
         
         // Parse SSE format: look for "data: " lines
         const lines = responseText.split('\n')
@@ -136,33 +203,48 @@ Deno.serve(async (req) => {
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             jsonData = line.substring(6) // Remove "data: " prefix
+            console.log(`[MCP Execute] Found SSE data line: ${jsonData.substring(0, 200)}...`)
             break
           }
         }
         
         if (!jsonData) {
+          console.error(`[MCP Execute] No data found in SSE response. Full response:`, responseText)
           throw new Error('No data found in SSE response')
         }
         
         try {
           mcpResponse = JSON.parse(jsonData)
+          console.log(`[MCP Execute] Successfully parsed SSE JSON response`)
         } catch (parseError) {
+          console.error(`[MCP Execute] Failed to parse SSE data. Parse error:`, parseError, `Raw data:`, jsonData)
           throw new Error(`Failed to parse SSE data: ${parseError.message}`)
         }
       } else {
         // Handle regular JSON response
+        console.log(`[MCP Execute] Handling regular JSON response`)
         if (!response.ok && response.status !== 400) {
           // Some MCP servers return 400 but still have valid data
           const text = await response.text()
           console.error(`[MCP Execute] HTTP error ${response.status}: ${text}`)
           throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
-        mcpResponse = await response.json()
+        const responseText = await response.text()
+        console.log(`[MCP Execute] JSON response text (first 500 chars): ${responseText.substring(0, 500)}`)
+        try {
+          mcpResponse = JSON.parse(responseText)
+          console.log(`[MCP Execute] Successfully parsed JSON response`)
+        } catch (parseError) {
+          console.error(`[MCP Execute] Failed to parse JSON. Parse error:`, parseError, `Raw text:`, responseText)
+          throw new Error(`Failed to parse JSON response: ${parseError.message}`)
+        }
       }
+      
+      console.log(`[MCP Execute] MCP response structure:`, Object.keys(mcpResponse))
       
       // Check for MCP protocol errors
       if (mcpResponse.error) {
-        console.error(`[MCP Execute] MCP Error:`, mcpResponse.error)
+        console.error(`[MCP Execute] MCP Error detected:`, mcpResponse.error)
         return new Response(
           JSON.stringify({ 
             success: false, 
@@ -178,17 +260,59 @@ Deno.serve(async (req) => {
 
       // Extract the result
       const result = mcpResponse.result
+      console.log(`[MCP Execute] Tool ${tool_name} executed successfully, result type: ${typeof result}`)
+      console.log(`[MCP Execute] Result preview:`, JSON.stringify(result).substring(0, 200))
 
-      console.log(`[MCP Execute] Tool ${tool_name} executed successfully`)
+      // Check if Zapier MCP returned an error in the result (they use isError flag)
+      if (result && result.isError === true) {
+        console.error(`[MCP Execute] Zapier MCP tool returned an error:`, result)
+        
+        // Extract the error message from the nested content structure
+        let errorMessage = 'Tool execution failed'
+        if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
+          try {
+            const errorData = JSON.parse(result.content[0].text)
+            errorMessage = errorData.error || errorMessage
+          } catch (e) {
+            // If parsing fails, use the raw text
+            errorMessage = result.content[0].text
+          }
+        }
+        
+        console.log(`[MCP Execute] Extracted error message: ${errorMessage}`)
+        
+        // Return as a retry-able error for the LLM (200 OK so Universal Tool Executor processes it)
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: errorMessage,
+            requires_retry: true,
+            metadata: {
+              tool_name,
+              zapier_error: true,
+              feedback_url: result.content?.[0]?.text ? JSON.parse(result.content[0].text).feedbackUrl : null
+            }
+          }),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
 
       // Log tool execution for analytics (optional)
-      await supabase
-        .from('mcp_tools_cache')
-        .update({ last_updated: new Date().toISOString() })
-        .eq('connection_id', connection_id)
-        .eq('tool_name', tool_name)
-        .catch(err => console.warn('Failed to update tool usage timestamp:', err))
+      console.log(`[MCP Execute] Updating tool usage timestamp...`)
+      try {
+        await supabase
+          .from('mcp_tools_cache')
+          .update({ last_updated: new Date().toISOString() })
+          .eq('connection_id', connection_id)
+          .eq('tool_name', tool_name)
+      } catch (err) {
+        console.warn('[MCP Execute] Failed to update tool usage timestamp:', err)
+      }
 
+      console.log(`[MCP Execute] ✅ Returning success response`)
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -202,6 +326,7 @@ Deno.serve(async (req) => {
 
     } catch (mcpError: any) {
       console.error(`[MCP Execute] MCP connection error:`, mcpError)
+      console.error(`[MCP Execute] Error stack:`, mcpError.stack)
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -216,7 +341,8 @@ Deno.serve(async (req) => {
     }
 
   } catch (error: any) {
-    console.error('[MCP Execute] Error:', error)
+    console.error('[MCP Execute] Top-level error:', error)
+    console.error('[MCP Execute] Error stack:', error.stack)
     return new Response(
       JSON.stringify({ 
         success: false, 

@@ -84,9 +84,75 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   const [newApiKey, setNewApiKey] = useState('');
   const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
   const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
+  const [hasAssignedDocuments, setHasAssignedDocuments] = useState(false);
+  const [assignedDocumentsCount, setAssignedDocumentsCount] = useState(0);
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const { connections } = useConnections({ includeRevoked: false });
+
+  // Check for assigned documents
+  useEffect(() => {
+    const checkAssignedDocuments = async () => {
+      if (!agentId || !user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('agent_media_assignments')
+          .select('id')
+          .eq('agent_id', agentId)
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        
+        if (error) throw error;
+        
+        const count = data?.length || 0;
+        const hasDocuments = count > 0;
+        setHasAssignedDocuments(hasDocuments);
+        setAssignedDocumentsCount(count);
+        
+        // If documents are assigned but ocr_processing is not enabled, enable it automatically
+        if (hasDocuments && agentData) {
+          const metadata = agentData.metadata || {};
+          const toolSettings = metadata.settings || {};
+          
+          if (!toolSettings.ocr_processing_enabled) {
+            console.log('[ToolsTab] Auto-enabling Read Documents for agent with assigned documents');
+            
+            // Enable in database
+            const updatedSettings = { ...toolSettings, ocr_processing_enabled: true };
+            const updatedMetadata = {
+              ...metadata,
+              settings: updatedSettings
+            };
+
+            const { error: updateError } = await supabase
+              .from('agents')
+              .update({ metadata: updatedMetadata })
+              .eq('id', agentId)
+              .eq('user_id', user.id);
+
+            if (updateError) {
+              console.error('Error auto-enabling Read Documents:', updateError);
+            } else {
+              // Update local state
+              setAgentSettings(updatedSettings);
+              setAgentMetadata(updatedMetadata);
+              setSettings(prev => ({ ...prev, ocr_processing_enabled: true }));
+              
+              // Notify parent
+              if (onAgentUpdated) {
+                onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking assigned documents:', error);
+      }
+    };
+    
+    checkAssignedDocuments();
+  }, [agentId, user, supabase, agentData, onAgentUpdated]);
 
   useEffect(() => {
     // Load current tool settings from agent metadata
@@ -97,11 +163,14 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       setAgentMetadata(metadata);
       setAgentSettings(toolSettings);
       
+      // Sync database setting with UI state for ocr_processing
+      const shouldEnableOCR = hasAssignedDocuments ? true : (toolSettings.ocr_processing_enabled || false);
+      
       setSettings({
         voice_enabled: toolSettings.voice_enabled || false,
         web_search_enabled: toolSettings.web_search_enabled || false,
         document_creation_enabled: toolSettings.document_creation_enabled || false,
-        ocr_processing_enabled: toolSettings.ocr_processing_enabled || false,
+        ocr_processing_enabled: shouldEnableOCR,
         temporary_chat_links_enabled: toolSettings.temporary_chat_links_enabled || false
       });
       
@@ -112,8 +181,33 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
         ocr_processing: toolSettings.ocr_processing_credential || '',
         temporary_chat_links: toolSettings.temporary_chat_links_credential || ''
       });
+      
+      // If UI state doesn't match database, sync it immediately
+      if (hasAssignedDocuments && !toolSettings.ocr_processing_enabled) {
+        console.log('[ToolsTab] UI shows enabled but DB shows disabled, syncing database...');
+        const updatedSettings = { ...toolSettings, ocr_processing_enabled: true };
+        const updatedMetadata = { ...metadata, settings: updatedSettings };
+        
+        supabase
+          .from('agents')
+          .update({ metadata: updatedMetadata })
+          .eq('id', agentId)
+          .eq('user_id', user?.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('[ToolsTab] Error syncing OCR setting to database:', error);
+            } else {
+              console.log('[ToolsTab] Successfully synced OCR setting to database');
+              setAgentSettings(updatedSettings);
+              setAgentMetadata(updatedMetadata);
+              if (onAgentUpdated) {
+                onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+              }
+            }
+          });
+      }
     }
-  }, [agentData]);
+  }, [agentData, hasAssignedDocuments, agentId, user, supabase, onAgentUpdated]);
 
   // Provider configurations
   const providerConfigs: Record<string, ProviderConfig[]> = {
@@ -161,6 +255,14 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   };
 
   const handleToggle = async (tool: keyof ToolSettings, enabled: boolean) => {
+    // Prevent disabling Read Documents if agent has assigned documents
+    if (tool === 'ocr_processing_enabled' && !enabled && hasAssignedDocuments) {
+      toast.error(`Cannot disable Read Documents while ${assignedDocumentsCount} document${assignedDocumentsCount !== 1 ? 's are' : ' is'} assigned. Remove documents from the Media tab first.`, {
+        duration: 4000
+      });
+      return;
+    }
+    
     if (enabled) {
       // Check if credentials exist for this tool
       const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links';
@@ -537,12 +639,29 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
                         id={tool.id}
                         checked={tool.enabled}
                         onCheckedChange={(checked) => handleToggle(tool.id, checked)}
+                        disabled={tool.id === 'ocr_processing_enabled' && hasAssignedDocuments}
                       />
                       <Label htmlFor={tool.id} className="sr-only">
                         Toggle {tool.name}
                       </Label>
                     </div>
                   </div>
+
+                  {/* Document Assignment Notice */}
+                  {tool.id === 'ocr_processing_enabled' && hasAssignedDocuments && (
+                    <div className="pl-16 mt-2">
+                      <div className="flex items-start space-x-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium">Required for Assigned Documents</p>
+                          <p className="text-xs mt-1 text-blue-700 dark:text-blue-300">
+                            This agent has {assignedDocumentsCount} document{assignedDocumentsCount !== 1 ? 's' : ''} assigned. 
+                            Read Documents must remain enabled. Remove all documents from the Media tab to disable this feature.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Credential Selection */}
                   {tool.enabled && hasCredentials && (

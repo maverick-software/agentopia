@@ -63,11 +63,9 @@ export async function getRelevantChatHistory(
 
     const { data: v2Data, error: v2Error } = await v2Query;
 
-    // Log the results (only log error if it exists)
-    if (v2Error) {
-      console.error(`[getRelevantChatHistory] V2 Error:`, v2Error); 
-    }
-    console.log(`[getRelevantChatHistory] V2 Retrieved ${v2Data?.length ?? 0} messages`);
+    // Log the raw results
+    console.log(`[getRelevantChatHistory] V2 Result - Error:`, v2Error); 
+    console.log(`[getRelevantChatHistory] V2 Result - Data Count:`, v2Data?.length ?? 0);
     // console.log(`[getRelevantChatHistory] Query Result - Raw Data:`, data); // Avoid logging potentially sensitive message content unless necessary
 
     if (!v2Error && v2Data) {

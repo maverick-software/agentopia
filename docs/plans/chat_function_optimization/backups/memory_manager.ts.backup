@@ -723,79 +723,40 @@ export class MemoryManager {
     relevance_scores: number[];
     external?: any[];
   }> {
-    // ========================================
-    // GUARD CLAUSES - CHECK ONCE AT TOP
-    // ========================================
-    
-    // Check #1: Does agent have Pinecone connected?
-    let hasPinecone = false;
-    let pineconeConnection: any = null;
-    
-    try {
-      const { data: connection, error: connError } = await this.supabase
-        .from('agent_datastores')
-        .select(`
-          datastore_id,
-          datastores:datastore_id (
-            id,
-            type,
-            config,
-            user_id
-          )
-        `)
-        .eq('agent_id', agent_id)
-        .eq('datastores.type', 'pinecone')
-        .maybeSingle();
-      
-      if (connection && !connError) {
-        hasPinecone = true;
-        pineconeConnection = connection;
-      }
-    } catch {
-      hasPinecone = false;
-    }
-    
-    // Check #2: Does agent have GetZep enabled?
-    let hasGetZep = false;
-    
-    try {
-      const { data: agent } = await this.supabase
-        .from('agents')
-        .select('metadata, user_id')
-        .eq('id', agent_id)
-        .maybeSingle();
-      
-      hasGetZep = agent?.metadata?.settings?.use_account_graph === true;
-    } catch {
-      hasGetZep = false;
-    }
-    
-    // Log feature status ONCE
-    console.log(`[MemoryManager] Features for agent ${agent_id}: Pinecone=${hasPinecone}, GetZep=${hasGetZep}`);
-    
-    // Initialize GetZep manager if needed and enabled
-    if (hasGetZep && !this.getzepManager && agent_id) {
+    // Initialize GetZep manager if needed
+    if (!this.getzepManager && agent_id) {
       this.getzepManager = new GetZepSemanticManager(this.supabase, agent_id);
     }
     
     // ========================================
-    // PARALLEL RETRIEVAL - USE RESULTS FROM CHECKS
+    // PARALLEL RETRIEVAL - COMPLETELY INDEPENDENT
     // ========================================
     
     // OPERATION 1: Episodic retrieval (Pinecone/vector)
     const episodicPromise = (async () => {
-      // GUARD CLAUSE: Skip if episodic not requested
-      if (context?.memory_types && !context.memory_types.includes('episodic')) {
-        return [];
-      }
-      
-      // GUARD CLAUSE: Skip if no Pinecone (already checked above)
-      if (!hasPinecone || !pineconeConnection) {
-        return [];
-      }
-      
-      try {
-        const connection = pineconeConnection;
+      if (!context?.memory_types || context.memory_types.includes('episodic')) {
+        try {
+        // Check if agent has Pinecone datastore connected
+        const { data: connection, error: connError } = await this.supabase
+          .from('agent_datastores')
+          .select(`
+            datastore_id,
+            datastores:datastore_id (
+              id,
+              type,
+              config,
+              user_id
+            )
+          `)
+          .eq('agent_id', agent_id)
+          .eq('datastores.type', 'pinecone')
+          .maybeSingle();
+        
+        // If no connection found, return empty
+        if (!connection || connError) {
+          console.log('[MemoryManager] No Pinecone datastore connected for episodic memory');
+          return [];
+        }
 
         const ds = (connection as any)?.datastores;
         // Resolve API key from Vault when present
@@ -820,73 +781,84 @@ export class MemoryManager {
             apiKey = ds.config.apiKey; // backward compatibility
           }
         } catch (_) { apiKey = null; }
-        
-        // GUARD CLAUSE: If no API key or index name, return empty immediately
-        if (!apiKey || !ds?.config?.indexName) {
-          console.log('[MemoryManager] No Pinecone API key or index - skipping episodic search');
-          return [];
-        }
-        
-        // Generate embedding
-        const emb = await this.openai.embeddings.create({
-          model: this.config.embedding_model || 'text-embedding-3-small',
-          input: query,
-        });
-        const vector = emb.data[0].embedding as number[];
+        if (apiKey && ds?.config?.indexName) {
+          // Generate embedding
+          const emb = await this.openai.embeddings.create({
+            model: this.config.embedding_model || 'text-embedding-3-small',
+            input: query,
+          });
+          const vector = emb.data[0].embedding as number[];
 
-        // Query Pinecone (support optional host)
-        const pc = new Pinecone({ apiKey });
-        const index = ds.config.host ? pc.Index(ds.config.indexName, ds.config.host) : pc.Index(ds.config.indexName);
-        const search = await index.query({
-          vector,
-          topK: 10,
-          includeMetadata: true,
-          includeValues: false,
-          filter: { agent_id: { $eq: agent_id }, memory_type: { $eq: 'episodic' } },
-        });
+          // Query Pinecone (support optional host)
+          const pc = new Pinecone({ apiKey });
+          const index = ds.config.host ? pc.Index(ds.config.indexName, ds.config.host) : pc.Index(ds.config.indexName);
+          const search = await index.query({
+            vector,
+            topK: 10,
+            includeMetadata: true,
+            includeValues: false,
+            filter: { agent_id: { $eq: agent_id }, memory_type: { $eq: 'episodic' } },
+          });
 
-        const ids = (search.matches || []).map((m: any) => m.id);
-        if (ids.length > 0) {
-          const { data: memories } = await this.supabase
-            .from('agent_memories')
-            .select('*')
-            .in('id', ids);
-          return (memories || []) as any[];
+          const ids = (search.matches || []).map((m: any) => m.id);
+          if (ids.length > 0) {
+            const { data: memories } = await this.supabase
+              .from('agent_memories')
+              .select('*')
+              .in('id', ids);
+            return (memories || []) as any[];
+          } else {
+            return [];
+          }
         } else {
+          // No Pinecone connected - return empty (no fallback to DB)
+          console.log('[MemoryManager] No Pinecone datastore connected for episodic memory');
           return [];
         }
       } catch (err) {
+        // If error is "no rows" it means no Pinecone is connected
+        if ((err as any)?.message?.includes('no) rows returned')) {
+          console.log('[MemoryManager] No Pinecone datastore connected for episodic memory');
+          return [];
+        }
         console.warn('[MemoryManager] Episodic vector search failed:', (err as Error)?.message);
-        // EARLY EXIT: No fallback to DB - if Pinecone fails, return empty
+        // No fallback to DB - if Pinecone fails, return empty
+        return [];
+      }
+      } else {
         return [];
       }
     })();
     
     // OPERATION 2: Semantic retrieval (GetZep/graph)
     const semanticPromise = (async () => {
-      // GUARD CLAUSE: Skip if GetZep not enabled (already checked above)
-      if (!hasGetZep || !this.getzepManager) {
-        return [];
-      }
-      
-      try {
-        const results = await this.getzepManager.retrieve(query, 10);
-        if (results.length > 0) {
-          console.log(`[MemoryManager] ✅ GetZep retrieved ${results.length} results`);
+      if (this.getzepManager) {
+        try {
+          const results = await this.getzepManager.retrieve(query, 10);
+          console.log(`[MemoryManager] GetZep semantic retrieval returned ${results.length} results`);
+          return results;
+        } catch (error) {
+          console.error('[MemoryManager] GetZep semantic retrieval failed:', error);
+          return [];
         }
-        return results;
-      } catch (error) {
-        console.error('[MemoryManager] GetZep retrieval failed:', error);
-        return [];
       }
+      return [];
     })();
     
     // No legacy semantic - GetZep handles all semantic memory now
     
-    // OPERATION 4: External datastore vector search - REMOVED (duplicate of episodicPromise)
-    // Previously this called getVectorSearchResults() which duplicates the Pinecone check in episodicPromise
-    // If we need external datastores in future, add a separate check here
-    const externalPromise = Promise.resolve([]);
+    // OPERATION 4: External datastore vector search
+    const externalPromise = (async () => {
+      try {
+        const externalText = await getVectorSearchResults(query, agent_id, this.supabase, this.openai);
+        if (externalText) {
+          return [{ id: `external_${crypto.randomUUID()}`, content: { definition: externalText, concept: 'External Knowledge' } }];
+        }
+      } catch (_e) {
+        // ignore
+      }
+      return [];
+    })();
     
     // OPERATION 5: Procedural memories
     const proceduralPromise = (async () => {

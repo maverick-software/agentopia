@@ -484,13 +484,27 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
   
   // Convert common technical errors to interactive questions based on tool type
   const lowerError = error.toLowerCase();
-  const isEmailTool = toolName.startsWith('gmail_') || toolName.startsWith('smtp_');
+  const isEmailTool = toolName.startsWith('gmail_') || toolName.startsWith('smtp_') || toolName.startsWith('microsoft_outlook_');
   const isSearchTool = toolName.startsWith('web_search') || toolName.startsWith('news_') || toolName.startsWith('scrape_');
   const isSMSTool = toolName.startsWith('clicksend_');
   const isContactTool = toolName === 'search_contacts' || toolName === 'get_contact_details';
+  const isOutlookTool = toolName.startsWith('microsoft_outlook_');
   
   // Missing parameters errors
-  if (lowerError.includes('missing') && lowerError.includes('parameter')) {
+  if (lowerError.includes('missing') && (lowerError.includes('parameter') || lowerError.includes('field') || lowerError.includes('required'))) {
+    if (isOutlookTool) {
+      // Specific handling for Outlook/Zapier MCP tools
+      if (lowerError.includes('searchvalue') || lowerError.includes('search value')) {
+        if (toolName === 'microsoft_outlook_find_emails') {
+          return 'Question: To find emails, I need a search value. Please provide:\n' +
+                 '• A search term (e.g., "project update", "meeting notes")\n' +
+                 '• A sender email address\n' +
+                 '• Or leave it empty (use "") to get the most recent emails\n\n' +
+                 'Use the "searchValue" parameter, not "instructions".';
+        }
+      }
+      return 'Question: What Outlook information is missing? Please check the required parameters for this tool.';
+    }
     if (isEmailTool) {
       return 'Question: What email details are missing? Please provide the recipient email address, subject line, and message content.';
     }
@@ -629,7 +643,27 @@ export class UniversalToolExecutor {
       }
       
       // Find the appropriate routing configuration
-      const routingConfig = this.findRoutingConfig(toolName);
+      let routingConfig = this.findRoutingConfig(toolName);
+      let mcpConnectionId: string | null = null;
+      
+      // If no prefix match, check if this is an MCP tool
+      if (!routingConfig) {
+        console.log(`[UniversalToolExecutor] No prefix match for ${toolName}, checking if it's an MCP tool...`);
+        mcpConnectionId = await this.getMCPToolConnection(toolName, agentId, supabase);
+        if (mcpConnectionId) {
+          console.log(`[UniversalToolExecutor] ${toolName} is an MCP tool on connection ${mcpConnectionId}, routing to mcp-execute`);
+          routingConfig = {
+            edgeFunction: 'mcp-execute',
+            actionMapping: (toolName: string) => toolName, // Pass through tool name
+            parameterMapping: (params: Record<string, any>, context: any) => ({
+              connection_id: mcpConnectionId,
+              tool_name: toolName,
+              parameters: params,
+              agent_id: context.agentId
+            })
+          };
+        }
+      }
       
       if (!routingConfig) {
         console.error(`[UniversalToolExecutor] No routing configuration found for tool: ${toolName}`);
@@ -711,6 +745,7 @@ export class UniversalToolExecutor {
             return {
               ...data,
               error: enhancedError,  // Use enhanced error for retry mechanism
+              requires_retry: data.requires_retry,  // Preserve requires_retry flag from edge function
               metadata: { 
                 ...data.metadata, 
                 toolName, 
@@ -778,6 +813,34 @@ export class UniversalToolExecutor {
     }
     
     return null;
+  }
+  
+  /**
+   * Check if a tool is an MCP tool and return its connection_id
+   * Returns null if not an MCP tool, otherwise returns the connection_id
+   */
+  private static async getMCPToolConnection(toolName: string, agentId: string, supabase: SupabaseClient): Promise<string | null> {
+    try {
+      // Query mcp_tools_cache joined with agent_mcp_connections
+      const { data, error } = await supabase
+        .from('mcp_tools_cache')
+        .select('id, connection_id, agent_mcp_connections!inner(agent_id)')
+        .eq('tool_name', toolName)
+        .eq('agent_mcp_connections.agent_id', agentId)
+        .eq('agent_mcp_connections.is_active', true)
+        .limit(1)
+        .maybeSingle();
+      
+      if (error) {
+        console.error(`[UniversalToolExecutor] Error checking if ${toolName} is MCP tool:`, error);
+        return null;
+      }
+      
+      return data?.connection_id || null;
+    } catch (error) {
+      console.error(`[UniversalToolExecutor] Exception checking if ${toolName} is MCP tool:`, error);
+      return null;
+    }
   }
   
   /**

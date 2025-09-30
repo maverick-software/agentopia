@@ -118,26 +118,34 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
                 </span>
                 
-                {/* Thoughts and Process buttons for assistant messages */}
-                {message.role === 'assistant' && (
+                {/* Thoughts and Process buttons for assistant messages - ONLY show if there's actual data */}
+                {message.role === 'assistant' && (message.metadata?.aiProcessDetails || currentProcessingDetails) && (
                   <div className="flex items-center space-x-2">
-                    {/* Thoughts Dropdown */}
-                    <details className="group">
-                      <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
-                        <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
-                        <span className="text-xs text-muted-foreground group-open:text-foreground">
-                          Thoughts
-                        </span>
-                        <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
-                      </summary>
-                      <div className="absolute z-50 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
-                        <div className="text-xs text-muted-foreground">
-                          Thinking process details would appear here...
+                    {/* Thoughts Dropdown - only show if there are process steps */}
+                    {message.metadata?.aiProcessDetails?.steps && message.metadata.aiProcessDetails.steps.length > 0 && (
+                      <details className="group">
+                        <summary className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors">
+                          <Brain className="h-3 w-3 text-muted-foreground group-open:text-purple-500" />
+                          <span className="text-xs text-muted-foreground group-open:text-foreground">
+                            Thoughts
+                          </span>
+                          <ChevronRight className="h-2.5 w-2.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                        </summary>
+                        <div className="absolute z-50 mt-1 p-3 bg-popover border border-border rounded-lg shadow-lg min-w-80 max-w-96">
+                          <div className="text-xs space-y-2">
+                            {message.metadata.aiProcessDetails.steps.map((step: any, idx: number) => (
+                              <div key={idx} className="border-b border-border pb-2 last:border-0">
+                                <div className="font-medium text-foreground">{step.label}</div>
+                                {step.details && <div className="text-muted-foreground mt-1">{step.details}</div>}
+                                {step.duration && <div className="text-muted-foreground/70 mt-1">{step.duration}ms</div>}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </details>
+                      </details>
+                    )}
                     
-                    {/* Process Button */}
+                    {/* Process Button - only show if there are processing details */}
                     {currentProcessingDetails && onShowProcessModal && (
                       <button
                         onClick={onShowProcessModal}

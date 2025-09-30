@@ -90,7 +90,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         
         setReasoningStyle(settings.reasoning_style || 'analytical');
         setCustomInstructions(settings.custom_instructions || '');
-        setReasoningEnabled(settings.reasoning_enabled === true);
+        setReasoningEnabled(settings.reasoning_enabled === true); // Defaults to false if undefined
 
       } catch (error) {
         console.error('Error loading agent settings:', error);

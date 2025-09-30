@@ -2,8 +2,6 @@ import type { AdvancedChatMessage } from '../types/message.types.ts';
 import type { ProcessingContext, ProcessingMetrics } from './types.ts';
 import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling/manager.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
-import { PromptBuilder } from './utils/prompt-builder.ts';
-import { MarkdownFormatter } from './utils/markdown-formatter.ts';
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -15,25 +13,127 @@ export interface MessageHandler {
 }
 
 export class TextMessageHandler implements MessageHandler {
-  private promptBuilder: PromptBuilder;
-  
-  constructor(private openai: any, private supabase: any, private memoryManager?: MemoryManager | null) {
-    this.promptBuilder = new PromptBuilder(supabase);
-  }
-  
+  constructor(private openai: any, private supabase: any, private memoryManager?: MemoryManager | null) {}
   canHandle(message: AdvancedChatMessage): boolean {
     return (message as any).content?.type === 'text';
   }
-  
   /** Normalize tool definitions and drop malformed ones */
   private normalizeTools(tools: any[]): Array<{ name: string; description?: string; parameters: any }> {
-    return MarkdownFormatter.normalizeTools(tools);
+    const normalized: Array<{ name: string; description?: string; parameters: any }> = [];
+    for (const t of tools || []) {
+      const name = t?.name;
+      const params = t?.parameters;
+      if (typeof name === 'string' && params && typeof params === 'object') {
+        normalized.push({ name, description: t?.description || '', parameters: params });
+      } else {
+        try { console.log('[DEBUG] Dropping malformed tool before OpenAI:', JSON.stringify(t)); } catch {}
+      }
+    }
+    return normalized;
   }
   
   private ensureProperMarkdownFormatting(text: string): string {
-    return MarkdownFormatter.ensureProperFormatting(text);
+    // Split text into lines
+    let lines = text.split('\n');
+    let formattedLines: string[] = [];
+    let inCodeBlock = false;
+    let previousWasList = false;
+    let previousWasHeader = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      
+      // Check if we're entering/exiting a code block
+      if (trimmed.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        // Add spacing around code blocks
+        if (i > 0 && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        formattedLines.push(line);
+        if (!inCodeBlock && i < lines.length - 1) {
+          formattedLines.push('');
+        }
+        previousWasList = false;
+        previousWasHeader = false;
+        continue;
+      }
+      
+      // Don't format inside code blocks
+      if (inCodeBlock) {
+        formattedLines.push(line);
+        continue;
+      }
+      
+      // Check if this is a header
+      const isHeader = /^#{1,6}\s/.test(trimmed);
+      
+      // Check if this is a list item
+      const isList = /^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
+      
+      // Add spacing before headers
+      if (isHeader) {
+        if (i > 0 && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        formattedLines.push(line);
+        // Add space after header
+        if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+          formattedLines.push('');
+        }
+        previousWasHeader = true;
+        previousWasList = false;
+        continue;
+      }
+      
+      // Handle list items
+      if (isList) {
+        // Add space before list if previous wasn't a list
+        if (!previousWasList && i > 0 && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        formattedLines.push(line);
+        previousWasList = true;
+        previousWasHeader = false;
+        continue;
+      }
+      
+      // Handle regular paragraphs
+      if (trimmed !== '') {
+        // Add space after list ends
+        if (previousWasList && formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        
+        // Add space between paragraphs
+        if (i > 0 && !previousWasHeader && !previousWasList) {
+          const prevLine = formattedLines[formattedLines.length - 1];
+          if (prevLine !== '' && prevLine.trim() !== '') {
+            formattedLines.push('');
+          }
+        }
+        
+        formattedLines.push(line);
+        previousWasList = false;
+        previousWasHeader = false;
+      } else {
+        // Preserve empty lines but don't add duplicates
+        if (formattedLines[formattedLines.length - 1] !== '') {
+          formattedLines.push('');
+        }
+        previousWasList = false;
+        previousWasHeader = false;
+      }
+    }
+    
+    // Clean up any trailing empty lines
+    while (formattedLines.length > 0 && formattedLines[formattedLines.length - 1] === '') {
+      formattedLines.pop();
+    }
+    
+    return formattedLines.join('\n');
   }
-  
   async handle(message: AdvancedChatMessage, context: ProcessingContext) {
     const startTime = Date.now();
     const msgs: Array<{ role: 'system'|'user'|'assistant'|'tool'; content: string }> = [];
@@ -278,7 +378,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
     // Nudge awareness: briefly declare available tools and guidelines in a system message
     if (availableTools.length > 0) {
       const toolNames = availableTools.map(t => t.name).join(', ');
-      const guidance = this.promptBuilder.buildToolGuidance(toolNames);
+      const guidance = `You have access to the following tools that can help you complete the user's requests:\n\n${toolNames}\n\n=== TOOL USAGE GUIDELINES ===\n1. ALWAYS use tools when the user asks you to take an action (send email, search, create document, etc.)\n2. Tools have prefixes indicating their provider (gmail_, smtp_, microsoft_outlook_, clicksend_, web_search, etc.)\n3. For email-related requests, check which email tools are available and use the appropriate one\n4. For SMS requests, use the clicksend_ tools\n5. For calendar/contacts requests with Outlook, use the microsoft_outlook_ tools\n6. Use web_search tools for internet searches\n7. Only answer directly (without tools) for simple questions or when no relevant tool exists\n\n=== CRITICAL RESPONSE FORMATTING ===\n• When using tools, DO NOT include the raw JSON parameters in your response\n• DO NOT show code blocks like { "to": "...", "message": "..." }\n• Simply state what you're doing in ONE concise sentence, then call the tool\n• After the tool executes, report the result clearly\n• NEVER repeat the same action or explanation multiple times\n\nExample GOOD response:\n"I'll send that summary to Charles now."\n[tool executes]\n"✅ SMS sent successfully to Charles Sears."\n\nExample BAD response:\n"I'll send the SMS now.\n{ \"to\": \"+1234567890\", \"message\": \"...\" }\nNow I'll proceed with sending."\n\nIMPORTANT: When a user asks you to DO something (not just ask about it), you MUST use the appropriate tool. Do not just describe what you would do - actually use the tool to do it.`;
       msgs.push({ role: 'system', content: guidance });
     }
 
@@ -575,7 +675,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
       // Add guidance for clean final response
       msgs.push({
         role: 'system',
-        content: this.promptBuilder.buildReflectionGuidance()
+        content: `Now provide a FINAL, clean response to the user. Your response should:\n\n✅ Be concise and professional\n✅ Summarize what was accomplished\n✅ Report any results or outcomes clearly\n✅ Use markdown formatting for readability\n\n❌ DO NOT repeat intermediate steps or explanations\n❌ DO NOT include raw JSON or code blocks\n❌ DO NOT say "I'll do X now" - just report what was done\n\nThe user only needs to know the final outcome in a clear, friendly way.`
       } as any);
       
       if (router && useRouter && context.agent_id) {

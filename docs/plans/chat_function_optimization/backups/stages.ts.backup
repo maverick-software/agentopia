@@ -258,10 +258,74 @@ export class EnrichmentStage extends ProcessingStage {
           }
         }
 
-        // GetZep Knowledge Graph retrieval - REMOVED (DUPLICATE)
-        // This was duplicating the GetZep call already made by memoryManager.contextualSearch()
-        // The semantic memory results are already included in memoryResults above (line 156)
-        // No need to call GetZep separately here
+        // GetZep Knowledge Graph retrieval (semantic memory)
+        try {
+          console.log('[EnrichmentStage] Checking for GetZep knowledge graph...');
+          const { data: agentRow } = await (this.memoryManager as any).supabase
+            .from('agents')
+            .select('user_id, metadata')
+            .eq('id', context.agent_id)
+            .maybeSingle();
+          const userId = (agentRow as any)?.user_id;
+          const agentSettings = ((agentRow as any)?.metadata?.settings || {}) as Record<string, any>;
+          const useAccountGraph = agentSettings.use_account_graph === true; // Must be explicitly enabled
+          
+          console.log(`[EnrichmentStage] Agent ${context.agent_id}: useAccountGraph=${useAccountGraph}, userId=${userId}, hasQuery=${!!queryText}`);
+          
+          if (useAccountGraph && userId && queryText) {
+            try {
+              // Import and use GetZep retrieval
+              const { searchGetZepKnowledgeGraph, extractConcepts } = await import('../core/memory/getzep_retrieval.ts');
+              
+              // Search GetZep knowledge graph
+              const graphStart = Date.now();
+              const getzepResults = await searchGetZepKnowledgeGraph(queryText, userId, (this.memoryManager as any).supabase);
+              
+              if (getzepResults.length > 0) {
+                // Add GetZep results to memory sections
+                for (const result of getzepResults.slice(0, 3)) {
+                  memorySections.push({
+                    id: `getzep_${crypto.randomUUID()}`,
+                    title: 'Knowledge Graph',
+                    content: result.content,
+                    source: 'semantic_memory',
+                    priority: 1, // High priority for semantic knowledge
+                    token_count: estimateTokens(result.content),
+                    relevance_score: result.score,
+                    metadata: { 
+                      source: 'getzep',
+                      ...result.metadata 
+                    }
+                  });
+                }
+                
+                // Update metrics to show semantic memory was used
+                if (!metrics.semantic_memory) {
+                  metrics.semantic_memory = {
+                    searched: true,
+                    results_count: 0,
+                    relevance_scores: [],
+                    concepts_retrieved: [],
+                    search_time_ms: 0
+                  };
+                }
+                metrics.semantic_memory.searched = true;
+                metrics.semantic_memory.results_count = getzepResults.length;
+                metrics.semantic_memory.relevance_scores = getzepResults.map(r => r.score);
+                metrics.semantic_memory.concepts_retrieved = extractConcepts(queryText);
+                metrics.semantic_memory.search_time_ms = Date.now() - graphStart;
+                
+                console.log(`[EnrichmentStage] GetZep returned ${getzepResults.length} semantic results`);
+              } else {
+                console.log('[EnrichmentStage] No GetZep results for query');
+              }
+            } catch (err) {
+              console.warn('[EnrichmentStage] GetZep retrieval error:', err);
+            }
+          }
+        } catch (err) {
+          console.warn('[EnrichmentStage] Error checking agent graph settings:', err);
+        }
 
         const mergedSections = [...existingSections, ...memorySections];
         const totalTokens = mergedSections.reduce((sum: number, s: any) => sum + (s.token_count || 0), 0);

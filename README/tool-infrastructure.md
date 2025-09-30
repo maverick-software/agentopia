@@ -9,6 +9,7 @@ This document provides comprehensive information about Gofr Agents' tool infrast
 - [Tool Development Lifecycle](#tool-development-lifecycle)
 - [Universal Tool Executor](#universal-tool-executor)
 - [Tool Discovery System](#tool-discovery-system)
+- [Tool Settings & Toggles](#tool-settings--toggles)
 - [Creating New MCP Tools](#creating-new-mcp-tools)
 - [Tool Registration Process](#tool-registration-process)
 - [Parameter Generation](#parameter-generation)
@@ -254,6 +255,100 @@ if (hasContactPermissions) {
   }
 }
 ```
+
+## Tool Settings & Toggles
+
+The platform includes a UI-based tool management system that allows users to enable/disable specific tool categories on a per-agent basis. This provides fine-grained control over which tools agents have access to.
+
+### Available Tool Settings
+
+The following tool categories can be toggled in the Agent Settings → Tools tab:
+
+1. **Voice Synthesis** (`voice_enabled`)
+   - Provider: ElevenLabs
+   - Enables text-to-speech capabilities
+   - Default: `false` (disabled)
+
+2. **Web Search** (`web_search_enabled`)
+   - Provider: Serper API
+   - Enables web search, news, images, and local search
+   - Default: `false` (disabled)
+
+3. **Document Creation** (`document_creation_enabled`)
+   - Provider: Document API
+   - Enables document creation and editing
+   - Default: `false` (disabled)
+
+4. **Read Documents** (`ocr_processing_enabled`)
+   - Provider: OCR API (OCR.space or Mistral AI)
+   - Enables PDF and image text extraction
+   - Default: `false` (disabled)
+
+5. **Temporary Chat Links** (`temporary_chat_links_enabled`)
+   - Provider: Internal (Built-in)
+   - Enables anonymous public chat link creation
+   - Default: `false` (disabled)
+
+6. **Advanced Reasoning** (`reasoning_enabled`)
+   - Provider: Internal (Built-in)
+   - Enables sophisticated reasoning patterns (inductive, deductive, abductive)
+   - Configured in: Agent Settings → Behavior tab
+   - Default: `false` (disabled)
+
+### Tool Settings Storage
+
+Tool settings are stored in the agent's metadata:
+
+```json
+{
+  "metadata": {
+    "settings": {
+      "voice_enabled": false,
+      "web_search_enabled": false,
+      "document_creation_enabled": false,
+      "ocr_processing_enabled": false,
+      "temporary_chat_links_enabled": false,
+      "reasoning_enabled": false
+    }
+  }
+}
+```
+
+### How Tool Filtering Works
+
+The `get-agent-tools` edge function enforces these settings by:
+
+1. **Fetching Tool Settings**: Retrieves all toggle states from `metadata.settings`
+2. **Provider Mapping**: Maps service providers to their required settings:
+   ```typescript
+   const providerToSettingMap: Record<string, string> = {
+     'serper_api': 'web_search_enabled',
+     'elevenlabs': 'voice_enabled',
+     'internal_system': 'reasoning_enabled',
+   };
+   ```
+3. **Filtering Providers**: Skips providers if their required setting is `false`
+4. **Default Behavior**: All settings default to `false` if not explicitly set
+
+### Always-Available Tools
+
+The following tool categories are **always available** (no toggle required):
+
+1. **Contact Management** - Enabled if agent has contact permissions
+2. **Email Integration** (Gmail, Outlook, SMTP, etc.) - Based on connected credentials
+3. **SMS Integration** (ClickSend, Twilio, etc.) - Based on connected credentials
+4. **Media Library** (Document Search) - Enabled if agent has assigned documents
+5. **Zapier MCP** - Available if Zapier MCP server is connected
+
+These tools are controlled by their respective permission systems rather than global toggles.
+
+### Best Practices for Tool Toggles
+
+1. **Default to Off**: New tool categories should default to `false` for security
+2. **Explicit Opt-In**: Users must explicitly enable tools they want to use
+3. **Clear UI Feedback**: Show toggle state clearly in the UI
+4. **Provider-Level Filtering**: Filter at the provider level, not individual tools
+5. **Consistent Naming**: Use `[category]_enabled` pattern for all settings
 
 ### Adding New Internal Tools
 

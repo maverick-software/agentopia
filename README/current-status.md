@@ -5,8 +5,8 @@ This document provides an up-to-date overview of Agentopia's development status,
 ## 🎯 Overall Project Status
 
 **Status**: Production-Ready with Active Development  
-**Last Updated**: September 11, 2025  
-**Version**: 2.0 (Modular Documentation Architecture)
+**Last Updated**: September 30, 2025  
+**Version**: 2.1 (Tool Toggle System & Reasoning Fixes)
 
 ### Production Readiness Assessment
 - ✅ **Core Functionality**: Complete agent management and workspace collaboration
@@ -14,6 +14,42 @@ This document provides an up-to-date overview of Agentopia's development status,
 - ✅ **Integrations**: Comprehensive email and tool connectivity
 - ✅ **UI/UX**: Professional interface with accessibility compliance
 - ✅ **Documentation**: Comprehensive, modular documentation system
+
+## 🔧 Recent Major Fixes (September 2025)
+
+### Tool Settings & Discovery System Overhaul
+**Completed**: September 30, 2025
+
+**Problem**: Agent tools were appearing regardless of UI toggle settings. Users could disable tools in the UI, but agents would still have access to all tools.
+
+**Root Cause**: The `get-agent-tools` edge function was only checking `reasoning_enabled` and `temporary_chat_links_enabled`, completely ignoring other toggle settings like `web_search_enabled`, `voice_enabled`, etc.
+
+**Solution Implemented**:
+1. **Created `getToolSettings()` function** - Centralized function to fetch all tool toggle states from agent metadata
+2. **Provider-to-Setting Mapping** - Systematic mapping of service providers to their required settings
+3. **Provider-Level Filtering** - Skip entire providers if their required setting is disabled
+4. **Default-to-Disabled Logic** - All tool settings default to `false` for security
+5. **Simplified Reasoning Check** - Removed complex fallback logic, now simply checks `metadata.settings.reasoning_enabled`
+
+**Files Modified**:
+- `supabase/functions/get-agent-tools/database-service.ts` - Added `getToolSettings()` function
+- `supabase/functions/get-agent-tools/index.ts` - Added filtering logic and provider mapping
+- `src/components/modals/agent-settings/BehaviorTab.tsx` - Clarified default behavior
+
+**Impact**:
+- ✅ All tool toggles now work correctly
+- ✅ Tools default to disabled (secure by default)
+- ✅ Clear UI feedback matches actual tool availability
+- ✅ Simplified codebase with consistent logic
+- ✅ Better security through explicit opt-in
+
+**Tool Categories Affected**:
+- Voice Synthesis (elevenlabs) → `voice_enabled`
+- Web Search (serper_api) → `web_search_enabled`
+- Advanced Reasoning (internal_system) → `reasoning_enabled`
+- Document Creation → `document_creation_enabled`
+- OCR Processing → `ocr_processing_enabled`
+- Temporary Chat Links → `temporary_chat_links_enabled`
 
 ## ✅ Completed Major Features
 
@@ -46,6 +82,8 @@ This document provides an up-to-date overview of Agentopia's development status,
 - **Dynamic Tool Discovery**: Automatic detection and integration of available tools
 - **Function Calling**: Sophisticated tool execution with retry logic
 - **Permission System**: Granular agent-specific tool access control
+- **Tool Toggle System**: UI-based enable/disable controls for tool categories (Voice, Web Search, Reasoning, etc.)
+- **Settings Enforcement**: All tools default to disabled; explicit opt-in required
 
 ### 📚 Advanced Content Management
 **Status**: **COMPLETE & PRODUCTION-READY**
@@ -86,12 +124,13 @@ This document provides an up-to-date overview of Agentopia's development status,
 ## 🔄 Active Development Areas
 
 ### 🧠 Advanced Reasoning System
-**Status**: **40% Complete - MCP Framework Ready**
+**Status**: **COMPLETE & PRODUCTION-READY**
 - ✅ Database schema and core architecture implemented
-- ✅ MCP-style reasoning tools with confidence tracking
+- ✅ MCP-style reasoning tools with confidence tracking (8 reasoning tools)
 - ✅ Adversarial critic system with reconsideration cycles
-- 🔄 Integration with existing chat system (in progress)
-- 🔄 UI components for reasoning process visualization
+- ✅ Integration with chat system via tool toggle
+- ✅ UI toggle in Behavior tab (defaults to disabled)
+- ✅ Dynamic tool filtering based on agent settings
 
 ### 🔧 MCP Management Interface
 **Status**: **60% Complete - Major Components Ready**

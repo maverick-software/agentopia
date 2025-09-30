@@ -231,17 +231,14 @@ async function handler(req: Request): Promise<Response> {
     if (!req.headers.get('X-API-Version')) {
       apiVersion = looksLikeV2 ? '2.0' : '1.0';
     }
+    log.info('Processing request', { api_version: apiVersion, method: req.method, url: req.url });
     
     // Initialize message adapter for conversions
     const messageAdapter = new MessageAdapter();
     
     if (apiVersion.startsWith('2')) {
       // Handle v2 requests
-      const acceptHeader = req.headers.get('Accept');
-      const wantsStream = acceptHeader?.includes('text/event-stream');
-      const requestType = wantsStream && body.options?.response?.stream ? 'streaming' : 'standard';
-      
-      log.info('Processing v2 request', { type: requestType, method: req.method });
+      log.info('Processing v2 request');
       
       // Validate as v2 request
       const validation = validator.validateChatRequest(body);
@@ -252,9 +249,16 @@ async function handler(req: Request): Promise<Response> {
         );
       }
       
+      const acceptHeader = req.headers.get('Accept');
+      const wantsStream = acceptHeader?.includes('text/event-stream');
+      
       if (wantsStream && body.options?.response?.stream) {
+        log.info('Processing streaming request');
         return handleStreamingRequest(body, requestId);
       }
+      
+      // Process regular request
+      log.info('Processing standard request');
       
       // Ensure user_id is set from authenticated user
       if (!body.context) body.context = {};

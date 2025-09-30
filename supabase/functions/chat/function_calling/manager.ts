@@ -563,6 +563,48 @@ export class FunctionCallingManager {
         return formattedResult;
       }
       
+      // Special handling for Outlook/Zapier MCP email tools
+      if (functionName.includes('microsoft_outlook') || functionName.includes('find_emails')) {
+        // Parse the MCP result content
+        const content = result.data?.content || result.data;
+        
+        if (Array.isArray(content)) {
+          // Handle array of content items (MCP protocol format)
+          let formattedResult = '';
+          for (const item of content) {
+            if (item.type === 'text' && item.text) {
+              // Try to parse JSON from text
+              try {
+                const emailData = JSON.parse(item.text);
+                if (emailData.emails && Array.isArray(emailData.emails)) {
+                  formattedResult += `Found ${emailData.emails.length} email(s):\n\n`;
+                  for (const email of emailData.emails.slice(0, 20)) { // Limit to 20 emails max
+                    formattedResult += `📧 **${email.subject || '(No subject)'}**\n`;
+                    formattedResult += `   From: ${email.from || 'Unknown'}\n`;
+                    if (email.receivedDateTime) {
+                      formattedResult += `   Received: ${email.receivedDateTime}\n`;
+                    }
+                    if (email.bodyPreview) {
+                      const preview = email.bodyPreview.substring(0, 150);
+                      formattedResult += `   Preview: ${preview}${email.bodyPreview.length > 150 ? '...' : ''}\n`;
+                    }
+                    formattedResult += `\n`;
+                  }
+                  if (emailData.emails.length > 20) {
+                    formattedResult += `\n... and ${emailData.emails.length - 20} more email(s)\n`;
+                  }
+                  return formattedResult;
+                }
+              } catch {
+                // Not JSON or different format, return as-is (truncated)
+                const textContent = item.text.substring(0, 2000);
+                return textContent + (item.text.length > 2000 ? '\n\n[Content truncated for brevity]' : '');
+              }
+            }
+          }
+        }
+      }
+      
       // Format successful result (generic)
       let formattedResult = `✅ Successfully executed ${functionName}`;
       

@@ -26,7 +26,8 @@ export async function getVectorSearchResults(
   supabaseClient: SupabaseClient,
   openai: OpenAI
 ): Promise<string | null> {
-  // GUARD CLAUSE: Quick check for Pinecone datastore connection FIRST
+  console.log(`[DEBUG] Starting vector search for agent ${agentId} with message: "${message.substring(0, 100)}..."`);
+  
   try {
     const { data: connection, error: connectionError } = await supabaseClient
       .from('agent_datastores')
@@ -45,21 +46,47 @@ export async function getVectorSearchResults(
       .eq('datastores.type', 'pinecone')
       .maybeSingle();
 
-    // EARLY EXIT #1: Connection error or no connection
-    if (connectionError || !connection || !connection?.datastores) {
-      console.log(`[VectorSearch] No Pinecone datastore connected for agent ${agentId} - skipping vector search`);
+    if (connectionError) {
+      // Only log as error if it's not the expected "no rows" case
+      if (connectionError.code !== 'PGRST116') {
+        console.error('Vector store connection error:', {
+          error: connectionError,
+          message: connectionError.message,
+          details: connectionError.details,
+          code: connectionError.code,
+          agentId: agentId
+        });
+      }
+      return null;
+    }
+    
+    // Check if no connection was found
+    if (!connection) {
+      console.log(`[DEBUG] Agent ${agentId} has no Pinecone datastore connected`);
+      return null;
+    }
+
+    if (!connection?.datastores) {
+      console.log(`[DEBUG] Agent ${agentId} has connection but no datastore object`);
       return null;
     }
 
     const datastore = connection.datastores;
-    
-    // EARLY EXIT #2: Incomplete configuration
-    if (!datastore.config?.apiKey || !datastore.config?.indexName) {
-      console.log(`[VectorSearch] Incomplete Pinecone config for agent ${agentId} - skipping vector search`);
-      return null;
+    console.log(`[DEBUG] Found Pinecone datastore ${datastore.id} for agent ${agentId}`);
+    console.log(`[DEBUG] Datastore config keys:`, Object.keys(datastore.config || {}));
+
+    // Validate necessary config fields exist
+    if (!datastore.config?.apiKey || !datastore.config?.region || !datastore.config?.indexName) {
+        console.error(`[DEBUG] Incomplete Pinecone configuration found in datastore ${datastore.id}:`, {
+          hasApiKey: !!datastore.config?.apiKey,
+          hasRegion: !!datastore.config?.region, 
+          hasIndexName: !!datastore.config?.indexName,
+          config: datastore.config
+        });
+        return null;
     }
-    
-    console.log(`[VectorSearch] ✅ Starting vector search for agent ${agentId}`);
+
+    console.log(`[DEBUG] Pinecone config validated for datastore ${datastore.id}`);
 
     // Generate embedding (prefer router embedding model if enabled)
     let embeddingValues: number[] = [];

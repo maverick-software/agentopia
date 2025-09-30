@@ -421,9 +421,18 @@ serve(async (req) => {
       console.error('[ClickSend] Failed to log error:', logError);
     }
 
+    // Check if this is a validation error (retryable) or a hard error
+    const isValidationError = error.message && (
+      error.message.includes('Invalid phone number format') ||
+      error.message.includes('missing') ||
+      error.message.includes('required') ||
+      error.message.includes('must be between')
+    );
+    
     const response: ClickSendResponse = {
       success: false,
       error: error.message,
+      requires_retry: isValidationError,  // Flag validation errors as retryable
       metadata: {
         execution_time_ms: Date.now() - startTime
       }
@@ -432,7 +441,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify(response),
       { 
-        status: 500, 
+        status: isValidationError ? 200 : 500,  // 200 for retryable errors, 500 for hard errors
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );

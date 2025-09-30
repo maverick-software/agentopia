@@ -83,53 +83,40 @@ export class MessageProcessor {
       new EnrichmentStage(this.contextEngine, this._memoryManager),
       // Reasoning stage using scorer+selector+markov
       new (class ReasoningStage extends ProcessingStage {
-        constructor(
-          private outerOpenAI: any, 
-          private outerMonitoring: MonitoringSystem, 
-          private _memoryManager: any,
-          private outerSupabase: SupabaseClient
-        ) { super(); }
+        constructor(private outerOpenAI: any, private outerMonitoring: MonitoringSystem, private _memoryManager: any) { super(); }
         get name() { return 'reasoning'; }
         async process(message: any, context: ProcessingContext, metrics: ProcessingMetrics): Promise<any> {
           try {
-            // GUARD CLAUSE: Check if reasoning is enabled in agent settings
-            let reasoningEnabled = false; // DISABLED BY DEFAULT
-            let userThreshold = 0.3;
+            // Load user's reasoning threshold preference
+            let userThreshold = 0.3; // default
             
-            try {
-              const { data: agent } = await this.outerSupabase
-                .from('agents')
-                .select('metadata')
-                .eq('id', context.agent_id)
-                .single();
-              
-              // Check metadata.settings.reasoning_enabled (set by UI toggle)
-              reasoningEnabled = agent?.metadata?.settings?.reasoning_enabled === true;
-              
-              const reasoningSettings = agent?.metadata?.reasoning_settings;
-              if (reasoningSettings?.threshold !== undefined) {
-                userThreshold = Math.max(0, Math.min(1, reasoningSettings.threshold));
-              }
-              
-              console.log(`[ReasoningStage] Agent settings - reasoning_enabled: ${reasoningEnabled}, threshold: ${userThreshold}`);
-            } catch (e) {
-              console.log(`[ReasoningStage] Error loading settings, reasoning disabled by default`, e);
-            }
-
-            // GUARD CLAUSE: If reasoning disabled in database, skip entirely (don't allow request override)
-            if (!reasoningEnabled) {
-              console.log(`[ReasoningStage] ⏭️ Advanced Reasoning is DISABLED in agent settings - skipping reasoning chain`);
-              metrics.reasoning = { score: 0, enabled: false, style: 'none' as any, reason: 'disabled_by_user' };
-              return message;
-            }
-            
-            // Allow threshold override from request (but not enabled flag)
+            // First check if threshold is passed in request options
             if (context.request_options?.reasoning?.threshold !== undefined) {
               userThreshold = context.request_options.reasoning.threshold;
               console.log(`[ReasoningStage] Using threshold from request: ${userThreshold}`);
+            } else {
+              // Otherwise try to load from agent settings
+              try {
+                const { data: agent } = await this.supabase
+                  .from('agents')
+                  .select('metadata')
+                  .eq('id', context.agent_id)
+                  .single();
+                
+                const reasoningSettings = agent?.metadata?.reasoning_settings;
+                if (reasoningSettings?.threshold !== undefined) {
+                  userThreshold = Math.max(0, Math.min(1, reasoningSettings.threshold));
+                  console.log(`[ReasoningStage] Loaded threshold from agent settings: ${userThreshold}`);
+                } else {
+                  console.log(`[ReasoningStage] Using default threshold: ${userThreshold}`);
+                }
+              } catch (e) {
+                console.log(`[ReasoningStage] Error loading settings, using default: ${userThreshold}`, e);
+              }
             }
 
-            const defaultOpts: ReasoningOptions = { enabled: reasoningEnabled, threshold: userThreshold } as any;
+            // Enable reasoning by default; UI can turn it off via options.reasoning.enabled = false
+            const defaultOpts: ReasoningOptions = { enabled: true, threshold: userThreshold } as any;
             const opts = ({ ...defaultOpts, ...(context.request_options?.reasoning || {}) }) as ReasoningOptions;
             const contentText = message.content?.type === 'text' ? (message.content.text || '') : '';
             const scoreInfo = ReasoningScorer.score(contentText, (metrics.context_tokens || 0) / 4000);
@@ -319,7 +306,7 @@ export class MessageProcessor {
             }
           return message;
         }
-      })(this.openai, this.monitoring, this._memoryManager, this.supabase),
+      })(this.openai, this.monitoring, this._memoryManager),
       
       new MainProcessingStage(this.getProcessingHandlers()),
       new ResponseStage(),

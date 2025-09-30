@@ -23,6 +23,7 @@ import {
   hasAgentDocuments,
   hasTemporaryChatLinksEnabled,
   hasAdvancedReasoningEnabled,
+  getToolSettings,
   supabase
 } from './database-service.ts';
 
@@ -102,9 +103,17 @@ serve(async (req) => {
     const tools: ToolDefinition[] = [];
     const providersProcessed = new Set<string>();
 
-    // Check if Advanced Reasoning is enabled once, outside the loops
-    const reasoningEnabled = await hasAdvancedReasoningEnabled(agent_id, user_id);
-    console.log(`[GetAgentTools] Advanced Reasoning enabled: ${reasoningEnabled}`);
+    // Get all tool settings from agent metadata
+    const toolSettings = await getToolSettings(agent_id, user_id);
+    console.log(`[GetAgentTools] Tool settings:`, toolSettings);
+
+    // Map provider names to their tool setting keys
+    const providerToSettingMap: Record<string, string> = {
+      'serper_api': 'web_search_enabled',
+      'elevenlabs': 'voice_enabled',
+      'internal_system': 'reasoning_enabled',  // For reasoning tools
+      // OCR and document creation are checked differently (via scopes/capabilities)
+    };
 
     // Process each authorized tool to generate MCP tools
     for (const toolData of authorizedTools) {
@@ -127,6 +136,13 @@ serve(async (req) => {
 
       // Skip if already processed this provider
       if (providersProcessed.has(providerName)) {
+        continue;
+      }
+
+      // Check if this provider requires a tool setting to be enabled
+      const requiredSetting = providerToSettingMap[providerName];
+      if (requiredSetting && !toolSettings[requiredSetting]) {
+        console.log(`[GetAgentTools] Skipping ${provider.display_name} (${providerName}) - ${requiredSetting} is disabled`);
         continue;
       }
 
@@ -156,16 +172,6 @@ serve(async (req) => {
           // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
           const normalizedToolName = normalizeToolName(providerPrefixedName);
           
-          // Skip reasoning tools if Advanced Reasoning is disabled
-          // Check for any tool that starts with internal_system_ and contains reasoning
-          if (!reasoningEnabled && (
-            normalizedToolName.includes('reasoning') || 
-            normalizedToolName.startsWith('internal_system_')
-          )) {
-            console.log(`[GetAgentTools] Skipping reasoning tool ${normalizedToolName} - Advanced Reasoning is disabled`);
-            continue;
-          }
-          
           // Generate tool parameters
           const parameters = generateParametersForCapability(normalizedToolName);
           
@@ -194,8 +200,13 @@ serve(async (req) => {
       console.warn(`[GetAgentTools] Error checking for agent media assignments:`, error);
     }
 
-    if (hasDocuments) {
-      console.log(`[GetAgentTools] Agent has assigned documents, adding Media Library MCP tools`);
+    // Only add Media Library tools if agent has documents AND Read Documents is enabled
+    if (hasDocuments && !toolSettings['ocr_processing_enabled']) {
+      console.log(`[GetAgentTools] Agent has assigned documents but Read Documents is disabled - skipping Media Library tools`);
+    }
+    
+    if (hasDocuments && toolSettings['ocr_processing_enabled']) {
+      console.log(`[GetAgentTools] Agent has assigned documents and Read Documents enabled, adding Media Library MCP tools`);
       
       const mediaLibraryTools = [
         'search_documents',
