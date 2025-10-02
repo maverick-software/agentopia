@@ -177,7 +177,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
    * Build tool usage guidance
    */
   buildToolGuidance(toolNames: string): string {
-    return `You have access to the following tools that can help you complete the user's requests:\n\n${toolNames}\n\n=== TOOL USAGE GUIDELINES ===\n1. ALWAYS use tools when the user asks you to take an action (send email, search, create document, etc.)\n2. Tools have prefixes indicating their provider (gmail_, smtp_, microsoft_outlook_, clicksend_, web_search, etc.)\n3. For email-related requests, check which email tools are available and use the appropriate one\n4. For SMS requests, use the clicksend_ tools\n5. For calendar/contacts requests with Outlook, use the microsoft_outlook_ tools\n6. Use web_search tools for internet searches\n7. Only answer directly (without tools) for simple questions or when no relevant tool exists\n\n=== CRITICAL RESPONSE FORMATTING ===\n• When using tools, DO NOT include the raw JSON parameters in your response\n• DO NOT show code blocks like { "to": "...", "message": "..." }\n• Simply state what you're doing in ONE concise sentence, then call the tool\n• After the tool executes, report the result clearly\n• NEVER repeat the same action or explanation multiple times\n\nExample GOOD response:\n"I'll send that summary to Charles now."\n[tool executes]\n"✅ SMS sent successfully to Charles Sears."\n\nExample BAD response:\n"I'll send the SMS now.\n{ \"to\": \"+1234567890\", \"message\": \"...\" }\nNow I'll proceed with sending."\n\nIMPORTANT: When a user asks you to DO something (not just ask about it), you MUST use the appropriate tool. Do not just describe what you would do - actually use the tool to do it.`;
+    return `You have access to the following tools that can help you complete the user's requests:\n\n${toolNames}\n\n=== TOOL USAGE GUIDELINES ===\n1. ALWAYS use tools when the user asks you to take an action (send email, search, create document, etc.)\n2. Tools have prefixes indicating their provider (gmail_, smtp_, microsoft_outlook_, clicksend_, web_search, etc.)\n3. For email-related requests, check which email tools are available and use the appropriate one\n4. For SMS requests, use the clicksend_ tools\n5. For calendar/contacts requests with Outlook, use the microsoft_outlook_ tools\n6. Use web_search tools for internet searches\n7. Only answer directly (without tools) for simple questions or when no relevant tool exists\n\n=== CRITICAL: YOU MUST USE FUNCTION CALLING ===\n❌ NEVER just say you will do something - you MUST actually call the function\n❌ NEVER respond with text like "I'll send the SMS now" without calling the tool\n❌ NEVER simulate or pretend to take action - USE THE ACTUAL TOOL\n✅ When the user asks you to send/create/search/do ANYTHING, you MUST call the appropriate tool function\n✅ Do not write conversational responses about taking action - TAKE THE ACTION by calling the tool\n\n=== CRITICAL RESPONSE FORMATTING ===\n• When using tools, DO NOT include the raw JSON parameters in your response\n• DO NOT show code blocks like { "to": "...", "message": "..." }\n• Simply state what you're doing in ONE concise sentence, then call the tool\n• After the tool executes, report the result clearly\n• NEVER repeat the same action or explanation multiple times\n\nExample GOOD response:\n"I'll send that summary to Charles now."\n[tool executes]\n"✅ SMS sent successfully to Charles Sears."\n\nExample BAD response:\n"I'll send the SMS now.\n{ \"to\": \"+1234567890\", \"message\": \"...\" }\nNow I'll proceed with sending."\n\nIMPORTANT: When a user asks you to DO something (not just ask about it), you MUST use the appropriate tool. Do not just describe what you would do - actually use the tool to do it.`;
   }
 
   /**
@@ -271,9 +271,9 @@ Remember: ALWAYS use blank lines between elements for readability!`
   }
 
   /**
-   * Build complete system prompt
+   * Build complete system messages array (old method - for backward compatibility)
    */
-  async buildSystemPrompt(context: ProcessingContext, message: any): Promise<Array<{ role: 'system' | 'user' | 'assistant'; content: string }>> {
+  async buildSystemMessages(context: ProcessingContext, message: any): Promise<Array<{ role: 'system' | 'user' | 'assistant'; content: string }>> {
     const msgs: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
 
     if (!context.agent_id) {
@@ -308,6 +308,67 @@ Remember: ALWAYS use blank lines between elements for readability!`
     }
 
     return msgs;
+  }
+
+  /**
+   * Build comprehensive system prompt string with agent identity, instructions, and guidance
+   */
+  buildSystemPromptString(agent: any): string {
+    const sections: string[] = [];
+    
+    // CRITICAL: Agent Identity - Must be first and explicit
+    sections.push(`=== AGENT IDENTITY ===
+Your name is "${agent?.name || 'Assistant'}".
+You MUST always identify yourself by this name when asked.
+${agent?.description ? `Your description/role: ${agent.description}` : ''}
+${agent?.personality ? `Your personality traits: ${agent.personality}\nYou MUST maintain these personality characteristics consistently in all interactions.` : ''}
+When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is ${agent?.name || 'Assistant'}"
+=== END AGENT IDENTITY ===`);
+    
+    // System instructions come after identity
+    if (agent?.system_instructions) {
+      sections.push(`=== SYSTEM INSTRUCTIONS ===
+${agent.system_instructions}
+=== END SYSTEM INSTRUCTIONS ===`);
+    }
+    
+    // Document tools guidance
+    sections.push(`=== DOCUMENT ACCESS INSTRUCTIONS ===
+IMPORTANT: When users ask about uploaded documents, files, or content they've shared:
+1. FIRST use 'search_documents' to find relevant documents
+2. THEN use 'get_document_content' to retrieve the actual content
+3. Reference the document content directly in your response
+4. Always mention the document name/source when referencing content
+Examples of when to use document tools:
+- "What does the document say about..."
+- "Summarize the uploaded file"
+- "What are the key points in..."
+- "Tell me about the document I uploaded"
+=== END DOCUMENT ACCESS INSTRUCTIONS ===`);
+    
+    // Memory handling guidance
+    sections.push(`=== MEMORY HANDLING INSTRUCTIONS ===
+You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.
+
+Use these rules to apply memory to the current user request:
+1) EPISODIC MEMORY (events/examples):
+   - Purpose: continuity, personalization, and recent task alignment.
+   - Prioritize recency and direct relevance to the current query.
+   - Do NOT restate full content; summarize only what is minimally necessary.
+2) SEMANTIC MEMORY (facts/entities/conclusions/concepts):
+   - Purpose: factual grounding and domain knowledge.
+   - Prefer higher-confidence, multi-source items; prefer well-supported conclusions/concepts derived from 3–6 connected nodes/edges.
+   - If conflicts exist, resolve by (a) higher confidence, (b) greater evidence, (c) more recent; if unresolved, note uncertainty briefly.
+3) SAFETY & PRIVACY:
+   - Never leak raw sensitive content. Summarize and reference sources (e.g., [source: message 2025-08-12]).
+4) BREVITY & RELEVANCE:
+   - Extract only memory that materially improves the answer. Be concise and avoid repetition.
+=== END MEMORY HANDLING INSTRUCTIONS ===`);
+    
+    // Output formatting guidance
+    sections.push(this.buildFormattingInstructions().join('\n'));
+    
+    return sections.join('\n\n');
   }
 }
 

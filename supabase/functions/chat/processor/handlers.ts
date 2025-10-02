@@ -1,9 +1,10 @@
 import type { AdvancedChatMessage } from '../types/message.types.ts';
 import type { ProcessingContext, ProcessingMetrics } from './types.ts';
-import { FunctionCallingManager, type OpenAIToolCall } from '../function_calling/manager.ts';
+import { FunctionCallingManager } from '../function_calling/manager.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
 import { PromptBuilder } from './utils/prompt-builder.ts';
 import { MarkdownFormatter } from './utils/markdown-formatter.ts';
+import { ToolExecutor } from './utils/tool-executor.ts';
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -45,122 +46,11 @@ export class TextMessageHandler implements MessageHandler {
         .eq('id', context.agent_id)
         .single();
       
-      const preamble: string[] = [];
-      
-      // CRITICAL: Agent Identity - Must be first and explicit
-      preamble.push(`=== AGENT IDENTITY ===`);
-      preamble.push(`Your name is "${agent?.name || 'Assistant'}".`);
-      preamble.push(`You MUST always identify yourself by this name when asked.`);
-      
-      if (agent?.description) {
-        preamble.push(`Your description/role: ${agent.description}`);
+      // Build comprehensive system prompt using PromptBuilder
+      const systemPrompt = this.promptBuilder.buildSystemPromptString(agent);
+      if (systemPrompt) {
+        msgs.push({ role: 'system', content: systemPrompt });
       }
-      
-      if (agent?.personality) {
-        preamble.push(`Your personality traits: ${agent.personality}`);
-        preamble.push(`You MUST maintain these personality characteristics consistently in all interactions.`);
-      }
-      
-      preamble.push(`When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is ${agent?.name || 'Assistant'}"`);
-      preamble.push(`=== END AGENT IDENTITY ===\n`);
-      
-      // System instructions come after identity
-      if (agent?.system_instructions) {
-        preamble.push(`=== SYSTEM INSTRUCTIONS ===`);
-        preamble.push(agent.system_instructions);
-        preamble.push(`=== END SYSTEM INSTRUCTIONS ===\n`);
-      }
-      // Document tools guidance - CRITICAL for accessing uploaded content
-      preamble.push(`=== DOCUMENT ACCESS INSTRUCTIONS ===`);
-      preamble.push(`IMPORTANT: When users ask about uploaded documents, files, or content they've shared:`);
-      preamble.push(`1. FIRST use 'search_documents' to find relevant documents`);
-      preamble.push(`2. THEN use 'get_document_content' to retrieve the actual content`);
-      preamble.push(`3. Reference the document content directly in your response`);
-      preamble.push(`4. Always mention the document name/source when referencing content`);
-      preamble.push(`Examples of when to use document tools:`);
-      preamble.push(`- "What does the document say about..."`);
-      preamble.push(`- "Summarize the uploaded file"`);
-      preamble.push(`- "What are the key points in..."`);
-      preamble.push(`- "Tell me about the document I uploaded"`);
-      preamble.push(`=== END DOCUMENT ACCESS INSTRUCTIONS ===\n`);
-      
-      // Memory handling guidance (episodic + semantic + conclusions/concepts)
-      preamble.push(`=== MEMORY HANDLING INSTRUCTIONS ===\n` +
-        `You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.\n\n` +
-        `Use these rules to apply memory to the current user request:\n` +
-        `1) EPISODIC MEMORY (events/examples):\n` +
-        `   - Purpose: continuity, personalization, and recent task alignment.\n` +
-        `   - Prioritize recency and direct relevance to the current query.\n` +
-        `   - Do NOT restate full content; summarize only what is minimally necessary.\n` +
-        `2) SEMANTIC MEMORY (facts/entities/conclusions/concepts):\n` +
-        `   - Purpose: factual grounding and domain knowledge.\n` +
-        `   - Prefer higher-confidence, multi-source items; prefer well-supported conclusions/concepts derived from 3–6 connected nodes/edges.\n` +
-        `   - If conflicts exist, resolve by (a) higher confidence, (b) greater evidence, (c) more recent; if unresolved, note uncertainty briefly.\n` +
-        `3) SAFETY & PRIVACY:\n` +
-        `   - Never leak raw sensitive content. Summarize and reference sources (e.g., [source: message 2025-08-12]).\n` +
-        `4) BREVITY & RELEVANCE:\n` +
-        `   - Extract only memory that materially improves the answer. Be concise and avoid repetition.\n` +
-        `=== END MEMORY HANDLING INSTRUCTIONS ===\n`);
-      // Output formatting guidance - EXPLICIT MARKDOWN FORMATTING RULES
-      preamble.push(
-        `CRITICAL FORMATTING INSTRUCTIONS - You MUST format your responses using proper Markdown:
-
-1. **Paragraphs**: Add a blank line between EVERY paragraph for proper spacing.
-
-2. **Lists**: 
-   - Use bullet points (- or *) for unordered lists
-   - Use numbers (1. 2. 3.) for ordered lists
-   - Add a blank line before and after lists
-   - Each list item should be on its own line
-
-3. **Emphasis**:
-   - Use **bold** for important terms or key points
-   - Use *italics* for subtle emphasis or examples
-   - Use \`inline code\` for technical terms, commands, or values
-
-4. **Headers**:
-   - Use ## for main section headers
-   - Use ### for subsection headers
-   - Always add a blank line before and after headers
-
-5. **Code Blocks**:
-   \`\`\`language
-   // Use triple backticks for code blocks
-   // Specify the language for syntax highlighting
-   \`\`\`
-
-6. **Line Breaks**:
-   - ALWAYS add blank lines between different sections
-   - ALWAYS add blank lines between paragraphs
-   - ALWAYS add blank lines around lists, headers, and code blocks
-
-7. **Structure**:
-   - Start with a brief introduction if needed
-   - Organize content into logical sections
-   - Use headers to separate major topics
-   - End with a summary or conclusion if appropriate
-
-EXAMPLE of proper formatting:
-
-## Main Topic
-
-This is the first paragraph with some **important information**.
-
-This is the second paragraph, separated by a blank line. It includes \`technical terms\` in inline code.
-
-### Subsection
-
-Here's a list of items:
-
-- First item with **bold emphasis**
-- Second item with *italic text*
-- Third item with more details
-
-Another paragraph after the list, properly spaced.
-
-Remember: ALWAYS use blank lines between elements for readability!`
-      );
-      if (preamble.length) msgs.push({ role: 'system', content: preamble.join('\n') });
 
       // CONTEXT WINDOW INJECTION (episodic/semantic context) - as assistant message
       const ctxWin = (message as any)?.context?.context_window;
@@ -200,66 +90,10 @@ Remember: ALWAYS use blank lines between elements for readability!`
 
     // CRITICAL INTEGRATION: Add reasoning context if available
     const reasoningContext = (message as any).context?.reasoning;
-    if (reasoningContext && reasoningContext.enabled && reasoningContext.steps?.length > 0) {
-      console.log(`[TextMessageHandler] Integrating reasoning chain with ${reasoningContext.steps.length} steps (style: ${reasoningContext.style})`);
-      
-      let reasoningPrompt = `=== ADVANCED REASONING ANALYSIS ===\n`;
-      reasoningPrompt += `The user's query has been analyzed using ${reasoningContext.style?.toUpperCase() || 'ANALYTICAL'} reasoning.\n`;
-      reasoningPrompt += `Analysis Confidence: ${(reasoningContext.score * 100).toFixed(1)}% (threshold: ${(reasoningContext.threshold * 100).toFixed(0)}%)\n\n`;
-      
-      reasoningPrompt += `REASONING CHAIN (${reasoningContext.steps.length} steps):\n`;
-      reasoningContext.steps.forEach((step: any, index: number) => {
-        const stepNum = index + 1;
-        const state = step.state?.toUpperCase() || 'ANALYSIS';
-        const confidence = step.confidence ? ` [${(step.confidence * 100).toFixed(0)}% confidence]` : '';
-        
-        if (step.question) {
-          reasoningPrompt += `${stepNum}. [${state}] Question: ${step.question}${confidence}\n`;
-        }
-        if (step.hypothesis) {
-          reasoningPrompt += `${stepNum}. [${state}] Analysis: ${step.hypothesis}${confidence}\n`;
-        }
-        if (step.description && !step.hypothesis && !step.question) {
-          reasoningPrompt += `${stepNum}. [${state}] ${step.description}${confidence}\n`;
-        }
-        
-        // Include memory insights if available
-        if (step.memory_insights?.length > 0) {
-          reasoningPrompt += `   → Memory Context: ${step.memory_insights.join(', ')}\n`;
-        }
-        
-        // Include episodic/semantic memory counts
-        if (step.episodic_count > 0 || step.semantic_count > 0) {
-          reasoningPrompt += `   → Memories Referenced: ${step.episodic_count} episodic, ${step.semantic_count} semantic\n`;
-        }
-      });
-      
-      // Add reasoning conclusion
-      const finalStep = reasoningContext.steps[reasoningContext.steps.length - 1];
-      if (finalStep && (finalStep.state === 'conclude' || finalStep.type === 'decision')) {
-        reasoningPrompt += `\nREASONING CONCLUSION:\n`;
-        reasoningPrompt += `${finalStep.hypothesis || finalStep.description}\n`;
-        if (finalStep.confidence) {
-          reasoningPrompt += `Final Confidence: ${(finalStep.confidence * 100).toFixed(0)}%\n`;
-        }
-      }
-      
-      reasoningPrompt += `\nINSTRUCTIONS FOR RESPONSE:\n`;
-      reasoningPrompt += `• Build upon the reasoning analysis above\n`;
-      reasoningPrompt += `• Incorporate the insights and conclusions reached\n`;
-      reasoningPrompt += `• Address any uncertainties identified in the analysis\n`;
-      reasoningPrompt += `• Maintain appropriate confidence level based on the reasoning\n`;
-      reasoningPrompt += `• Reference the reasoning process when it adds value to your response\n`;
-      reasoningPrompt += `=== END REASONING ANALYSIS ===`;
-      
-      // Add as assistant message for immediate processing (ephemeral - not stored)
+    const reasoningPrompt = this.promptBuilder.buildReasoningContext(reasoningContext);
+    if (reasoningPrompt) {
       msgs.push({ role: 'assistant', content: reasoningPrompt });
-      
-      console.log(`[TextMessageHandler] Added ephemeral reasoning context (${reasoningPrompt.length} chars) as assistant message - will not be stored`);
-    } else if (reasoningContext) {
-      console.log(`[TextMessageHandler] Reasoning context available but disabled or no steps (enabled: ${reasoningContext.enabled}, steps: ${reasoningContext.steps?.length || 0})`);
-    } else {
-      console.log(`[TextMessageHandler] No reasoning context available`);
+      console.log(`[TextMessageHandler] Added ephemeral reasoning context (${reasoningPrompt.length} chars) as assistant message`);
     }
 
     // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
@@ -280,6 +114,12 @@ Remember: ALWAYS use blank lines between elements for readability!`
       const toolNames = availableTools.map(t => t.name).join(', ');
       const guidance = this.promptBuilder.buildToolGuidance(toolNames);
       msgs.push({ role: 'system', content: guidance });
+      
+      // Add explicit instruction for action requests
+      msgs.push({ 
+        role: 'system', 
+        content: `CRITICAL: If the user's message is a REQUEST or COMMAND (send, create, search, get, find, etc.), you MUST call the appropriate tool function. DO NOT just respond with text saying you will do it - actually call the function. This is MANDATORY for all action requests.` 
+      });
     }
 
     // First reasoning/act step (LLMRouter when enabled)
@@ -393,184 +233,39 @@ Remember: ALWAYS use blank lines between elements for readability!`
     }
 
     // Handle tool calls (Act → Observe → Reflect)
-    const toolCalls = (completion.choices?.[0]?.message?.tool_calls || []) as OpenAIToolCall[];
-    const toolDetails: any[] = [];
+    const toolCalls = (completion.choices?.[0]?.message?.tool_calls || []) as any[];
     const discoveredToolsForMetrics = availableTools.map(t => ({ name: t.name }));
+    
+    // DEBUG: Log tool calls from LLM
+    console.log(`[TextMessageHandler] LLM completion tool_calls count: ${toolCalls.length}`);
     if (toolCalls.length > 0) {
-      // Per OpenAI protocol, include the assistant message containing tool_calls before tool messages
-      const typedToolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = toolCalls as any;
-      msgs.push({
-        role: 'assistant',
-        content: '',
-        tool_calls: typedToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.function.name, arguments: tc.function.arguments } })),
-      } as any);
-      for (const tc of typedToolCalls) {
-        const started = Date.now();
-        try {
-          const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
-          const result = await fcm.executeFunction(context.agent_id || '', context.user_id || '', tc.function.name, args);
-          
-          // Check if this is an MCP tool that returned a clarifying question
-          const isMCPQuestion = !result.success && 
-            result.error && 
-            (result.error.toLowerCase().includes('question:') || 
-             result.error.toLowerCase().includes('what') ||
-             result.error.toLowerCase().includes('please provide') ||
-             result.error.toLowerCase().includes('missing'));
-          
-          toolDetails.push({
-            name: tc.function.name,
-            execution_time_ms: Date.now() - started,
-            success: !!result.success,
-            input_params: args,
-            output_result: result.data || null,
-            error: result.success ? undefined : result.error,
-            requires_retry: isMCPQuestion
-          });
-          
-          // Append tool observation
-          msgs.push({
-            role: 'tool',
-            content: await fcm.formatResult(tc.function.name, result),
-            tool_call_id: tc.id,
-          } as any);
-        } catch (err: any) {
-          toolDetails.push({
-            name: tc.function?.name,
-            execution_time_ms: Date.now() - started,
-            success: false,
-            input_params: {},
-            output_result: null,
-            error: err?.message || 'Tool execution error',
-          });
-          msgs.push({
-            role: 'tool',
-            content: `Tool ${tc.function?.name} failed: ${err?.message || 'Unknown error'}`,
-            tool_call_id: tc.id,
-          } as any);
-        }
-      }
-      // Check if any tools need retry (MCP interactive pattern)
-      const toolsNeedingRetry = toolDetails.filter(td => td.requires_retry);
-      let retryAttempts = 0;
-      const MAX_RETRY_ATTEMPTS = 3;
-      
-      while (toolsNeedingRetry.length > 0 && retryAttempts < MAX_RETRY_ATTEMPTS) {
-        retryAttempts++;
-        console.log(`[TextMessageHandler] Retrying ${toolsNeedingRetry.length} MCP tools (attempt ${retryAttempts}/${MAX_RETRY_ATTEMPTS})`);
-        
-        // Add a system message to guide the retry
-        msgs.push({
-          role: 'system',
-          content: `The previous tool call(s) need additional information. Please retry with the missing parameters based on the error messages. For document creation, include a 'text' or 'content' parameter with the document body.`
-        } as any);
-        
-        // Get the model to retry with additional parameters
-        let retryCompletion;
-        if (router && useRouter && context.agent_id) {
-          // Convert OpenAI format tools to LLMTool format for router
-          const norm = this.normalizeTools(availableTools);
-          const llmToolsRetry = norm.map(tool => ({
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters
-          }));
-          const retryResp = await router.chat(context.agent_id, msgs as any, { 
-            tools: llmToolsRetry, 
-            tool_choice: 'auto',
-            temperature: 0.7, 
-            maxTokens: 1200 
-          });
-          retryCompletion = {
-            choices: [{ message: retryResp }],
-            usage: retryResp.usage ? { prompt_tokens: retryResp.usage.prompt, completion_tokens: retryResp.usage.completion, total_tokens: retryResp.usage.total } : undefined,
-          };
-        } else {
-          retryCompletion = await this.openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: msgs,
-            temperature: 0.7,
-            max_tokens: 1200,
-            tools: this.normalizeTools(availableTools).map((fn) => ({ type: 'function', function: fn })),
-            tool_choice: 'auto',
-          });
-        }
-        
-        // Process retry tool calls
-        const retryToolCalls = (retryCompletion.choices?.[0]?.message?.tool_calls || []) as OpenAIToolCall[];
-        
-        if (retryToolCalls.length > 0) {
-          // Clear the tools needing retry list
-          toolsNeedingRetry.length = 0;
-          
-          // Add assistant message with retry tool calls
-          msgs.push({
-            role: 'assistant',
-            content: '',
-            tool_calls: retryToolCalls.map((tc: any) => ({ 
-              id: tc.id, 
-              type: 'function', 
-              function: { name: tc.function.name, arguments: tc.function.arguments } 
-            })),
-          } as any);
-          
-          // Execute retry tool calls
-          for (const tc of retryToolCalls) {
-            const started = Date.now();
-            try {
-              const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
-              const result = await fcm.executeFunction(context.agent_id || '', context.user_id || '', tc.function.name, args);
-              
-              // Check if this still needs retry
-              const stillNeedsRetry = !result.success && 
-                result.error && 
-                (result.error.toLowerCase().includes('question:') || 
-                 result.error.toLowerCase().includes('what') ||
-                 result.error.toLowerCase().includes('please provide') ||
-                 result.error.toLowerCase().includes('missing'));
-              
-              if (stillNeedsRetry && retryAttempts < MAX_RETRY_ATTEMPTS) {
-                toolsNeedingRetry.push({ name: tc.function.name, requires_retry: true });
-              }
-              
-              toolDetails.push({
-                name: tc.function.name,
-                execution_time_ms: Date.now() - started,
-                success: !!result.success,
-                input_params: args,
-                output_result: result.data || null,
-                error: result.success ? undefined : result.error,
-                retry_attempt: retryAttempts
-              });
-              
-              msgs.push({
-                role: 'tool',
-                content: await fcm.formatResult(tc.function.name, result),
-                tool_call_id: tc.id,
-              } as any);
-            } catch (err: any) {
-              toolDetails.push({
-                name: tc.function?.name,
-                execution_time_ms: Date.now() - started,
-                success: false,
-                input_params: {},
-                output_result: null,
-                error: err?.message || 'Tool execution error',
-                retry_attempt: retryAttempts
-              });
-              msgs.push({
-                role: 'tool',
-                content: `Tool ${tc.function?.name} failed: ${err?.message || 'Unknown error'}`,
-                tool_call_id: tc.id,
-              } as any);
-            }
-          }
-        } else {
-          // No retry tool calls generated, stop retrying
-          break;
-        }
-      }
-      
+      console.log(`[TextMessageHandler] Tool calls:`, JSON.stringify(toolCalls, null, 2));
+    } else {
+      console.log(`[TextMessageHandler] No tool calls in LLM response. Response: ${completion.choices?.[0]?.message?.content?.substring(0, 200)}`);
+    }
+    
+    // Initialize token counters
+    let promptTokens = completion.usage?.prompt_tokens || 0;
+    let completionTokens = completion.usage?.completion_tokens || 0;
+    
+    // Execute tools and handle retries using ToolExecutor
+    const toolExecResult = await ToolExecutor.executeToolCalls(
+      toolCalls,
+      msgs,
+      fcm,
+      context,
+      availableTools,
+      this.openai,
+      router,
+      useRouter,
+      this.normalizeTools.bind(this)
+    );
+    const toolDetails = toolExecResult.toolDetails;
+    promptTokens += toolExecResult.tokensUsed.prompt;
+    completionTokens += toolExecResult.tokensUsed.completion;
+    
+    // Tool execution complete - now reflect
+    if (toolCalls.length > 0) {
       // Reflect: ask model to produce final answer
       // Add guidance for clean final response
       msgs.push({
@@ -599,9 +294,7 @@ Remember: ALWAYS use blank lines between elements for readability!`
     // Post-process the response to ensure proper Markdown formatting
     // This handles cases where the LLM doesn't follow formatting instructions perfectly
     text = this.ensureProperMarkdownFormatting(text);
-    const tokensTotal = completion.usage?.total_tokens || 0;
-    const promptTokens = completion.usage?.prompt_tokens || 0;
-    const completionTokens = completion.usage?.completion_tokens || 0;
+    const tokensTotal = promptTokens + completionTokens;
     const processed: AdvancedChatMessage = {
       ...message,
       id: crypto.randomUUID(),
