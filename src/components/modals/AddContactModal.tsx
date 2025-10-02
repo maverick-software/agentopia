@@ -51,7 +51,7 @@ export default function AddContactModal({ isOpen, onClose, onContactAdded }: Add
 
     setLoading(true);
     try {
-      // Create contact using database function
+      // Create contact using database function (now includes mobile parameter)
       const { data: contactId, error: contactError } = await supabase
         .rpc('create_contact_with_validation', {
           p_user_id: user.id,
@@ -62,6 +62,7 @@ export default function AddContactModal({ isOpen, onClose, onContactAdded }: Add
           p_contact_type: formData.contact_type,
           p_email: formData.email.trim() || null,
           p_phone: formData.phone.trim() || null,
+          p_mobile: formData.mobile.trim() || null,
           p_notes: formData.notes.trim() || null,
           p_tags: formData.tags,
           p_custom_fields: {
@@ -70,24 +71,6 @@ export default function AddContactModal({ isOpen, onClose, onContactAdded }: Add
         });
 
       if (contactError) throw contactError;
-
-      // Add mobile number if provided
-      if (formData.mobile.trim() && contactId) {
-        const { error: mobileError } = await supabase
-          .from('contact_communication_channels')
-          .insert({
-            contact_id: contactId,
-            user_id: user.id,
-            channel_type: 'mobile',
-            channel_identifier: formData.mobile.trim(),
-            is_primary: !formData.phone.trim(), // Primary if no regular phone
-            display_label: 'Mobile Phone'
-          });
-
-        if (mobileError) {
-          console.warn('Failed to add mobile number:', mobileError);
-        }
-      }
 
       toast.success('Contact added successfully.');
 
