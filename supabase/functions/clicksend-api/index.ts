@@ -55,20 +55,32 @@ class ClickSendClient {
     };
 
     console.log(`[ClickSend] Making ${method} request to ${endpoint}`);
-
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[ClickSend] API error ${response.status}: ${errorText}`);
-      throw new Error(`ClickSend API error: ${response.status} - ${errorText}`);
+    if (body) {
+      console.log(`[ClickSend] Request payload:`, JSON.stringify(body, null, 2));
     }
 
-    return await response.json();
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      console.log(`[ClickSend] Response status: ${response.status} ${response.statusText}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[ClickSend] API error response: ${errorText}`);
+        throw new Error(`ClickSend API error: ${response.status} - ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      console.log(`[ClickSend] Response data:`, JSON.stringify(responseData, null, 2));
+      return responseData;
+    } catch (error: any) {
+      console.error(`[ClickSend] Request failed:`, error.message);
+      throw error;
+    }
   }
 
   // Send SMS message
@@ -351,6 +363,20 @@ serve(async (req) => {
         throw new Error(`Unknown action: ${action}`);
     }
 
+    // Check if the result is a validation error (requires_retry from handleSendSMS)
+    if (result && result.success === false && result.requires_retry) {
+      console.log(`[ClickSend] Validation error - returning for LLM retry`);
+      
+      // Return validation error with HTTP 200 so the retry mechanism engages
+      return new Response(
+        JSON.stringify(result),
+        { 
+          status: 200,  // Important: 200 so universal-tool-executor processes it as retryable
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // Log successful operation
     await supabase.from('tool_execution_logs').insert({
       agent_id: agent_id,
@@ -478,26 +504,62 @@ async function handleSendSMS(client: ClickSendClient, params: any): Promise<any>
   to = phoneNumber;
   const finalMessageText = messageText;
 
-  // Auto-fix common phone number format issues (assume USA +1 if not specified)
-  if (to && !to.startsWith('+')) {
-    // Remove any non-digit characters except +
-    const cleanNumber = to.replace(/[^\d]/g, '');
+  // Smart phone number cleaning - handle all common formats before validation
+  // This prevents unnecessary LLM retries for simple formatting issues
+  const originalNumber = to;
+  
+  // Step 1: Remove all non-digit characters except the leading +
+  let cleaned = to.replace(/[^\d+]/g, '');
+  
+  // Step 2: Handle multiple + signs - keep only the first
+  if (cleaned.startsWith('+')) {
+    const digitsOnly = cleaned.substring(1).replace(/\+/g, '');
+    cleaned = '+' + digitsOnly;
+  }
+  
+  // Step 3: Add country code if missing
+  if (!cleaned.startsWith('+')) {
+    const digits = cleaned;
     
-    // If it's 10 digits, assume US number
-    if (cleanNumber.length === 10 && /^[2-9]\d{2}[2-9]\d{2}\d{4}$/.test(cleanNumber)) {
-      to = `+1${cleanNumber}`;
-      console.log(`[ClickSend] Auto-corrected US phone number to: ${to}`);
+    // If it's 10 digits and looks like a US number (area code starts with 2-9)
+    if (digits.length === 10 && /^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) {
+      cleaned = '+1' + digits;
     }
-    // If it's 11 digits starting with 1, assume US number with country code
-    else if (cleanNumber.length === 11 && cleanNumber.startsWith('1')) {
-      to = `+${cleanNumber}`;
-      console.log(`[ClickSend] Auto-corrected phone number to: ${to}`);
+    // If it's 11 digits starting with 1 (US country code)
+    else if (digits.length === 11 && digits.startsWith('1')) {
+      cleaned = '+' + digits;
+    }
+    // Otherwise, assume it's a US number and add +1
+    else if (digits.length >= 10) {
+      cleaned = '+1' + digits;
     }
   }
+  
+  to = cleaned;
+  
+  if (originalNumber !== cleaned) {
+    console.log(`[ClickSend] Smart-cleaned phone number: "${originalNumber}" → "${cleaned}"`);
+  }
 
-  // Validate phone number format
+  // Validate phone number format after cleaning
   if (!validatePhoneNumber(to)) {
-    throw new Error(`Invalid phone number format. The number "${phoneNumber}" was processed as "${to}". Please provide a valid phone number. For US numbers, use formats like: +1234567890, 1234567890, (123) 456-7890, or 123-456-7890.`);
+    // Only return error if cleaning didn't fix it
+    const errorMessage = `Invalid phone number format. The number "${originalNumber}" was cleaned to "${to}" but is still invalid. Please provide a valid phone number with country code and area code.`;
+    
+    console.log(`[ClickSend] Phone validation error after cleaning: ${errorMessage}`);
+    
+    return {
+      success: false,
+      error: errorMessage,
+      requires_retry: true,
+      metadata: {
+        error_type: 'validation_error',
+        field: 'to',
+        provided_value: originalNumber,
+        cleaned_value: to,
+        expected_format: '+1234567890 (international format)'
+      }
+    };
   }
 
   // Validate SMS body
@@ -596,3 +658,4 @@ function getRequiredScopes(action: string): string[] {
 
   return scopeMap[action] || [];
 }
+

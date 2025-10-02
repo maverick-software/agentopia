@@ -715,7 +715,10 @@ export class UniversalToolExecutor {
       }
       
       // Call the appropriate edge function
+      console.log(`[UniversalToolExecutor] Calling edge function: ${routingConfig.edgeFunction}`);
       const { data, error } = await supabase.functions.invoke(routingConfig.edgeFunction, invokeOptions);
+      
+      console.log(`[UniversalToolExecutor] Edge function response - error:`, error ? JSON.stringify(error) : 'null', ', data:', data ? JSON.stringify(data).substring(0, 500) : 'null');
       
       if (error) {
         console.error(`[UniversalToolExecutor] Edge function error for ${toolName}:`, error);

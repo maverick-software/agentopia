@@ -140,25 +140,11 @@ Deno.serve(async (req) => {
     try {
       console.log(`[MCP Execute] Calling MCP server for tool: ${tool_name}`)
       
-      // Transform parameters for Zapier MCP compatibility
-      // Zapier's "instructions" field is meant for AI interpretation, but OpenAI sends params directly
-      // If we have "instructions" but missing actual parameters, use instructions to infer them
+      // Pass parameters as-is to let the LLM learn from errors
+      // The intelligent retry mechanism will handle missing parameters
       let transformedParameters = { ...parameters };
       
-      if (connection.connection_type === 'zapier' && parameters.instructions && typeof parameters.instructions === 'string') {
-        console.log(`[MCP Execute] Detected Zapier tool with instructions parameter, applying smart parameter transformation...`)
-        
-        // For email search tools, if searchValue is missing, use empty string (gets recent emails)
-        if (tool_name.includes('find_emails') || tool_name.includes('search')) {
-          if (!transformedParameters.searchValue) {
-            transformedParameters.searchValue = '';  // Empty string gets most recent items
-            console.log(`[MCP Execute] Added searchValue: "" for email search (will get recent emails)`)
-          }
-        }
-        
-        // Keep instructions for Zapier's AI to use as context
-        console.log(`[MCP Execute] Transformed parameters:`, transformedParameters)
-      }
+      console.log(`[MCP Execute] Parameters being sent to MCP server:`, transformedParameters)
       
       const mcpRequestBody = {
         jsonrpc: '2.0',

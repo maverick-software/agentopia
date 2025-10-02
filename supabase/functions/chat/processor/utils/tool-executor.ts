@@ -108,9 +108,10 @@ export class ToolExecutor {
       console.log(`[ToolExecutor] Retrying ${toolsNeedingRetry.length} MCP tools (attempt ${retryAttempts}/${MAX_RETRY_ATTEMPTS})`);
       
       // Add a system message to guide the retry
+      // The error details are already in the conversation as tool messages
       msgs.push({
         role: 'system',
-        content: `The previous tool call(s) need additional information. Please retry with the missing parameters based on the error messages. For document creation, include a 'text' or 'content' parameter with the document body.`
+        content: `The MCP server has returned error messages with guidance on how to correct the parameters. Please review the error feedback above, adjust the parameters accordingly, and retry the tool call with the corrected values.`
       } as any);
       
       // Get the model to retry with additional parameters
@@ -183,21 +184,28 @@ export class ToolExecutor {
         } as any);
         
         // Execute retry tool calls
+        console.log(`[ToolExecutor] Executing ${retryToolCalls.length} retry tool calls...`);
         for (const tc of retryToolCalls) {
           const started = Date.now();
           try {
             const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+            console.log(`[ToolExecutor] Retry tool ${tc.function.name} with args:`, JSON.stringify(args).substring(0, 200));
+            
             const result = await fcm.executeFunction(context.agent_id || '', context.user_id || '', tc.function.name, args);
             
-            // Check if still needs retry
-            const stillNeedsRetry = !result.success && 
+            // Check if still needs retry - prioritize explicit requires_retry flag
+            const stillNeedsRetry = result.requires_retry === true || (
+              !result.success && 
               result.error && 
               (result.error.toLowerCase().includes('question:') || 
                result.error.toLowerCase().includes('what') ||
                result.error.toLowerCase().includes('please provide') ||
-               result.error.toLowerCase().includes('missing'));
+               result.error.toLowerCase().includes('missing'))
+            );
             
-            toolDetails.push({
+            console.log(`[ToolExecutor] Retry result for ${tc.function.name} - success: ${result.success}, requires_retry: ${stillNeedsRetry}`);
+            
+            const toolDetail = {
               name: tc.function.name,
               execution_time_ms: Date.now() - started,
               success: !!result.success,
@@ -205,7 +213,9 @@ export class ToolExecutor {
               output_result: result.data || null,
               error: result.success ? undefined : result.error,
               requires_retry: stillNeedsRetry
-            });
+            };
+            
+            toolDetails.push(toolDetail);
             
             // Append tool observation
             msgs.push({
@@ -216,7 +226,8 @@ export class ToolExecutor {
             
             // Add to retry list if still needs retry
             if (stillNeedsRetry) {
-              toolsNeedingRetry.push(toolDetails[toolDetails.length - 1]);
+              console.log(`[ToolExecutor] Tool ${tc.function.name} still needs retry after attempt ${retryAttempts}`);
+              toolsNeedingRetry.push(toolDetail);
             }
           } catch (err: any) {
             toolDetails.push({
