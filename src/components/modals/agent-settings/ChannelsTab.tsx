@@ -847,31 +847,6 @@ export function ChannelsTab({ agentId, agentData, onAgentUpdated }: ChannelsTabP
           );
         })}
       </div>
-
-
-
-      {hasChanges && (
-        <div className="flex items-center justify-end pt-4 border-t">
-          <Button
-            onClick={handleSave}
-            disabled={isLoading}
-            className="min-w-[100px]"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-        </div>
-      )}
-
       {/* Credential Configuration Modal */}
       <Dialog open={credentialModal.isOpen} onOpenChange={(open) => 
         setCredentialModal(prev => ({ ...prev, isOpen: open }))

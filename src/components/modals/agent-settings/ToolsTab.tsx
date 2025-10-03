@@ -739,28 +739,6 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
 
 
 
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t">
-        <Button onClick={handleSave} disabled={isLoading || saved || !hasChanges}>
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : saved ? (
-            <>
-              <Save className="h-4 w-4 mr-2 text-green-500" />
-              Saved!
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
-            </>
-          )}
-        </Button>
-      </div>
-
       {/* Credential Configuration Modal */}
       <Dialog open={credentialModal.isOpen} onOpenChange={(open) => 
         setCredentialModal(prev => ({ ...prev, isOpen: open }))

@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getModelsByProvider } from '@/lib/llm/modelRegistry';
+import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 import { toast } from 'react-hot-toast';
 
 interface IdentityTabProps {
@@ -92,11 +93,15 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
   const [description, setDescription] = useState(agentData?.description || '');
   const [selectedPersonality, setSelectedPersonality] = useState(agentData?.personality || 'professional');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(agentData?.avatar_url || null);
+  
+  // Resolve media library URLs
+  const resolvedAvatarUrl = useMediaLibraryUrl(avatarUrl);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   // Update form when agentData changes
   useEffect(() => {
@@ -107,6 +112,13 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
       setAvatarUrl(agentData.avatar_url || null);
     }
   }, [agentData]);
+
+  // Detect if there are unsaved changes
+  const hasChanges = 
+    name.trim() !== (agentData?.name || '') ||
+    description.trim() !== (agentData?.description || '') ||
+    selectedPersonality !== (agentData?.personality || 'professional') ||
+    avatarUrl !== (agentData?.avatar_url || null);
 
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
@@ -130,6 +142,10 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
       if (error) throw error;
 
       toast.success('Identity updated successfully! ✨');
+      
+      // Show success state
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
       
       if (onAgentUpdated) {
         onAgentUpdated(data);
@@ -262,7 +278,7 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
         <CardContent className="space-y-4">
           <div className="flex items-center space-x-6">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={avatarUrl || undefined} alt={name || 'Agent'} />
+              <AvatarImage src={resolvedAvatarUrl || undefined} alt={name || 'Agent'} />
               <AvatarFallback className="text-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white">
                 {name?.charAt(0)?.toUpperCase() || 'A'}
               </AvatarFallback>
@@ -353,23 +369,6 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
           </div>
         </CardContent>
       </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t">
-        <Button onClick={handleSave} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              Save Changes
-            </>
-          )}
-        </Button>
-      </div>
 
       {/* Generate Avatar Modal */}
       <GenerateAvatarModal

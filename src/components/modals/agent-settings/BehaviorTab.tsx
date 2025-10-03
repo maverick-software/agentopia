@@ -1,20 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { 
   Loader2, 
   Check, 
-  Brain,
-  MessageSquare,
-  Settings
+  Plus,
+  X,
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+
+interface CustomContext {
+  id: string;
+  name: string;
+  content: string;
+}
+
+interface Rule {
+  id: string;
+  content: string;
+}
 
 interface BehaviorTabProps {
   agentId: string;
@@ -24,47 +35,19 @@ interface BehaviorTabProps {
   onAgentUpdated?: (updatedData: any) => void;
 }
 
-const REASONING_STYLES = [
-  {
-    id: 'analytical',
-    name: 'Analytical',
-    description: 'Step-by-step logical reasoning with detailed analysis',
-    icon: '🔍'
-  },
-  {
-    id: 'creative',
-    name: 'Creative',
-    description: 'Innovative thinking with multiple perspectives and brainstorming',
-    icon: '💡'
-  },
-  {
-    id: 'practical',
-    name: 'Practical',
-    description: 'Solution-focused approach with actionable recommendations',
-    icon: '🛠️'
-  },
-  {
-    id: 'collaborative',
-    name: 'Collaborative',
-    description: 'Interactive reasoning that builds on user input and feedback',
-    icon: '🤝'
-  },
-  {
-    id: 'systematic',
-    name: 'Systematic',
-    description: 'Structured methodology following established frameworks',
-    icon: '📋'
-  }
-];
-
 export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabProps) {
   const supabase = useSupabaseClient();
   const { user } = useAuth();
 
-  // Form state
-  const [reasoningStyle, setReasoningStyle] = useState('analytical');
-  const [customInstructions, setCustomInstructions] = useState('');
-  const [reasoningEnabled, setReasoningEnabled] = useState(false);
+  // Core Behavior state
+  const [role, setRole] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [constraints, setConstraints] = useState('');
+  const [tools, setTools] = useState('');
+  const [customContexts, setCustomContexts] = useState<CustomContext[]>([]);
+
+  // Rules state
+  const [rules, setRules] = useState<Rule[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -86,11 +69,17 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         if (error) throw error;
 
         const metadata = data?.metadata || {};
-        const settings = metadata.settings || {};
+        const behavior = metadata.behavior || {};
         
-        setReasoningStyle(settings.reasoning_style || 'analytical');
-        setCustomInstructions(settings.custom_instructions || '');
-        setReasoningEnabled(settings.reasoning_enabled === true); // Defaults to false if undefined
+        // Load Core Behavior sections
+        setRole(behavior.role || '');
+        setInstructions(behavior.instructions || '');
+        setConstraints(behavior.constraints || '');
+        setTools(behavior.tools || '');
+        setCustomContexts(behavior.custom_contexts || []);
+        
+        // Load Rules
+        setRules(behavior.rules || []);
 
       } catch (error) {
         console.error('Error loading agent settings:', error);
@@ -103,6 +92,60 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
   }, [agentId, supabase]);
 
 
+
+  // Helper functions for custom contexts
+  const addCustomContext = () => {
+    const newContext: CustomContext = {
+      id: Date.now().toString(),
+      name: '',
+      content: ''
+    };
+    setCustomContexts([...customContexts, newContext]);
+  };
+
+  const updateCustomContext = (id: string, field: 'name' | 'content', value: string) => {
+    setCustomContexts(customContexts.map(ctx => 
+      ctx.id === id ? { ...ctx, [field]: value } : ctx
+    ));
+  };
+
+  const removeCustomContext = (id: string) => {
+    setCustomContexts(customContexts.filter(ctx => ctx.id !== id));
+  };
+
+  // UI state for editing
+  const [editingSection, setEditingSection] = React.useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = React.useState<string | null>(null);
+  const [editingRuleId, setEditingRuleId] = React.useState<string | null>(null);
+  
+  const addRule = () => {
+    if (rules.length >= 50) {
+      toast.error('Maximum 50 rules allowed');
+      return;
+    }
+    const newRule: Rule = {
+      id: Date.now().toString(),
+      content: ''
+    };
+    setRules([...rules, newRule]);
+    setEditingRuleId(newRule.id); // Auto-open for editing
+  };
+
+  const updateRule = (id: string, content: string) => {
+    // Validate word count (max 50 words)
+    const wordCount = content.trim().split(/\s+/).filter(word => word.length > 0).length;
+    if (wordCount > 50) {
+      toast.error('Rule must be 50 words or less');
+      return;
+    }
+    setRules(rules.map(rule => 
+      rule.id === id ? { ...rule, content } : rule
+    ));
+  };
+
+  const removeRule = (id: string) => {
+    setRules(rules.filter(rule => rule.id !== id));
+  };
 
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
@@ -118,13 +161,57 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         .single();
 
       const currentMetadata = currentData?.metadata || {};
+      
+      // Build the system prompt
+      let systemPrompt = '';
+
+      if (role.trim()) {
+        systemPrompt += `## Role ##\n\n${role.trim()}\n\n`;
+      }
+
+      if (instructions.trim()) {
+        systemPrompt += `## Instructions ##\n\n${instructions.trim()}\n\n`;
+      }
+
+      if (constraints.trim()) {
+        systemPrompt += `## Constraints ##\n\n${constraints.trim()}\n\n`;
+      }
+
+      if (tools.trim()) {
+        systemPrompt += `## Tools ##\n\n${tools.trim()}\n\n`;
+      }
+
+      // Add custom contexts
+      customContexts.forEach(ctx => {
+        if (ctx.name.trim() && ctx.content.trim()) {
+          systemPrompt += `## ${ctx.name.trim()} ##\n\n${ctx.content.trim()}\n\n`;
+        }
+      });
+
+      // Add rules section
+      const activeRules = rules.filter(rule => rule.content.trim());
+      if (activeRules.length > 0) {
+        systemPrompt += `## Rules ##\n\n`;
+        activeRules.forEach((rule, index) => {
+          systemPrompt += `${index + 1}. ${rule.content.trim()}\n`;
+        });
+      }
+
+      systemPrompt = systemPrompt.trim();
+      
       const updatedMetadata = {
         ...currentMetadata,
+        behavior: {
+          role,
+          instructions,
+          constraints,
+          tools,
+          custom_contexts: customContexts,
+          rules
+        },
         settings: {
           ...currentMetadata.settings,
-          reasoning_style: reasoningStyle,
-          custom_instructions: customInstructions,
-          reasoning_enabled: reasoningEnabled
+          custom_instructions: systemPrompt // This is what gets sent to the LLM
         }
       };
 
@@ -141,7 +228,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
 
       if (error) throw error;
 
-      toast.success('Behavior settings updated successfully! 🧠');
+      toast.success('Behavior settings updated successfully! 🎯');
       
       if (onAgentUpdated) {
         onAgentUpdated(data);
@@ -153,7 +240,7 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
     } finally {
       setLoading(false);
     }
-  }, [agentId, user, reasoningStyle, customInstructions, reasoningEnabled, supabase, onAgentUpdated]);
+  }, [agentId, user, role, instructions, constraints, tools, customContexts, rules, supabase, onAgentUpdated]);
 
   if (loadingSettings) {
     return (
@@ -164,133 +251,535 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full">
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto pr-2 space-y-6 pb-20">
+        {/* Header */}
       <div>
-        <h3 className="text-lg font-medium">Behavior & Instructions</h3>
+          <h3 className="text-lg font-medium">Agent Behavior</h3>
         <p className="text-sm text-muted-foreground">
-          Configure advanced reasoning, system instructions, and assistant behavior.
+            Define your agent's role, instructions, constraints, and operational rules.
         </p>
       </div>
 
-      {/* Reasoning Style */}
+        {/* Core Behavior Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <MessageSquare className="h-5 w-5" />
-            <span>Reasoning Style</span>
-          </CardTitle>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle>Core Behavior</CardTitle>
           <CardDescription>
-            How your agent approaches problems and formulates responses
+                  Define the fundamental aspects of how your agent operates and communicates
           </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addCustomContext}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Context
+              </Button>
+            </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <Label>Style</Label>
-            <Select value={reasoningStyle} onValueChange={setReasoningStyle}>
-              <SelectTrigger className="max-w-md">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REASONING_STYLES.map((style) => (
-                  <SelectItem key={style.id} value={style.id}>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-lg">{style.icon}</span>
-                      <div>
-                        <div className="font-medium">{style.name}</div>
-                        <div className="text-xs text-muted-foreground">{style.description}</div>
+          <CardContent className="space-y-1">
+            {/* Role */}
+            {editingSection === 'role' ? (
+              <div className="bg-muted/30 rounded p-3 space-y-2">
+                <Label htmlFor="role" className="text-sm font-medium">Role</Label>
+                <p className="text-xs text-muted-foreground">
+                  What is your agent's primary role or job function?
+                </p>
+                <Textarea
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="Example: You are a professional customer support specialist focused on resolving technical issues."
+                  rows={3}
+                  className="w-full"
+                  autoFocus
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingSection(null)}
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
+                onMouseLeave={() => openMenuId === 'role' && setOpenMenuId(null)}
+              >
+                <div className="flex-1 pr-8">
+                  <p className="text-sm font-medium text-foreground">Role</p>
+                  {role && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{role}</p>}
+                  {!role && <p className="text-xs text-muted-foreground italic">Not set</p>}
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenuId(openMenuId === 'role' ? null : 'role')}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                  >
+                    <span className="text-muted-foreground">⋯</span>
+                  </button>
+                  {openMenuId === 'role' && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 py-1 min-w-[100px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSection('role');
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Separator */}
+            <div className="border-t border-border/30 my-1"></div>
+
+            {/* Instructions */}
+            {editingSection === 'instructions' ? (
+              <div className="bg-muted/30 rounded p-3 space-y-2">
+                <Label htmlFor="instructions" className="text-sm font-medium">Instructions</Label>
+                <p className="text-xs text-muted-foreground">
+                  How should your agent behave and communicate?
+                </p>
+                <Textarea
+                  id="instructions"
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  placeholder="Example: Always be polite, helpful, and solution-focused. Listen carefully to customer concerns and provide clear, step-by-step guidance."
+                  rows={4}
+                  className="w-full"
+                  autoFocus
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingSection(null)}
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
+                onMouseLeave={() => openMenuId === 'instructions' && setOpenMenuId(null)}
+              >
+                <div className="flex-1 pr-8">
+                  <p className="text-sm font-medium text-foreground">Instructions</p>
+                  {instructions && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{instructions}</p>}
+                  {!instructions && <p className="text-xs text-muted-foreground italic">Not set</p>}
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenuId(openMenuId === 'instructions' ? null : 'instructions')}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                  >
+                    <span className="text-muted-foreground">⋯</span>
+                  </button>
+                  {openMenuId === 'instructions' && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 py-1 min-w-[100px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSection('instructions');
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Separator */}
+            <div className="border-t border-border/30 my-1"></div>
+
+            {/* Constraints */}
+            {editingSection === 'constraints' ? (
+              <div className="bg-muted/30 rounded p-3 space-y-2">
+                <Label htmlFor="constraints" className="text-sm font-medium">Constraints</Label>
+                <p className="text-xs text-muted-foreground">
+                  What boundaries or limitations should your agent follow?
+                </p>
+                <Textarea
+                  id="constraints"
+                  value={constraints}
+                  onChange={(e) => setConstraints(e.target.value)}
+                  placeholder="Example: Never share confidential information, never make promises about refunds without checking policy, always escalate billing issues to human agents."
+                  rows={4}
+                  className="w-full"
+                  autoFocus
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingSection(null)}
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
+                onMouseLeave={() => openMenuId === 'constraints' && setOpenMenuId(null)}
+              >
+                <div className="flex-1 pr-8">
+                  <p className="text-sm font-medium text-foreground">Constraints</p>
+                  {constraints && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{constraints}</p>}
+                  {!constraints && <p className="text-xs text-muted-foreground italic">Not set</p>}
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenuId(openMenuId === 'constraints' ? null : 'constraints')}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                  >
+                    <span className="text-muted-foreground">⋯</span>
+                  </button>
+                  {openMenuId === 'constraints' && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 py-1 min-w-[100px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSection('constraints');
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Separator */}
+            <div className="border-t border-border/30 my-1"></div>
+
+            {/* Tools */}
+            {editingSection === 'tools' ? (
+              <div className="bg-muted/30 rounded p-3 space-y-2">
+                <Label htmlFor="tools" className="text-sm font-medium">Tools</Label>
+                <p className="text-xs text-muted-foreground">
+                  How should your agent use available tools and integrations?
+                </p>
+                <Textarea
+                  id="tools"
+                  value={tools}
+                  onChange={(e) => setTools(e.target.value)}
+                  placeholder="Example: Use the knowledge base search tool for technical documentation. Use email integration to send follow-up confirmations after resolving issues."
+                  rows={4}
+                  className="w-full"
+                  autoFocus
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingSection(null)}
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
+                onMouseLeave={() => openMenuId === 'tools' && setOpenMenuId(null)}
+              >
+                <div className="flex-1 pr-8">
+                  <p className="text-sm font-medium text-foreground">Tools</p>
+                  {tools && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{tools}</p>}
+                  {!tools && <p className="text-xs text-muted-foreground italic">Not set</p>}
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenuId(openMenuId === 'tools' ? null : 'tools')}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                  >
+                    <span className="text-muted-foreground">⋯</span>
+                  </button>
+                  {openMenuId === 'tools' && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 py-1 min-w-[100px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSection('tools');
+                          setOpenMenuId(null);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Custom Contexts */}
+            {customContexts.map((context, index) => {
+                const isEditingContext = editingSection === `context-${context.id}`;
+                
+                if (isEditingContext) {
+                  return (
+                    <React.Fragment key={context.id}>
+                      {index > 0 && <div className="border-t border-border/30 my-1"></div>}
+                      <div className="bg-muted/30 rounded p-3 space-y-2">
+                      <Input
+                        value={context.name}
+                        onChange={(e) => updateCustomContext(context.id, 'name', e.target.value)}
+                        placeholder="Context name (e.g., Company Values)"
+                        className="w-full"
+                      />
+                      <Textarea
+                        value={context.content}
+                        onChange={(e) => updateCustomContext(context.id, 'content', e.target.value)}
+                        placeholder="Enter context content..."
+                        rows={3}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeCustomContext(context.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingSection(null)}
+                        >
+                          Done
+                        </Button>
                       </div>
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    </React.Fragment>
+                  );
+                }
+                
+                return (
+                  <React.Fragment key={context.id}>
+                    {index > 0 && <div className="border-t border-border/30 my-1"></div>}
+                    <div
+                    className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
+                    onMouseLeave={() => openMenuId === `context-${context.id}` && setOpenMenuId(null)}
+                  >
+                    <div className="flex-1 pr-8">
+                      <p className="text-sm font-medium text-foreground">{context.name || 'New Context'}</p>
+                      {context.content && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{context.content}</p>}
+                    </div>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOpenMenuId(openMenuId === `context-${context.id}` ? null : `context-${context.id}`)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                      >
+                        <span className="text-muted-foreground">⋯</span>
+                      </button>
+                      {openMenuId === `context-${context.id}` && (
+                        <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 py-1 min-w-[100px]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSection(`context-${context.id}`);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeCustomContext(context.id);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-muted transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
           </div>
+                  </React.Fragment>
+                );
+              })}
         </CardContent>
       </Card>
 
-      {/* Advanced Reasoning */}
+        {/* Rules Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Brain className="h-5 w-5" />
-            <span>Advanced Reasoning</span>
-          </CardTitle>
+            <CardTitle>Rules</CardTitle>
           <CardDescription>
-            Enable enhanced reasoning capabilities and chain-of-thought processing
+              Specific rules your agent must follow (max 50 rules, 50 words each)
           </CardDescription>
         </CardHeader>
-        <CardContent>
+          <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-base">Enable Advanced Reasoning</Label>
-              <div className="text-sm text-muted-foreground">
-                Activates sophisticated reasoning patterns including inductive, abductive, and deductive logic
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4" />
+                <span>{rules.length} / 50 rules</span>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addRule}
+                disabled={rules.length >= 50}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Rule
+              </Button>
             </div>
-            <Switch
-              checked={reasoningEnabled}
-              onCheckedChange={setReasoningEnabled}
-            />
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* System Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Settings className="h-5 w-5" />
-            <span>System Instructions</span>
-          </CardTitle>
-          <CardDescription>
-            Core behavioral guidelines that define your agent's most important operating principles
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Primary Instructions</Label>
+            {rules.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">No rules defined yet.</p>
+                <p className="text-xs mt-1">Click "Add Rule" to create specific guidelines for your agent.</p>
+          </div>
+            )}
+
+            <div className="space-y-1">
+              {rules.map((rule, index) => {
+                const isEditing = editingRuleId === rule.id;
+                const showMenu = openMenuId === rule.id;
+                const wordCount = rule.content.trim().split(/\s+/).filter(word => word.length > 0).length;
+                const isOverLimit = wordCount > 50;
+                
+                // If editing, show the edit form
+                if (isEditing) {
+                  return (
+                    <React.Fragment key={rule.id}>
+                      {index > 0 && <div className="border-t border-border/30 my-1"></div>}
+                      <div className="bg-muted/30 rounded p-3 space-y-2">
               <Textarea
-                value={customInstructions}
-                onChange={(e) => setCustomInstructions(e.target.value)}
-                placeholder="Example: You are a professional customer support agent. Always be polite, helpful, and solution-focused. When handling complaints, acknowledge the issue, apologize sincerely, and provide clear next steps. Escalate to a human agent if the customer requests it or if the issue requires manual intervention."
-                rows={6}
-                className="w-full"
-              />
-              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-medium text-foreground">💡 Best Practices:</p>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  <li>• Be specific about tone, style, and approach</li>
-                  <li>• Define clear boundaries and escalation rules</li>
-                  <li>• Include examples of desired responses</li>
-                  <li>• Specify any compliance or safety requirements</li>
-                </ul>
+                        value={rule.content}
+                        onChange={(e) => updateRule(rule.id, e.target.value)}
+                        placeholder="Enter a specific rule (max 50 words)..."
+                        rows={2}
+                        className={`w-full ${isOverLimit ? 'border-red-500' : ''}`}
+                        autoFocus
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs ${isOverLimit ? 'text-red-500' : 'text-muted-foreground'}`}>
+                          {wordCount} / 50 words
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (rule.content.trim()) {
+                                setEditingRuleId(null);
+                              } else {
+                                // If empty, remove it
+                                removeRule(rule.id);
+                              }
+                            }}
+                          >
+                            {rule.content.trim() ? 'Save' : 'Cancel'}
+                          </Button>
+                        </div>
               </div>
             </div>
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                <strong>Note:</strong> These instructions are sent as system prompts and take highest priority in guiding your agent's behavior. They will be applied to every conversation.
-              </p>
+                    </React.Fragment>
+                  );
+                }
+                
+                // If not editing and has content, show closed state
+                if (rule.content.trim()) {
+                  return (
+                    <React.Fragment key={rule.id}>
+                      {index > 0 && <div className="border-t border-border/30 my-1"></div>}
+                      <div 
+                      className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
+                      onMouseLeave={() => setOpenMenuId(null)}
+                    >
+                      <p className="text-sm text-foreground flex-1 pr-8">
+                        {rule.content}
+                      </p>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setOpenMenuId(showMenu ? null : rule.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                        >
+                          <span className="text-muted-foreground">⋯</span>
+                        </button>
+                        {showMenu && (
+                          <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 py-1 min-w-[100px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingRuleId(rule.id);
+                                setOpenMenuId(null);
+                              }}
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                removeRule(rule.id);
+                                setOpenMenuId(null);
+                              }}
+                              className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-muted transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
             </div>
+                    </React.Fragment>
+                  );
+                }
+                
+                // Skip rendering if no content and not editing (shouldn't happen)
+                return null;
+              })}
           </div>
         </CardContent>
       </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t">
-        <Button onClick={handleSave} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              Save Changes
-            </>
-          )}
-        </Button>
       </div>
     </div>
   );

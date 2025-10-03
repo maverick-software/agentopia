@@ -44,11 +44,36 @@ export class RetryCoordinator {
       retryAttempts++;
       console.log(`[RetryCoordinator] 🚀 INTELLIGENT RETRY ${retryAttempts}/${this.MAX_RETRY_ATTEMPTS} for ${toolDetail.name}`);
       
-      // Check if this error is retryable
-      if (!IntelligentRetrySystem.isRetryableError(toolDetail.name, toolDetail.error || '')) {
-        console.log(`[RetryCoordinator] Error for ${toolDetail.name} is not retryable, skipping`);
+      // Use LLM to analyze if this error is retryable
+      const retryAnalysis = await IntelligentRetrySystem.isRetryableError(
+        toolDetail.name, 
+        toolDetail.error || '', 
+        openai
+      );
+      
+      console.log(`[RetryCoordinator] LLM retry analysis for ${toolDetail.name}:`, retryAnalysis);
+      
+      if (!retryAnalysis.isRetryable) {
+        console.log(`[RetryCoordinator] LLM determined ${toolDetail.name} is not retryable: ${retryAnalysis.reasoning}`);
         failedRetries++;
+        
+        // Add system message explaining why it's not retryable
+        msgs.push({
+          role: 'system',
+          content: `❌ RETRY SKIPPED: ${toolDetail.name} - ${retryAnalysis.reasoning} (Confidence: ${Math.round(retryAnalysis.confidence * 100)}%)`
+        });
+        
         continue;
+      }
+
+      console.log(`[RetryCoordinator] LLM approved retry for ${toolDetail.name}: ${retryAnalysis.reasoning} (Confidence: ${Math.round(retryAnalysis.confidence * 100)}%)`);
+      
+      // Add suggested fix to system messages if available
+      if (retryAnalysis.suggestedFix) {
+        msgs.push({
+          role: 'system',
+          content: `🔧 RETRY GUIDANCE for ${toolDetail.name}: ${retryAnalysis.suggestedFix}`
+        });
       }
 
       // Create execution context for intelligent retry

@@ -195,42 +195,66 @@ export class IntelligentRetrySystem {
   }
 
   /**
-   * Use LLM to analyze error and suggest parameter fixes
+   * Use LLM to analyze error and suggest parameter fixes with enhanced intelligence
    */
   private static async llmAnalyzeError(context: ToolExecutionContext, openai: any): Promise<RetryAnalysis> {
     try {
-      const prompt = `You are an expert at analyzing tool execution errors and fixing parameter issues.
+      const prompt = `You are an expert at analyzing tool execution errors and fixing parameter issues automatically.
 
 TOOL: ${context.toolName}
 ERROR: ${context.error}
 ORIGINAL PARAMETERS: ${JSON.stringify(context.originalParams, null, 2)}
 ATTEMPT: ${context.attempt}/${context.maxAttempts}
 
-Analyze this error and determine:
-1. Is this a fixable parameter issue?
-2. What parameters need to be changed/added/removed?
-3. What are the correct parameter names and values?
+Analyze this error intelligently and provide a comprehensive fix:
 
-Common patterns:
-- Zapier MCP tools often need "searchValue" instead of "instructions" or "query"
-- Gmail tools need "query" parameter for searches
-- Contact tools need "query" parameter for searches
-- SMS tools need "to" (phone) and "message_text" parameters
-- Email tools need "to", "subject", "body" parameters
+1. **Error Classification**: What type of error is this?
+   - Parameter missing/wrong name
+   - Format/validation issue  
+   - Authentication/permission issue
+   - Network/temporary issue
+   - Service-specific issue
 
-Respond with a JSON object:
+2. **Intelligent Parameter Analysis**: Look at the original parameters and error message:
+   - Are there parameter name mismatches? (e.g., "instructions" vs "searchValue", "message" vs "body")
+   - Are there format issues? (phone numbers, emails, etc.)
+   - Are required parameters missing?
+   - Are there extra/unwanted parameters?
+
+3. **Smart Fixes**: Provide specific parameter transformations:
+   - Rename parameters to match API expectations
+   - Transform formats (e.g., phone number formatting)
+   - Add missing required parameters with sensible defaults
+   - Remove problematic parameters
+
+4. **Tool-Specific Knowledge**: Apply knowledge about common issues:
+   - Zapier MCP tools often need "searchValue" instead of "instructions"
+   - ClickSend SMS needs "to" (phone) and "message" parameters
+   - Gmail tools need "query" for searches
+   - Outlook tools have specific parameter naming conventions
+
+Common transformation patterns:
+- "instructions" → "searchValue" (for Zapier Outlook tools)
+- "instructions" → "query" (for search tools)
+- "message" → "body" or "message_text" (for messaging tools)
+- "phone" → "to" (for SMS tools)
+- Phone number formatting: ensure international format (+1234567890)
+
+Respond with JSON:
 {
   "shouldRetry": boolean,
-  "transformedParams": { "param": "value" } or null,
+  "transformedParams": { "corrected": "parameters" } or null,
   "confidence": 0.0-1.0,
-  "reasoning": "explanation of the fix"
+  "reasoning": "detailed explanation of the analysis and fix",
+  "errorType": "parameter_mismatch|format_issue|missing_required|authentication|network|service_error",
+  "specificFixes": ["list of specific changes made"]
 }`;
 
       const response = await openai.chat.completions.create({
         model: 'gpt-4',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1,
-        max_tokens: 500
+        max_tokens: 800
       });
 
       const content = response.choices[0]?.message?.content;
@@ -241,19 +265,19 @@ Respond with a JSON object:
       // Parse JSON response
       const analysis = JSON.parse(content);
       
-      console.log(`[IntelligentRetry] LLM analysis result:`, analysis);
+      console.log(`[IntelligentRetry] Enhanced LLM analysis result:`, analysis);
       
       return {
         shouldRetry: analysis.shouldRetry && context.attempt < context.maxAttempts,
         transformedParams: analysis.transformedParams,
         confidence: analysis.confidence || 0.5,
-        reasoning: analysis.reasoning || 'LLM analysis',
+        reasoning: analysis.reasoning || 'Enhanced LLM analysis',
         enhancedInstructions: analysis.transformedParams ? 
-          this.generateEnhancedInstructions(context, analysis.transformedParams) : undefined
+          this.generateEnhancedInstructions(context, analysis.transformedParams, analysis.specificFixes || []) : undefined
       };
 
     } catch (error) {
-      console.error(`[IntelligentRetry] LLM analysis failed:`, error);
+      console.error(`[IntelligentRetry] Enhanced LLM analysis failed:`, error);
       
       // Fallback to heuristic analysis
       return this.heuristicAnalysis(context);
@@ -310,27 +334,33 @@ Respond with a JSON object:
   }
 
   /**
-   * Generate enhanced instructions for the retry attempt
+   * Generate enhanced instructions for the retry attempt with specific fixes listed
    */
   private static generateEnhancedInstructions(
     context: ToolExecutionContext, 
-    transformedParams: Record<string, any>
+    transformedParams: Record<string, any>,
+    specificFixes: string[] = []
   ): string {
     const { toolName, error, attempt } = context;
     
-    return `RETRY ATTEMPT ${attempt}: The previous tool call failed with error: "${error}"
+    const fixesList = specificFixes.length > 0 
+      ? `\n\nSPECIFIC FIXES APPLIED:\n${specificFixes.map(fix => `• ${fix}`).join('\n')}`
+      : '';
+    
+    return `🔧 INTELLIGENT RETRY ATTEMPT ${attempt}: The previous tool call failed with error: "${error}"
 
-CORRECTED PARAMETERS: The tool call has been automatically corrected with the following parameters:
-${JSON.stringify(transformedParams, null, 2)}
+🤖 LLM ANALYSIS: The error has been analyzed using AI and the following corrected parameters have been generated:
+${JSON.stringify(transformedParams, null, 2)}${fixesList}
 
-CRITICAL: You MUST retry the tool call immediately using these EXACT corrected parameters. Do not modify them or ask for user input. The system has already analyzed the error and provided the correct parameter format.
+✅ CRITICAL INSTRUCTIONS: You MUST retry the tool call immediately using these EXACT AI-corrected parameters. 
 
-For ${toolName}:
-- Use the corrected parameter names and values exactly as provided
-- Do not use generic parameters like "instructions" 
-- The error has been analyzed and the parameters have been fixed automatically
+🎯 FOR ${toolName}:
+- The AI has analyzed the error and transformed the parameters automatically
+- Use the corrected parameter names and values exactly as provided above
+- Do not modify these parameters or ask for user input
+- The system has applied intelligent fixes based on tool-specific knowledge
 
-RETRY NOW with the corrected parameters.`;
+🚀 RETRY NOW with the AI-corrected parameters - the system is confident this will resolve the issue.`;
   }
 
   /**
@@ -409,39 +439,139 @@ RETRY NOW with the corrected parameters.`;
   }
 
   /**
-   * Check if an error is retryable
+   * Check if an error is retryable using LLM intelligence
    */
-  static isRetryableError(toolName: string, error: string): boolean {
+  static async isRetryableError(toolName: string, error: string, openai: any): Promise<{
+    isRetryable: boolean;
+    confidence: number;
+    reasoning: string;
+    suggestedFix?: string;
+  }> {
+    try {
+      const prompt = `You are an expert at analyzing tool execution errors and determining if they can be fixed automatically.
+
+TOOL: ${toolName}
+ERROR: ${error}
+
+Analyze this error and determine:
+1. Is this error fixable through parameter adjustment or retry?
+2. How confident are you (0.0-1.0)?
+3. What type of error is this?
+4. Can you suggest a specific fix?
+
+Consider these error types:
+- RETRYABLE: Missing parameters, wrong parameter names, format issues, temporary network issues
+- NOT RETRYABLE: Authentication failures, permissions denied, service unavailable, rate limits exceeded
+
+Common retryable patterns:
+- "missing", "required", "invalid parameter", "please provide"
+- Parameter name mismatches (e.g., "searchValue" vs "query")
+- Format issues (phone numbers, emails, etc.)
+- Temporary connectivity issues
+
+NOT retryable patterns:
+- "unauthorized", "forbidden", "authentication failed"
+- "rate limit", "quota exceeded", "service unavailable"
+- "not found" (for resources that don't exist)
+
+Respond with JSON:
+{
+  "isRetryable": boolean,
+  "confidence": 0.0-1.0,
+  "reasoning": "detailed explanation",
+  "suggestedFix": "specific suggestion if retryable"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 300
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        console.warn(`[IntelligentRetry] No LLM response for retry analysis, falling back to heuristic`);
+        return this.heuristicRetryCheck(toolName, error);
+      }
+
+      try {
+        const analysis = JSON.parse(content);
+        console.log(`[IntelligentRetry] LLM retry analysis for ${toolName}:`, analysis);
+        
+        return {
+          isRetryable: analysis.isRetryable || false,
+          confidence: analysis.confidence || 0.5,
+          reasoning: analysis.reasoning || 'LLM analysis',
+          suggestedFix: analysis.suggestedFix
+        };
+      } catch (parseError) {
+        console.error(`[IntelligentRetry] Failed to parse LLM response:`, parseError);
+        return this.heuristicRetryCheck(toolName, error);
+      }
+
+    } catch (llmError) {
+      console.error(`[IntelligentRetry] LLM retry analysis failed:`, llmError);
+      return this.heuristicRetryCheck(toolName, error);
+    }
+  }
+
+  /**
+   * Fallback heuristic retry check when LLM fails
+   */
+  private static heuristicRetryCheck(toolName: string, error: string): {
+    isRetryable: boolean;
+    confidence: number;
+    reasoning: string;
+    suggestedFix?: string;
+  } {
     const lowerError = error.toLowerCase();
     
-    // Parameter-related errors are always retryable
+    // Parameter-related errors are retryable
     if (lowerError.includes('missing') || 
         lowerError.includes('required') || 
         lowerError.includes('invalid parameter') ||
         lowerError.includes('searchvalue') ||
-        lowerError.includes('question:')) {
-      return true;
+        lowerError.includes('question:') ||
+        lowerError.includes('please provide') ||
+        lowerError.includes('correct parameters')) {
+      return {
+        isRetryable: true,
+        confidence: 0.8,
+        reasoning: 'Heuristic: Parameter-related error detected',
+        suggestedFix: 'Check parameter names and required fields'
+      };
     }
 
     // Authentication errors are not retryable
     if (lowerError.includes('unauthorized') || 
         lowerError.includes('forbidden') || 
         lowerError.includes('authentication')) {
-      return false;
+      return {
+        isRetryable: false,
+        confidence: 0.9,
+        reasoning: 'Heuristic: Authentication error - not retryable'
+      };
     }
 
     // Network/temporary errors are retryable
     if (lowerError.includes('timeout') || 
         lowerError.includes('network') || 
-        lowerError.includes('connection')) {
-      return true;
+        lowerError.includes('connection') ||
+        lowerError.includes('non-2xx')) {
+      return {
+        isRetryable: true,
+        confidence: 0.7,
+        reasoning: 'Heuristic: Network/temporary error detected',
+        suggestedFix: 'Retry with same parameters or check service status'
+      };
     }
 
-    // Tool-specific retryable patterns
-    if (toolName.includes('microsoft_outlook_') && lowerError.includes('search value')) {
-      return true;
-    }
-
-    return false;
+    // Default: not retryable with low confidence
+    return {
+      isRetryable: false,
+      confidence: 0.3,
+      reasoning: 'Heuristic: Unknown error type, defaulting to not retryable'
+    };
   }
 }

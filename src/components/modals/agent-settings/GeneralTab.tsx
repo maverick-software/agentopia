@@ -178,7 +178,7 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="pb-4 border-b border-border">
+      <div>
         <h3 className="text-lg font-semibold">General Information</h3>
         <p className="text-sm text-muted-foreground mt-1">
           Configure your agent's basic information, identity, and language model.
@@ -328,45 +328,6 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
         )}
       </div>
 
-      {/* Save Button - Always visible with enhanced animations */}
-      <div className="flex items-center justify-end pt-6 border-t border-border">
-        <Button
-          onClick={handleSave}
-          disabled={isLoading || !name.trim() || saveState === 'saving'}
-          size="sm"
-          className={`transition-all duration-300 transform ${
-            saveState === 'success' 
-              ? 'bg-green-600 hover:bg-green-700 text-white scale-105' 
-              : saveState === 'error'
-              ? 'bg-red-600 hover:bg-red-700 text-white scale-105'
-              : saveState === 'saving'
-              ? 'scale-95'
-              : 'hover:scale-105'
-          }`}
-        >
-          {saveState === 'saving' ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : saveState === 'success' ? (
-            <>
-              <Check className="w-4 h-4 mr-2 animate-bounce" />
-              Saved!
-            </>
-          ) : saveState === 'error' ? (
-            <>
-              <X className="w-4 h-4 mr-2 animate-pulse" />
-              Save Failed
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              {hasChanges ? 'Save Changes' : 'No Changes'}
-            </>
-          )}
-        </Button>
-      </div>
     </div>
   );
 }

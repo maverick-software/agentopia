@@ -388,29 +388,6 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
 
 
 
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t">
-        <Button onClick={handleSave} disabled={loading || saved}>
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : saved ? (
-            <>
-              <Check className="h-4 w-4 mr-2 text-green-500" />
-              Saved!
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              Save Changes
-            </>
-          )}
-        </Button>
-      </div>
-
-
     </div>
   );
 }

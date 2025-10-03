@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogHeader,
@@ -31,7 +31,10 @@ import {
   Library,
   GitBranch,
   Zap,
-  UserCheck
+  UserCheck,
+  Save,
+  Check,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -40,13 +43,14 @@ import { GeneralTab } from './agent-settings/GeneralTab';
 import { ScheduleTab } from './agent-settings/ScheduleTab';
 import { IdentityTab } from './agent-settings/IdentityTab';
 import { BehaviorTab } from './agent-settings/BehaviorTab';
+import { ReasoningTab } from './agent-settings/ReasoningTab';
 import { MemoryTab } from './agent-settings/MemoryTab';
 import { MediaTab } from './agent-settings/MediaTab';
 import { ToolsTab } from './agent-settings/ToolsTab';
 import { ChannelsTab } from './agent-settings/ChannelsTab';
 import { SourcesTab } from './agent-settings/SourcesTab';
 import { TeamTab } from './agent-settings/TeamTab';
-import ContactsTab from './agent-settings/ContactsTab';
+import ContactsTab, { ContactsTabRef } from './agent-settings/ContactsTab';
 import { ZapierMCPTab } from './agent-settings/ZapierMCPTab';
 
 interface AgentSettingsModalProps {
@@ -61,10 +65,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'reasoning' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'reasoning' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 
 interface TabConfig {
   id: TabId;
@@ -92,8 +96,14 @@ const TABS: TabConfig[] = [
   {
     id: 'behavior',
     label: 'Behavior',
+    icon: MessageSquare,
+    description: 'System instructions'
+  },
+  {
+    id: 'reasoning',
+    label: 'Reasoning',
     icon: Brain,
-    description: 'Reasoning and instructions'
+    description: 'Advanced reasoning capabilities'
   },
   {
     id: 'memory',
@@ -177,6 +187,7 @@ export function AgentSettingsModal({
   initialTab = 'general'
 }: AgentSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const contactsTabRef = useRef<ContactsTabRef>(null);
 
   // Reset to initial tab when modal opens
   useEffect(() => {
@@ -184,6 +195,19 @@ export function AgentSettingsModal({
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
+
+  // Handle save button click
+  const handleSave = async () => {
+    if (activeTab === 'contacts' && contactsTabRef.current) {
+      await contactsTabRef.current.save();
+    }
+    // Add more tab save handlers here as needed
+  };
+
+  // Determine if current tab has save functionality
+  const canSave = activeTab === 'contacts';
+  const isSaving = activeTab === 'contacts' && contactsTabRef.current?.saving;
+  const saveSuccess = activeTab === 'contacts' && contactsTabRef.current?.saveSuccess;
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -205,6 +229,8 @@ export function AgentSettingsModal({
         return <IdentityTab {...commonProps} />;
       case 'behavior':
         return <BehaviorTab {...commonProps} />;
+      case 'reasoning':
+        return <ReasoningTab {...commonProps} />;
       case 'memory':
         return <MemoryTab {...commonProps} />;
       case 'media':
@@ -218,7 +244,7 @@ export function AgentSettingsModal({
       case 'team':
         return <TeamTab {...commonProps} />;
       case 'contacts':
-        return <ContactsTab agent={{ id: agentId, name: agentData?.name || 'Agent', user_id: '' }} />;
+        return <ContactsTab ref={contactsTabRef} agent={{ id: agentId, name: agentData?.name || 'Agent', user_id: '' }} />;
       case 'zapier-mcp':
         return <ZapierMCPTab {...commonProps} />;
       default:
@@ -231,15 +257,46 @@ export function AgentSettingsModal({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-[900px] translate-x-[-50%] translate-y-[-50%] gap-0 border bg-background p-0 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] rounded-xl border-border dark:border-border max-h-[90vh]">
-        <DialogHeader className="px-6 py-4 border-b border-border dark:border-border bg-background dark:bg-background rounded-t-xl">
+        <DialogHeader className="px-6 py-4 bg-background dark:bg-background rounded-t-xl">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-semibold text-foreground dark:text-foreground">
               Agent Settings
             </DialogTitle>
-            <DialogPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </DialogPrimitive.Close>
+            <div className="flex items-center gap-2">
+              {canSave && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        size="icon"
+                        className={`h-8 w-8 transition-all duration-300 ${
+                          saveSuccess 
+                            ? 'bg-green-600 hover:bg-green-700' 
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
+                      >
+                        {isSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : saveSuccess ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Settings'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              <DialogPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogPrimitive.Close>
+            </div>
           </div>
         </DialogHeader>
 

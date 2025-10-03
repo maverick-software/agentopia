@@ -5,6 +5,7 @@ import { BarChart3, Brain, ChevronRight, FileText, Paperclip } from 'lucide-reac
 import { InlineThinkingIndicator } from '../InlineThinkingIndicator';
 import type { Message } from '../../types';
 import type { Database } from '../../types/database.types';
+import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -22,6 +23,8 @@ interface MessageListProps {
 }
 
 export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps }: MessageListProps) {
+  const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
+  
   return (
     <div className="space-y-6">
       {messages.map((message, index) => {
@@ -82,13 +85,13 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                 </div>
               ) : (
                 <>
-                  {agent?.avatar_url ? (
+                  {resolvedAvatarUrl ? (
                     <img 
-                      src={agent.avatar_url} 
-                      alt={agent.name || 'Agent'}
+                      src={resolvedAvatarUrl} 
+                      alt={agent?.name || 'Agent'}
                       className="w-8 h-8 rounded-full object-cover"
                       onError={(e) => {
-                        console.warn('Message avatar failed to load:', agent.avatar_url);
+                        console.warn('Message avatar failed to load:', resolvedAvatarUrl);
                         e.currentTarget.style.display = 'none';
                         const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                         if (fallback) fallback.style.display = 'flex';
@@ -97,7 +100,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   ) : null}
                   <div 
                     className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
-                    style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
+                    style={{ display: resolvedAvatarUrl ? 'none' : 'flex' }}
                   >
                     <span className="text-white text-sm font-medium">
                       {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
@@ -301,16 +304,18 @@ interface ChatStarterScreenProps {
 }
 
 export function ChatStarterScreen({ agent }: ChatStarterScreenProps) {
+  const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
+  
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center max-w-md mx-auto px-6 animate-fade-in">
-        {agent?.avatar_url ? (
+        {resolvedAvatarUrl ? (
           <img 
-            src={agent.avatar_url} 
-            alt={agent.name || 'Agent'}
+            src={resolvedAvatarUrl} 
+            alt={agent?.name || 'Agent'}
             className="w-16 h-16 rounded-full object-cover mx-auto mb-6 shadow-lg"
             onError={(e) => {
-              console.warn('Avatar image failed to load:', agent.avatar_url);
+              console.warn('Avatar image failed to load:', resolvedAvatarUrl);
               // Hide the broken image and show fallback
               e.currentTarget.style.display = 'none';
               const fallback = e.currentTarget.nextElementSibling as HTMLElement;
@@ -320,7 +325,7 @@ export function ChatStarterScreen({ agent }: ChatStarterScreenProps) {
         ) : null}
         <div 
           className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg"
-          style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
+          style={{ display: resolvedAvatarUrl ? 'none' : 'flex' }}
         >
           <span className="text-white text-xl font-medium">
             {agent?.name?.charAt(0)?.toUpperCase() || 'A'}

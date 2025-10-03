@@ -11,6 +11,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import type { Database } from '../../types/database.types';
+import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -43,6 +44,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const navigate = useNavigate();
   const [clearingCache, setClearingCache] = useState(false);
+  const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
 
   const handleClearCache = async () => {
     if (!agent?.user_id) {
@@ -94,13 +96,13 @@ export function ChatHeader({
               className="relative group cursor-pointer"
               onClick={onShowAboutMe}
             >
-              {agent?.avatar_url ? (
+              {resolvedAvatarUrl ? (
                 <img 
-                  src={agent.avatar_url} 
-                  alt={agent.name || 'Agent'}
+                  src={resolvedAvatarUrl} 
+                  alt={agent?.name || 'Agent'}
                   className="w-6 h-6 rounded-full object-cover transition-all duration-200 group-hover:brightness-75"
                   onError={(e) => {
-                    console.warn('Header avatar failed to load:', agent.avatar_url);
+                    console.warn('Header avatar failed to load:', resolvedAvatarUrl);
                     e.currentTarget.style.display = 'none';
                     const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                     if (fallback) fallback.style.display = 'flex';
@@ -109,7 +111,7 @@ export function ChatHeader({
               ) : null}
               <div 
                 className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-all duration-200 group-hover:brightness-75"
-                style={{ display: agent?.avatar_url ? 'none' : 'flex' }}
+                style={{ display: resolvedAvatarUrl ? 'none' : 'flex' }}
               >
                 <span className="text-white text-xs font-medium">
                   {agent?.name?.charAt(0)?.toUpperCase() || 'A'}

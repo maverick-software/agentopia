@@ -66,7 +66,10 @@ serve(async (req) => {
 
     const result = await openai.images.generate({
       model: "gpt-image-1",
-      prompt: prompt
+      prompt: prompt,
+      size: "1024x1024",
+      background: "transparent",
+      quality: "high"
     })
 
     console.log('OpenAI response structure:', JSON.stringify(result, null, 2))
