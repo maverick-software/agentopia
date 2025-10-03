@@ -231,10 +231,47 @@ Deno.serve(async (req) => {
       // Check for MCP protocol errors
       if (mcpResponse.error) {
         console.error(`[MCP Execute] MCP Error detected:`, mcpResponse.error)
+        
+        const errorCode = mcpResponse.error.code
+        const errorMessage = mcpResponse.error.message || 'Unknown error'
+        
+        // Check if this is a retryable parameter error
+        const isParameterError = errorCode === -32602 || // Invalid params
+                                errorMessage.toLowerCase().includes('invalid arguments') ||
+                                errorMessage.toLowerCase().includes('required') ||
+                                errorMessage.toLowerCase().includes('missing') ||
+                                errorMessage.toLowerCase().includes('undefined')
+        
+        console.log(`[MCP Execute] Error code: ${errorCode}, Is parameter error: ${isParameterError}`)
+        
+        if (isParameterError) {
+          console.log(`[MCP Execute] 🔄 MCP parameter error detected - flagging for retry`)
+          
+          // Return success: false with requires_retry flag for intelligent retry system
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `MCP Error ${errorCode}: ${errorMessage}`,
+              requires_retry: true,
+              metadata: {
+                tool_name,
+                mcp_error_code: errorCode,
+                mcp_error: mcpResponse.error,
+                retry_reason: 'Invalid or missing parameters detected'
+              }
+            }),
+            { 
+              status: 200, // Return 200 so Universal Tool Executor processes the retry
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          )
+        }
+        
+        // Non-retryable error
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: `MCP Error: ${mcpResponse.error.message || 'Unknown error'}`,
+            error: `MCP Error: ${errorMessage}`,
             data: mcpResponse.error
           }),
           { 

@@ -37,7 +37,15 @@ export interface ParameterTransformation {
 
 export class IntelligentRetrySystem {
   private static parameterTransformations: ParameterTransformation[] = [
-    // Zapier MCP Outlook Tools
+    // Zapier MCP Outlook Tools - Handle undefined instructions
+    {
+      from: 'instructions',
+      to: 'instructions',
+      condition: (toolName, error) => 
+        toolName.includes('microsoft_outlook_find_emails') && 
+        (error.toLowerCase().includes('instructions') && error.toLowerCase().includes('undefined')),
+      transformer: (value: string) => value || "" // Provide empty string as default
+    },
     {
       from: 'instructions',
       to: 'searchValue',
@@ -531,15 +539,18 @@ Respond with JSON:
     if (lowerError.includes('missing') || 
         lowerError.includes('required') || 
         lowerError.includes('invalid parameter') ||
+        lowerError.includes('invalid arguments') ||
+        lowerError.includes('mcp error -32602') ||
         lowerError.includes('searchvalue') ||
         lowerError.includes('question:') ||
         lowerError.includes('please provide') ||
-        lowerError.includes('correct parameters')) {
+        lowerError.includes('correct parameters') ||
+        lowerError.includes('undefined')) {
       return {
         isRetryable: true,
-        confidence: 0.8,
-        reasoning: 'Heuristic: Parameter-related error detected',
-        suggestedFix: 'Check parameter names and required fields'
+        confidence: 0.9,
+        reasoning: 'Heuristic: Parameter validation error detected (missing, invalid, or undefined parameters)',
+        suggestedFix: 'Check parameter names, required fields, and ensure all parameters are defined'
       };
     }
 

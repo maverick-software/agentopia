@@ -249,7 +249,7 @@ export class TextMessageHandler implements MessageHandler {
     let completionTokens = completion.usage?.completion_tokens || 0;
     
     // Execute tools and handle retries using ToolExecutor
-    const toolExecResult = await ToolExecutor.executeToolCalls(
+    let toolExecResult = await ToolExecutor.executeToolCalls(
       toolCalls,
       msgs,
       fcm,
@@ -260,12 +260,125 @@ export class TextMessageHandler implements MessageHandler {
       useRouter,
       this.normalizeTools.bind(this)
     );
-    const toolDetails = toolExecResult.toolDetails;
+    let toolDetails = toolExecResult.toolDetails;
     promptTokens += toolExecResult.tokensUsed.prompt;
     completionTokens += toolExecResult.tokensUsed.completion;
     
+    // MCP Protocol: Handle LLM retry loop for interactive errors
+    let mcpRetryAttempts = 0;
+    const MAX_MCP_RETRIES = 3;
+    
+    while (toolExecResult.requiresLLMRetry && mcpRetryAttempts < MAX_MCP_RETRIES) {
+      mcpRetryAttempts++;
+      console.log(`[TextMessageHandler] 🔄 MCP RETRY LOOP - Attempt ${mcpRetryAttempts}/${MAX_MCP_RETRIES}`);
+      console.log(`[TextMessageHandler] MCP guidance was added to conversation, calling LLM again`);
+      
+      // Call LLM again - it will read the MCP guidance and generate new tool calls
+      let retryCompletion;
+      
+      if (router && useRouter && context.agent_id) {
+        // Convert tools for router
+        const llmTools = availableTools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }));
+        
+        const retryResp = await router.chat(context.agent_id, msgs as any, { 
+          tools: llmTools, 
+          temperature: 0.7, // Slightly higher for creativity in parameter generation
+          maxTokens: 1200,
+          tool_choice: 'auto'
+        });
+        
+        const retryToolCalls = (retryResp.toolCalls || []) as Array<{ id: string; name: string; arguments: string }>;
+        retryCompletion = {
+          choices: [{ 
+            message: { 
+              content: retryResp.text, 
+              tool_calls: retryToolCalls.map((tc) => ({ 
+                id: tc.id, 
+                type: 'function', 
+                function: { name: tc.name, arguments: tc.arguments } 
+              })) 
+            } 
+          }],
+          usage: retryResp.usage ? { 
+            prompt_tokens: retryResp.usage.prompt, 
+            completion_tokens: retryResp.usage.completion, 
+            total_tokens: retryResp.usage.total 
+          } : undefined,
+        };
+        
+        if (retryResp.usage) {
+          promptTokens += retryResp.usage.prompt;
+          completionTokens += retryResp.usage.completion;
+        }
+      } else {
+        const norm = this.normalizeTools(availableTools);
+        retryCompletion = await this.openai.chat.completions.create({
+          model: effectiveModel,
+          messages: msgs,
+          tools: norm.map(tool => ({
+            type: 'function',
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters
+            }
+          })),
+          temperature: 0.7, // Slightly higher for creativity in parameter generation
+          max_tokens: 1200,
+          tool_choice: 'auto'
+        });
+        
+        promptTokens += retryCompletion.usage?.prompt_tokens || 0;
+        completionTokens += retryCompletion.usage?.completion_tokens || 0;
+      }
+      
+      const retryToolCalls = retryCompletion.choices?.[0]?.message?.tool_calls || [];
+      console.log(`[TextMessageHandler] MCP retry generated ${retryToolCalls.length} tool calls`);
+      
+      if (retryToolCalls.length === 0) {
+        console.log(`[TextMessageHandler] No tool calls in MCP retry, stopping retry loop`);
+        break;
+      }
+      
+      // Execute the retry tool calls
+      console.log(`[TextMessageHandler] Executing MCP retry tool calls:`, retryToolCalls.map(tc => tc.function?.name).join(', '));
+      
+      toolExecResult = await ToolExecutor.executeToolCalls(
+        retryToolCalls,
+        msgs,
+        fcm,
+        context,
+        availableTools,
+        this.openai,
+        router,
+        useRouter,
+        this.normalizeTools.bind(this)
+      );
+      
+      // Merge tool details from retry
+      toolDetails = [...toolDetails, ...toolExecResult.toolDetails];
+      promptTokens += toolExecResult.tokensUsed.prompt;
+      completionTokens += toolExecResult.tokensUsed.completion;
+      
+      // Check if more retries are needed
+      if (!toolExecResult.requiresLLMRetry) {
+        console.log(`[TextMessageHandler] ✅ MCP retry successful - no more retries needed`);
+        break;
+      } else {
+        console.log(`[TextMessageHandler] MCP retry still requires more attempts`);
+      }
+    }
+    
+    if (mcpRetryAttempts >= MAX_MCP_RETRIES && toolExecResult.requiresLLMRetry) {
+      console.log(`[TextMessageHandler] ⚠️ Max MCP retry attempts (${MAX_MCP_RETRIES}) reached, some tools may have failed`);
+    }
+    
     // Tool execution complete - now reflect
-    if (toolCalls.length > 0) {
+    if (toolCalls.length > 0 || mcpRetryAttempts > 0) {
       // Reflect: ask model to produce final answer
       // Add guidance for clean final response
       msgs.push({

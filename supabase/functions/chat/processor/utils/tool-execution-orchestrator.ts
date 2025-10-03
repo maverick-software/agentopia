@@ -61,13 +61,15 @@ export class ToolExecutionOrchestrator {
       msgs
     );
 
-    // Add retry summary to conversation
-    ConversationHandler.addRetrySummary(
-      msgs,
-      retryStats.successfulRetries,
-      retryStats.failedRetries,
-      retryStats.totalAttempts
-    );
+    // Add retry summary to conversation (only if not requiring LLM retry)
+    if (!retryStats.requiresLLMRetry) {
+      ConversationHandler.addRetrySummary(
+        msgs,
+        retryStats.successfulRetries,
+        retryStats.failedRetries,
+        retryStats.totalAttempts
+      );
+    }
 
     // Log final execution summary
     this.logExecutionSummary(toolDetails, retryStats);
@@ -79,7 +81,9 @@ export class ToolExecutionOrchestrator {
         prompt: promptTokens,
         completion: completionTokens,
         total: promptTokens + completionTokens
-      }
+      },
+      requiresLLMRetry: retryStats.requiresLLMRetry,
+      retryGuidanceAdded: retryStats.retryGuidanceAdded
     };
   }
 

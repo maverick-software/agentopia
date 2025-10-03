@@ -1,10 +1,12 @@
 /**
  * Retry Coordinator
  * Orchestrates intelligent retry logic for failed tool executions
+ * Implements MCP (Model Context Protocol) retry pattern
  */
 
 import type { FunctionCallingManager } from '../../function_calling/manager.ts';
 import { IntelligentRetrySystem, type ToolExecutionContext as RetryContext } from './intelligent-retry-system.ts';
+import { MCPRetryHandler } from './mcp-retry-handler.ts';
 import type { ToolDetail, ToolExecutionContext } from './tool-execution-types.ts';
 
 export class RetryCoordinator {
@@ -23,11 +25,15 @@ export class RetryCoordinator {
     successfulRetries: number;
     failedRetries: number;
     totalAttempts: number;
+    requiresLLMRetry: boolean;
+    retryGuidanceAdded: boolean;
   }> {
     const toolsNeedingRetry = toolDetails.filter(td => td.requires_retry);
     let retryAttempts = 0;
     let successfulRetries = 0;
     let failedRetries = 0;
+    let requiresLLMRetry = false;
+    let retryGuidanceAdded = false;
     
     console.log(`[RetryCoordinator] 🔍 Checking for tools needing retry: ${toolsNeedingRetry.length} found`);
     if (toolsNeedingRetry.length > 0) {
@@ -68,7 +74,37 @@ export class RetryCoordinator {
 
       console.log(`[RetryCoordinator] LLM approved retry for ${toolDetail.name}: ${retryAnalysis.reasoning} (Confidence: ${Math.round(retryAnalysis.confidence * 100)}%)`);
       
-      // Add suggested fix to system messages if available
+      // Check if this is an MCP interactive error
+      const isMCPError = MCPRetryHandler.isMCPInteractiveError(toolDetail.error || '');
+      
+      if (isMCPError) {
+        console.log(`[RetryCoordinator] 🎯 MCP INTERACTIVE ERROR detected - using MCP protocol retry`);
+        
+        // Add MCP retry system message following protocol
+        const mcpRetryMessage = MCPRetryHandler.generateRetrySystemMessage({
+          toolName: toolDetail.name,
+          originalParams: toolDetail.input_params || {},
+          errorMessage: toolDetail.error || '',
+          attempt: retryAttempts,
+          maxAttempts: this.MAX_RETRY_ATTEMPTS
+        });
+        
+        msgs.push({
+          role: 'system',
+          content: mcpRetryMessage
+        });
+        
+        console.log(`[RetryCoordinator] Added MCP retry guidance to conversation`);
+        
+        // Signal that LLM needs to be called again with retry guidance
+        requiresLLMRetry = true;
+        retryGuidanceAdded = true;
+        
+        // Don't execute anything - let the LLM make a NEW tool call
+        continue;
+      }
+      
+      // For non-MCP errors, add suggested fix if available
       if (retryAnalysis.suggestedFix) {
         msgs.push({
           role: 'system',
@@ -143,7 +179,9 @@ export class RetryCoordinator {
     return {
       successfulRetries,
       failedRetries,
-      totalAttempts: retryAttempts
+      totalAttempts: retryAttempts,
+      requiresLLMRetry,
+      retryGuidanceAdded
     };
   }
 

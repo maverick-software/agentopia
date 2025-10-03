@@ -7,6 +7,8 @@ export interface ToolExecutionResult {
   toolDetails: ToolDetail[];
   msgs: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string; tool_calls?: any[] }>;
   tokensUsed: { prompt: number; completion: number; total: number };
+  requiresLLMRetry?: boolean; // MCP protocol: signals that LLM should make new tool calls
+  retryGuidanceAdded?: boolean; // Indicates MCP retry guidance was added to conversation
 }
 
 export interface ToolDetail {
