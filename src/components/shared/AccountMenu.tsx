@@ -54,11 +54,11 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
 
   return (
     <>
-      <div className={`${isCollapsed ? 'px-2' : 'px-4'} pb-4`}>
+      <div className="pb-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
-              className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-700 transition-colors text-left ${
+              className={`w-full flex items-center gap-2 p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-left ${
                 isCollapsed ? 'justify-center' : ''
               }`}
               title={isCollapsed ? user.email : undefined}
@@ -69,7 +69,7 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
                 </AvatarFallback>
               </Avatar>
               {!isCollapsed && (
-                <span className="text-sm text-gray-300 truncate">
+                <span className="text-sm text-sidebar-foreground truncate">
                   {user.email}
                 </span>
               )}
@@ -191,7 +191,7 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
               </DropdownMenuItem>
             </div>
 
-            {/* Plan Section */}
+            {/* Plan Section with Usage Info */}
             <div className={`pt-3 mb-3 border-t ${
               isAdminArea ? 'border-gray-600' : 'border-border/50'
             }`}>
@@ -211,6 +211,71 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
                   <span className="text-sm">Upgrade plan</span>
                 </DropdownMenuItem>
               )}
+              
+              {/* Plan Usage Information */}
+              <div className={`mt-3 px-3 py-3 rounded-lg ${
+                isAdminArea ? 'bg-gray-700/50' : 'bg-accent/30'
+              }`}>
+                <div className="mb-2">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className={`font-medium ${isAdminArea ? 'text-gray-300' : 'text-foreground'}`}>
+                      {subscription?.display_name || 'FREE PLAN'}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* API Calls/Actions Usage */}
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-muted-foreground">Actions</span>
+                      <span className={`font-medium ${isAdminArea ? 'text-gray-300' : 'text-foreground'}`}>
+                        200 / 200
+                      </span>
+                    </div>
+                    <div className={`h-1.5 rounded-full overflow-hidden ${
+                      isAdminArea ? 'bg-gray-600' : 'bg-muted'
+                    }`}>
+                      <div 
+                        className="h-full bg-green-500 transition-all duration-300"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-muted-foreground">Credits</span>
+                      <span className={`font-medium ${isAdminArea ? 'text-gray-300' : 'text-foreground'}`}>
+                        1,000 / 1,000
+                      </span>
+                    </div>
+                    <div className={`h-1.5 rounded-full overflow-hidden ${
+                      isAdminArea ? 'bg-gray-600' : 'bg-muted'
+                    }`}>
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-300"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Manage Plan Link */}
+                <button
+                  onClick={() => navigate('/billing')}
+                  className="w-full mt-3 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center justify-between transition-colors"
+                >
+                  <span>Manage plan</span>
+                  <span className="text-muted-foreground">→</span>
+                </button>
+                
+                {isFreePlan && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Resets in 24 days
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Admin Portal - Highlighted - Only show for admins not in admin area */}

@@ -50,6 +50,65 @@ Comprehensive Mailgun API integration:
 - **Inbound Routing**: Process incoming emails with smart routing
 - **Agent Authorization**: Granular permission management
 
+## 🔌 Universal MCP Platform
+
+### Model Context Protocol Integration
+Connect agents to ANY MCP-compliant server for universal tool connectivity:
+
+- **Automatic Server Detection**: Server type, capabilities, and protocol version detected on connection
+- **Multiple Server Support**: Zapier, Retell AI, Anthropic, OpenAI, custom, and generic MCP servers
+- **Health Monitoring**: Real-time connection health tracking with automatic status updates
+- **Zero-Touch Integration**: Connect, detect, and start using tools automatically
+
+### Supported MCP Servers
+
+#### Zapier MCP Server
+- **8,000+ Applications**: Access to Zapier's complete app ecosystem
+- **AI Actions**: Pre-configured actions optimized for AI agents
+- **Tools Available**: Email, calendar, CRM, project management, and more
+- **Server Type**: HTTP with SSE (Server-Sent Events)
+
+#### Retell AI MCP Server
+- **Voice Agent Integration**: Connect voice AI capabilities to agents
+- **Real-time Communication**: Live conversation and transcription tools
+- **Call Management**: Initiate, manage, and analyze voice interactions
+
+#### Anthropic MCP Servers
+- **Claude Integration**: Direct access to Claude-specific tools
+- **Enhanced Capabilities**: Anthropic's extended tool ecosystem
+- **Research Tools**: Advanced research and analysis capabilities
+
+#### OpenAI MCP Servers
+- **OpenAI Tools**: Integration with OpenAI's tool ecosystem
+- **Custom Functions**: User-defined functions via OpenAI format
+- **API Access**: Direct OpenAI API integration tools
+
+#### Custom MCP Servers
+- **Build Your Own**: Deploy custom MCP servers with specialized tools
+- **Standard Protocol**: Full MCP protocol compliance for compatibility
+- **Flexible Integration**: Connect internal services and proprietary systems
+
+### MCP Connection Process
+1. Navigate to agent settings → "MCP" tab
+2. Click "Connect MCP Server"
+3. Enter server URL (works with any MCP-compliant server)
+4. System automatically detects server type and capabilities
+5. Tools become available immediately
+
+### Health Monitoring
+- **Last Successful Call**: Track when each connection was last used
+- **Connection Status**: Real-time active/inactive status monitoring
+- **Server Statistics**: View usage statistics across all MCP servers
+- **Health Checks**: Run diagnostic checks on connection health
+
+### Server Type Detection
+The system automatically detects and configures:
+- Server name and version
+- Protocol version (e.g., 2024-11-05)
+- Available capabilities (tools, resources, prompts)
+- Transport type (HTTP, SSE, stdio)
+- Authentication requirements
+
 ## 💬 Temporary Chat Links
 
 ### Anonymous Public Chat Access

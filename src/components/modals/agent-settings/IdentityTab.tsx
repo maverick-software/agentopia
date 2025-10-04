@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,7 +9,8 @@ import {
   Check, 
   Camera, 
   Upload,
-  ImageIcon
+  ImageIcon,
+  Save
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +31,13 @@ interface IdentityTabProps {
     avatar_url?: string;
   };
   onAgentUpdated?: (updatedData: any) => void;
+}
+
+export interface IdentityTabRef {
+  save: () => Promise<void>;
+  hasChanges: boolean;
+  saving: boolean;
+  saveSuccess: boolean;
 }
 
 // Real personality templates from the actual system  
@@ -84,7 +92,7 @@ const PERSONALITY_OPTIONS = [
   }
 ];
 
-export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabProps) {
+export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agentId, agentData, onAgentUpdated }, ref) => {
   const supabase = useSupabaseClient();
   const { user } = useAuth();
 
@@ -124,6 +132,7 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
     if (!agentId || !user) return;
     
     setLoading(true);
+    const startTime = Date.now();
     
     try {
       const { data, error } = await supabase
@@ -141,9 +150,14 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
 
       if (error) throw error;
 
+      // Ensure minimum 1 second loading time
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, 1000 - elapsed);
+      await new Promise(resolve => setTimeout(resolve, remainingTime));
+
       toast.success('Identity updated successfully! ✨');
       
-      // Show success state
+      // Show success state for 2 seconds
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2000);
       
@@ -160,11 +174,12 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
   }, [agentId, user, name, description, selectedPersonality, avatarUrl, supabase, onAgentUpdated]);
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files || event.target.files.length === 0 || !agentId || !user) {
+    const target = event.target; // Store reference before async operations
+    if (!target.files || target.files.length === 0 || !agentId || !user) {
       return;
     }
 
-    const file = event.target.files[0];
+    const file = target.files[0];
     const maxSize = 50 * 1024 * 1024; // 50MB (Media Library limit)
     const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
 
@@ -246,7 +261,9 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
     } finally {
       setUploading(false);
       // Reset the input value so the same file can be selected again
-      event.target.value = '';
+      if (target) {
+        target.value = '';
+      }
     }
   }, [agentId, user, supabase, agentData?.name]);
 
@@ -258,6 +275,14 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
   const getSelectedPersonality = () => {
     return PERSONALITY_OPTIONS.find(p => p.id === selectedPersonality);
   };
+
+  // Expose save method and state to parent via ref
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    hasChanges,
+    saving: loading,
+    saveSuccess: justSaved
+  }));
 
   return (
     <div className="space-y-4">
@@ -380,4 +405,4 @@ export function IdentityTab({ agentId, agentData, onAgentUpdated }: IdentityTabP
       />
     </div>
   );
-}
+});

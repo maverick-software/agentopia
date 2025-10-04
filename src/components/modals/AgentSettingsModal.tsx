@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { 
   User, 
@@ -37,11 +38,12 @@ import {
   Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MCPIcon } from '../ui/mcp-icon';
 
 // Import tab content components
 import { GeneralTab } from './agent-settings/GeneralTab';
 import { ScheduleTab } from './agent-settings/ScheduleTab';
-import { IdentityTab } from './agent-settings/IdentityTab';
+import { IdentityTab, IdentityTabRef } from './agent-settings/IdentityTab';
 import { BehaviorTab } from './agent-settings/BehaviorTab';
 import { ReasoningTab } from './agent-settings/ReasoningTab';
 import { MemoryTab } from './agent-settings/MemoryTab';
@@ -51,6 +53,7 @@ import { ChannelsTab } from './agent-settings/ChannelsTab';
 import { SourcesTab } from './agent-settings/SourcesTab';
 import { TeamTab } from './agent-settings/TeamTab';
 import ContactsTab, { ContactsTabRef } from './agent-settings/ContactsTab';
+import { TabRef } from './agent-settings/types';
 import { ZapierMCPTab } from './agent-settings/ZapierMCPTab';
 
 interface AgentSettingsModalProps {
@@ -153,8 +156,9 @@ const TABS: TabConfig[] = [
   {
     id: 'zapier-mcp',
     label: 'MCP',
-    icon: Zap,
-    description: 'Model Context Protocol server connections'
+    icon: MCPIcon,
+    description: 'Model Context Protocol server connections',
+    standOut: false
   },
   {
     id: 'schedule',
@@ -189,24 +193,42 @@ export function AgentSettingsModal({
   onAgentUpdated,
   initialTab = 'general'
 }: AgentSettingsModalProps) {
+  const { isAdmin } = useAuth();
   // Check if this is a system agent (like Gofr)
   const isSystemAgent = agentData?.metadata?.is_system_agent === true;
   
   // If system agent and initial tab is disabled, default to first allowed tab
   const getInitialTab = () => {
-    if (isSystemAgent && SYSTEM_AGENT_DISABLED_TABS.includes(initialTab)) {
-      // Find first tab that's not disabled for system agents
+    // For system agents, check if user is admin
+    if (isSystemAgent && !isAdmin && SYSTEM_AGENT_DISABLED_TABS.includes(initialTab)) {
+      // Non-admin users can't access restricted tabs, find first allowed tab
       const allowedTab = TABS.find(tab => 
         !tab.disabled && 
         !SYSTEM_AGENT_DISABLED_TABS.includes(tab.id)
       );
-      return allowedTab?.id || 'memory'; // Default to 'memory' if nothing found
+      return allowedTab?.id || 'memory'; // Fallback to 'memory' if nothing found
     }
+    // Admin users or non-system agents always use the requested initial tab
     return initialTab;
   };
   
   const [activeTab, setActiveTab] = useState<TabId>(getInitialTab());
-  const contactsTabRef = useRef<ContactsTabRef>(null);
+  
+  // Create refs for all tabs that support saving
+  const tabRefs = useRef<Record<string, React.RefObject<TabRef>>>({
+    general: React.createRef<TabRef>(),
+    identity: React.createRef<TabRef>(),
+    behavior: React.createRef<TabRef>(),
+    reasoning: React.createRef<TabRef>(),
+    tools: React.createRef<TabRef>(),
+    contacts: React.createRef<TabRef>(),
+  });
+  
+  // Legacy refs for backward compatibility
+  const contactsTabRef = tabRefs.current.contacts as React.RefObject<ContactsTabRef>;
+  const identityTabRef = tabRefs.current.identity as React.RefObject<IdentityTabRef>;
+  
+  const [forceUpdate, setForceUpdate] = useState(0);
 
   // Reset to initial tab when modal opens (respecting system agent restrictions)
   useEffect(() => {
@@ -215,18 +237,31 @@ export function AgentSettingsModal({
     }
   }, [isOpen, initialTab, isSystemAgent]);
 
-  // Handle save button click
-  const handleSave = async () => {
-    if (activeTab === 'contacts' && contactsTabRef.current) {
-      await contactsTabRef.current.save();
+  // Poll for changes in tabs to update save button visibility
+  useEffect(() => {
+    if (isOpen) {
+      const interval = setInterval(() => {
+        setForceUpdate(prev => prev + 1);
+      }, 300); // Poll every 300ms for responsive save button
+      return () => clearInterval(interval);
     }
-    // Add more tab save handlers here as needed
+  }, [isOpen]);
+
+  // Handle save button click - works for any tab with a ref
+  const handleSave = async () => {
+    const currentTabRef = tabRefs.current[activeTab];
+    if (currentTabRef?.current?.save) {
+      await currentTabRef.current.save();
+    }
   };
 
+  // Get current tab ref
+  const currentTabRef = tabRefs.current[activeTab];
+  
   // Determine if current tab has save functionality
-  const canSave = activeTab === 'contacts';
-  const isSaving = activeTab === 'contacts' && contactsTabRef.current?.saving;
-  const saveSuccess = activeTab === 'contacts' && contactsTabRef.current?.saveSuccess;
+  const canSave = currentTabRef?.current?.hasChanges ?? false;
+  const isSaving = currentTabRef?.current?.saving ?? false;
+  const saveSuccess = currentTabRef?.current?.saveSuccess ?? false;
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -241,21 +276,21 @@ export function AgentSettingsModal({
 
     switch (activeTab) {
       case 'general':
-        return <GeneralTab {...commonProps} />;
+        return <GeneralTab ref={tabRefs.current.general} {...commonProps} />;
       case 'schedule':
         return <ScheduleTab {...commonProps} />;
       case 'identity':
-        return <IdentityTab {...commonProps} />;
+        return <IdentityTab ref={tabRefs.current.identity} {...commonProps} />;
       case 'behavior':
-        return <BehaviorTab {...commonProps} />;
+        return <BehaviorTab ref={tabRefs.current.behavior} {...commonProps} />;
       case 'reasoning':
-        return <ReasoningTab {...commonProps} />;
+        return <ReasoningTab ref={tabRefs.current.reasoning} {...commonProps} />;
       case 'memory':
         return <MemoryTab {...commonProps} />;
       case 'media':
         return <MediaTab {...commonProps} />;
       case 'tools':
-        return <ToolsTab {...commonProps} />;
+        return <ToolsTab ref={tabRefs.current.tools} {...commonProps} />;
       case 'channels':
         return <ChannelsTab {...commonProps} />;
       case 'sources':
@@ -263,11 +298,11 @@ export function AgentSettingsModal({
       case 'team':
         return <TeamTab {...commonProps} />;
       case 'contacts':
-        return <ContactsTab ref={contactsTabRef} agent={{ id: agentId, name: agentData?.name || 'Agent', user_id: '' }} />;
+        return <ContactsTab ref={tabRefs.current.contacts} agent={{ id: agentId, name: agentData?.name || 'Agent', user_id: '' }} />;
       case 'zapier-mcp':
         return <ZapierMCPTab {...commonProps} />;
       default:
-        return <GeneralTab {...commonProps} />;
+        return <GeneralTab ref={tabRefs.current.general} {...commonProps} />;
     }
   };
 
@@ -282,18 +317,21 @@ export function AgentSettingsModal({
               Agent Settings
             </DialogTitle>
             <div className="flex items-center gap-2">
-              {canSave && (
+              {/* Save icon - always visible, subdued when no changes */}
+              {(activeTab === 'general' || activeTab === 'identity' || activeTab === 'behavior' || activeTab === 'reasoning' || activeTab === 'tools' || activeTab === 'contacts') && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         onClick={handleSave}
-                        disabled={isSaving}
+                        disabled={isSaving || saveSuccess || !canSave}
                         size="icon"
                         className={`h-8 w-8 transition-all duration-300 ${
                           saveSuccess 
-                            ? 'bg-green-600 hover:bg-green-700' 
-                            : 'bg-blue-600 hover:bg-blue-700'
+                            ? 'bg-green-600/50 hover:bg-green-600/50 cursor-default' 
+                            : canSave 
+                              ? 'bg-blue-600 hover:bg-blue-700' 
+                              : 'bg-blue-600/30 hover:bg-blue-600/40 cursor-not-allowed'
                         }`}
                       >
                         {isSaving ? (
@@ -301,12 +339,12 @@ export function AgentSettingsModal({
                         ) : saveSuccess ? (
                           <Check className="h-4 w-4" />
                         ) : (
-                          <Save className="h-4 w-4" />
+                          <Save className={`h-4 w-4 ${!canSave ? 'opacity-50' : ''}`} />
                         )}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>{isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Settings'}</p>
+                      <p>{isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : !canSave ? 'No changes to save' : 'Save Settings'}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -325,8 +363,8 @@ export function AgentSettingsModal({
             <div className="h-full overflow-y-auto">
               <div className="p-3 space-y-0.5">
                 {TABS.map((tab) => {
-                  // Hide tabs that are restricted for system agents
-                  const isSystemAgentRestricted = isSystemAgent && SYSTEM_AGENT_DISABLED_TABS.includes(tab.id);
+                  // Hide tabs that are restricted for system agents (unless user is admin)
+                  const isSystemAgentRestricted = isSystemAgent && !isAdmin && SYSTEM_AGENT_DISABLED_TABS.includes(tab.id);
                   if (isSystemAgentRestricted) {
                     return null; // Hide the tab completely
                   }

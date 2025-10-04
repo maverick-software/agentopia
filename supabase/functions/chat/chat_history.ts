@@ -70,33 +70,23 @@ export async function getRelevantChatHistory(
     console.log(`[getRelevantChatHistory] V2 Retrieved ${v2Data?.length ?? 0} messages`);
     // console.log(`[getRelevantChatHistory] Query Result - Raw Data:`, data); // Avoid logging potentially sensitive message content unless necessary
 
-    if (!v2Error && v2Data) {
-      const historyV2 = (v2Data || []).map((msg: any) => ({
-          role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
-          content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
-          timestamp: msg.created_at,
-          agentName: msg.agents?.name ?? null
-      } as ChatMessage)).reverse();
-      console.log(`[getRelevantChatHistory] Processed ${historyV2.length} messages for history (v2).`);
-      return historyV2;
+    if (v2Error) {
+      throw v2Error;
     }
 
-    // Fallback to v1 if v2 fails (temporary during migration)
-    const { data, error } = await supabaseClient
-      .from('chat_messages')
-      .select('content, created_at, sender_agent_id, sender_user_id, agents:sender_agent_id ( name )')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
-    const history = (data || []).map((msg: any) => ({
-      role: msg.sender_agent_id ? 'assistant' : 'user',
-      content: msg.content,
-      timestamp: msg.created_at,
-      agentName: msg.agents?.name ?? null
-    } as ChatMessage)).reverse(); 
-    
-    console.log(`[getRelevantChatHistory] Processed ${history.length} messages for history.`);
-    return history;
+    if (!v2Data) {
+      console.log(`[getRelevantChatHistory] No messages found`);
+      return [];
+    }
+
+    const historyV2 = (v2Data || []).map((msg: any) => ({
+        role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
+        content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
+        timestamp: msg.created_at,
+        agentName: msg.agents?.name ?? null
+    } as ChatMessage)).reverse();
+    console.log(`[getRelevantChatHistory] Processed ${historyV2.length} messages for history (v2).`);
+    return historyV2;
 
   } catch (err) {
     console.error(`[getRelevantChatHistory] Error fetching history (channel: ${channelId}, user: ${userId}, agent: ${targetAgentId}):`, err);
@@ -105,29 +95,36 @@ export async function getRelevantChatHistory(
 }
 
 /**
- * Saves a user message to the database
+ * Saves a user message to the database (V2)
  * @param channelId - The channel ID where the message was sent
  * @param content - The message content
  * @param senderId - The ID of the user sending the message
  * @param supabaseClient - Supabase client instance
+ * @param conversationId - The conversation ID
+ * @param sessionId - The session ID
  * @returns Success status
  */
 export async function saveUserMessage(
   channelId: string | null,
   content: string,
   senderId: string,
-  supabaseClient: SupabaseClient
+  supabaseClient: SupabaseClient,
+  conversationId?: string,
+  sessionId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const userMessagePayload = {
+      conversation_id: conversationId || crypto.randomUUID(),
+      session_id: sessionId || crypto.randomUUID(),
       channel_id: channelId,
-      content: content,
+      content: typeof content === 'string' ? { type: 'text', text: content } : content,
+      role: 'user',
       sender_user_id: senderId,
       sender_agent_id: null
     };
 
     const { error: insertError } = await supabaseClient
-      .from('chat_messages')
+      .from('chat_messages_v2')
       .insert(userMessagePayload);
 
     if (insertError) {
@@ -143,29 +140,36 @@ export async function saveUserMessage(
 }
 
 /**
- * Saves an agent response to the database
+ * Saves an agent response to the database (V2)
  * @param channelId - The channel ID where the response was sent
  * @param content - The response content
  * @param agentId - The ID of the agent sending the response
  * @param supabaseClient - Supabase client instance
+ * @param conversationId - The conversation ID
+ * @param sessionId - The session ID
  * @returns Success status
  */
 export async function saveAgentResponse(
   channelId: string | null,
   content: string,
   agentId: string,
-  supabaseClient: SupabaseClient
+  supabaseClient: SupabaseClient,
+  conversationId?: string,
+  sessionId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const agentResponsePayload = {
+      conversation_id: conversationId || crypto.randomUUID(),
+      session_id: sessionId || crypto.randomUUID(),
       channel_id: channelId,
-      content: content,
+      content: typeof content === 'string' ? { type: 'text', text: content } : content,
+      role: 'assistant',
       sender_user_id: null,
       sender_agent_id: agentId
     };
 
     const { error: responseInsertError } = await supabaseClient
-      .from('chat_messages')
+      .from('chat_messages_v2')
       .insert(agentResponsePayload);
 
     if (responseInsertError) {

@@ -46,12 +46,12 @@ Production deployment and operations:
 
 ### 🛠️ Integrations & External Services
 - **[Integrations](integrations.md)** - Overview of all integration capabilities and setup processes
+- **[Universal MCP System](universal-mcp-system.md)** - 🆕 Connect to ANY MCP-compliant server (Zapier, Retell AI, Anthropic, OpenAI, custom)
+- **[Tool Infrastructure](tool-infrastructure.md)** - MCP protocol, function calling, and universal tool execution
 - **[Email Integrations](email-integrations.md)** - Gmail, SMTP, SendGrid, Mailgun, and Microsoft Outlook
 - **[Microsoft 365](microsoft-365.md)** - Outlook, Teams, and OneDrive integration suite
 - **[Temporary Chat Links](temporary-chat-links.md)** - Anonymous public chat links for employee check-ins, customer support, and feedback collection
 - **[Web Research](web-research.md)** - Search providers, content scraping, and AI summarization
-- **[Tool Infrastructure](tool-infrastructure.md)** - MCP protocol, function calling, and tool execution
-- **[Zapier MCP](zapier-mcp.md)** - Universal tool connectivity through Model Context Protocol
 
 ### 📋 Organization & Automation
 - **[Task Scheduling](task-scheduling.md)** - Automated task execution, cron expressions, and multi-step workflows
@@ -69,8 +69,9 @@ Production deployment and operations:
 - **[Handoff Documentation](handoff.md)** - Knowledge transfer protocols and project continuity
 
 ### 📊 Status & Planning
-- **[Current Status](current-status.md)** - Project status, completed features, and next steps
+- **[Current Status](current-status.md)** - Project status, completed features, and next steps (Updated Oct 2025)
 - **[August 2025 Updates](august-2025-updates.md)** - Recent stabilization efforts and new feature rollouts
+- **[October 2025 Updates](../docs/UNIVERSAL_MCP_PHASE1_COMPLETE.md)** - 🆕 Universal MCP System implementation
 
 ## 🎯 Quick Reference by Use Case
 

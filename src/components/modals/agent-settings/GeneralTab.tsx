@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,7 +56,9 @@ interface GeneralTabProps {
   onAgentUpdated?: (updatedData: any) => void;
 }
 
-export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabProps) {
+import { TabRef } from './types';
+
+export const GeneralTab = forwardRef<TabRef, GeneralTabProps>(({ agentId, agentData, onAgentUpdated }, ref) => {
   const [name, setName] = useState(agentData?.name || '');
   const [description, setDescription] = useState(agentData?.description || '');
   const [provider, setProvider] = useState<string>('openai');
@@ -172,8 +174,15 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
 
   const hasChanges = 
     name !== (agentData?.name || '') ||
-    description !== (agentData?.description || '') ||
-    !loadingPreferences; // Always allow saving if preferences are loaded
+    description !== (agentData?.description || '');
+
+  // Expose save method and state to parent via ref
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    hasChanges,
+    saving: saveState === 'saving',
+    saveSuccess: saveState === 'success'
+  }));
 
   return (
     <div className="space-y-6">
@@ -330,4 +339,4 @@ export function GeneralTab({ agentId, agentData, onAgentUpdated }: GeneralTabPro
 
     </div>
   );
-}
+});

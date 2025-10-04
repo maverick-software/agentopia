@@ -6,10 +6,10 @@ import {
   ChevronDown, ChevronRight,
   GitBranch, FolderKanban,
   User as UserIcon,
-  Server, Key, Zap, Plus, MessageSquarePlus,
+  Server, Key, Zap, Plus,
   MoreVertical, Pencil, Archive, Trash2,
   Network, FileText, HelpCircle, Crown, CreditCard, Shield,
-  MessageCircle
+  MessageCircle, SquarePen
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useConversations } from '../hooks/useConversations';
+import { Logo } from './ui/logo';
 
 // Define type for a single navigation item, allowing for children
 interface NavItem {
@@ -37,32 +38,16 @@ interface NavItem {
 
 // Helper function to get icon color class based on route or label
 const getIconColorClass = (route: string, label: string): string => {
-  // Check by route first, then by label for flexibility
-
-  if (route.includes('/chat') && !route.includes('/agents') || label === 'Chat') return 'text-blue-500';
-  if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
-  if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
-  if (route.includes('/media') || label.includes('Media')) return 'text-icon-media';
-  if (route.includes('/contacts') || label.includes('Contacts')) return 'text-icon-contacts';
-  if (route.includes('/workflows') || label.includes('Workflows')) return 'text-icon-workflows';
-  if (route.includes('/automations') || label.includes('Automations')) return 'text-purple-500';
-  if (route.includes('/integrations') || label.includes('Integrations')) return 'text-icon-integrations';
-  if (route.includes('/credentials') || label.includes('Credentials')) return 'text-icon-credentials';
-  if (route.includes('/teams') || label.includes('Team')) return 'text-icon-teams';
-  if (route.includes('/workspaces') || label.includes('Workspaces')) return 'text-icon-workspaces';
-  if (route.includes('/projects') || label.includes('Projects')) return 'text-icon-projects';
-  if (route.includes('/settings') || label.includes('Settings')) return 'text-icon-settings';
-  
-  // Default fallback
-  return 'text-sidebar-foreground';
+  // All sidebar icons are white
+  return 'text-white';
 };
 
 // Updated navigation structure with organized hierarchical nesting
 const navItems: NavItem[] = [
   { 
     to: '/chat', 
-    icon: MessageCircle, 
-    label: 'Chat',
+    icon: SquarePen, 
+    label: 'New chat',
     isCustom: false
   },
   { 
@@ -70,6 +55,12 @@ const navItems: NavItem[] = [
     icon: Users, 
     label: 'Agents',
     isCustom: true
+  },
+  { 
+    to: '/media', 
+    icon: FileText, 
+    label: 'Library',
+    isCustom: false
   },
 ];
 
@@ -103,7 +94,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
           style={{ paddingLeft: `${1 + level * 1.5}rem` }} // Indentation for submenus
         >
           <item.icon className={`w-4 h-4 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
-          <span className="font-medium flex-1 text-left truncate">{item.label}</span>
+          <span className="font-normal flex-1 text-left truncate">{item.label}</span>
           {isExpanded ? <ChevronDown size={16} className="text-sidebar-foreground" /> : <ChevronRight size={16} className="text-sidebar-foreground" />}
         </button>
         {isExpanded && (
@@ -138,7 +129,7 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
         style={!isCollapsed ? { paddingLeft: `${1 + level * 1.5}rem` } : {}}
       >
         <item.icon className={`w-4 h-4 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
-        {!isCollapsed && <span className="font-medium truncate">{item.label}</span>}
+        {!isCollapsed && <span className="font-normal truncate">{item.label}</span>}
       </NavLink>
     );
   }
@@ -146,29 +137,6 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
 
 // Simplified Agents navigation - just the main link
 const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({ isCollapsed, level = 0 }) => {
-  const location = useLocation();
-  const { agents, fetchAllAgents } = useAgents();
-  const [recentAgents, setRecentAgents] = useState<any[]>([]);
-
-  const isActiveOrParent = location.pathname.startsWith('/agents');
-
-  // Update recent agents when the agents list changes
-  useEffect(() => {
-    if (agents.length > 0) {
-      // Filter out system agents (like Gofr) and get top 10 most recent user agents
-      const userAgents = agents.filter(agent => {
-        // Exclude agents marked as system agents
-        return !agent.metadata?.is_system_agent;
-      });
-      setRecentAgents(userAgents.slice(0, 10));
-    }
-  }, [agents]);
-
-  // Initial fetch on mount
-  useEffect(() => {
-    fetchAllAgents();
-  }, [fetchAllAgents]);
-
   if (isCollapsed) {
     return (
       <NavLink
@@ -188,56 +156,20 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
   }
 
   return (
-    <div className="space-y-1">
-      {/* Main Agents Link */}
-      <NavLink
-        to="/agents"
-        className={({ isActive }): string =>
-          `flex items-center space-x-2 rounded-md transition-colors px-3 py-2 text-sm ${
-            isActive
-              ? 'bg-sidebar-accent/30 text-sidebar-foreground'
-              : 'text-sidebar-foreground hover:bg-sidebar-accent'
-          }`
-        }
-        style={{ paddingLeft: `${1 + level * 1.5}rem` }}
-      >
-        <Users className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/agents', 'Agents')}`} />
-        <span className="font-medium truncate">Agents</span>
-      </NavLink>
-
-      {/* Recent Agents List */}
-      {recentAgents.length > 0 && (
-        <div className="ml-6 space-y-1">
-          {recentAgents.map((agent) => (
-            <NavLink
-              key={agent.id}
-              to={`/agents/${agent.id}/chat`}
-              className={({ isActive }): string =>
-                `flex items-center space-x-2 rounded-md transition-colors px-2 py-1.5 text-sm group ${
-                  isActive
-                    ? 'bg-sidebar-accent/20 text-sidebar-foreground'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                }`
-              }
-            >
-              {/* Agent Avatar */}
-              {agent.avatar_url ? (
-                <img 
-                  src={agent.avatar_url} 
-                  alt={agent.name}
-                  className="w-4 h-4 rounded-full flex-shrink-0"
-                />
-              ) : (
-                <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex-shrink-0" />
-              )}
-              
-              {/* Agent Name */}
-              <span className="truncate text-xs">{agent.name}</span>
-            </NavLink>
-          ))}
-        </div>
-      )}
-    </div>
+    <NavLink
+      to="/agents"
+      className={({ isActive }): string =>
+        `flex items-center space-x-2 rounded-md transition-colors px-3 py-2 text-sm ${
+          isActive
+            ? 'bg-sidebar-accent/30 text-sidebar-foreground'
+            : 'text-sidebar-foreground hover:bg-sidebar-accent'
+        }`
+      }
+      style={{ paddingLeft: `${1 + level * 1.5}rem` }}
+    >
+      <Users className={`w-5 h-5 flex-shrink-0 ${getIconColorClass('/agents', 'Agents')}`} />
+      <span className="font-normal truncate">Agents</span>
+    </NavLink>
   );
 };
 
@@ -267,12 +199,32 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     >
       <div className="flex-1 mb-2 flex flex-col min-h-0 overflow-y-auto">
         <div>
-          <div className={`flex items-center mb-3 transition-all duration-300 ${isCollapsed ? 'justify-center mt-4' : 'justify-start px-2'}`}>
-            <Bot size={isCollapsed ? 20 : 18} className="text-icon-agents" />
-            <span className={`ml-2 text-lg font-semibold text-sidebar-foreground transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
-              Gofr Agents
-            </span>
+          <div className={`flex items-center mb-3 transition-all duration-300 ${isCollapsed ? 'justify-center mt-4' : 'justify-between px-2'}`}>
+            <div className="flex items-center">
+              <Logo
+                size={isCollapsed ? 'sm' : 'md'}
+                variant="icon"
+                showText={false}
+              />
+              {!isCollapsed && (
+                <span className="ml-2 text-base text-sidebar-foreground">
+                  <span className="font-semibold">Gofr</span> <span className="font-light">Labs</span>
+                </span>
+              )}
+            </div>
+            {!isCollapsed && (
+              <button 
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="text-sidebar-foreground/60 hover:text-sidebar-foreground p-1 rounded hover:bg-sidebar-accent transition-colors duration-200"
+                title="Collapse Sidebar"
+              >
+                <PanelLeftClose size={20} />
+              </button>
+            )}
           </div>
+          
+          {/* Subtle separator line */}
+          <div className="border-b border-sidebar-border/30 mb-3"></div>
           
           <div className="space-y-1">
             {visibleNavItems.map((item) => {
@@ -283,51 +235,20 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               }
             })}
 
-            {/* New Chat (positioned after Projects, before Conversations) */}
+            {/* Conversations - Show Gofr agent by default, or current agent if on agent chat page */}
             {(() => {
+              if (!user) return null;
+              
+              // Check if we're on an agent chat page
               const m = location.pathname.match(/^\/agents\/([^/]+)\/chat/);
               const agentId = m?.[1];
-              if (!agentId || !user) return null;
-              return (
-                <button
-                  onClick={async () => {
-                    if (!agentId || !user) { navigate('/agents'); return; }
-                    // create a one-off client hook usage via dynamic function call is not possible; instead, route to chat and let page create on first message
-                    // Fallback: simple local creation using RPC-like insert
-                    try {
-                      const { supabase } = await import('../lib/supabase');
-                      const id = crypto.randomUUID();
-                      // optimistic local persistence; if RLS blocks, route without
-                      await supabase.from('conversation_sessions').insert({ conversation_id: id, user_id: user.id, agent_id: agentId, title: 'New Conversation', status: 'active' });
-                      // proactively refresh sidebar list by emitting a synthetic change (fetch hook is already subscribed)
-                      try { (await import('../hooks/useConversations')); } catch {}
-                      const convId = id;
-                      localStorage.setItem(`agent_${agentId}_conversation_id`, convId);
-                      navigate(`/agents/${agentId}/chat?conv=${convId}`);
-                    } catch {
-                      navigate(`/agents/${agentId}/chat`);
-                    }
-                  }}
-                  className={`flex items-center space-x-2 rounded-md transition-colors px-3 py-2 w-full text-left text-sidebar-foreground hover:bg-sidebar-accent text-sm`}
-                  title="New Chat"
-                >
-                  <MessageSquarePlus className={`w-4 h-4 flex-shrink-0 ${getIconColorClass('/chat/new', 'New Chat')}`} />
-                  {!isCollapsed && <span className="font-medium truncate">New Chat</span>}
-                </button>
-              );
-            })()}
-
-            {/* Conversations injected after New Chat only on agent chat page */}
-            {(() => {
-              const m = location.pathname.match(/^\/agents\/([^/]+)\/chat/);
-              if (!m || !user) return null;
-              const agentId = m[1];
+              
               return (
                 <ConversationsForAgentSidebar
-                  agentId={agentId}
+                  agentId={agentId} // Will be undefined for non-agent pages, component will fetch Gofr agent
                   userId={user.id}
                   isCollapsed={isCollapsed}
-                  onOpen={(convId) => {
+                  onOpen={(convId, targetAgentId) => {
                     // Validate conversation is active before opening
                     (async () => {
                       try {
@@ -336,19 +257,19 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                           .from('conversation_sessions')
                           .select('status')
                           .eq('conversation_id', convId)
-                          .eq('agent_id', agentId)
+                          .eq('agent_id', targetAgentId)
                           .eq('user_id', user.id)
                           .maybeSingle();
                         if (!row || row.status !== 'active') {
                           // If not active, clear selection and go to new chat screen
-                          try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
-                          navigate(`/agents/${agentId}/chat`);
+                          try { localStorage.removeItem(`agent_${targetAgentId}_conversation_id`); } catch {}
+                          navigate(`/agents/${targetAgentId}/chat`);
                           return;
                         }
-                        localStorage.setItem(`agent_${agentId}_conversation_id`, convId);
-                        navigate(`/agents/${agentId}/chat?conv=${convId}`);
+                        localStorage.setItem(`agent_${targetAgentId}_conversation_id`, convId);
+                        navigate(`/agents/${targetAgentId}/chat?conv=${convId}`);
                       } catch {
-                        navigate(`/agents/${agentId}/chat`);
+                        navigate(`/agents/${targetAgentId}/chat`);
                       }
                     })();
                   }}
@@ -358,19 +279,20 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </div>
         </div>
 
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className={`mt-auto text-sidebar-foreground hover:text-sidebar-accent-foreground p-1 rounded hover:bg-sidebar-accent transition-colors duration-200 mb-2 ${ 
-            isCollapsed ? 'self-center' : 'self-start ml-1'
-          }`}
-          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-          {isCollapsed ? <PanelRightClose size={20} /> : <PanelLeftClose size={20} />}
-        </button>
+        {/* Show expand button at bottom when collapsed */}
+        {isCollapsed && (
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="mt-auto text-sidebar-foreground/60 hover:text-sidebar-foreground p-1 rounded hover:bg-sidebar-accent transition-colors duration-200 mb-2 self-center"
+            title="Expand Sidebar"
+          >
+            <PanelRightClose size={20} />
+          </button>
+        )}
       </div>
 
       {user && (
-        <div className="border-t border-sidebar-border/50 pt-2 mt-2">
+        <div className="border-t border-sidebar-border/50 pt-2 mt-2 px-2">
           <AccountMenu isCollapsed={isCollapsed} isAdminArea={false} />
         </div>
       )}
@@ -384,25 +306,66 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   );
 }
 
-function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: { agentId: string; userId: string; isCollapsed: boolean; onOpen: (id: string) => void }) {
-  const { items, createConversation, renameConversation, archiveConversation } = useConversations(agentId, userId);
+function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: { agentId?: string; userId: string; isCollapsed: boolean; onOpen: (id: string, agentId: string) => void }) {
   const navigate = useNavigate();
-  if (isCollapsed) return null;
+  const [isChatsExpanded, setIsChatsExpanded] = useState(true);
+  const [gofrAgentId, setGofrAgentId] = useState<string | null>(null);
+  const [isLoadingGofr, setIsLoadingGofr] = useState(false);
+  
+  // If no agentId provided, fetch the Gofr system agent ID
+  useEffect(() => {
+    if (!agentId && !gofrAgentId && !isLoadingGofr) {
+      setIsLoadingGofr(true);
+      (async () => {
+        try {
+          const { supabase } = await import('../lib/supabase');
+          const { data, error } = await supabase
+            .from('agents')
+            .select('id')
+            .eq('name', 'Gofr')
+            .eq('metadata->>is_system_agent', 'true')
+            .single();
+          
+          if (data && !error) {
+            setGofrAgentId(data.id);
+          }
+        } catch (err) {
+          console.error('Failed to fetch Gofr agent:', err);
+        } finally {
+          setIsLoadingGofr(false);
+        }
+      })();
+    }
+  }, [agentId, gofrAgentId, isLoadingGofr]);
+  
+  // Use provided agentId or fallback to Gofr agent
+  const effectiveAgentId = agentId || gofrAgentId;
+  
+  const { items, createConversation, renameConversation, archiveConversation } = useConversations(effectiveAgentId || '', userId);
+  
+  if (isCollapsed || !effectiveAgentId) return null;
   
   // Limit to last 10 chats
   const recentItems = items.slice(0, 10);
   const hasMoreChats = items.length > 10;
   
   return (
-    <div className="mt-2">
-      <div className="px-3 py-1.5 text-xs uppercase tracking-wider text-muted-foreground font-medium">Chats</div>
-      <div className="space-y-0.5">
+    <div style={{ marginTop: '40px' }}>
+      <button
+        onClick={() => setIsChatsExpanded(!isChatsExpanded)}
+        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground font-medium hover:text-sidebar-foreground transition-colors"
+      >
+        <span>Chats</span>
+        {isChatsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+      {isChatsExpanded && (
+        <div className="space-y-0.5">
         {recentItems.map(c => {
           const displayTitle = c.title || (c.last_message ? 'Chat' : 'New chat');
           return (
-            <div key={c.conversation_id} className="px-3 py-1.5 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between text-sm group" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id); }}>
+            <div key={c.conversation_id} className="px-3 py-1.5 hover:bg-sidebar-accent rounded cursor-pointer flex items-center justify-between text-sm group" onClick={(e) => { e.preventDefault(); onOpen(c.conversation_id, effectiveAgentId); }}>
               <div className="min-w-0 flex-1 pr-2">
-                <div className="truncate text-sm text-sidebar-foreground">{displayTitle}</div>
+                <div className="truncate text-sm font-normal text-sidebar-foreground">{displayTitle}</div>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -419,8 +382,8 @@ function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: 
                     e.preventDefault(); 
                     e.stopPropagation(); 
                     await archiveConversation(c.conversation_id); 
-                    try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
-                    navigate(`/agents/${agentId}/chat`);
+                    try { localStorage.removeItem(`agent_${effectiveAgentId}_conversation_id`); } catch {}
+                    navigate(`/agents/${effectiveAgentId}/chat`);
                   }}>
                     <Archive className="w-4 h-4 mr-2" />
                     Archive
@@ -430,8 +393,8 @@ function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: 
                     e.stopPropagation(); 
                     if (confirm('Delete this conversation? This will archive it.')) { 
                       await archiveConversation(c.conversation_id); 
-                      try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
-                      navigate(`/agents/${agentId}/chat`);
+                      try { localStorage.removeItem(`agent_${effectiveAgentId}_conversation_id`); } catch {}
+                      navigate(`/agents/${effectiveAgentId}/chat`);
                     } 
                   }}>
                     <Trash2 className="w-4 h-4 mr-2 text-red-500" />
@@ -445,11 +408,12 @@ function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: 
         
         {/* View All link if there are more than 10 chats */}
         {hasMoreChats && (
-          <div className="px-3 py-1.5 hover:bg-sidebar-accent rounded cursor-pointer text-sm" onClick={() => navigate(`/chats/${agentId}`)}>
+          <div className="px-3 py-1.5 hover:bg-sidebar-accent rounded cursor-pointer text-sm" onClick={() => navigate(`/chats/${effectiveAgentId}`)}>
             <div className="text-muted-foreground hover:text-sidebar-foreground transition-colors">View all ({items.length})</div>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

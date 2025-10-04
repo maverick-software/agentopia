@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +35,9 @@ interface BehaviorTabProps {
   onAgentUpdated?: (updatedData: any) => void;
 }
 
-export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabProps) {
+import { TabRef } from './types';
+
+export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agentData, onAgentUpdated }, ref) => {
   const supabase = useSupabaseClient();
   const { user } = useAuth();
 
@@ -52,6 +54,15 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
   // UI state
   const [loading, setLoading] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  
+  // Track original values for change detection
+  const [originalRole, setOriginalRole] = useState('');
+  const [originalInstructions, setOriginalInstructions] = useState('');
+  const [originalConstraints, setOriginalConstraints] = useState('');
+  const [originalTools, setOriginalTools] = useState('');
+  const [originalCustomContexts, setOriginalCustomContexts] = useState<CustomContext[]>([]);
+  const [originalRules, setOriginalRules] = useState<Rule[]>([]);
 
   // Load agent settings
   useEffect(() => {
@@ -72,14 +83,27 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
         const behavior = metadata.behavior || {};
         
         // Load Core Behavior sections
-        setRole(behavior.role || '');
-        setInstructions(behavior.instructions || '');
-        setConstraints(behavior.constraints || '');
-        setTools(behavior.tools || '');
-        setCustomContexts(behavior.custom_contexts || []);
+        const loadedRole = behavior.role || '';
+        const loadedInstructions = behavior.instructions || '';
+        const loadedConstraints = behavior.constraints || '';
+        const loadedTools = behavior.tools || '';
+        const loadedContexts = behavior.custom_contexts || [];
+        const loadedRules = behavior.rules || [];
         
-        // Load Rules
-        setRules(behavior.rules || []);
+        setRole(loadedRole);
+        setInstructions(loadedInstructions);
+        setConstraints(loadedConstraints);
+        setTools(loadedTools);
+        setCustomContexts(loadedContexts);
+        setRules(loadedRules);
+        
+        // Store original values
+        setOriginalRole(loadedRole);
+        setOriginalInstructions(loadedInstructions);
+        setOriginalConstraints(loadedConstraints);
+        setOriginalTools(loadedTools);
+        setOriginalCustomContexts(loadedContexts);
+        setOriginalRules(loadedRules);
 
       } catch (error) {
         console.error('Error loading agent settings:', error);
@@ -150,7 +174,9 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
     
+    const startTime = Date.now();
     setLoading(true);
+    setSaveSuccess(false);
     
     try {
       // Get current metadata
@@ -238,9 +264,43 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
       console.error('Error updating agent behavior:', error);
       toast.error('Failed to update behavior settings');
     } finally {
+      // Ensure minimum 1 second spinner duration
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, 1000 - elapsedTime);
+      
+      await new Promise(resolve => setTimeout(resolve, remainingTime));
       setLoading(false);
+      setSaveSuccess(true);
+      
+      // Update original values after successful save
+      setOriginalRole(role);
+      setOriginalInstructions(instructions);
+      setOriginalConstraints(constraints);
+      setOriginalTools(tools);
+      setOriginalCustomContexts(customContexts);
+      setOriginalRules(rules);
+      
+      // Reset success state after 2 seconds
+      setTimeout(() => setSaveSuccess(false), 2000);
     }
   }, [agentId, user, role, instructions, constraints, tools, customContexts, rules, supabase, onAgentUpdated]);
+
+  // Detect if there are unsaved changes
+  const hasChanges = 
+    role !== originalRole ||
+    instructions !== originalInstructions ||
+    constraints !== originalConstraints ||
+    tools !== originalTools ||
+    JSON.stringify(customContexts) !== JSON.stringify(originalCustomContexts) ||
+    JSON.stringify(rules) !== JSON.stringify(originalRules);
+  
+  // Expose save method and state to parent via ref
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    hasChanges,
+    saving: loading,
+    saveSuccess
+  }));
 
   if (loadingSettings) {
     return (
@@ -783,4 +843,4 @@ export function BehaviorTab({ agentId, agentData, onAgentUpdated }: BehaviorTabP
       </div>
     </div>
   );
-}
+});

@@ -5,8 +5,8 @@ This document provides an up-to-date overview of Agentopia's development status,
 ## 🎯 Overall Project Status
 
 **Status**: Production-Ready with Active Development  
-**Last Updated**: September 30, 2025  
-**Version**: 2.1 (Tool Toggle System & Reasoning Fixes)
+**Last Updated**: October 4, 2025  
+**Version**: 2.2 (Universal MCP System)
 
 ### Production Readiness Assessment
 - ✅ **Core Functionality**: Complete agent management and workspace collaboration
@@ -14,6 +14,48 @@ This document provides an up-to-date overview of Agentopia's development status,
 - ✅ **Integrations**: Comprehensive email and tool connectivity
 - ✅ **UI/UX**: Professional interface with accessibility compliance
 - ✅ **Documentation**: Comprehensive, modular documentation system
+
+## 🔧 Recent Major Updates (October 2025)
+
+### Universal MCP System Implementation
+**Completed**: October 4, 2025
+
+**Enhancement**: Transformed the MCP system from Zapier-only to support ANY MCP-compliant server, enabling integration with Retell AI, Anthropic, OpenAI, and custom MCP implementations.
+
+**What Changed**:
+1. **Database Schema**: Added `server_capabilities`, `server_info`, `protocol_version`, and `last_successful_call` columns
+2. **Server Detection**: Intelligent auto-detection of server types from initialization responses
+3. **Health Monitoring**: Automatic tracking of connection health and successful tool calls
+4. **UI Updates**: Changed "Zapier MCP" to "MCP" throughout the interface
+5. **Zero Breaking Changes**: All existing Zapier connections continue to work seamlessly
+
+**Implementation Details**:
+- **Server Detection Module**: `supabase/functions/_shared/mcp-server-detection.ts` - Detects Zapier, Retell AI, Anthropic, OpenAI, custom, and generic MCP servers
+- **Edge Functions Updated**: `create-mcp-connection` now auto-detects server type; `mcp-execute` tracks health
+- **Health Monitoring Functions**: `check_mcp_server_health`, `record_mcp_tool_success`, `get_mcp_server_type_stats`
+- **Migration**: `supabase/migrations/20251002000001_universal_mcp_support.sql` - Safe, idempotent migration
+
+**Supported MCP Servers**:
+- ✅ **Zapier MCP** - 8,000+ app integrations (existing connections migrated automatically)
+- ✅ **Retell AI** - Voice agent integrations
+- ✅ **Anthropic MCP** - Claude-specific tools and capabilities
+- ✅ **OpenAI MCP** - OpenAI tool integrations
+- ✅ **Custom MCP Servers** - Any MCP-compliant implementation
+- ✅ **Generic MCP** - Standard protocol implementations
+
+**Impact**:
+- ✅ System now truly universal - connect to any MCP server
+- ✅ Server type and capabilities auto-detected
+- ✅ Health monitoring for all connections
+- ✅ Zero breaking changes for existing users
+- ✅ Scalable for future MCP server types
+
+**Documentation**:
+- **Investigation Report**: `docs/MCP_UNIVERSAL_SYSTEM_INVESTIGATION_REPORT.md`
+- **Deployment Guide**: `docs/UNIVERSAL_MCP_PHASE1_DEPLOYMENT_GUIDE.md`
+- **Completion Summary**: `docs/UNIVERSAL_MCP_PHASE1_COMPLETE.md`
+
+---
 
 ## 🔧 Recent Major Fixes (September 2025)
 
@@ -76,11 +118,14 @@ This document provides an up-to-date overview of Agentopia's development status,
 - **SendGrid**: Complete API integration with advanced features
 - **Mailgun**: Full API integration with validation and analytics
 
-### 🛠️ Universal Tool Infrastructure
+### 🛠️ Universal MCP Platform
 **Status**: **COMPLETE & PRODUCTION-READY**
-- **Zapier MCP Integration**: Access to 8,000+ applications via Model Context Protocol
-- **Dynamic Tool Discovery**: Automatic detection and integration of available tools
-- **Function Calling**: Sophisticated tool execution with retry logic
+- **Universal MCP Support**: Connect to ANY MCP-compliant server (Zapier, Retell AI, Anthropic, OpenAI, custom)
+- **Automatic Server Detection**: Server type, capabilities, and protocol version auto-detected on connection
+- **Health Monitoring**: Real-time connection health tracking with last successful call timestamps
+- **Zapier Integration**: Access to 8,000+ applications via Zapier's MCP server
+- **Dynamic Tool Discovery**: Automatic detection and integration of available tools from any MCP server
+- **Function Calling**: Sophisticated tool execution with intelligent retry logic
 - **Permission System**: Granular agent-specific tool access control
 - **Tool Toggle System**: UI-based enable/disable controls for tool categories (Voice, Web Search, Reasoning, etc.)
 - **Settings Enforcement**: All tools default to disabled; explicit opt-in required

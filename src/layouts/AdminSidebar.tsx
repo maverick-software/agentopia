@@ -14,6 +14,7 @@ import {
   PanelRightClose 
 } from 'lucide-react';
 import { AccountMenu } from '@/components/shared/AccountMenu';
+import { Logo } from '../components/ui/logo';
 
 // Define props for the component
 interface AdminSidebarProps {
@@ -51,11 +52,16 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isCollapsed, setIsCo
                 <div className="flex-1">
                     {/* Logo/Title section - adjust styling based on isCollapsed */}
                     <div className={`flex items-center mb-6 transition-all duration-300 ${isCollapsed ? 'justify-center mt-8' : 'justify-start'}`}>
-                        {/* Use a generic icon or replace img src */}
-                        <Bot size={isCollapsed ? 28 : 24} className="text-indigo-400" />
-                        <span className={`ml-2 text-xl font-bold transition-opacity duration-300 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
-                            Admin Portal
-                        </span>
+                        <Logo 
+                            size={isCollapsed ? 'sm' : 'md'}
+                            variant="icon"
+                            showText={false}
+                        />
+                        {!isCollapsed && (
+                            <span className="ml-2 text-sm font-medium text-indigo-200">
+                                Admin Portal
+                            </span>
+                        )}
                     </div>
                     
                     {/* Navigation Links - adjust styling based on isCollapsed */}

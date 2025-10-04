@@ -20,21 +20,30 @@ This document provides comprehensive information about Gofr Agents' tool infrast
 
 ## Overview
 
-Gofr Agents uses a sophisticated tool infrastructure based on the Model Context Protocol (MCP) to enable AI agents to interact with external services and internal systems. This system provides:
+Gofr Agents uses a sophisticated tool infrastructure based on the Model Context Protocol (MCP) to enable AI agents to interact with external services and internal systems. The system has been architected as a **Universal MCP Platform**, capable of connecting to ANY MCP-compliant server.
 
-- **Universal Tool Execution**: Single execution pathway for all tool types
-- **Dynamic Tool Discovery**: Automatic tool registration and availability checking
-- **Permission-Based Access**: Role-based tool access control
-- **Scalable Architecture**: Easy addition of new tools without code changes
+### Universal MCP Platform Features
+
+- **Universal Server Support**: Connect to Zapier, Retell AI, Anthropic, OpenAI, custom, and generic MCP servers
+- **Automatic Server Detection**: Server type, capabilities, and protocol version auto-detected on connection
+- **Health Monitoring**: Real-time connection health tracking with last successful call timestamps
+- **Zero Breaking Changes**: Existing Zapier connections continue to work seamlessly
+- **Universal Tool Execution**: Single execution pathway for all tool types from any MCP server
+- **Dynamic Tool Discovery**: Automatic tool registration and availability checking from any server
+- **Permission-Based Access**: Role-based tool access control across all server types
+- **Scalable Architecture**: Easy addition of new MCP servers without code changes
+- **Intelligent Retry Logic**: LLM-friendly error responses with automatic parameter correction
 - **Error Handling**: Comprehensive error reporting and retry mechanisms
 
 ### Key Components
 
 1. **Universal Tool Executor**: Routes tool calls to appropriate edge functions
-2. **Tool Discovery System**: Automatically discovers and registers available tools
-3. **MCP Edge Functions**: Individual serverless functions for tool execution
-4. **Parameter Generation**: Dynamic schema generation for tool parameters
-5. **Permission System**: Agent-based tool access control
+2. **Server Detection System**: Auto-detects MCP server type and capabilities
+3. **Tool Discovery System**: Automatically discovers and registers available tools from any MCP server
+4. **MCP Edge Functions**: Individual serverless functions for tool execution
+5. **Parameter Generation**: Dynamic schema generation for tool parameters
+6. **Permission System**: Agent-based tool access control
+7. **Health Monitoring**: Real-time connection health tracking and statistics
 
 ## MCP Architecture
 
@@ -49,9 +58,23 @@ Tool Discovery ← Parameter Schema ← Permission Check ← Tool Execution ← 
 ### Core Files
 
 - **`supabase/functions/chat/function_calling/universal-tool-executor.ts`**: Main routing logic
+- **`supabase/functions/_shared/mcp-server-detection.ts`**: Server type detection and capability extraction
+- **`supabase/functions/create-mcp-connection/index.ts`**: MCP server connection with auto-detection
+- **`supabase/functions/mcp-execute/index.ts`**: Universal MCP tool execution with health tracking
 - **`supabase/functions/get-agent-tools/index.ts`**: Tool discovery and registration
 - **`supabase/functions/get-agent-tools/tool-generator.ts`**: Parameter schema generation
 - **`supabase/functions/[tool-name]-mcp/index.ts`**: Individual tool implementations
+
+### Database Schema
+
+- **`agent_mcp_connections`**: Stores MCP server connections with metadata
+  - `connection_type`: Auto-detected server type (zapier, retell_ai, anthropic, openai, custom, generic)
+  - `server_capabilities`: JSONB containing discovered capabilities
+  - `server_info`: JSONB with server name, version, and metadata
+  - `protocol_version`: MCP protocol version (e.g., '2024-11-05')
+  - `last_successful_call`: Timestamp of last successful tool execution
+- **`mcp_tools_cache`**: Cached tool definitions from MCP servers
+- **Health Monitoring Functions**: `check_mcp_server_health`, `record_mcp_tool_success`, `get_mcp_server_type_stats`
 
 ## Tool Development Lifecycle
 

@@ -87,6 +87,8 @@ export function AgentChatPage() {
     // If no conversation in URL, we'll need to create a temporary one
     return !urlConvId;
   });
+  // Refresh key to force conversation reload when clicking the same conversation
+  const [conversationRefreshKey, setConversationRefreshKey] = useState(0);
   // Reasoning toggle (persist per agent in localStorage)
   const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(() => {
     const key = `agent_${agentId}_reasoning_enabled`;
@@ -236,12 +238,19 @@ export function AgentChatPage() {
     const params = new URLSearchParams(location.search);
     const conv = params.get('conv');
     
-    if (conv && conv !== selectedConversationId) {
+    if (conv) {
       // URL has a conversation ID, use it
-      console.log('[AgentChatPage] Setting conversation ID from URL:', conv, 'previous:', selectedConversationId);
-      setSelectedConversationId(conv);
-      setIsTemporaryConversation(false); // URL conversations are not temporary
-      if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
+      // Always update even if it's the same to force a refresh when clicking the same conversation
+      if (conv !== selectedConversationId) {
+        console.log('[AgentChatPage] Setting conversation ID from URL:', conv, 'previous:', selectedConversationId);
+        setSelectedConversationId(conv);
+        setIsTemporaryConversation(false); // URL conversations are not temporary
+        if (agentId) localStorage.setItem(`agent_${agentId}_conversation_id`, conv);
+      } else {
+        // Force a reload by incrementing the refresh key
+        console.log('[AgentChatPage] Same conversation clicked, forcing reload:', conv);
+        setConversationRefreshKey(prev => prev + 1);
+      }
     } else if (!conv && !selectedConversationId && agentId) {
       // No conversation ID in URL or state - generate temporary one and update URL
       const tempConvId = crypto.randomUUID();
@@ -780,29 +789,8 @@ export function AgentChatPage() {
 					return;
 				}
 
-				// If we just transitioned from temporary to permanent and have messages,
-				// don't clear them - let real-time subscription handle updates
-				if (messages.length > 0 && !isTemporaryConversation) {
-					// Just validate the conversation exists, but don't clear messages
-					try {
-						const { data: sessionRow } = await supabase
-							.from('conversation_sessions')
-							.select('status')
-							.eq('conversation_id', selectedConversationId)
-							.eq('agent_id', agentId)
-							.eq('user_id', user.id)
-							.maybeSingle();
-						if (!sessionRow || sessionRow.status !== 'active') {
-							setSelectedConversationId(null);
-							setIsTemporaryConversation(true);
-							try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
-							setMessages([]);
-							return;
-						}
-					} catch { /* non-fatal; proceed */ }
-					// Conversation is valid, keep existing messages
-					return;
-				}
+				// Removed the early return logic that prevented reloading when switching conversations
+				// The conversationRefreshKey dependency will trigger proper reloads when needed
 
 				// Validate conversation is active; if archived or missing, clear selection and redirect
 				try {
@@ -860,7 +848,7 @@ export function AgentChatPage() {
 		};
 
 		fetchHistory();
-	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation, isTemporaryConversation]);
+	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation, isTemporaryConversation, conversationRefreshKey]);
 
   // Set up real-time message subscription
   useEffect(() => {

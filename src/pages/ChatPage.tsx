@@ -52,9 +52,9 @@ export function ChatPage() {
         const gofrAgentId = gofrAgentData;
 
         // Check if user has an existing conversation with Gofr
-        // Note: Adjust this query based on your actual conversations table schema
+        // Note: Using chat_messages_v2 table
         const { data: existingConversations, error: convError } = await supabase
-          .from('chat_messages')
+          .from('chat_messages_v2')
           .select('conversation_id')
           .eq('agent_id', gofrAgentId)
           .eq('user_id', user.id)
