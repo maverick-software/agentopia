@@ -372,7 +372,7 @@ export function AgentSettingsModal({
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
                   const isDisabled = tab.disabled;
-                  const isStandOut = tab.standOut;
+                  const isStandOut = tab.standOut === true;
                   
                   const tabButton = (
                     <button

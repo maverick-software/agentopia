@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
-  Zap, 
   RefreshCw, 
   Trash2, 
   Plus, 
@@ -18,6 +17,7 @@ import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { ZapierMCPModal } from '../ZapierMCPModal';
 import { ZapierMCPManager, AgentMCPConnection, MCPToolCache } from '@/lib/mcp/zapier-mcp-manager';
 import { toast } from 'react-hot-toast';
+import { MCPIcon } from '@/components/ui/mcp-icon';
 
 interface ZapierMCPTabProps {
   agentId: string;
@@ -186,7 +186,7 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-orange-500" />
+              <MCPIcon size={20} />
               MCP Server
             </CardTitle>
             <CardDescription>
@@ -195,8 +195,8 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
           </CardHeader>
           <CardContent>
             <div className="text-center py-8">
-              <div className="w-16 h-16 mx-auto mb-4 bg-orange-50 dark:bg-orange-950/20 rounded-full flex items-center justify-center">
-                <Zap className="w-8 h-8 text-orange-500" />
+              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
+                <MCPIcon size={32} />
               </div>
               <h4 className="font-medium mb-2">No MCP Server Connected</h4>
               <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
@@ -292,7 +292,7 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Zap className="w-5 h-5" />
+                  <MCPIcon size={20} />
                   Available Tools ({tools.length})
                 </CardTitle>
                 <CardDescription>

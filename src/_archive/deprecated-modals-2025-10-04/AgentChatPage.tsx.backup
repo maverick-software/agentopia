@@ -37,8 +37,18 @@ export function AgentChatPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false);
+  const [showAboutMeModal, setShowAboutMeModal] = useState(false);
+  const [showHowIThinkModal, setShowHowIThinkModal] = useState(false);
+  const [showWhatIKnowModal, setShowWhatIKnowModal] = useState(false);
+  const [showToolsModal, setShowToolsModal] = useState(false);
+  const [showChannelsModal, setShowChannelsModal] = useState(false);
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
-  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'reasoning' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp'>('general');
+  const [agentSettingsInitialTab, setAgentSettingsInitialTab] = useState<'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp'>('general');
   
   // Real-time message subscription
   const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
@@ -1230,7 +1240,11 @@ export function AgentChatPage() {
       const responseData = await response.json();
       console.log('Chat API response:', responseData);
       
-      // Processing details are handled internally by the chat component
+      // Store processing details for debugging modal (supports V2 and V1)
+      const v2Processing = responseData.processing_details || responseData.data?.processing_details;
+      if (v2Processing) {
+        setCurrentProcessingDetails(v2Processing);
+      }
       
       // Support both V2 and V1 response shapes
       const v2Text = responseData?.data?.message?.content?.text;
@@ -1566,6 +1580,14 @@ export function AgentChatPage() {
       <ChatHeader
         agent={agent}
         agentId={agentId || ''}
+        onShowTeamAssignment={() => setShowTeamAssignmentModal(true)}
+        onShowAboutMe={() => setShowAboutMeModal(true)}
+        onShowHowIThink={() => setShowHowIThinkModal(true)}
+        onShowWhatIKnow={() => setShowWhatIKnowModal(true)}
+        onShowTools={() => setShowToolsModal(true)}
+        onShowChannels={() => setShowChannelsModal(true)}
+        onShowTasks={() => setShowTasksModal(true)}
+        onShowHistory={() => setShowHistoryModal(true)}
         onShowAgentSettings={() => setShowAgentSettingsModal(true)}
       />
 
@@ -1588,6 +1610,8 @@ export function AgentChatPage() {
                 user={user}
                 thinkingMessageIndex={thinkingMessageIndex}
                 formatMarkdown={formatMarkdown}
+                currentProcessingDetails={currentProcessingDetails}
+                onShowProcessModal={() => setShowProcessModal(true)}
                 aiState={aiState}
                         currentTool={currentTool}
                 processSteps={processSteps}
@@ -1619,10 +1643,29 @@ export function AgentChatPage() {
 
       {/* Chat Modals */}
       <ChatModals
+        showTeamAssignmentModal={showTeamAssignmentModal}
+        showAboutMeModal={showAboutMeModal}
+        showHowIThinkModal={showHowIThinkModal}
+        showWhatIKnowModal={showWhatIKnowModal}
+        showToolsModal={showToolsModal}
+        showChannelsModal={showChannelsModal}
+        showTasksModal={showTasksModal}
+        showHistoryModal={showHistoryModal}
+        showProcessModal={showProcessModal}
         showAgentSettingsModal={showAgentSettingsModal}
+        setShowTeamAssignmentModal={setShowTeamAssignmentModal}
+        setShowAboutMeModal={setShowAboutMeModal}
+        setShowHowIThinkModal={setShowHowIThinkModal}
+        setShowWhatIKnowModal={setShowWhatIKnowModal}
+        setShowToolsModal={setShowToolsModal}
+        setShowChannelsModal={setShowChannelsModal}
+        setShowTasksModal={setShowTasksModal}
+        setShowHistoryModal={setShowHistoryModal}
+        setShowProcessModal={setShowProcessModal}
         setShowAgentSettingsModal={setShowAgentSettingsModal}
         agentId={agentId || ''}
         agent={agent}
+        currentProcessingDetails={currentProcessingDetails}
         agentSettingsInitialTab={agentSettingsInitialTab}
         onAgentUpdated={(updatedData) => {
           // Merge the updated data with existing agent data to prevent losing fields

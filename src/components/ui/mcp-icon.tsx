@@ -6,7 +6,7 @@ interface MCPIconProps {
   size?: number;
 }
 
-export function MCPIcon({ className, size = 24 }: MCPIconProps) {
+export function MCPIcon({ className, size = 16 }: MCPIconProps) {
   const { theme } = useTheme();
   
   // Use light icon for dark theme, dark icon for light theme
@@ -19,7 +19,7 @@ export function MCPIcon({ className, size = 24 }: MCPIconProps) {
       width={size}
       height={size}
       className={className}
-      style={{ display: 'inline-block', opacity: 0.7 }}
+      style={{ display: 'inline-block', opacity: 0.8 }}
     />
   );
 }

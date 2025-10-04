@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MoreVertical, Settings, RefreshCw } from 'lucide-react';
+import { ArrowLeft, MoreVertical, UserPlus, User, Brain, BookOpen, Wrench, MessageSquare, ChevronRight, BarChart3, Settings, Plug, Sliders, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -18,12 +18,28 @@ type Agent = Database['public']['Tables']['agents']['Row'];
 interface ChatHeaderProps {
   agent: Agent | null;
   agentId: string;
+  onShowTeamAssignment: () => void;
+  onShowAboutMe: () => void;
+  onShowHowIThink: () => void;
+  onShowWhatIKnow: () => void;
+  onShowTools: () => void;
+  onShowChannels: () => void;
+  onShowTasks: () => void;
+  onShowHistory: () => void;
   onShowAgentSettings: () => void;
 }
 
 export function ChatHeader({
   agent,
   agentId,
+  onShowTeamAssignment,
+  onShowAboutMe,
+  onShowHowIThink,
+  onShowWhatIKnow,
+  onShowTools,
+  onShowChannels,
+  onShowTasks,
+  onShowHistory,
   onShowAgentSettings
 }: ChatHeaderProps) {
   const navigate = useNavigate();
@@ -78,7 +94,7 @@ export function ChatHeader({
             {/* Avatar with hover edit functionality */}
             <div 
               className="relative group cursor-pointer"
-              onClick={onShowAgentSettings}
+              onClick={onShowAboutMe}
             >
               {resolvedAvatarUrl ? (
                 <img 
@@ -136,6 +152,41 @@ export function ChatHeader({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={onShowTeamAssignment}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Team Assignment
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onShowAboutMe}>
+              <User className="mr-2 h-4 w-4" />
+              About Me
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowHowIThink}>
+              <Brain className="mr-2 h-4 w-4" />
+              How I Think
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowWhatIKnow}>
+              <BookOpen className="mr-2 h-4 w-4" />
+              What I Know
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onShowTools}>
+              <Wrench className="mr-2 h-4 w-4" />
+              Tools
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowChannels}>
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Channels
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowTasks}>
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Tasks
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowHistory}>
+              <ChevronRight className="mr-2 h-4 w-4" />
+              History
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onShowAgentSettings}>
               <Settings className="mr-2 h-4 w-4" />
               Agent Settings
