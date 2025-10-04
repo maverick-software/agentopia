@@ -700,11 +700,11 @@ export function AgentChatPage() {
         const controller = new AbortController();
         abortControllerRef.current = controller;
         
+        // Fetch agent - allow access to system agents or user's own agents
         const { data, error } = await supabase
           .from('agents')
           .select('*')
           .eq('id', agentId)
-          .eq('user_id', user.id)
           .single();
         
         if (error) {
@@ -712,6 +712,15 @@ export function AgentChatPage() {
             throw new Error('Agent not found or you do not have permission to access it.');
           }
           throw error;
+        }
+        
+        // Check if user has permission to access this agent
+        // Allow if: 1) User owns the agent, OR 2) It's a system agent
+        const isSystemAgent = data.metadata?.is_system_agent === true;
+        const isOwner = data.user_id === user.id;
+        
+        if (!isOwner && !isSystemAgent) {
+          throw new Error('You do not have permission to access this agent.');
         }
         
         if (!isMounted.current) {

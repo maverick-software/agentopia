@@ -217,7 +217,8 @@ export function AgentsPage() {
 
   // Filtering logic
   const filteredAgents = useMemo(() => {
-    let filtered = agents;
+    // First, exclude system agents (like Gofr)
+    let filtered = agents.filter(agent => !agent.metadata?.is_system_agent);
 
     // Apply search filter
     if (searchQuery.trim()) {

@@ -8,7 +8,8 @@ import {
   User as UserIcon,
   Server, Key, Zap, Plus, MessageSquarePlus,
   MoreVertical, Pencil, Archive, Trash2,
-  Network, FileText, HelpCircle, Crown, CreditCard, Shield
+  Network, FileText, HelpCircle, Crown, CreditCard, Shield,
+  MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -38,6 +39,7 @@ interface NavItem {
 const getIconColorClass = (route: string, label: string): string => {
   // Check by route first, then by label for flexibility
 
+  if (route.includes('/chat') && !route.includes('/agents') || label === 'Chat') return 'text-blue-500';
   if (route.includes('/agents') || label.includes('Agent')) return 'text-icon-agents';
   if (route.includes('/memory') || label.includes('Memory')) return 'text-icon-memory';
   if (route.includes('/media') || label.includes('Media')) return 'text-icon-media';
@@ -57,6 +59,12 @@ const getIconColorClass = (route: string, label: string): string => {
 
 // Updated navigation structure with organized hierarchical nesting
 const navItems: NavItem[] = [
+  { 
+    to: '/chat', 
+    icon: MessageCircle, 
+    label: 'Chat',
+    isCustom: false
+  },
   { 
     to: '/agents', 
     icon: Users, 
@@ -147,8 +155,12 @@ const AgentsNavRenderer: React.FC<{ isCollapsed: boolean; level?: number }> = ({
   // Update recent agents when the agents list changes
   useEffect(() => {
     if (agents.length > 0) {
-      // Get top 10 most recent agents (already ordered by created_at desc)
-      setRecentAgents(agents.slice(0, 10));
+      // Filter out system agents (like Gofr) and get top 10 most recent user agents
+      const userAgents = agents.filter(agent => {
+        // Exclude agents marked as system agents
+        return !agent.metadata?.is_system_agent;
+      });
+      setRecentAgents(userAgents.slice(0, 10));
     }
   }, [agents]);
 

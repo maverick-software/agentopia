@@ -74,6 +74,7 @@ import GraphSettingsPage from '../pages/GraphSettingsPage';
 import { ChatsPage } from '../pages/ChatsPage';
 import ContactsPage from '../pages/ContactsPage';
 import { TempChatPage } from '../pages/TempChatPage';
+import { ChatPage } from '../pages/ChatPage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
@@ -87,6 +88,7 @@ export const appRoutes: RouteConfig[] = [
 
   // Protected routes (require layout)
 
+  { path: '/chat', element: ChatPage, protection: 'protected', layout: true },
   { path: '/agents', element: AgentsPage, protection: 'protected', layout: true },
   { path: '/agents/new', element: AgentEditPage, protection: 'protected', layout: true },
   { path: '/agents/:agentId', element: AgentEditPage, protection: 'protected', layout: true },

@@ -80,6 +80,9 @@ interface TabConfig {
   standOut?: boolean;
 }
 
+// Tabs that should be disabled for system agents
+const SYSTEM_AGENT_DISABLED_TABS = ['general', 'identity', 'behavior', 'reasoning', 'team', 'schedule', 'workflows', 'automations'];
+
 const TABS: TabConfig[] = [
   {
     id: 'general',
@@ -186,15 +189,31 @@ export function AgentSettingsModal({
   onAgentUpdated,
   initialTab = 'general'
 }: AgentSettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  // Check if this is a system agent (like Gofr)
+  const isSystemAgent = agentData?.metadata?.is_system_agent === true;
+  
+  // If system agent and initial tab is disabled, default to first allowed tab
+  const getInitialTab = () => {
+    if (isSystemAgent && SYSTEM_AGENT_DISABLED_TABS.includes(initialTab)) {
+      // Find first tab that's not disabled for system agents
+      const allowedTab = TABS.find(tab => 
+        !tab.disabled && 
+        !SYSTEM_AGENT_DISABLED_TABS.includes(tab.id)
+      );
+      return allowedTab?.id || 'memory'; // Default to 'memory' if nothing found
+    }
+    return initialTab;
+  };
+  
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab());
   const contactsTabRef = useRef<ContactsTabRef>(null);
 
-  // Reset to initial tab when modal opens
+  // Reset to initial tab when modal opens (respecting system agent restrictions)
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab);
+      setActiveTab(getInitialTab());
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, isSystemAgent]);
 
   // Handle save button click
   const handleSave = async () => {
@@ -306,6 +325,12 @@ export function AgentSettingsModal({
             <div className="h-full overflow-y-auto">
               <div className="p-3 space-y-0.5">
                 {TABS.map((tab) => {
+                  // Hide tabs that are restricted for system agents
+                  const isSystemAgentRestricted = isSystemAgent && SYSTEM_AGENT_DISABLED_TABS.includes(tab.id);
+                  if (isSystemAgentRestricted) {
+                    return null; // Hide the tab completely
+                  }
+
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
                   const isDisabled = tab.disabled;
