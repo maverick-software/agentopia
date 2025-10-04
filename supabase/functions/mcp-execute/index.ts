@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import { corsHeaders } from '../_shared/cors.ts'
+import { getServerTypeMetadata } from '../_shared/mcp-server-detection.ts'
 
 interface MCPExecuteRequest {
   connection_id: string;
@@ -97,6 +98,10 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[MCP Execute] Connection found - is_active: ${connection.is_active}, connection_type: ${connection.connection_type}`)
+    
+    // Get server type metadata for specialized handling
+    const serverMetadata = getServerTypeMetadata(connection.connection_type);
+    console.log(`[MCP Execute] Server type: ${connection.connection_type}, Name: ${serverMetadata.name}, Transport: ${serverMetadata.defaultTransport}`);
 
     if (!connection.is_active) {
       console.error(`[MCP Execute] Connection is not active`)
@@ -336,16 +341,23 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Log tool execution for analytics (optional)
-      console.log(`[MCP Execute] Updating tool usage timestamp...`)
+      // Log tool execution for analytics and health monitoring
+      console.log(`[MCP Execute] Updating tool usage and connection health...`)
       try {
+        // Update tool cache timestamp
         await supabase
           .from('mcp_tools_cache')
           .update({ last_updated: new Date().toISOString() })
           .eq('connection_id', connection_id)
           .eq('tool_name', tool_name)
+        
+        // Record successful tool execution for health monitoring
+        await supabase.rpc('record_mcp_tool_success', {
+          p_connection_id: connection_id
+        })
       } catch (err) {
-        console.warn('[MCP Execute] Failed to update tool usage timestamp:', err)
+        console.warn('[MCP Execute] Failed to update tool usage/health:', err)
+        // Don't fail the request if logging fails
       }
 
       console.log(`[MCP Execute] ✅ Returning success response`)

@@ -219,10 +219,10 @@ export function ZapierMCPModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-orange-500" />
-            Zapier MCP Server
+            MCP Server Connection
           </DialogTitle>
           <DialogDescription>
-            Connect {agentData?.name || 'this agent'} to its unique Zapier MCP server to access automation tools.
+            Connect {agentData?.name || 'this agent'} to an MCP server to access automation tools and integrations.
           </DialogDescription>
         </DialogHeader>
 
@@ -249,7 +249,7 @@ export function ZapierMCPModal({
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <Link className="w-4 h-4 text-green-500" />
-                        <h3 className="font-medium">Connected to Zapier MCP Server</h3>
+                        <h3 className="font-medium">Connected to MCP Server</h3>
                         <Badge variant={connection.is_active ? "default" : "secondary"}>
                           {connection.is_active ? "Active" : "Inactive"}
                         </Badge>
@@ -293,7 +293,7 @@ export function ZapierMCPModal({
                     Available Tools ({tools.length})
                   </CardTitle>
                   <CardDescription>
-                    These tools are available to {agentData?.name || 'this agent'} from the connected Zapier MCP server.
+                    These tools are available to {agentData?.name || 'this agent'} from the connected MCP server.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -330,9 +330,9 @@ export function ZapierMCPModal({
             // Connect Form
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Connect to Zapier MCP Server</CardTitle>
+                <CardTitle className="text-lg">Connect to MCP Server</CardTitle>
                 <CardDescription>
-                  Enter your unique Zapier MCP server URL to connect and discover available automation tools.
+                  Enter your MCP server URL to connect and discover available tools (works with Zapier, Retell AI, Anthropic, and any MCP-compliant server).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

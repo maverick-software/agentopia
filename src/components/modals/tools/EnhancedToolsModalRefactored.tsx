@@ -158,7 +158,7 @@ export function EnhancedToolsModalRefactored({
           <Tabs value={modalState.activeTab} onValueChange={modalState.setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="connected">Connected Tools</TabsTrigger>
-              <TabsTrigger value="zapier">Zapier MCP</TabsTrigger>
+              <TabsTrigger value="zapier">MCP</TabsTrigger>
               <TabsTrigger value="available">Add New Tool</TabsTrigger>
             </TabsList>
             

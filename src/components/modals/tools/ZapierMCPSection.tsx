@@ -135,9 +135,9 @@ export function ZapierMCPSection({
     return (
       <div className="text-center py-12">
         <Zap className="w-16 h-16 mx-auto mb-4 text-orange-500" />
-        <h3 className="text-lg font-semibold mb-2">Zapier MCP Server</h3>
+        <h3 className="text-lg font-semibold mb-2">MCP Server</h3>
         <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          Connect this agent to its unique Zapier MCP server to access automation tools and workflows.
+          Connect this agent to an MCP server to access automation tools and workflows.
         </p>
         <Button
           onClick={onShowZapierModal}
@@ -159,7 +159,7 @@ export function ZapierMCPSection({
             <Zap className="w-5 h-5 text-green-600 dark:text-green-400" />
           </div>
           <div>
-            <h3 className="font-medium">Zapier MCP Server Connected</h3>
+            <h3 className="font-medium">MCP Server Connected</h3>
             <p className="text-sm text-muted-foreground">
               {zapierToolsCount} tools available
             </p>

@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import { corsHeaders } from '../_shared/cors.ts'
+import { detectServerType, getServerTypeMetadata, extractCapabilities, formatServerInfo } from '../_shared/mcp-server-detection.ts'
 
 interface CreateConnectionRequest {
   agentId: string;
@@ -85,6 +86,36 @@ Deno.serve(async (req) => {
         throw new Error(`HTTP ${initResponse.status}: ${initResponse.statusText}`)
       }
 
+      // Parse initialization response to detect server type
+      let initResult: any = {};
+      try {
+        const initContentType = initResponse.headers.get('content-type') || '';
+        if (initContentType.includes('text/event-stream')) {
+          const initText = await initResponse.text();
+          const initLines = initText.split('\n');
+          for (const line of initLines) {
+            if (line.startsWith('data: ')) {
+              initResult = JSON.parse(line.substring(6));
+              break;
+            }
+          }
+        } else {
+          initResult = await initResponse.json();
+        }
+      } catch (e) {
+        console.warn('Could not parse init response for server detection:', e);
+        // Continue - we'll use defaults
+      }
+
+      // Detect server type from initialization response
+      const detectedType = detectServerType(serverUrl, initResult.result || {});
+      const serverMetadata = getServerTypeMetadata(detectedType);
+      const serverCapabilities = extractCapabilities(initResult.result || {});
+      const serverDisplayName = formatServerInfo(detectedType, initResult.result || {});
+      
+      console.log(`Detected MCP server type: ${detectedType} (${serverDisplayName})`);
+      console.log(`Server capabilities: ${serverCapabilities.join(', ')}`);
+      
       // Send initialized notification (optional, may fail)
       try {
         await fetch(serverUrl, {
@@ -213,15 +244,26 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Create the MCP connection record
-    const { data: connection, error: insertError } = await supabase
+    // Create the MCP connection record with detected server type
+    const { data: connection, error: insertError} = await supabase
       .from('agent_mcp_connections')
       .insert({
         agent_id: agentId,
         connection_name: connectionName,
         vault_server_url_id: vaultId,
         server_url: null, // Never store plain text URLs
-        connection_type: 'zapier',
+        connection_type: detectedType,
+        server_capabilities: {
+          tools: { listChanged: false },
+          discovered: serverCapabilities,
+          ...((initResult.result || {}).capabilities || {})
+        },
+        server_info: {
+          name: serverDisplayName,
+          ...((initResult.result || {}).serverInfo || {}),
+          detectedType: detectedType
+        },
+        protocol_version: (initResult.result || {}).protocolVersion || '2024-11-05',
         auth_config: authConfig,
         is_active: true
       })

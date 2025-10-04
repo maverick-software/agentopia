@@ -152,9 +152,9 @@ const TABS: TabConfig[] = [
   },
   {
     id: 'zapier-mcp',
-    label: 'Zapier MCP',
+    label: 'MCP',
     icon: Zap,
-    description: 'MCP server connections and tools'
+    description: 'Model Context Protocol server connections'
   },
   {
     id: 'schedule',

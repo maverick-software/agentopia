@@ -175,9 +175,9 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">Zapier MCP Integration</h3>
+        <h3 className="text-lg font-medium">MCP Server Integration</h3>
         <p className="text-sm text-muted-foreground">
-          Connect to Zapier MCP servers for automation tools and workflows.
+          Connect to any MCP-compliant server for automation tools and workflows.
         </p>
       </div>
 
@@ -187,10 +187,10 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-orange-500" />
-              Zapier MCP Server
+              MCP Server
             </CardTitle>
             <CardDescription>
-              Connect this agent to a Zapier MCP server to access automation tools and workflows.
+              Connect this agent to any MCP server (Zapier, Retell AI, Anthropic, etc.) to access tools and workflows.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -200,7 +200,7 @@ export function ZapierMCPTab({ agentId, agentData, onAgentUpdated }: ZapierMCPTa
               </div>
               <h4 className="font-medium mb-2">No MCP Server Connected</h4>
               <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-                Connect to a Zapier MCP server to enable this agent to use automation tools and access thousands of app integrations.
+                Connect to an MCP server to enable this agent to use automation tools and access integrations.
               </p>
               <Button
                 onClick={() => setShowZapierModal(true)}
