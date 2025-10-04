@@ -1,5 +1,22 @@
 # MCP Protocol Implementation Fix - Proper LLM-Based Retry
 
+## ⚠️ ROOT CAUSE IDENTIFIED
+
+**The REAL issue is STALE TOOL SCHEMAS in `mcp_tools_cache`!**
+
+While we've implemented comprehensive retry logic, the fundamental problem is:
+- The cached OpenAI schema has `instructions` as the parameter
+- Zapier's current MCP schema expects `searchValue` 
+- When LLM uses cached schema → sends wrong parameters → fails
+
+**SOLUTION:** Call `refresh-mcp-tools` edge function to update schemas from Zapier MCP server.
+
+See `docs/FIX_OUTLOOK_MCP_SCHEMA.md` for immediate fix instructions.
+
+---
+
+# Original Implementation (Retry Logic Enhancement)
+
 ## Problem Statement
 
 The intelligent retry system was bypassing the LLM and trying to automatically fix parameters. This violates the MCP (Model Context Protocol) specification which requires:

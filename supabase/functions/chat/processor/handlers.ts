@@ -268,9 +268,11 @@ export class TextMessageHandler implements MessageHandler {
     let mcpRetryAttempts = 0;
     const MAX_MCP_RETRIES = 3;
     
+    console.log(`[TextMessageHandler] 🔍 CHECKING FOR MCP RETRY - requiresLLMRetry: ${toolExecResult.requiresLLMRetry}, retryGuidanceAdded: ${toolExecResult.retryGuidanceAdded}`);
+    
     while (toolExecResult.requiresLLMRetry && mcpRetryAttempts < MAX_MCP_RETRIES) {
       mcpRetryAttempts++;
-      console.log(`[TextMessageHandler] 🔄 MCP RETRY LOOP - Attempt ${mcpRetryAttempts}/${MAX_MCP_RETRIES}`);
+      console.log(`[TextMessageHandler] 🔄 🔄 🔄 MCP RETRY LOOP STARTING - Attempt ${mcpRetryAttempts}/${MAX_MCP_RETRIES}`);
       console.log(`[TextMessageHandler] MCP guidance was added to conversation, calling LLM again`);
       
       // Call LLM again - it will read the MCP guidance and generate new tool calls

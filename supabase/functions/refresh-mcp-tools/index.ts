@@ -156,17 +156,37 @@ Deno.serve(async (req) => {
 
       // Insert new tools
       if (tools.length > 0) {
-        const toolsToInsert = tools.map((tool: any) => ({
-          connection_id: connectionId,
-          tool_name: tool.name,
-          tool_schema: tool,
-          openai_schema: {
+        // Generate schema hash for change detection
+        const generateSchemaHash = (schema: any): string => {
+          const schemaStr = JSON.stringify(schema, Object.keys(schema).sort())
+          // Simple hash function (for better hash, use crypto.subtle.digest)
+          let hash = 0
+          for (let i = 0; i < schemaStr.length; i++) {
+            const char = schemaStr.charCodeAt(i)
+            hash = ((hash << 5) - hash) + char
+            hash = hash & hash // Convert to 32bit integer
+          }
+          return hash.toString(36)
+        }
+
+        const toolsToInsert = tools.map((tool: any) => {
+          const openaiSchema = {
             name: tool.name,
             description: tool.description || '',
             parameters: tool.inputSchema || {}
-          },
-          last_updated: new Date().toISOString()
-        }))
+          }
+          
+          return {
+            connection_id: connectionId,
+            tool_name: tool.name,
+            tool_schema: tool,
+            openai_schema: openaiSchema,
+            schema_hash: generateSchemaHash(openaiSchema),
+            schema_version: '1.0.0', // Could extract from tool metadata if available
+            last_updated: new Date().toISOString(),
+            refresh_count: 1 // Will be incremented on subsequent refreshes
+          }
+        })
 
         console.log(`[Refresh MCP Tools] Inserting ${toolsToInsert.length} tools for connection ${connectionId}`)
         console.log(`[Refresh MCP Tools] First tool sample:`, JSON.stringify(toolsToInsert[0], null, 2))

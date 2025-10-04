@@ -37,30 +37,44 @@ export class MCPRetryHandler {
    * Generate MCP retry system message following protocol guidelines
    */
   static generateRetrySystemMessage(context: MCPRetryContext): string {
+    // Extract parameter hints from error
+    const hints = this.extractParameterHints(context.errorMessage);
+    
+    let parameterGuidance = '';
+    if (hints.requiredParam) {
+      parameterGuidance = `\n🎯 REQUIRED PARAMETER: "${hints.requiredParam}"\n`;
+      if (hints.suggestedValue !== undefined) {
+        parameterGuidance += `   Suggested value: "${hints.suggestedValue}"\n`;
+      }
+    }
+    
     return `🔄 MCP TOOL RETRY - Attempt ${context.attempt}/${context.maxAttempts}
 
-The tool "${context.toolName}" returned an interactive error message that requires additional information:
+The tool "${context.toolName}" returned an interactive error message:
 
 ERROR MESSAGE:
 ${context.errorMessage}
-
+${parameterGuidance}
 📋 MCP PROTOCOL INSTRUCTIONS:
 1. READ the error message carefully - it tells you EXACTLY what's needed
-2. The error message is conversational and guides you on what parameters to provide
-3. Generate a NEW tool call with the CORRECTED parameters based on the error guidance
-4. If the error asks for a specific parameter (e.g., "searchValue"), use THAT parameter name
-5. If no specific value is mentioned, use reasonable defaults or empty strings for optional fields
+2. Generate a BRAND NEW tool call with ONLY the correct parameters
+3. **DO NOT include parameters mentioned as wrong in the error**
+4. **ONLY use the parameter names specified in the error message**
 
-⚠️ CRITICAL: 
-- The error message above is from the MCP server and contains the guidance you need
-- Follow the parameter names EXACTLY as mentioned in the error message
-- Do NOT ask the user for input - use your best judgment or reasonable defaults
-- Retry the tool call immediately with corrected parameters
+⚠️ CRITICAL RULES:
+- If error says "Use 'searchValue' parameter, NOT 'instructions'" → ONLY send searchValue, REMOVE instructions
+- If error says "Use 'query' parameter, NOT 'search'" → ONLY send query, REMOVE search  
+- Follow parameter names EXACTLY as mentioned in the error message
+- Do NOT combine old and new parameters - use ONLY what the error specifies
+- Use empty string ("") as default value if no specific value is needed
 
-ORIGINAL PARAMETERS (for reference):
+WRONG PARAMETERS TO REMOVE (from error message):
+${this.extractWrongParameters(context.errorMessage).map(p => `  ❌ ${p}`).join('\n') || '  (none specified)'}
+
+ORIGINAL PARAMETERS (DO NOT REUSE):
 ${JSON.stringify(context.originalParams, null, 2)}
 
-Now, please retry the ${context.toolName} tool call with the correct parameters as guided by the error message.`;
+NOW: Generate a COMPLETELY NEW tool call for ${context.toolName} using ONLY the correct parameter names from the error message.`;
   }
 
   /**
@@ -101,6 +115,22 @@ CORRECTED PARAMETERS:
 ${JSON.stringify(transformedParams, null, 2)}
 
 ✅ Please retry the tool call with these corrected parameters.`;
+  }
+
+  /**
+   * Extract parameters that should NOT be used (mentioned as wrong in error)
+   */
+  static extractWrongParameters(errorMessage: string): string[] {
+    const wrongParams: string[] = [];
+    
+    // Match patterns like: "not 'instructions'" or "instead of 'query'"
+    const notPattern = /(?:not|instead of|don't use)\s+['"`](\w+)['"`]/gi;
+    let match;
+    while ((match = notPattern.exec(errorMessage)) !== null) {
+      wrongParams.push(match[1]);
+    }
+    
+    return wrongParams;
   }
 
   /**

@@ -77,8 +77,10 @@ export class RetryCoordinator {
       // Check if this is an MCP interactive error
       const isMCPError = MCPRetryHandler.isMCPInteractiveError(toolDetail.error || '');
       
+      console.log(`[RetryCoordinator] ⚠️ CRITICAL CHECK - isMCPError: ${isMCPError}, error: "${toolDetail.error}"`);
+      
       if (isMCPError) {
-        console.log(`[RetryCoordinator] 🎯 MCP INTERACTIVE ERROR detected - using MCP protocol retry`);
+        console.log(`[RetryCoordinator] 🎯 🎯 🎯 MCP INTERACTIVE ERROR DETECTED - USING MCP PROTOCOL RETRY`);
         
         // Add MCP retry system message following protocol
         const mcpRetryMessage = MCPRetryHandler.generateRetrySystemMessage({

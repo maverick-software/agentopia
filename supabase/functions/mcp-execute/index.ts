@@ -247,6 +247,18 @@ Deno.serve(async (req) => {
         if (isParameterError) {
           console.log(`[MCP Execute] 🔄 MCP parameter error detected - flagging for retry`)
           
+          // Mark schema as potentially stale for automatic refresh
+          try {
+            await supabase.rpc('mark_mcp_schema_refresh_needed', {
+              p_connection_id: connection_id,
+              p_error_message: errorMessage
+            })
+            console.log(`[MCP Execute] 📝 Marked connection ${connection_id} for schema refresh`)
+          } catch (refreshMarkError) {
+            console.warn(`[MCP Execute] Failed to mark schema refresh:`, refreshMarkError)
+            // Don't fail the request if marking fails
+          }
+          
           // Return success: false with requires_retry flag for intelligent retry system
           return new Response(
             JSON.stringify({ 
@@ -257,7 +269,8 @@ Deno.serve(async (req) => {
                 tool_name,
                 mcp_error_code: errorCode,
                 mcp_error: mcpResponse.error,
-                retry_reason: 'Invalid or missing parameters detected'
+                retry_reason: 'Invalid or missing parameters detected',
+                schema_refresh_triggered: true
               }
             }),
             { 

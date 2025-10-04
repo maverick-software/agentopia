@@ -294,6 +294,41 @@ serve(async (req) => {
       } else if (mcpTools && mcpTools.length > 0) {
         console.log(`[GetAgentTools] Found ${mcpTools.length} MCP tools for agent ${agent_id}`);
         
+        // Check for stale schemas (> 7 days old)
+        const uniqueConnectionIds = new Set<string>();
+        for (const mcpTool of mcpTools) {
+          if (mcpTool.connection_id) {
+            uniqueConnectionIds.add(mcpTool.connection_id);
+          }
+        }
+        
+        // Check each connection for staleness and trigger background refresh if needed
+        for (const connectionId of uniqueConnectionIds) {
+          try {
+            const { data: isStale } = await supabase
+              .rpc('is_mcp_schema_stale', { p_connection_id: connectionId });
+            
+            if (isStale) {
+              console.warn(`[GetAgentTools] ⚠️ Schema stale for connection ${connectionId} - triggering background refresh`);
+              
+              // Trigger background refresh (non-blocking)
+              supabase.functions.invoke('refresh-mcp-tools', {
+                body: { connectionId }
+              }).then(({ data, error }) => {
+                if (error) {
+                  console.error(`[GetAgentTools] Background refresh failed for ${connectionId}:`, error);
+                } else {
+                  console.log(`[GetAgentTools] ✅ Background refresh completed for ${connectionId}:`, data);
+                }
+              }).catch(err => {
+                console.error(`[GetAgentTools] Background refresh error for ${connectionId}:`, err);
+              });
+            }
+          } catch (staleCheckError) {
+            console.warn(`[GetAgentTools] Failed to check schema staleness:`, staleCheckError);
+          }
+        }
+        
         for (const mcpTool of mcpTools) {
           if (mcpTool.openai_schema && mcpTool.tool_name) {
             tools.push({
