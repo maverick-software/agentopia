@@ -23,7 +23,9 @@ import {
   Plus,
   Key,
   ScanText,
-  MessageCircle
+  MessageCircle,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 
 interface ToolsTabProps {
@@ -86,6 +88,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
   const [hasAssignedDocuments, setHasAssignedDocuments] = useState(false);
   const [assignedDocumentsCount, setAssignedDocumentsCount] = useState(0);
+  const [refreshingCache, setRefreshingCache] = useState(false);
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const { connections } = useConnections({ includeRevoked: false });
@@ -474,6 +477,40 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
     }
   };
 
+  const handleRefreshCache = async () => {
+    if (!agentData?.user_id) {
+      toast.error('Unable to refresh cache: missing user information');
+      return;
+    }
+
+    setRefreshingCache(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('invalidate-agent-tool-cache', {
+        body: {
+          agent_id: agentId,
+          user_id: agentData.user_id
+        }
+      });
+
+      if (error) {
+        console.error('Cache refresh error:', error);
+        toast.error('Failed to refresh tool cache');
+        return;
+      }
+
+      if (data?.success) {
+        toast.success(`Tool cache refreshed successfully! (${data.tools_count} tools updated)`);
+      } else {
+        toast.error(data?.error || 'Failed to refresh cache');
+      }
+    } catch (error: any) {
+      console.error('Cache refresh error:', error);
+      toast.error('Failed to refresh tool cache');
+    } finally {
+      setRefreshingCache(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsLoading(true);
     try {
@@ -597,12 +634,44 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">Tools & Capabilities</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure which tools and capabilities your agent can use.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Tools & Capabilities</h3>
+          <p className="text-sm text-muted-foreground">
+            Configure which tools and capabilities your agent can use.
+          </p>
+        </div>
+        <Button
+          onClick={handleRefreshCache}
+          disabled={refreshingCache}
+          variant="outline"
+          size="sm"
+          className="flex-shrink-0"
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${refreshingCache ? 'animate-spin' : ''}`} />
+          Refresh Tool Cache
+        </Button>
       </div>
+
+      {/* Cache Info Card */}
+      <Card className="bg-muted/30 border-dashed">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <Database className="w-4 h-4" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-medium">Tool Schema Cache</h4>
+                <Badge variant="outline" className="text-xs">System</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The tool cache stores schemas and metadata for all available tools. Refresh this cache if you've recently connected new integrations, updated API credentials, or if tools aren't appearing correctly in your agent's capabilities.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         {tools.map((tool) => {

@@ -1573,6 +1573,7 @@ export function AgentChatPage() {
       <ChatHeader
         agent={agent}
         agentId={agentId || ''}
+        conversationId={selectedConversationId || undefined}
         onShowAgentSettings={() => setShowAgentSettingsModal(true)}
       />
 

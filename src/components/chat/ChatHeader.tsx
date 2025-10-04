@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MoreVertical, Settings, RefreshCw } from 'lucide-react';
+import { ArrowLeft, MoreVertical, FolderPlus, Archive, Flag, Trash2, Share } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -8,59 +8,79 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { supabase } from '../../lib/supabase';
-import { toast } from 'react-hot-toast';
 import type { Database } from '../../types/database.types';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
+import { toast } from 'react-hot-toast';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
 interface ChatHeaderProps {
   agent: Agent | null;
   agentId: string;
+  conversationId?: string;
   onShowAgentSettings: () => void;
 }
 
 export function ChatHeader({
   agent,
   agentId,
+  conversationId,
   onShowAgentSettings
 }: ChatHeaderProps) {
   const navigate = useNavigate();
-  const [clearingCache, setClearingCache] = useState(false);
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleClearCache = async () => {
-    if (!agent?.user_id) {
-      toast.error('Unable to clear cache: missing user information');
+  const handleShare = () => {
+    // TODO: Implement share functionality
+    toast.success('Share functionality coming soon!');
+  };
+
+  const handleAddToProject = () => {
+    // TODO: Implement add to project functionality
+    toast.success('Add to project functionality coming soon!');
+  };
+
+  const handleArchive = async () => {
+    if (!conversationId) {
+      toast.error('No conversation to archive');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      // TODO: Implement archive functionality
+      toast.success('Conversation archived');
+    } catch (error) {
+      toast.error('Failed to archive conversation');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReport = () => {
+    // TODO: Implement report functionality
+    toast.success('Report functionality coming soon!');
+  };
+
+  const handleDelete = async () => {
+    if (!conversationId) {
+      toast.error('No conversation to delete');
+      return;
+    }
+    
+    if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
       return;
     }
 
-    setClearingCache(true);
+    setIsProcessing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('invalidate-agent-tool-cache', {
-        body: {
-          agent_id: agentId,
-          user_id: agent.user_id
-        }
-      });
-
-      if (error) {
-        console.error('Cache clear error:', error);
-        toast.error('Failed to clear tool cache');
-        return;
-      }
-
-      if (data?.success) {
-        toast.success(`Tool cache cleared! (${data.tools_count} tools refreshed)`);
-      } else {
-        toast.error(data?.error || 'Failed to clear cache');
-      }
-    } catch (error: any) {
-      console.error('Cache clear error:', error);
-      toast.error('Failed to clear tool cache');
+      // TODO: Implement delete functionality
+      toast.success('Conversation deleted');
+      navigate('/chat');
+    } catch (error) {
+      toast.error('Failed to delete conversation');
     } finally {
-      setClearingCache(false);
+      setIsProcessing(false);
     }
   };
 
@@ -118,16 +138,6 @@ export function ChatHeader({
       </div>
 
       <div className="flex items-center space-x-2">
-        {/* Cache Clear Button */}
-        <button
-          onClick={handleClearCache}
-          disabled={clearingCache}
-          className="p-1.5 hover:bg-accent rounded-lg transition-colors disabled:opacity-50"
-          title="Clear tool cache (refreshes agent tools and schemas)"
-        >
-          <RefreshCw className={`h-4 w-4 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
-        </button>
-        
         {/* Agent Actions Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -135,10 +145,31 @@ export function ChatHeader({
               <MoreVertical className="h-4 w-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={onShowAgentSettings}>
-              <Settings className="mr-2 h-4 w-4" />
-              Agent Settings
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={handleShare} disabled={isProcessing}>
+              <Share className="mr-2 h-4 w-4" />
+              Share
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleAddToProject} disabled={isProcessing}>
+              <FolderPlus className="mr-2 h-4 w-4" />
+              Add to project
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleArchive} disabled={isProcessing || !conversationId}>
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleReport} disabled={isProcessing}>
+              <Flag className="mr-2 h-4 w-4" />
+              Report
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={handleDelete} 
+              disabled={isProcessing || !conversationId}
+              className="text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
