@@ -39,13 +39,20 @@ export const scrollToBottom = (messagesEndRef: React.RefObject<HTMLDivElement>) 
 };
 
 /**
- * Auto-resize textarea based on content
+ * Auto-resize textarea based on content with clean scrollbar
  */
 export const adjustTextareaHeight = (textareaRef: React.RefObject<HTMLTextAreaElement>) => {
   if (textareaRef.current) {
+    // Reset height to auto to get the correct scrollHeight
     textareaRef.current.style.height = 'auto';
     const scrollHeight = textareaRef.current.scrollHeight;
-    textareaRef.current.style.height = `${Math.min(scrollHeight, CHAT_CONSTANTS.MAX_TEXTAREA_HEIGHT)}px`;
+    
+    // Set the height, capped at maxHeight
+    const newHeight = Math.min(scrollHeight, CHAT_CONSTANTS.MAX_TEXTAREA_HEIGHT);
+    textareaRef.current.style.height = `${newHeight}px`;
+    
+    // Enable overflow when content exceeds maxHeight
+    textareaRef.current.style.overflowY = scrollHeight > CHAT_CONSTANTS.MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
   }
 };
 

@@ -70,7 +70,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="flex-shrink-0 bg-background">
+    <div className="flex-shrink-0 bg-background pb-6">
       <div className="max-w-3xl mx-auto px-4 py-2">
         {/* ChatGPT-style document attachments display */}
         {attachedDocuments.length > 0 && (
@@ -116,25 +116,29 @@ export function ChatInput({
         )}
 
         <form onSubmit={onSubmit} className="relative">
-          {/* Text input container - Clean text area only */}
-          <div className="relative bg-card/50 border border-border/40 rounded-3xl shadow-sm hover:bg-card hover:shadow-md transition-all duration-200 focus-within:border-ring/50 focus-within:shadow-md focus-within:bg-card">
-            <div className="px-4 py-2 flex items-center">
+          {/* Text input container - Expanding textarea with clean scrollbar */}
+          <div className="relative bg-card border border-border/50 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/40 focus-within:shadow-md">
+            <div className="px-4 py-3 flex items-start gap-2">
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={onKeyDown}
                 placeholder={`Message ${agent?.name || 'Agent'}...`}
-                className="w-full resize-none bg-transparent text-foreground placeholder-muted-foreground/70 border-0 outline-0 text-[15px] leading-normal disabled:opacity-50 disabled:cursor-not-allowed placeholder-center"
+                className="flex-1 resize-none bg-transparent text-foreground placeholder-muted-foreground/60 border-0 outline-none text-[15px] leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed scrollbar-thin"
                 disabled={!agent}
                 rows={1}
-                style={{ minHeight: '22px', maxHeight: '120px' }}
+                style={{ 
+                  minHeight: '24px', 
+                  maxHeight: '200px',
+                  overflowY: 'hidden'
+                }}
               />
               {/* Voice input button inside text area - disappears when typing */}
               {!input.trim() && (
                 <button
                   type="button"
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors ml-2"
+                  className="p-1.5 text-muted-foreground/60 hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0 mt-0.5"
                   disabled={!agent}
                   title="Voice input"
                 >
@@ -147,10 +151,9 @@ export function ChatInput({
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Tools row - Outside text area for cleaner look */}
-          <div className="flex items-center justify-between mt-2 px-1">
+            
+            {/* Tools row - Inside container with visual separation */}
+            <div className="flex items-center justify-between px-3 pb-2 pt-0 border-t border-border/20">
             {/* Left side tools */}
             <div className="flex items-center space-x-1">
               {/* File attachment */}
@@ -193,15 +196,16 @@ export function ChatInput({
               )}
             </div>
 
-            {/* Right side - Send button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || !agent || sending}
-              className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Send message"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+              {/* Right side - Send button */}
+              <button
+                type="submit"
+                disabled={!input.trim() || !agent || sending}
+                className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Send message"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </form>
       </div>

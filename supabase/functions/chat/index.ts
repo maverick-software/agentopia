@@ -114,6 +114,38 @@ User message: "${text.slice(0, 500)}"`;
   }
 }
 
+// Utility: Generate an improved conversation title from first 3 messages with better context
+async function generateImprovedConversationTitle(messages: Array<{role: string, content: string}>): Promise<string> {
+  try {
+    // Build a concise summary of the conversation
+    const conversationSummary = messages
+      .map((msg, idx) => `${idx + 1}. ${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content.slice(0, 200)}`)
+      .join('\n');
+    
+    const prompt = `Based on this conversation, create a concise 3-7 word title that captures the main topic or purpose.
+Rules: Title Case, no quotes, no trailing punctuation.
+
+Conversation:
+${conversationSummary}`;
+    
+    const resp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You generate accurate, informative chat titles based on conversation context.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 30,
+    });
+    const out = (resp.choices?.[0]?.message?.content || '').trim();
+    // Basic sanitation
+    return out.replace(/^"|"$/g, '').replace(/[.!?\s]+$/g, '').slice(0, 80) || 'Conversation';
+  } catch (_e) {
+    // If LLM fails, keep the existing title
+    return 'Conversation';
+  }
+}
+
 // Ensure a conversation_sessions row exists and has a title
 async function ensureConversationSession(convId: string, agentId: string, userId: string, firstUserText?: string) {
   try {
@@ -147,6 +179,58 @@ async function ensureConversationSession(convId: string, agentId: string, userId
   } catch (err) {
     // Non-fatal; proceed without title
     logger.warn('ensureConversationSession failed', err as any);
+  }
+}
+
+// Update conversation title after 3rd message for better context
+async function updateConversationTitleAfterThirdMessage(convId: string) {
+  try {
+    // Count total user messages in this conversation
+    const { data: messages, error: countError } = await supabase
+      .from('chat_messages_v2')
+      .select('role, content')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true });
+    
+    if (countError || !messages) {
+      logger.warn('Failed to count messages for title update', countError);
+      return;
+    }
+    
+    // Count only user messages (excluding system and assistant messages)
+    const userMessages = messages.filter(m => m.role === 'user');
+    
+    // Update title after exactly 3 user messages
+    if (userMessages.length === 3) {
+      logger.info(`Updating conversation title after 3rd message for conversation: ${convId}`);
+      
+      // Get first 3 exchanges (up to 6 messages total - 3 user + 3 assistant responses)
+      const firstExchanges = messages.slice(0, Math.min(6, messages.length)).map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : (m.content?.text ?? '')
+      }));
+      
+      // Generate improved title with conversation context
+      const improvedTitle = await generateImprovedConversationTitle(firstExchanges);
+      
+      // Update the conversation session with the new title
+      const { error: updateError } = await supabase
+        .from('conversation_sessions')
+        .update({ 
+          title: improvedTitle,
+          last_active: new Date().toISOString()
+        })
+        .eq('conversation_id', convId);
+      
+      if (updateError) {
+        logger.warn('Failed to update conversation title', updateError);
+      } else {
+        logger.info(`Successfully updated conversation title to: "${improvedTitle}"`);
+      }
+    }
+  } catch (err) {
+    // Non-fatal; just log and continue
+    logger.warn('updateConversationTitleAfterThirdMessage failed', err as any);
   }
 }
 
@@ -263,12 +347,14 @@ async function handler(req: Request): Promise<Response> {
       }
       
       // Ensure conversation record + AI title (only for first user message flows)
+      let conversationId: string | null = null;
       try {
         const convId = body?.context?.conversation_id;
         const agentId = body?.context?.agent_id || body?.message?.context?.agent_id;
         const userId = body?.context?.user_id || authenticatedUserId;
         const userText = (body?.message?.content?.text ?? '') as string;
         if (convId && agentId && userId && userText) {
+          conversationId = convId; // Store for later title update
           await ensureConversationSession(convId, agentId, userId, userText);
         }
       } catch (_e) {}
@@ -336,6 +422,14 @@ async function handler(req: Request): Promise<Response> {
         });
       } catch (persistErr) {
         log.warn('Assistant message persistence failed (non-fatal)', persistErr as Error);
+      }
+      
+      // Update conversation title after 3rd message (non-blocking)
+      if (conversationId) {
+        // Run asynchronously without waiting
+        updateConversationTitleAfterThirdMessage(conversationId).catch(err => {
+          log.warn('Title update after 3rd message failed (non-fatal)', err as Error);
+        });
       }
       
       // Create response headers

@@ -283,10 +283,17 @@ export function AgentChatPage() {
   }, [agentId, selectedConversationId]);
   const adjustTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
+      // Reset height to auto to get the correct scrollHeight
       textareaRef.current.style.height = 'auto';
       const scrollHeight = textareaRef.current.scrollHeight;
       const maxHeight = 200; // Max height in pixels
-      textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+      
+      // Set the height, capped at maxHeight
+      const newHeight = Math.min(scrollHeight, maxHeight);
+      textareaRef.current.style.height = `${newHeight}px`;
+      
+      // Enable overflow when content exceeds maxHeight
+      textareaRef.current.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
   }, []);
 

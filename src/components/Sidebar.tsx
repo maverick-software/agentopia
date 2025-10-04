@@ -185,6 +185,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { subscription, isFreePlan } = useSubscription();
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
 
   // Filter nav items based on admin status - no longer needed for the main list
@@ -195,7 +196,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   return (
     <nav 
-      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-12 p-1' : 'w-56 p-2'}`}
+      className={`relative flex flex-col bg-sidebar-background border-r border-sidebar-border h-full overflow-y-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-12 p-1' : 'w-64 p-2'}`}
     >
       <div className="flex-1 mb-2 flex flex-col min-h-0 overflow-y-auto">
         <div>
@@ -291,7 +292,77 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         )}
       </div>
 
-      {user && (
+      {user && !isCollapsed && (
+        <>
+          {/* Plan Usage Information - Above separator */}
+          <div className="px-1.5 mb-4">
+            <div className="bg-sidebar-accent/40 rounded-lg p-3">
+              <div className="mb-2">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-medium text-sidebar-foreground">
+                    {subscription?.display_name || 'FREE PLAN'}
+                  </span>
+                </div>
+              </div>
+              
+              {/* API Calls/Actions Usage */}
+              <div className="space-y-2">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Actions</span>
+                    <span className="font-medium text-sidebar-foreground">
+                      200 / 200
+                    </span>
+                  </div>
+                  <div className="w-full bg-sidebar-border/50 rounded-full h-1.5">
+                    <div 
+                      className="bg-green-500 h-1.5 rounded-full transition-all duration-300" 
+                      style={{ width: `${(200 / 200) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                
+                {/* Credits Usage */}
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Credits</span>
+                    <span className="font-medium text-sidebar-foreground">
+                      1,000 / 1,000
+                    </span>
+                  </div>
+                  <div className="w-full bg-sidebar-border/50 rounded-full h-1.5">
+                    <div 
+                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300" 
+                      style={{ width: `${(1000 / 1000) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              
+              <button
+                onClick={() => navigate('/billing')}
+                className="w-full mt-3 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center justify-between transition-colors"
+              >
+                <span>Manage plan</span>
+                <span className="text-muted-foreground">→</span>
+              </button>
+              
+              {isFreePlan && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Resets in 24 days
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Separator then Account Menu */}
+          <div className="border-t border-sidebar-border/50 pt-2 px-2 pb-2">
+            <AccountMenu isCollapsed={isCollapsed} isAdminArea={false} />
+          </div>
+        </>
+      )}
+      
+      {user && isCollapsed && (
         <div className="border-t border-sidebar-border/50 pt-2 mt-2 px-2">
           <AccountMenu isCollapsed={isCollapsed} isAdminArea={false} />
         </div>
