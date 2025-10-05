@@ -1,5 +1,24 @@
 
 
+## Agent 2 Agent Job Queue ##
+
+Sometimes an agent will not have the tools for a specific job. It would be good to create a system where, if the agent doesn't have the tools, it has access to a job queue MCP tool that allows it to send a request to a sort of 'Task Master' agent or queue. The Task Master would then review all available agents and their toolsets/capabilities, and send a request to that agent to see if it can perform the task. If the agent responds affirmatively and completes the request, the Task Master will receive the information and provide it back to the original agent. Otherwise, the Task Master can respond back with a list of agents who might be able to complete that task, or that it could not find any agents for that task.
+
+## Agent Tagging ##
+
+We need to add agent contact tab into the settings modal for agents. This way we can grant permissions for agents to speak with each other. If agents are enabled for another agent, then the user can tag an agent within another agent's chat. The agent also becomes aware of the other agents and their tools via Google's A2A protocol, and can tag them in a chat for help with a task or request.
+
+## Plans and Pricing ##
+
+We need to figure out a pricing modal for this system and create a plan management system for it that we can manage on the admin side of the platform.
+
+## Remove Integrations Page ##
+
+We need to remove the integrations page and leave to the admin side. All integrations should be handled via the agent chat interface. The admin page will allow us to enable/disable integrations.
+
+## Plan Management ##
+
+This page needs to be turned into a pop up modal so the user does not need to leave the main chat interface. Everything about the platform should feel like the person is connected to the agents directly, with all external items being secondary.
 
 ## Memory Storage System Upgrade ##
 
@@ -10,18 +29,27 @@ Here are a few metrics we can use: our background process can determine whether 
 Specifically, we want to store memories that are related to expertise, systems, processes and procedures or entities within the business itself (agents, humans, etc.). This will improve awareness over time. These should processed for the explicit memory as episodic memories for vector, and separately semantic understanding for the knowledge graph. We already have these systems built, we just need to add these additional features, and ensure that the background processes for memory storage are not interrupting or slowing down our agentic chat sessions.
 
 
-Document Creation
-SMS via ClickSend or Twilio
-AI generated Dashboards (TaskViewa or QuickChart.io)
-Time Tracking via Toggl (maybe zapier)
+## Artifacts ##
+
+Agents needs to be able to create word documents, PDFs, text files (with various extensions) and html pages.'
+
+## Canvas ##
+
+Users need to be able to work with agents inside a canvas, allowing them to work on a single artifact, making edits themselves, or having the agent make edits. The user needs to be able to highlight areas, drag them into the chat similar to how Cursor does for specific edits. Then, from the Canvas, the user can instruct the agent to generate any file type from it, if it is the right type of project. If it is a text project, they can generate a Word Document (.docx), PDF (.pdf), Markdown (.md) etc. If it is a code project, they can produce TypeScript, JavaScript, Python files, etc.
+
+We can have spreadsheet project, text project, code project (any other kinds of projects??)
+
+## In-chat Image Generation ##
+
+We need to incorporate in-chat image generation for agents. These images will be stored in the artifact system of the media library. We need to include the editing feature, where the agent uses the edit feature from OpenAI GPT-Image-1 and maybe even other image editing APis if available. The image generation tool needs to be enabled/disabled via the settings modal > tools tab. Not every agent needs to be able to generate images.
+
+## AI generated Dashboards via Canvas ##
+
+We need to create a system of predefined UI elements and enable reports via Canvas. The user needs to be able to save these reports as custom dashboards inside our system, so they can be reviewed, refreshed and reported on at any time. We can added a temporary viewing capability similar to our existing temporary chat links. This will allow agents to become more useful, because they will be able to send links to users with temporary viewing privileges. Or we can have them generate PDF reports and send those links. The reports would be part of the artifact system in the existing media library system.
 
 ## Projects ##
 
 Create a project management system similar to Asana and Clickup that empowers users to assign  agents to complete tasks. This should be a hybrid system where users and agents can be assigned to tasks. The user should be in control of when the project starts, and when agents actually perform the tasks assigned to them. Agents should be aware of what projects they are assigned to and what tasks they are assigned to, even in the chat interface.This means we should implement the project mechanism as an MCP tool, so that the agent can discover it as a tool during chat and determine if it should use the Project MCP tools to find assigned projects, tasks, etc. The user can assign context to the task, including in-task text descriptions, or upload documents. They can also assign the results of other completed tasks from other agents, users or the same agent to the current task in case there are project dependencies. Sidebar link, page where users can see projects in a list or grid. Project details page, live editing. Slide-in panel from right side for task details like asana. file uploads for each task.
-
-## Contact List ##
-
-Create a centralized contact list page and system that allows me to add contacts to the system. Name, Numbers (work, home, cell), email address, home address, work address, birthdate and notes. Then, on the agent chat page add 'Contacts' system so that we can add contacts or enable access to all contacts for that specific agent. Create a 'Contacts Lookup Tool' that we will make available via the MCP tool system our agents already have. Investigate, Research, Plan, Implement using the @plan_and_execute.mdc protocol.
 
 ## Delegated ##
 
@@ -119,6 +147,14 @@ This will allow us to add a model selection to the admin settings/setup area, wi
 ---
 
 ## Completed: ##
+
+## Contact List ## (complete)
+
+Create a centralized contact list page and system that allows me to add contacts to the system. Name, Numbers (work, home, cell), email address, home address, work address, birthdate and notes. Then, on the agent chat page add 'Contacts' system so that we can add contacts or enable access to all contacts for that specific agent. Create a 'Contacts Lookup Tool' that we will make available via the MCP tool system our agents already have. Investigate, Research, Plan, Implement using the @plan_and_execute.mdc protocol.
+
+## SMS via ClickSend or Twilio ## (completed)
+
+Add SMS capabilities via MCP protocol for agents.
 
 ## Cleanup agent_oauth_permissions table calls ## (completed)
 
