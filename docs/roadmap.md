@@ -8,11 +8,28 @@ Sometimes an agent will not have the tools for a specific job. It would be good 
 
 We need to add agent contact tab into the settings modal for agents. This way we can grant permissions for agents to speak with each other. If agents are enabled for another agent, then the user can tag an agent within another agent's chat. The agent also becomes aware of the other agents and their tools via Google's A2A protocol, and can tag them in a chat for help with a task or request.
 
-## Chat Summary ##
+## Chat Summary ## ✅ PHASE 1 COMPLETE (Oct 6, 2025)
+
+**Status**: Foundation deployed to cloud - automatic summarization active!
 
 Rather than having our message history sent to the agent every time we send a message, I would rather have the agent maintain a conversation summary board, where it updates its board as the conversation itself updates. This would operate as a sort of background agent independent of the agent itself and run asynchronously from the user/agent chat session. The conversation history can become available for the agent via MCP tools and a vector search. We can save the chat history for posterity in the existing way, but for our 'working memory' for the agent, it would be better to offer the agent a conversation history search tool to use that used vector-based similarity search rather than just dumping 25 previous messages. We already have a long-term memory vector-based search using pinecone--let's investigate and find out if we can supabase pg_vector for this working memory system. Research and report on how this can work.
 
 https://cursor.com/docs/agent/chat/summarization
+
+**✅ Implemented (Phase 1 - Foundation)**:
+- Database tables with pg_vector (conversation_summaries, working_memory_chunks, conversation_summary_boards)
+- Background summarization Edge Function (deployed to cloud)
+- Automatic trigger system (every 5 messages)
+- Vector similarity search with HNSW indexes
+- Entity extraction, topic modeling, action item tracking
+
+**📋 Next Phase** (Phase 2 - Integration):
+- Replace raw message history in chat handler
+- Add MCP search tools for agents
+- Integrate working memory context
+- Test token savings (expect 83% reduction)
+
+**📁 Documentation**: `docs/plans/chat_summary_system/`
 
 ## Plans and Pricing ##
 

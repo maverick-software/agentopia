@@ -1,5 +1,6 @@
 import React from 'react';
 import { AgentSettingsModal } from '../modals/AgentSettingsModal';
+import { ProcessModal } from '../modals/ProcessModal';
 import type { Database } from '../../types/database.types';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
@@ -7,14 +8,17 @@ type Agent = Database['public']['Tables']['agents']['Row'];
 interface ChatModalsProps {
   // Modal states
   showAgentSettingsModal: boolean;
+  showProcessModal?: boolean;
   
   // Modal close handlers
   setShowAgentSettingsModal: (show: boolean) => void;
+  setShowProcessModal?: (show: boolean) => void;
   
   // Data
   agentId: string;
   agent: Agent | null;
   agentSettingsInitialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'reasoning' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+  currentProcessingDetails?: any;
   
   // Handlers
   onAgentUpdated: (updatedAgent: Agent) => void;
@@ -24,14 +28,17 @@ interface ChatModalsProps {
 export function ChatModals({
   // Modal states
   showAgentSettingsModal,
+  showProcessModal = false,
   
   // Modal close handlers
   setShowAgentSettingsModal,
+  setShowProcessModal,
   
   // Data
   agentId,
   agent,
   agentSettingsInitialTab = 'general',
+  currentProcessingDetails,
   
   // Handlers
   onAgentUpdated,
@@ -61,6 +68,15 @@ export function ChatModals({
           }
         }}
       />
+      
+      {/* Process Modal - Shows detailed AI processing information */}
+      {showProcessModal && setShowProcessModal && (
+        <ProcessModal
+          isOpen={showProcessModal}
+          onClose={() => setShowProcessModal(false)}
+          processingDetails={currentProcessingDetails}
+        />
+      )}
     </>
   );
 }

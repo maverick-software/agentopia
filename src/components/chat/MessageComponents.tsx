@@ -122,7 +122,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                 </span>
                 
                 {/* Thoughts and Process buttons for assistant messages - ONLY show if there's actual data */}
-                {message.role === 'assistant' && (message.metadata?.aiProcessDetails || currentProcessingDetails) && (
+                {message.role === 'assistant' && (message.metadata?.aiProcessDetails || message.metadata?.processingDetails || currentProcessingDetails) && (
                   <div className="flex items-center space-x-2">
                     {/* Thoughts Dropdown - only show if there are process steps */}
                     {message.metadata?.aiProcessDetails?.steps && message.metadata.aiProcessDetails.steps.length > 0 && (
@@ -149,7 +149,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                     )}
                     
                     {/* Process Button - only show if there are processing details */}
-                    {currentProcessingDetails && onShowProcessModal && (
+                    {(message.metadata?.processingDetails || currentProcessingDetails) && onShowProcessModal && (
                       <button
                         onClick={onShowProcessModal}
                         className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors"

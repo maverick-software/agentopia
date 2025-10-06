@@ -463,6 +463,73 @@ const TOOL_ROUTING_MAP: Record<string, {
       tool_name: context.toolName,
       ...params
     })
+  },
+
+  // Artifact tools - AI-generated content management
+  'create_artifact': {
+    edgeFunction: 'artifacts-mcp',
+    actionMapping: () => 'create_artifact',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'create_artifact',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+
+  'update_artifact': {
+    edgeFunction: 'artifacts-mcp',
+    actionMapping: () => 'update_artifact',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'update_artifact',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+
+  'list_artifacts': {
+    edgeFunction: 'artifacts-mcp',
+    actionMapping: () => 'list_artifacts',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'list_artifacts',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+
+  'get_artifact': {
+    edgeFunction: 'artifacts-mcp',
+    actionMapping: () => 'get_artifact',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_artifact',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+
+  'get_version_history': {
+    edgeFunction: 'artifacts-mcp',
+    actionMapping: () => 'get_version_history',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_version_history',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+
+  'delete_artifact': {
+    edgeFunction: 'artifacts-mcp',
+    actionMapping: () => 'delete_artifact',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'delete_artifact',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
   }
 };
 

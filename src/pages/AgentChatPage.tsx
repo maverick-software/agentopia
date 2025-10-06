@@ -158,6 +158,10 @@ export function AgentChatPage() {
     startTime?: Date;
   }>>([]);
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState<number | null>(null);
+  
+  // Process Modal state
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchAgentAttempts = useRef(0);
@@ -379,6 +383,7 @@ export function AgentChatPage() {
 
   // AI State Management Functions
   const startAIProcessing = useCallback(() => {
+    // Update AI state
     setShowAIIndicator(true);
     setAiState('thinking');
     setCurrentTool(null);
@@ -544,7 +549,10 @@ export function AgentChatPage() {
               timestamp: new Date(),
               agentId: agent?.id,
               userId: user?.id,
-              metadata: { isCompleted: true },
+              metadata: { 
+                isCompleted: true,
+                processingDetails: currentProcessingDetails
+              },
               aiProcessDetails: {
                 steps: done,
                 totalDuration: Date.now() - (done[0]?.startTime?.getTime() || Date.now()),
@@ -1237,7 +1245,12 @@ export function AgentChatPage() {
       const responseData = await response.json();
       console.log('Chat API response:', responseData);
       
-      // Processing details are handled internally by the chat component
+      // Capture processing details for the Process modal
+      const v2Processing = responseData.processing_details || responseData.data?.processing_details;
+      if (v2Processing) {
+        console.log('Captured processing details:', v2Processing);
+        setCurrentProcessingDetails(v2Processing);
+      }
       
       // Support both V2 and V1 response shapes
       const v2Text = responseData?.data?.message?.content?.text;
@@ -1597,10 +1610,12 @@ export function AgentChatPage() {
                 thinkingMessageIndex={thinkingMessageIndex}
                 formatMarkdown={formatMarkdown}
                 aiState={aiState}
-                        currentTool={currentTool}
+                currentTool={currentTool}
                 processSteps={processSteps}
+                currentProcessingDetails={currentProcessingDetails}
+                onShowProcessModal={() => setShowProcessModal(true)}
               />
-                            </div>
+            </div>
                           )}
           
 
@@ -1629,9 +1644,12 @@ export function AgentChatPage() {
       <ChatModals
         showAgentSettingsModal={showAgentSettingsModal}
         setShowAgentSettingsModal={setShowAgentSettingsModal}
+        showProcessModal={showProcessModal}
+        setShowProcessModal={setShowProcessModal}
         agentId={agentId || ''}
         agent={agent}
         agentSettingsInitialTab={agentSettingsInitialTab}
+        currentProcessingDetails={currentProcessingDetails}
         onAgentUpdated={(updatedData) => {
           // Merge the updated data with existing agent data to prevent losing fields
           setAgent(prev => prev ? { ...prev, ...updatedData } : updatedData as Agent);
