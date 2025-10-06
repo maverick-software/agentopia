@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Settings, LogOut, HelpCircle, Crown, CreditCard, Shield,
-  Network, FileText, MemoryStick, Server, Key,
+  Key,
   Sun, Moon, Home
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -145,34 +145,6 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
                     <Link to="/settings" className="flex items-center w-full">
                       <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">General Settings</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  
-                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                    <Link to="/media" className="flex items-center w-full">
-                      <FileText className="mr-3 h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Media</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  
-                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                    <Link to="/graph-settings" className="flex items-center w-full">
-                      <Network className="mr-3 h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Knowledge Graph</span>
-                    </Link>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                    <Link to="/memory" className="flex items-center w-full">
-                      <MemoryStick className="mr-3 h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Memory</span>
-                    </Link>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem asChild className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2">
-                    <Link to="/integrations" className="flex items-center w-full">
-                      <Server className="mr-3 h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Integrations</span>
                     </Link>
                   </DropdownMenuItem>
 

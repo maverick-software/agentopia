@@ -16,8 +16,9 @@ export const AgentsPage = lazy(() => import('../pages/AgentsPage').then(module =
 // export const AgentEditPage = lazy(() => import('../pages/AgentEditPage').then(module => ({ default: module.AgentEditPage })));
 export const AgentEditPage = lazy(() => import('../pages/agents/[agentId]/edit'));
 export const AgentChatPage = lazy(() => import('../pages/AgentChatPage.tsx').then(module => ({ default: module.AgentChatPage })));
-export const DatastoresPage = lazy(() => import('../pages/DatastoresPage.tsx').then(module => ({ default: module.DatastoresPage })));
-export const DatastoreEditPage = lazy(() => import('../pages/DatastoreEditPage.tsx'));
+// Archived 2025-10-05: DatastoresPage moved to Agent Settings → Memory tab
+// export const DatastoresPage = lazy(() => import('../pages/DatastoresPage.tsx').then(module => ({ default: module.DatastoresPage })));
+// export const DatastoreEditPage = lazy(() => import('../pages/DatastoreEditPage.tsx'));
 export const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage.tsx').then(module => ({ default: module.AdminDashboardPage })));
 export const TeamsPage = lazy(() => import('../pages/TeamsPage.tsx').then(module => ({ default: module.TeamsPage })));
 export const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage.tsx').then(module => ({ default: module.TeamDetailsPage })));
@@ -52,6 +53,7 @@ export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConf
 
 export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 
 export const AdminIntegrationManagement = lazy(() => import('../pages/AdminIntegrationManagement').then(module => ({ default: module.AdminIntegrationManagement })));
+export const AdminSystemAPIKeysPage = lazy(() => import('../pages/admin/AdminSystemAPIKeysPage').then(module => ({ default: module.AdminSystemAPIKeysPage })));
 
 // Admin Billing Pages
 export const AdminStripeConfigPage = lazy(() => import('../pages/admin/AdminStripeConfigPage').then(module => ({ default: module.default })));

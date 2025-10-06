@@ -8,6 +8,12 @@ Sometimes an agent will not have the tools for a specific job. It would be good 
 
 We need to add agent contact tab into the settings modal for agents. This way we can grant permissions for agents to speak with each other. If agents are enabled for another agent, then the user can tag an agent within another agent's chat. The agent also becomes aware of the other agents and their tools via Google's A2A protocol, and can tag them in a chat for help with a task or request.
 
+## Chat Summary ##
+
+Rather than having our message history sent to the agent every time we send a message, I would rather have the agent maintain a conversation summary board, where it updates its board as the conversation itself updates. This would operate as a sort of background agent independent of the agent itself and run asynchronously from the user/agent chat session. The conversation history can become available for the agent via MCP tools and a vector search. We can save the chat history for posterity in the existing way, but for our 'working memory' for the agent, it would be better to offer the agent a conversation history search tool to use that used vector-based similarity search rather than just dumping 25 previous messages. We already have a long-term memory vector-based search using pinecone--let's investigate and find out if we can supabase pg_vector for this working memory system. Research and report on how this can work.
+
+https://cursor.com/docs/agent/chat/summarization
+
 ## Plans and Pricing ##
 
 We need to figure out a pricing modal for this system and create a plan management system for it that we can manage on the admin side of the platform.
@@ -28,6 +34,9 @@ Here are a few metrics we can use: our background process can determine whether 
 
 Specifically, we want to store memories that are related to expertise, systems, processes and procedures or entities within the business itself (agents, humans, etc.). This will improve awareness over time. These should processed for the explicit memory as episodic memories for vector, and separately semantic understanding for the knowledge graph. We already have these systems built, we just need to add these additional features, and ensure that the background processes for memory storage are not interrupting or slowing down our agentic chat sessions.
 
+## Prompt Library ##
+
+We need to be able to save prompts with custom variables. They become forms with input fields, dropdowns, etc. Then they become reusable. They can be used independently and open a new system agent chat (Gofr), or they can be called in an agent chat via the # symbol.
 
 ## Artifacts ##
 

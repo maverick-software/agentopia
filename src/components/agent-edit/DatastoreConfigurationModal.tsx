@@ -4,10 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Database, Brain, Plus, ExternalLink } from 'lucide-react';
+import { Database, Brain, Plus, ExternalLink, Check, Loader2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'react-hot-toast';
+import { CredentialSelector } from '@/integrations/_shared';
 
 interface Datastore {
   id: string;
@@ -25,11 +29,10 @@ interface DatastoreConfigurationModalProps {
   agentId: string;
   availableDatastores: Datastore[];
   selectedVectorStore?: string;
-  selectedKnowledgeStore?: string;
-  onSelectDatastore: (type: 'pinecone' | 'getzep', datastoreId: string) => void;
-  onCreateDatastore: (type: 'pinecone' | 'getzep') => void;
+  onSelectDatastore: (type: 'pinecone', datastoreId: string) => void;
   connecting: boolean;
   loadingAvailable: boolean;
+  onDatastoresUpdated?: () => void; // Callback when datastores are created
 }
 
 
@@ -40,15 +43,23 @@ export const DatastoreConfigurationModal: React.FC<DatastoreConfigurationModalPr
   agentId,
   availableDatastores,
   selectedVectorStore,
-  selectedKnowledgeStore,
   onSelectDatastore,
-  onCreateDatastore,
   connecting,
-  loadingAvailable
+  loadingAvailable,
+  onDatastoresUpdated
 }) => {
   const { user } = useAuth();
 
   const [agentName, setAgentName] = useState<string>('unknown_agent');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    config: {} as any
+  });
 
   // Fetch agent name when modal opens
   useEffect(() => {
@@ -73,33 +84,85 @@ export const DatastoreConfigurationModal: React.FC<DatastoreConfigurationModalPr
     }
   }, [isOpen, agentId]);
 
-  // Filter datastores by type
+  // Filter datastores by type (only vector stores for agent-specific configuration)
   const vectorStores = availableDatastores.filter(ds => ds.type === 'pinecone');
-  const knowledgeStores = availableDatastores.filter(ds => ds.type === 'getzep');
 
-  // Get selected datastores
+  // Get selected datastore
   const connectedVectorStore = vectorStores.find(ds => ds.id === selectedVectorStore);
-  const connectedKnowledgeStore = knowledgeStores.find(ds => ds.id === selectedKnowledgeStore);
 
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowCreateForm(false);
+      setFormData({ name: '', description: '', config: {} });
+    }
+  }, [isOpen]);
 
+  const handleCreateDatastore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      toast.error('You must be logged in to create a datastore');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data: newDatastore, error } = await supabase
+        .from('datastores')
+        .insert({
+          name: formData.name,
+          description: formData.description,
+          type: 'pinecone',
+          config: formData.config,
+          user_id: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('Vector store created successfully!');
+      
+      // Reset form and hide it
+      setFormData({ name: '', description: '', config: {} });
+      setShowCreateForm(false);
+      
+      // Notify parent to refresh datastores
+      if (onDatastoresUpdated) {
+        onDatastoresUpdated();
+      }
+      
+      // Auto-select the newly created datastore
+      if (newDatastore) {
+        onSelectDatastore('pinecone', newDatastore.id);
+      }
+    } catch (err: any) {
+      console.error('Failed to create datastore:', err);
+      toast.error(err.message || 'Failed to create datastore');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Configure Agent Knowledge & Memory</DialogTitle>
+          <DialogTitle>Configure Vector Store</DialogTitle>
           <DialogDescription>
-            Set up vector storage, knowledge graphs, and document repositories for your agent's memory system.
+            Select or create a Pinecone vector database for semantic similarity search
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
+        <div className="py-4">
           {/* Vector Datastore Section */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
+          {(
+            <Card 
+            className={`transition-all duration-200 rounded-xl ${
               connectedVectorStore 
-                ? 'border-primary bg-primary/5' 
-                : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                ? 'border-primary/50 bg-primary/5' 
+                : 'border-border/50 hover:border-primary/30 hover:bg-accent/30'
             }`}
           >
             <CardHeader className="pb-3">
@@ -125,9 +188,9 @@ export const DatastoreConfigurationModal: React.FC<DatastoreConfigurationModalPr
             </CardHeader>
             <CardContent>
               {connectedVectorStore ? (
-                <div className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-accent/20 border border-border/50 rounded-xl">
                   <div>
-                    <p className="font-medium text-card-foreground">{connectedVectorStore.name}</p>
+                    <p className="font-medium text-foreground">{connectedVectorStore.name}</p>
                     <p className="text-sm text-muted-foreground">{connectedVectorStore.description}</p>
                   </div>
                   <Button
@@ -135,6 +198,7 @@ export const DatastoreConfigurationModal: React.FC<DatastoreConfigurationModalPr
                     size="sm"
                     onClick={() => onSelectDatastore('pinecone', '')}
                     disabled={connecting}
+                    className="rounded-lg"
                   >
                     Disconnect
                   </Button>
@@ -143,7 +207,7 @@ export const DatastoreConfigurationModal: React.FC<DatastoreConfigurationModalPr
                 <div className="space-y-3">
                   {loadingAvailable ? (
                     <p className="text-center text-muted-foreground py-4">Loading vector stores...</p>
-                  ) : (
+                  ) : !showCreateForm ? (
                     <>
                       <Label className="text-sm font-medium">Available Vector Stores</Label>
                       <Select 
@@ -164,148 +228,154 @@ export const DatastoreConfigurationModal: React.FC<DatastoreConfigurationModalPr
                       
                       <Button 
                         variant="outline"
-                        onClick={() => onCreateDatastore('pinecone')}
-                        className="w-full"
+                        onClick={() => setShowCreateForm(true)}
+                        className="w-full rounded-lg"
                         disabled={connecting}
                       >
                         <Plus className="mr-2 h-4 w-4" />
                         Create New Vector Store
                       </Button>
                     </>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Knowledge Graph Datastore Section */}
-          <Card 
-            className={`cursor-pointer transition-all duration-200 ${
-              connectedKnowledgeStore 
-                ? 'border-primary bg-primary/5' 
-                : 'border-border hover:border-primary/50 hover:bg-accent/50'
-            }`}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <Brain className="h-5 w-5 text-green-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">Knowledge Graph Datastore</CardTitle>
-                    <CardDescription>
-                      GetZep knowledge graph for entity relationships and facts
-                    </CardDescription>
-                  </div>
-                </div>
-                {connectedKnowledgeStore && (
-                  <div className="flex items-center text-sm text-primary">
-                    <Check className="h-4 w-4 mr-1" />
-                    Connected
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {connectedKnowledgeStore ? (
-                <div className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
-                  <div>
-                    <p className="font-medium text-card-foreground">{connectedKnowledgeStore.name}</p>
-                    <p className="text-sm text-muted-foreground">{connectedKnowledgeStore.description}</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onSelectDatastore('getzep', '')}
-                    disabled={connecting}
-                  >
-                    Disconnect
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {loadingAvailable ? (
-                    <p className="text-center text-muted-foreground py-4">Loading knowledge graphs...</p>
                   ) : (
-                    <>
-                      <Label className="text-sm font-medium">Available Knowledge Graphs</Label>
-                      <Select 
-                        value={selectedKnowledgeStore || 'none'}
-                        onValueChange={(value) => onSelectDatastore('getzep', value === 'none' ? '' : value)}
-                        disabled={connecting}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a knowledge graph..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {knowledgeStores.map(ds => (
-                            <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      
-                      <Button 
-                        variant="outline"
-                        onClick={() => onCreateDatastore('getzep')}
-                        className="w-full"
-                        disabled={connecting}
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create New Knowledge Graph
-                      </Button>
-                    </>
+                    <form onSubmit={handleCreateDatastore} className="space-y-4 pt-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold">New Vector Store</h4>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowCreateForm(false);
+                            setFormData({ name: '', description: '', config: {} });
+                          }}
+                          disabled={isSaving}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="vector-name">Name</Label>
+                        <Input
+                          id="vector-name"
+                          required
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="e.g., Main Vector Database"
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="vector-description">Description</Label>
+                        <Textarea
+                          id="vector-description"
+                          required
+                          value={formData.description}
+                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                          placeholder="Describe this vector store"
+                          rows={2}
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pinecone-api-key">Pinecone API Key</Label>
+                        <Input
+                          id="pinecone-api-key"
+                          type="password"
+                          required
+                          value={formData.config?.apiKey || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, apiKey: e.target.value }
+                          })}
+                          placeholder="Enter API key"
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pinecone-index">Index Name</Label>
+                        <Input
+                          id="pinecone-index"
+                          required
+                          value={formData.config?.indexName || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, indexName: e.target.value }
+                          })}
+                          placeholder="Enter index name"
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pinecone-region">Region</Label>
+                        <Input
+                          id="pinecone-region"
+                          required
+                          value={formData.config?.region || ''}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, region: e.target.value }
+                          })}
+                          placeholder="e.g., us-east-1"
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="pinecone-dimensions">Dimensions</Label>
+                        <Input
+                          id="pinecone-dimensions"
+                          type="number"
+                          required
+                          value={formData.config?.dimensions || '1536'}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            config: { ...formData.config, dimensions: parseInt(e.target.value) }
+                          })}
+                          placeholder="1536"
+                          disabled={isSaving}
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setShowCreateForm(false);
+                            setFormData({ name: '', description: '', config: {} });
+                          }}
+                          disabled={isSaving}
+                          className="flex-1 rounded-lg"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={isSaving}
+                          className="flex-1 rounded-lg"
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Creating...
+                            </>
+                          ) : (
+                            'Create'
+                          )}
+                        </Button>
+                      </div>
+                    </form>
                   )}
                 </div>
               )}
             </CardContent>
           </Card>
-
-          {/* Document Repository Section */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <Database className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Document Repository</CardTitle>
-                  <CardDescription>
-                    Manage documents for your agent's knowledge base via Media Library
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 border border-border rounded-lg bg-muted/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium mb-1">Use Media Library</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Upload and manage documents in the centralized Media Library, then assign them to agents.
-                      </p>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => window.open('/media', '_blank')}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open Media Library
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    <strong>💡 How it works:</strong> Upload documents to Media Library → Assign to agents → Documents are processed and stored in connected datastores for semantic search and knowledge extraction.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -9,17 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Loader2, 
   Check, 
-  Database,
-  Brain,
-  Lightbulb,
-  MessageSquare,
-  ChevronDown
+  MessageSquare
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConnections } from '@/integrations/_shared/hooks/useConnections';
 import { toast } from 'react-hot-toast';
 import type { Datastore } from '@/types';
+import { AgentDatastoreSelector } from '@/components/agent-edit/AgentDatastoreSelector';
 
 
 interface MemoryTabProps {
@@ -242,7 +239,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
       </div>
 
       {/* Context Settings */}
-      <Card>
+      <Card className="rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <MessageSquare className="h-5 w-5" />
@@ -273,116 +270,49 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         </CardContent>
       </Card>
 
-      {/* Long Term Memory */}
-      <Card>
+      {/* Long Term Memory - Using AgentDatastoreSelector */}
+      <AgentDatastoreSelector
+        agentId={agentId}
+        availableDatastores={availableDatastores}
+        selectedVectorStore={selectedDatastoreId}
+        onSelectDatastore={(type, value) => {
+          setSelectedDatastoreId(value);
+          setVectorMemoryEnabled(!!value);
+        }}
+        onConnectDatastores={handleSave}
+        loadingAvailable={loadingDatastores}
+        connecting={loading}
+        onDatastoresUpdated={loadDatastores}
+      />
+
+      {/* Account-Wide Knowledge Graph Toggle */}
+      <Card className="rounded-xl">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
-            <Database className="h-5 w-5" />
-            <span>Long Term Memory</span>
+            <MessageSquare className="h-5 w-5" />
+            <span>Account-Wide Knowledge Graph</span>
           </CardTitle>
           <CardDescription>
-            Connect datastores to enhance your agent's knowledge and memory
+            Enable GetZep knowledge graph to share structured knowledge across all agents in your account
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {loadingDatastores ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Loading datastores...
+        <CardContent>
+          <div className={`flex items-center justify-between p-4 rounded-xl bg-accent/30 ${!hasGetZepCredentials ? 'opacity-50' : ''}`}>
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Enable Knowledge Graph</Label>
+              <div className="text-xs text-muted-foreground">
+                {hasGetZepCredentials 
+                  ? "Shared across all agents - configure in Knowledge page"
+                  : "GetZep credentials required. Configure in Knowledge page."
+                }
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Vector Datastores - Episodic Memory */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium flex items-center space-x-2">
-                  <Brain className="h-4 w-4" />
-                  <span>Vector Datastores (Episodic Memory)</span>
-                </Label>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Enable episodic memory to store and recall specific experiences, conversations, and contextual information. Select one vector datastore to use.
-                </div>
-                
-                {availableDatastores.length > 0 ? (
-                  <div className="space-y-4">
-                    {/* Enable/Disable Toggle */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="space-y-0.5">
-                        <Label className="text-sm font-medium">Enable Episodic Memory</Label>
-                        <div className="text-xs text-muted-foreground">
-                          Store experiences and conversations for future recall
-                        </div>
-                      </div>
-                      <Switch
-                        checked={vectorMemoryEnabled}
-                        onCheckedChange={handleVectorMemoryToggle}
-                      />
-                    </div>
-
-                    {/* Datastore Selection */}
-                    {vectorMemoryEnabled && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Select Vector Datastore</Label>
-                        <Select
-                          value={selectedDatastoreId || undefined}
-                          onValueChange={handleDatastoreSelection}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose a vector datastore..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableDatastores.map((datastore) => (
-                              <SelectItem key={datastore.id} value={datastore.id}>
-                                <div>
-                                  <div className="font-medium">{datastore.name}</div>
-                                  <div className="text-xs text-muted-foreground">{datastore.description}</div>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {selectedDatastoreId && (
-                          <div className="text-xs text-green-600 mt-1">
-                            ✓ Selected: {availableDatastores.find(d => d.id === selectedDatastoreId)?.name}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground p-3 border rounded-lg bg-muted/50">
-                    No vector datastores available. Create one to enable episodic memory.
-                  </div>
-                )}
-              </div>
-
-              {/* Account Knowledge Graph - Semantic Memory */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium flex items-center space-x-2">
-                  <Lightbulb className="h-4 w-4" />
-                  <span>Knowledge Graph (Semantic Memory)</span>
-                </Label>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Enable semantic memory to access structured knowledge, concepts, and relationships from your account-wide knowledge graph.
-                </div>
-                <div className={`flex items-center justify-between p-3 border rounded-lg ${!hasGetZepCredentials ? 'opacity-50' : ''}`}>
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-medium">Enable Semantic Memory</Label>
-                    <div className="text-xs text-muted-foreground">
-                      {hasGetZepCredentials 
-                        ? "Access structured knowledge and concept relationships"
-                        : "GetZep credentials required. Configure in Integrations."
-                      }
-                    </div>
-                  </div>
-                  <Switch
-                    checked={graphEnabled && hasGetZepCredentials}
-                    onCheckedChange={hasGetZepCredentials ? setGraphEnabled : undefined}
-                    disabled={!hasGetZepCredentials}
-                  />
-                </div>
-              </div>
-            </>
-          )}
+            <Switch
+              checked={graphEnabled && hasGetZepCredentials}
+              onCheckedChange={hasGetZepCredentials ? setGraphEnabled : undefined}
+              disabled={!hasGetZepCredentials}
+            />
+          </div>
         </CardContent>
       </Card>
 

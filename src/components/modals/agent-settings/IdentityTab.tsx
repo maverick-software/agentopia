@@ -98,7 +98,6 @@ export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agent
 
   // Form state
   const [name, setName] = useState(agentData?.name || '');
-  const [description, setDescription] = useState(agentData?.description || '');
   const [selectedPersonality, setSelectedPersonality] = useState(agentData?.personality || 'professional');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(agentData?.avatar_url || null);
   
@@ -115,7 +114,6 @@ export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agent
   useEffect(() => {
     if (agentData) {
       setName(agentData.name || '');
-      setDescription(agentData.description || '');
       setSelectedPersonality(agentData.personality || 'professional');
       setAvatarUrl(agentData.avatar_url || null);
     }
@@ -124,12 +122,16 @@ export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agent
   // Detect if there are unsaved changes
   const hasChanges = 
     name.trim() !== (agentData?.name || '') ||
-    description.trim() !== (agentData?.description || '') ||
     selectedPersonality !== (agentData?.personality || 'professional') ||
     avatarUrl !== (agentData?.avatar_url || null);
 
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
+    
+    if (!name.trim()) {
+      toast.error('Agent name is required');
+      return;
+    }
     
     setLoading(true);
     const startTime = Date.now();
@@ -139,7 +141,6 @@ export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agent
         .from('agents')
         .update({
           name: name.trim(),
-          description: description.trim(),
           personality: selectedPersonality,
           avatar_url: avatarUrl
         })
@@ -171,7 +172,7 @@ export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agent
     } finally {
       setLoading(false);
     }
-  }, [agentId, user, name, description, selectedPersonality, avatarUrl, supabase, onAgentUpdated]);
+  }, [agentId, user, name, selectedPersonality, avatarUrl, supabase, onAgentUpdated]);
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const target = event.target; // Store reference before async operations
@@ -289,9 +290,33 @@ export const IdentityTab = forwardRef<IdentityTabRef, IdentityTabProps>(({ agent
       <div>
         <h3 className="text-lg font-medium">Identity & Appearance</h3>
         <p className="text-sm text-muted-foreground">
-          Configure your agent's avatar and personality type.
+          Configure your agent's name, avatar, and personality type.
         </p>
       </div>
+
+      {/* Agent Name - Moved from General tab */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent Name</CardTitle>
+          <CardDescription>
+            This is how your agent will be identified in conversations.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="agent-name" className="text-sm font-medium">
+              Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="agent-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter agent name"
+              className="max-w-md"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

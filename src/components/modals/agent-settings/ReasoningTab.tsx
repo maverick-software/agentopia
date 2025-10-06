@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import {
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import { TabRef } from './types';
 
 interface ReasoningTabProps {
   agentId: string;
@@ -20,15 +21,17 @@ interface ReasoningTabProps {
   onAgentUpdated?: (updatedData: any) => void;
 }
 
-export function ReasoningTab({ agentId, agentData, onAgentUpdated }: ReasoningTabProps) {
+export const ReasoningTab = forwardRef<TabRef, ReasoningTabProps>(({ agentId, agentData, onAgentUpdated }, ref) => {
   const supabase = useSupabaseClient();
   const { user } = useAuth();
 
   // Form state
   const [reasoningEnabled, setReasoningEnabled] = useState(false);
+  const [originalReasoningEnabled, setOriginalReasoningEnabled] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
 
   // Load agent settings
@@ -49,7 +52,9 @@ export function ReasoningTab({ agentId, agentData, onAgentUpdated }: ReasoningTa
         const metadata = data?.metadata || {};
         const settings = metadata.settings || {};
         
-        setReasoningEnabled(settings.reasoning_enabled === true); // Defaults to false if undefined
+        const enabled = settings.reasoning_enabled === true;
+        setReasoningEnabled(enabled);
+        setOriginalReasoningEnabled(enabled); // Store original value
 
       } catch (error) {
         console.error('Error loading reasoning settings:', error);
@@ -60,6 +65,16 @@ export function ReasoningTab({ agentId, agentData, onAgentUpdated }: ReasoningTa
 
     loadReasoningSettings();
   }, [agentId, supabase]);
+
+  // Expose save method and state to parent via ref
+  useImperativeHandle(ref, () => ({
+    save: async () => {
+      await handleSave();
+    },
+    hasChanges: reasoningEnabled !== originalReasoningEnabled,
+    saving: loading,
+    saveSuccess
+  }));
 
   const handleSave = useCallback(async () => {
     if (!agentId || !user) return;
@@ -97,6 +112,15 @@ export function ReasoningTab({ agentId, agentData, onAgentUpdated }: ReasoningTa
       if (error) throw error;
 
       toast.success('Reasoning settings updated successfully! 🧠');
+      
+      // Update original value to reflect saved state
+      setOriginalReasoningEnabled(reasoningEnabled);
+      
+      // Show success state
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+      }, 2000);
       
       if (onAgentUpdated) {
         onAgentUpdated(data);
@@ -189,5 +213,7 @@ export function ReasoningTab({ agentId, agentData, onAgentUpdated }: ReasoningTa
       </Card>
     </div>
   );
-}
+});
+
+ReasoningTab.displayName = 'ReasoningTab';
 

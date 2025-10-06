@@ -23,8 +23,9 @@ import UnauthorizedPage from '../pages/UnauthorizedPage';
 import {
     AgentsPage,
     AgentChatPage,
-    DatastoresPage,
-    DatastoreEditPage,
+    // Archived 2025-10-05: DatastoresPage moved to Agent Settings → Memory tab
+    // DatastoresPage,
+    // DatastoreEditPage,
     AdminDashboardPage,
     TeamsPage,
     TeamDetailsPage,
@@ -36,6 +37,7 @@ import {
     AdminAgentManagement,
     AdminMCPMarketplaceManagement,
     AdminIntegrationManagement,
+    AdminSystemAPIKeysPage,
     AdminStripeConfigPage,
     AdminUserBillingPage,
     StripeOAuthCallbackPage,
@@ -95,9 +97,10 @@ export const appRoutes: RouteConfig[] = [
   { path: '/agents/:agentId/edit', element: AgentEditPage, protection: 'protected', layout: true },
   { path: '/agents/:agentId/chat', element: AgentChatPage, protection: 'protected', layout: true },
   { path: '/chats/:agentId', element: ChatsPage, protection: 'protected', layout: true },
-  { path: '/memory', element: DatastoresPage, protection: 'protected', layout: true },
-  { path: '/memory/new', element: DatastoreEditPage, protection: 'protected', layout: true },
-  { path: '/memory/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
+  // Archived 2025-10-05: Memory/Datastores routes moved to Agent Settings → Memory tab
+  // { path: '/memory', element: DatastoresPage, protection: 'protected', layout: true },
+  // { path: '/memory/new', element: DatastoreEditPage, protection: 'protected', layout: true },
+  // { path: '/memory/:datastoreId/edit', element: DatastoreEditPage, protection: 'protected', layout: true },
   { path: '/media', element: MediaLibraryPage, protection: 'protected', layout: true },
   { path: '/contacts', element: ContactsPage, protection: 'protected', layout: true },
   { path: '/teams', element: TeamsPage, protection: 'protected', layout: true },
@@ -138,6 +141,7 @@ export const appRoutes: RouteConfig[] = [
     children: [
       { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
       { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
+      { path: '/admin/system-api-keys', element: AdminSystemAPIKeysPage, protection: 'admin', layout: false }, // System API keys management
       { path: '/admin/marketplace', element: AdminMCPMarketplaceManagement, protection: 'admin', layout: false }, // Add marketplace management
       { path: '/admin/oauth-providers', element: AdminIntegrationManagement, protection: 'admin', layout: false }, // OAuth providers management
       { path: '/admin/billing/stripe-config', element: AdminStripeConfigPage, protection: 'admin', layout: false }, // Stripe configuration

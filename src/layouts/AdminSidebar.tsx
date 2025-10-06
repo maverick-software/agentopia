@@ -5,6 +5,7 @@ import {
   LayoutDashboard, 
   Users, 
   Bot, // Using Bot icon for Agent Management
+  Key, // Add Key icon for System API Keys
   Store, // Add Store icon for marketplace
   Wrench, // Add Wrench icon for Tools
   Settings, // Add Settings icon for Integration Management
@@ -27,7 +28,8 @@ const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'User Management', href: '/admin/users', icon: Users },
     { name: 'Agent Management', href: '/admin/agents', icon: Bot }, 
-    { name: 'Integration Management', href: '/admin/integrations', icon: Settings },
+    { name: 'System API Keys', href: '/admin/system-api-keys', icon: Key },
+    { name: 'Integration Management', href: '/admin/oauth-providers', icon: Settings },
     { name: 'MCP Templates', href: '/admin/marketplace', icon: Store },
     { name: 'Droplets', href: '/admin/tools', icon: Wrench },
     { name: 'Stripe Configuration', href: '/admin/billing/stripe-config', icon: CreditCard },

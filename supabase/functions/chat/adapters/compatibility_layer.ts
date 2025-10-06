@@ -14,7 +14,7 @@ export class DualWriteService {
   constructor(private supabaseClient: SupabaseClient) {}
   
   /**
-   * Save message to both old and new tables
+   * Save message to V2 table only (V1 deprecated)
    */
   async saveMessage(
     message: any,
@@ -26,44 +26,12 @@ export class DualWriteService {
   ): Promise<{ v1Success: boolean; v2Success: boolean; errors: any[] }> {
     const flags = getFeatureFlags();
     const errors: any[] = [];
-    let v1Success = false;
     let v2Success = false;
-    
-    // Check kill switch
-    if (KillSwitch.isActivated('emergency_rollback')) {
-      console.warn('[DualWrite] Emergency rollback activated, only writing to V1');
-      options = { ...options, skipV2: true };
-    }
     
     // Determine message format
     const isV2Format = MessageFormatAdapter.isV2Message(message);
     
-    // Save to V1 table
-    if (!options?.skipV1 && flags.maintain_dual_write) {
-      try {
-        const v1Message = isV2Format 
-          ? MessageFormatAdapter.toV1(message) 
-          : message;
-        
-        const { error } = await this.supabaseClient
-          .from('chat_messages')
-          .insert({
-            channel_id: options?.context?.channel_id || null,
-            content: v1Message.content,
-            sender_user_id: options?.context?.sender_user_id || null,
-            sender_agent_id: options?.context?.sender_agent_id || null,
-            created_at: v1Message.timestamp || new Date().toISOString(),
-          });
-        
-        if (error) throw error;
-        v1Success = true;
-      } catch (error) {
-        console.error('[DualWrite] V1 write failed:', error);
-        errors.push({ table: 'chat_messages', error });
-      }
-    }
-    
-    // Save to V2 table
+    // Save to V2 table only (V1 is deprecated)
     if (!options?.skipV2 && flags.use_advanced_messages) {
       try {
         const v2Message: AdvancedChatMessage = isV2Format 
@@ -95,21 +63,22 @@ export class DualWriteService {
         if (error) throw error;
         v2Success = true;
       } catch (error) {
-        console.error('[DualWrite] V2 write failed:', error);
+        console.error('[V2 Write] Write failed:', error);
         errors.push({ table: 'chat_messages_v2', error });
       }
     }
     
-    // Log results
+    // Log results (for backward compatibility with calling code)
     if (flags.verbose_logging) {
-      console.log('[DualWrite] Results:', { v1Success, v2Success, errorCount: errors.length });
+      console.log('[V2 Write] Success:', v2Success);
     }
     
-    return { v1Success, v2Success, errors };
+    // Return v1Success as false since we're not writing to V1 anymore
+    return { v1Success: false, v2Success, errors };
   }
   
   /**
-   * Read messages with fallback between versions
+   * Read messages from V2 table only (V1 deprecated)
    */
   async readMessages(
     filters: any,
@@ -117,8 +86,8 @@ export class DualWriteService {
   ): Promise<any[]> {
     const flags = getFeatureFlags();
     
-    // Try preferred version first
-    if (preferVersion === '2' && flags.use_advanced_messages) {
+    // Read from V2 table only (V1 is deprecated)
+    if (flags.use_advanced_messages) {
       try {
         const { data: v2Messages, error } = await this.supabaseClient
           .from('chat_messages_v2')
@@ -126,40 +95,15 @@ export class DualWriteService {
           .match(filters)
           .order('created_at', { ascending: false });
         
-        if (!error && v2Messages?.length > 0) {
-          return v2Messages;
-        }
+        if (error) throw error;
+        return v2Messages || [];
       } catch (error) {
-        console.warn('[DualWrite] V2 read failed, falling back to V1:', error);
+        console.error('[V2 Read] Read failed:', error);
+        return [];
       }
     }
     
-    // Fallback to V1
-    try {
-      const { data: v1Messages, error } = await this.supabaseClient
-        .from('chat_messages')
-        .select('*')
-        .match(filters)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      // Convert to requested format if needed
-      if (preferVersion === '2' && v1Messages) {
-        return v1Messages.map(msg => 
-          MessageFormatAdapter.toV2({
-            role: msg.sender_user_id ? 'user' : 'assistant',
-            content: msg.content,
-            timestamp: msg.created_at,
-          })
-        );
-      }
-      
-      return v1Messages || [];
-    } catch (error) {
-      console.error('[DualWrite] Both reads failed:', error);
-      return [];
-    }
+    return [];
   }
 }
 

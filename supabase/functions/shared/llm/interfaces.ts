@@ -27,12 +27,14 @@ export interface LLMChatOptions {
 	topP?: number;
 	stream?: boolean;
 	model?: string;
+	previousResponseId?: string; // For multi-turn conversations in Responses API
 }
 
 export interface LLMChatResponse {
 	text?: string;
 	toolCalls?: LLMToolCall[];
 	usage?: LLMUsage;
+	responseId?: string; // Response ID from Responses API for chaining
 }
 
 export interface LLMProvider {

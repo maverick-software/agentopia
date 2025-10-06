@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -11,6 +11,7 @@ import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConnections } from '@/integrations/_shared/hooks/useConnections';
 import { toast } from 'react-hot-toast';
+import { TabRef } from './types';
 import { 
   Volume2, 
   Search, 
@@ -58,7 +59,7 @@ interface ProviderConfig {
   requiresOAuth: boolean;
 }
 
-export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) {
+export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData, onAgentUpdated }, ref) => {
   const [settings, setSettings] = useState<ToolSettings>({
     voice_enabled: false,
     web_search_enabled: false,
@@ -75,6 +76,7 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [credentialModal, setCredentialModal] = useState<CredentialModalState>({
     isOpen: false,
@@ -92,6 +94,16 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const { connections } = useConnections({ includeRevoked: false });
+
+  // Expose save method and state to parent via ref
+  useImperativeHandle(ref, () => ({
+    save: async () => {
+      await handleSave();
+    },
+    hasChanges,
+    saving: isLoading,
+    saveSuccess
+  }));
 
   // Check for assigned documents
   useEffect(() => {
@@ -540,8 +552,10 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       
       // Show saved state for 2 seconds
       setSaved(true);
+      setSaveSuccess(true);
       setTimeout(() => {
         setSaved(false);
+        setSaveSuccess(false);
       }, 2000);
       
       setHasChanges(false);
@@ -945,4 +959,6 @@ export function ToolsTab({ agentId, agentData, onAgentUpdated }: ToolsTabProps) 
       </Dialog>
     </div>
   );
-}
+});
+
+ToolsTab.displayName = 'ToolsTab';

@@ -13,19 +13,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { DatastoreConfigurationModal } from './DatastoreConfigurationModal';
 
-// Datastore Form Component (similar to DatastoresPage)
+// Datastore Form Component - Type-specific forms
 interface DatastoreFormProps {
   datastore?: Datastore | null;
   onSubmit: (data: Partial<Datastore>) => Promise<void>;
   onCancel: () => void;
   isSaving: boolean;
+  datastoreType: 'pinecone' | 'getzep'; // Pre-determined type
 }
 
-function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFormProps) {
+function DatastoreForm({ datastore, onSubmit, onCancel, isSaving, datastoreType }: DatastoreFormProps) {
   const [formData, setFormData] = useState<Partial<Datastore>>({
     name: datastore?.name || '',
     description: datastore?.description || '',
-    type: datastore?.type || 'pinecone',
+    type: datastore?.type || datastoreType, // Use the pre-determined type
     config: datastore?.config || {},
   });
   const [formError, setFormError] = useState<string | null>(null);
@@ -57,7 +58,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
           required
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="Enter datastore name"
+          placeholder={`Enter ${datastoreType === 'pinecone' ? 'vector store' : 'knowledge graph'} name`}
           disabled={isSaving}
         />
       </div>
@@ -69,31 +70,10 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: DatastoreFor
           required
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          placeholder="Enter datastore description"
+          placeholder={`Describe this ${datastoreType === 'pinecone' ? 'vector store' : 'knowledge graph'}`}
           rows={3}
           disabled={isSaving}
         />
-      </div>
-
-      <div>
-        <Label htmlFor="ds-type">Type</Label>
-        <Select
-          value={formData.type}
-          onValueChange={(value: 'pinecone' | 'getzep') => setFormData({
-            ...formData,
-            type: value,
-            config: {}
-          })}
-          disabled={isSaving || !!datastore} // Can't change type when editing
-        >
-          <SelectTrigger id="ds-type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pinecone">Pinecone</SelectItem>
-            <SelectItem value="getzep">GetZep</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {formData.type === 'pinecone' && (
@@ -231,8 +211,7 @@ interface AgentDatastoreSelectorProps {
   agentId: string | undefined;
   availableDatastores: Datastore[];
   selectedVectorStore: string | undefined;
-  selectedKnowledgeStore: string | undefined;
-  onSelectDatastore: (type: 'vector' | 'knowledge', value: string) => void;
+  onSelectDatastore: (type: 'vector', value: string) => void;
   onConnectDatastores: () => Promise<void>;
   loadingAvailable: boolean;
   connecting: boolean;
@@ -243,7 +222,6 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
   agentId,
   availableDatastores,
   selectedVectorStore,
-  selectedKnowledgeStore,
   onSelectDatastore,
   onConnectDatastores,
   loadingAvailable,
@@ -253,12 +231,12 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
   const { user } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createModalType, setCreateModalType] = useState<'pinecone' | 'getzep'>('pinecone');
   const [editingDatastore, setEditingDatastore] = useState<Datastore | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Filter datastores by type
+  // Filter datastores by type (only vector stores for agent-specific configuration)
   const vectorStores = availableDatastores.filter(ds => ds.type === 'pinecone');
-  const knowledgeStores = availableDatastores.filter(ds => ds.type === 'getzep');
 
   const handleConnectClick = async () => {
     await onConnectDatastores();
@@ -313,42 +291,31 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
     }
   };
 
-  // New handlers for the unified modal
-  const handleDatastoreSelect = (type: 'pinecone' | 'getzep', datastoreId: string) => {
-    if (type === 'pinecone') {
-      onSelectDatastore('vector', datastoreId);
-    } else if (type === 'getzep') {
-      onSelectDatastore('knowledge', datastoreId);
-    }
+  // Handler for datastore selection
+  const handleDatastoreSelect = (type: 'pinecone', datastoreId: string) => {
+    onSelectDatastore('vector', datastoreId);
   };
 
-  const handleCreateDatastore = (type: 'pinecone' | 'getzep') => {
-    setShowCreateModal(true);
-    // Pre-fill the form with the correct type
-    setEditingDatastore(null);
-  };
-
-  // Get currently selected datastores
+  // Get currently selected datastore
   const selectedVector = vectorStores.find(ds => ds.id === selectedVectorStore);
-  const selectedKnowledge = knowledgeStores.find(ds => ds.id === selectedKnowledgeStore);
 
   return (
-    <Card>
+    <Card className="rounded-xl">
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Database className="h-5 w-5" />
-          Datastore Connections
+          Vector Store Connection
         </CardTitle>
         <CardDescription>
-          Connect vector and knowledge datastores to enhance agent capabilities
+          Connect a Pinecone vector database for semantic similarity search and episodic memory
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Current Connections Display */}
-        <div className="space-y-3">
+        {/* Current Connection Display */}
+        <div>
           {/* Vector Store */}
           {selectedVector ? (
-            <div className="flex items-center justify-between p-3 border rounded-md">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-accent/30">
               <div className="space-y-1">
                 <p className="text-sm font-medium">Vector Store</p>
                 <p className="text-sm text-muted-foreground">
@@ -367,7 +334,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
               </Button>
             </div>
           ) : (
-            <div className="flex items-center justify-between p-3 border-2 border-dashed border-muted-foreground/30 rounded-md bg-muted/20">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/30">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-muted-foreground">Vector Store</p>
                 <p className="text-sm text-muted-foreground/70">
@@ -384,85 +351,22 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
               </Button>
             </div>
           )}
-
-          {/* Knowledge Store */}
-          {selectedKnowledge ? (
-            <div className="flex items-center justify-between p-3 border rounded-md">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Knowledge Store</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedKnowledge.name}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditingDatastore(selectedKnowledge);
-                  setShowCreateModal(true);
-                }}
-              >
-                <Edit2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between p-3 border-2 border-dashed border-muted-foreground/30 rounded-md bg-muted/20">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Knowledge Store</p>
-                <p className="text-sm text-muted-foreground/70">
-                  Add Knowledge Graph
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsModalOpen(true)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2">
-          <Button 
-            variant="outline"
-            size="sm"
-            onClick={() => setIsModalOpen(true)}
-            disabled={loadingAvailable || !agentId}
-            className="flex-1"
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Configure Connections
-          </Button>
-          <Button 
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCreateModal(true)}
-            disabled={!user}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            New Datastore
-          </Button>
-        </div>
-
-        {/* Unified Datastore Configuration Modal */}
+        {/* Datastore Configuration Modal */}
         <DatastoreConfigurationModal
           isOpen={isModalOpen}
           onOpenChange={setIsModalOpen}
           agentId={agentId!}
           availableDatastores={availableDatastores}
           selectedVectorStore={selectedVectorStore}
-          selectedKnowledgeStore={selectedKnowledgeStore}
           onSelectDatastore={handleDatastoreSelect}
-          onCreateDatastore={handleCreateDatastore}
           connecting={connecting}
           loadingAvailable={loadingAvailable}
+          onDatastoresUpdated={onDatastoresUpdated}
         />
 
-        {/* Create/Edit Datastore Modal - Keep for creating new datastores */}
+        {/* Create/Edit Datastore Modal - Type-specific */}
         <Dialog open={showCreateModal || !!editingDatastore} onOpenChange={(open) => {
           if (!open) {
             setShowCreateModal(false);
@@ -472,12 +376,15 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>
-                {editingDatastore ? 'Edit Datastore' : 'Create New Datastore'}
+                {editingDatastore 
+                  ? `Edit ${editingDatastore.type === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}`
+                  : `Create New ${createModalType === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}`
+                }
               </DialogTitle>
               <DialogDescription>
                 {editingDatastore 
-                  ? 'Update the datastore configuration'
-                  : 'Create a new datastore to use with your agents'
+                  ? `Update your ${editingDatastore.type === 'pinecone' ? 'Pinecone vector database' : 'GetZep knowledge graph'} configuration`
+                  : `Set up a new ${createModalType === 'pinecone' ? 'Pinecone vector database for semantic search' : 'GetZep knowledge graph for entity relationships'}`
                 }
               </DialogDescription>
             </DialogHeader>
@@ -489,6 +396,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
                 setEditingDatastore(null);
               }}
               isSaving={isSaving}
+              datastoreType={editingDatastore?.type || createModalType}
             />
           </DialogContent>
         </Dialog>

@@ -1,66 +1,68 @@
 # Artifact System Implementation - Project Overview
 
-**Status**: ✅ Planning Complete - Ready for Implementation  
-**Date**: October 4, 2025  
-**Estimated Timeline**: 8-10 days  
-**Complexity**: Medium-High
+**Status**: ✅ Planning Complete - Aligned with Brief v2.0 (Simplified)  
+**Date**: October 6, 2025  
+**Estimated Timeline**: 10 days  
+**Complexity**: Medium
 
 ## 📚 Documentation Structure
 
 | Document | Purpose | Status |
 |----------|---------|--------|
-| **[ARCHITECTURE_REVISION.md](ARCHITECTURE_REVISION.md)** | Detailed two-table architecture design | ✅ Complete |
-| **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** | High-level implementation strategy & phases | ✅ Complete |
-| **[WBS_CHECKLIST.md](WBS_CHECKLIST.md)** | Detailed 210-task work breakdown structure | ✅ Complete |
+| **[README.md](README.md)** | 📖 This file - Project overview and quick reference | ✅ Current |
+| **[REVISED_PLAN.md](REVISED_PLAN.md)** | ⭐ **IMPLEMENTATION PLAN** - Complete technical specification | ✅ Current |
+| **[SUMMARY.md](SUMMARY.md)** | 📋 Quick reference summary for developers | ✅ Current |
+| **[ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)** | 🎨 Visual diagrams and data flows | ✅ Current |
 
 ## 🎯 Quick Start
 
 ### For Implementers
 
-1. **Read First**: [ARCHITECTURE_REVISION.md](ARCHITECTURE_REVISION.md)
-   - Understand the two-table approach
-   - See why we use `artifacts` + `media_library`
-   - Review query patterns
+1. **⭐ Start Here**: [SUMMARY.md](SUMMARY.md)
+   - Quick overview of what we're building
+   - Key architecture decisions
+   - 10-day timeline breakdown
 
-2. **Plan Your Work**: [WBS_CHECKLIST.md](WBS_CHECKLIST.md)
-   - Start with Phase 1: Database & Backend
-   - Follow checklist sequentially
-   - Check off items as you complete them
+2. **📖 Full Details**: [REVISED_PLAN.md](REVISED_PLAN.md)
+   - Complete database schema
+   - All MCP tool specifications
+   - Phase-by-phase implementation guide
+   - Component architecture
 
-3. **Reference Strategy**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
-   - See overall phases and timeline
-   - Review technical specifications
-   - Check success criteria
+3. **🎨 Visual Reference**: [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)
+   - Data flow diagrams
+   - Component hierarchy
+   - Storage organization
+   - UI layouts
 
 ### For Reviewers
 
-1. Review [ARCHITECTURE_REVISION.md](ARCHITECTURE_REVISION.md) for design decisions
-2. Check [WBS_CHECKLIST.md](WBS_CHECKLIST.md) progress tracking
-3. Verify implementation matches [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) specifications
+1. Review [REVISED_PLAN.md](REVISED_PLAN.md) for design decisions and specifications
+2. Check [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) for visual understanding
+3. Reference [SUMMARY.md](SUMMARY.md) for quick overview
 
 ## 🏗️ Architecture Summary
 
-### Two-Table Design
+### Single-Table Design (Aligned with Brief v2.0)
 
-**Table 1: `artifacts`** (Reference & Metadata)
-- Stores artifact-specific metadata
-- Links to conversations and messages
-- Handles versioning and analytics
-- Fast queries without loading content
+**Table 1: `artifacts`** (Main Storage)
+- Stores content directly in `content` TEXT column
+- Links to conversation, workspace, agent, message
+- Handles versioning with `parent_artifact_id`
+- Single-table queries for better performance
 
-**Table 2: `media_library`** (Content Storage)
-- Stores actual artifact content
-- Handles file storage and URLs
-- Reuses existing infrastructure
-- Joined only when content needed
+**Table 2: `artifact_versions`** (Version History)
+- Snapshots of previous versions
+- Version number, content, timestamp
+- Enables version restore and diff comparison
 
 ### Key Benefits
 
-✅ **Performance**: Fast metadata queries, lazy content loading  
-✅ **Clarity**: Clear separation of concerns  
-✅ **Reuse**: Leverages existing media library infrastructure  
-✅ **Scalability**: Optimized for growth  
-✅ **Maintainability**: Easy to extend and debug
+✅ **Simplicity**: All artifact data in one table  
+✅ **Performance**: No joins needed for content  
+✅ **Clarity**: Clear artifact ownership and context  
+✅ **Versioning**: Clean version history tracking  
+✅ **Maintainability**: Straightforward schema
 
 ## 📊 Project Phases
 
@@ -204,38 +206,19 @@
 - MCP Tools: `README/tool-infrastructure.md`
 - Chat System: `docs/chat/`
 
-## 🎯 Key Design Decisions
+## 📋 What's NOT Included (Excluded from Brief v2.0)
 
-### Why Two Tables?
+Per your requirements, these features are **NOT** being implemented:
 
-**Decision**: Use separate `artifacts` table + existing `media_library`
+❌ **Real-time collaboration** - No cursor presence or multi-user editing  
+❌ **Semantic search** - No Pinecone embeddings  
+❌ **AI-generated change summaries** - Manual versioning only  
+❌ **File format conversion** - No DOCX↔HTML or HTML→PDF  
+❌ **Collaborator permissions** - No `artifact_collaborators` table  
+❌ **DOCX generation** - No Word document support  
+❌ **PDF generation** - No PDF creation
 
-**Rationale**:
-1. Fast queries: Get artifact metadata without loading content
-2. Clear semantics: Artifacts = agent creations, media_library = storage
-3. Reuse: Leverage existing storage infrastructure
-4. Performance: Join only when full content needed
-5. Maintainability: Easy to extend with artifact-specific features
-
-### Why Not Extend Media Library?
-
-**Considered**: Adding artifact columns to `media_library`
-
-**Rejected Because**:
-1. Mixed concerns (user uploads + agent artifacts)
-2. Slower queries (must scan all media)
-3. Confusing semantics
-4. Harder to add artifact-specific features
-
-### Why Not Dedicated Storage?
-
-**Considered**: Store artifacts in separate bucket/table
-
-**Rejected Because**:
-1. Duplicates existing infrastructure
-2. Two places to manage content
-3. Inconsistent patterns
-4. More complexity
+This keeps the implementation focused, manageable, and achievable in 10 days.
 
 ## 📋 Next Actions
 
@@ -259,7 +242,8 @@
 
 ---
 
-**Last Updated**: October 4, 2025  
-**Project Status**: ✅ Planning Complete, Ready for Implementation  
-**Next Milestone**: Phase 1 Completion (Database & Backend)
+**Last Updated**: October 6, 2025  
+**Documentation Version**: 3.0 (Consolidated & Simplified)  
+**Project Status**: ✅ Planning Complete - Aligned with Brief v2.0  
+**Next Milestone**: Phase 1 Implementation (Database & Backend)
 

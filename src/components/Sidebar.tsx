@@ -9,7 +9,7 @@ import {
   Server, Key, Zap, Plus,
   MoreVertical, Pencil, Archive, Trash2,
   Network, FileText, HelpCircle, Crown, CreditCard, Shield,
-  MessageCircle, SquarePen
+  MessageCircle, SquarePen, Brain
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -60,6 +60,12 @@ const navItems: NavItem[] = [
     to: '/media', 
     icon: FileText, 
     label: 'Library',
+    isCustom: false
+  },
+  { 
+    to: '/graph-settings', 
+    icon: Brain, 
+    label: 'Knowledge',
     isCustom: false
   },
 ];
