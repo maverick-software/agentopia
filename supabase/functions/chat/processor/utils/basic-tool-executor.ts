@@ -18,7 +18,16 @@ export class BasicToolExecutor {
     const started = Date.now();
     
     try {
-      const args = toolCall.function?.arguments ? JSON.parse(toolCall.function.arguments) : {};
+      // Parse arguments - handle both string and object formats
+      let args: Record<string, any> = {};
+      if (toolCall.function?.arguments) {
+        if (typeof toolCall.function.arguments === 'string') {
+          args = JSON.parse(toolCall.function.arguments);
+        } else if (typeof toolCall.function.arguments === 'object') {
+          args = toolCall.function.arguments;
+        }
+      }
+      
       const result = await fcm.executeFunction(
         context.agent_id || '', 
         context.user_id || '', 

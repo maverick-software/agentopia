@@ -46,7 +46,24 @@ export class OpenAIProvider implements LLMProvider {
 	private prepareInput(messages: LLMMessage[]): { instructions?: string; input: any } {
 		// Separate system messages (instructions) from user/assistant messages
 		const systemMessages = messages.filter(m => m.role === 'system');
-		const otherMessages = messages.filter(m => m.role !== 'system');
+		const otherMessages = messages
+			.filter(m => m.role !== 'system')
+			.map(m => {
+				// RESPONSES API COMPATIBILITY: Convert 'tool' role to 'function_call_output'
+				// The Responses API uses a different format for tool results:
+				// - Chat Completions API: { role: 'tool', content: '...', tool_call_id: '...' }
+				// - Responses API: { type: 'function_call_output', call_id: '...', output: '...' }
+				// Reference: https://platform.openai.com/docs/guides/function-calling?api-mode=responses
+				if (m.role === 'tool') {
+					const toolCallId = (m as any).tool_call_id || 'unknown';
+					return {
+						type: 'function_call_output',
+						call_id: toolCallId,
+						output: m.content
+					};
+				}
+				return m;
+			});
 
 		// Combine system messages into instructions
 		const instructions = systemMessages.length > 0 

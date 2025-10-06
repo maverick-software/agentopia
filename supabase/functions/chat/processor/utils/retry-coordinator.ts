@@ -88,7 +88,8 @@ export class RetryCoordinator {
           originalParams: toolDetail.input_params || {},
           errorMessage: toolDetail.error || '',
           attempt: retryAttempts,
-          maxAttempts: this.MAX_RETRY_ATTEMPTS
+          maxAttempts: this.MAX_RETRY_ATTEMPTS,
+          suggestedFix: retryAnalysis.suggestedFix // Include LLM's suggested fix!
         });
         
         msgs.push({

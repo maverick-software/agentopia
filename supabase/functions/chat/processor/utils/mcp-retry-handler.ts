@@ -10,6 +10,7 @@ export interface MCPRetryContext {
   errorMessage: string;
   attempt: number;
   maxAttempts: number;
+  suggestedFix?: string; // LLM-generated fix suggestion
 }
 
 export class MCPRetryHandler {
@@ -48,16 +49,25 @@ export class MCPRetryHandler {
       }
     }
     
+    // Build suggested fix section if available
+    let suggestedFixSection = '';
+    if (context.suggestedFix) {
+      suggestedFixSection = `\n💡 AI-GENERATED FIX SUGGESTION:
+${context.suggestedFix}
+
+`;
+    }
+    
     return `🔄 MCP TOOL RETRY - Attempt ${context.attempt}/${context.maxAttempts}
 
 The tool "${context.toolName}" returned an interactive error message:
 
 ERROR MESSAGE:
 ${context.errorMessage}
-${parameterGuidance}
+${parameterGuidance}${suggestedFixSection}
 📋 MCP PROTOCOL INSTRUCTIONS:
 1. READ the error message carefully - it tells you EXACTLY what's needed
-2. Generate a BRAND NEW tool call with ONLY the correct parameters
+2. ${context.suggestedFix ? 'FOLLOW the AI-generated fix suggestion above' : 'Generate a BRAND NEW tool call with ONLY the correct parameters'}
 3. **DO NOT include parameters mentioned as wrong in the error**
 4. **ONLY use the parameter names specified in the error message**
 

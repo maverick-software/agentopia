@@ -401,10 +401,10 @@ export function generateParametersForCapability(toolName: string) {
       ...baseSchema,
       properties: {
         to: { type: 'string', description: 'Recipient phone number in international format (e.g., +1234567890)' },
-        message: { type: 'string', description: 'SMS message text content (up to 1600 characters)' },
+        body: { type: 'string', description: 'SMS message text content (up to 1600 characters)' },
         from: { type: 'string', description: 'Sender phone number or short code (optional)' }
       },
-      required: ['to', 'message']
+      required: ['to', 'body']
     };
   }
 

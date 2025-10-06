@@ -51,28 +51,20 @@ export function ChatPage() {
 
         const gofrAgentId = gofrAgentData;
 
-        // Check if user has an existing conversation with Gofr
-        // Note: Using chat_messages_v2 table
-        const { data: existingConversations, error: convError } = await supabase
-          .from('chat_messages_v2')
-          .select('conversation_id')
-          .eq('agent_id', gofrAgentId)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (convError) {
-          console.error('Error checking existing conversations:', convError);
+        // Always navigate to NEW conversation with Gofr
+        // The "New Chat" button should always start fresh
+        // Clear any cached conversation ID in localStorage for this agent
+        try {
+          localStorage.removeItem(`agent_${gofrAgentId}_conversation_id`);
+          localStorage.removeItem(`agent_${gofrAgentId}_session_id`);
+        } catch (e) {
+          console.error('Error clearing localStorage:', e);
         }
 
-        // If there's an existing conversation, navigate to it
-        if (existingConversations && existingConversations.length > 0) {
-          const conversationId = existingConversations[0].conversation_id;
-          navigate(`/agents/${gofrAgentId}/chat?conv=${conversationId}`, { replace: true });
-        } else {
-          // Navigate to new conversation with Gofr
-          navigate(`/agents/${gofrAgentId}/chat`, { replace: true });
-        }
+        // Navigate without a conv parameter to force new conversation creation
+        // Add a timestamp parameter to force React to detect the navigation even if already on this route
+        const timestamp = Date.now();
+        navigate(`/agents/${gofrAgentId}/chat?new=${timestamp}`, { replace: true });
 
       } catch (err) {
         console.error('Error initializing Gofr chat:', err);

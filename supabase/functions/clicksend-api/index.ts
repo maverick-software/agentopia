@@ -182,7 +182,17 @@ serve(async (req) => {
     
     // Extract parameters - handle both direct params and nested input structure
     let parameters: any;
-    if (params?.input && typeof params.input === 'string') {
+    
+    // CRITICAL FIX: If params is a string (e.g. from Responses API), parse it first
+    if (typeof params === 'string') {
+      try {
+        parameters = JSON.parse(params);
+        console.log(`[ClickSend] Parsed params from JSON string:`, JSON.stringify(parameters, null, 2));
+      } catch (e) {
+        console.error(`[ClickSend] Failed to parse params string:`, e);
+        parameters = {};
+      }
+    } else if (params?.input && typeof params.input === 'string') {
       // Try to parse as JSON first, but if it fails, treat as plain text message
       try {
         parameters = JSON.parse(params.input);

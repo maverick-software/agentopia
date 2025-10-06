@@ -52,7 +52,8 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [accessType, setAccessType] = useState<'none' | 'all_contacts' | 'some_contacts'>('none');
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [accessType, setAccessType] = useState<'all_contacts' | 'some_contacts'>('all_contacts');
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
 
   // Expose save function to parent via ref
@@ -135,7 +136,11 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
       }
 
       if (permissionData) {
-        // Set access type based on permission_type
+        // Set enabled state based on permission_type
+        const enabled = permissionData.permission_type !== 'no_access';
+        setIsEnabled(enabled);
+        
+        // Set access type
         if (permissionData.permission_type === 'all_contacts') {
           setAccessType('all_contacts');
         } else if (permissionData.permission_type === 'specific_contacts') {
@@ -151,19 +156,18 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
             const contactIds = new Set(specificAccess.map((a: any) => a.contact_id));
             setSelectedContactIds(contactIds);
           }
-        } else {
-          // no_access or any other type
-          setAccessType('none');
         }
       } else {
-        // Default: no access
-        setAccessType('none');
+        // Default: disabled
+        setIsEnabled(false);
+        setAccessType('all_contacts');
         setSelectedContactIds(new Set());
       }
     } catch (error: any) {
       console.error('Error loading agent permissions:', error);
       // Set defaults on error
-      setAccessType('none');
+      setIsEnabled(false);
+      setAccessType('all_contacts');
       setSelectedContactIds(new Set());
     }
   };
@@ -172,8 +176,8 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
     setSaving(true);
     setSaveSuccess(false);
     try {
-      if (accessType === 'none') {
-        // If none, set permission_type to 'no_access'
+      if (!isEnabled) {
+        // If disabled, set permission_type to 'no_access'
         await supabase
           .from('agent_contact_permissions')
           .upsert({
@@ -198,7 +202,7 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
 
         toast.success('Contact tools disabled for this agent.');
       } else {
-        // Determine permission type based on access type
+        // If enabled, determine permission type based on access type
         const permissionType = accessType === 'all_contacts' ? 'all_contacts' : 'specific_contacts';
         
         // Create or update agent permissions and get the record
@@ -307,35 +311,58 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
       {/* Main Settings Card */}
       <Card>
         <CardContent className="pt-6 space-y-6">
-          {/* Access Level Dropdown */}
-          <div className="space-y-2">
-            <Label htmlFor="access-type">Access Level</Label>
-            <Select
-              value={accessType}
-              onValueChange={(value: 'none' | 'all_contacts' | 'some_contacts') => {
-                console.log('Changing access type to:', value);
-                setAccessType(value);
-                // Clear selected contacts when switching away from 'some_contacts'
-                if (value !== 'some_contacts') {
-                  setSelectedContactIds(new Set());
-                }
-              }}
-            >
-              <SelectTrigger id="access-type">
-                <SelectValue>
-                  {accessType === 'none' ? 'None' : accessType === 'all_contacts' ? 'All Contacts' : 'Some Contacts'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="all_contacts">All Contacts</SelectItem>
-                <SelectItem value="some_contacts">Some Contacts</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="enable-contacts" className="text-base font-medium">
+                Enable Contact Tools
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Allow this agent to access and interact with contacts
+              </p>
+            </div>
+            <Switch
+              id="enable-contacts"
+              checked={isEnabled}
+              onCheckedChange={setIsEnabled}
+            />
           </div>
 
-          {/* Contact Selection - Only shown when 'some_contacts' is selected */}
-          {accessType === 'some_contacts' && (
+          {/* Access Type Dropdown - Only shown when enabled */}
+          {isEnabled && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="access-type">Access Level</Label>
+                <Select
+                  value={accessType}
+                  onValueChange={(value: 'all_contacts' | 'some_contacts') => {
+                    console.log('Changing access type to:', value);
+                    setAccessType(value);
+                    // Clear selected contacts when switching to 'all_contacts'
+                    if (value === 'all_contacts') {
+                      setSelectedContactIds(new Set());
+                    }
+                  }}
+                >
+                  <SelectTrigger id="access-type">
+                    <SelectValue>
+                      {accessType === 'all_contacts' ? 'All Contacts' : 'Some Contacts'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all_contacts">All Contacts</SelectItem>
+                    <SelectItem value="some_contacts">Some Contacts</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {accessType === 'all_contacts' 
+                    ? 'Agent can access all contacts in your contact list'
+                    : 'Agent can only access selected contacts'}
+                </p>
+              </div>
+
+              {/* Contact Selection - Only shown when 'some_contacts' is selected */}
+              {accessType === 'some_contacts' && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Select Contacts</Label>
@@ -345,59 +372,61 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
                   </div>
 
                   {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-center space-x-2">
+                    <Search className="w-4 h-4 text-muted-foreground" />
                     <Input
                       placeholder="Search contacts..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
+                      className="flex-1"
                     />
                   </div>
 
                   {/* Contact List */}
-                  <div className="space-y-2">
-                    {filteredContacts.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>No contacts found</p>
-                      </div>
-                    ) : (
-                      <div className="max-h-96 overflow-y-auto space-y-2">
-                        {filteredContacts.map((contact) => (
-                          <div
-                            key={contact.id}
-                            className="flex items-center space-x-3 p-3 bg-muted/20 hover:bg-muted/40 transition-colors rounded-lg"
-                          >
-                            <Checkbox
-                              id={`contact-${contact.id}`}
-                              checked={selectedContactIds.has(contact.id)}
-                              onCheckedChange={(checked) => 
-                                handleContactToggle(contact.id, checked as boolean)
-                              }
-                            />
-                            <label
-                              htmlFor={`contact-${contact.id}`}
-                              className="flex-1 cursor-pointer"
+                  <div className="border rounded-md">
+                    <div className="max-h-96 overflow-y-auto">
+                      {filteredContacts.length === 0 ? (
+                        <div className="p-8 text-center text-muted-foreground">
+                          <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>No contacts found</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {filteredContacts.map((contact) => (
+                            <div
+                              key={contact.id}
+                              className="flex items-center space-x-3 p-3 hover:bg-muted/50 transition-colors"
                             >
-                              <div className="font-medium">{contact.display_name}</div>
-                              {(contact.organization || contact.job_title) && (
-                                <div className="text-sm text-muted-foreground">
-                                  {[contact.job_title, contact.organization]
-                                    .filter(Boolean)
-                                    .join(' • ')}
-                                </div>
-                              )}
-                              {contact.primary_email && (
-                                <div className="text-xs text-muted-foreground">
-                                  {contact.primary_email}
-                                </div>
-                              )}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                              <Checkbox
+                                id={`contact-${contact.id}`}
+                                checked={selectedContactIds.has(contact.id)}
+                                onCheckedChange={(checked) => 
+                                  handleContactToggle(contact.id, checked as boolean)
+                                }
+                              />
+                              <label
+                                htmlFor={`contact-${contact.id}`}
+                                className="flex-1 cursor-pointer"
+                              >
+                                <div className="font-medium">{contact.display_name}</div>
+                                {(contact.organization || contact.job_title) && (
+                                  <div className="text-sm text-muted-foreground">
+                                    {[contact.job_title, contact.organization]
+                                      .filter(Boolean)
+                                      .join(' • ')}
+                                  </div>
+                                )}
+                                {contact.primary_email && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {contact.primary_email}
+                                  </div>
+                                )}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Selection Summary */}
@@ -418,6 +447,8 @@ const ContactsTab = forwardRef<ContactsTabRef, ContactsTabProps>(({ agent }, ref
                     </div>
                   )}
                 </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

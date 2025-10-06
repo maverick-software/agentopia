@@ -33,11 +33,10 @@ export class FunctionCallingManager {
   // Execution tracking to prevent duplicates
   private executionTracker: Map<string, Promise<MCPToolResult>> = new Map();
   
-  // Tool caching system - TEMPORARILY DISABLED for debugging (Oct 6, 2025)
-  // Need to diagnose why LLM is not extracting parameters correctly
+  // Tool caching system - DISABLED for debugging schema issues
   private toolsCache: Map<string, CachedTools> = new Map();
-  private readonly CACHE_MESSAGE_THRESHOLD = 0; // DISABLED - always refresh
-  private readonly CACHE_TIME_THRESHOLD = 0; // DISABLED - always refresh
+  private readonly CACHE_MESSAGE_THRESHOLD = 0; // Revalidate immediately (caching disabled)
+  private readonly CACHE_TIME_THRESHOLD = 0; // Revalidate immediately (caching disabled)
   
   // Universal tool executor for all integrations
   private toolExecutor: typeof import('./universal-tool-executor.ts').UniversalToolExecutor | null = null;

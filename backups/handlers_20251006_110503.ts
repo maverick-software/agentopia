@@ -5,7 +5,6 @@ import { MemoryManager } from '../core/memory/memory_manager.ts';
 import { PromptBuilder } from './utils/prompt-builder.ts';
 import { MarkdownFormatter } from './utils/markdown-formatter.ts';
 import { ToolExecutor } from './utils/tool-executor.ts';
-import { IntentClassifier } from './utils/intent-classifier.ts';
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -34,47 +33,6 @@ export class TextMessageHandler implements MessageHandler {
   
   private ensureProperMarkdownFormatting(text: string): string {
     return MarkdownFormatter.ensureProperFormatting(text);
-  }
-  
-  /**
-   * Detect if LLM response suggests tools would be helpful (false negative detection)
-   * This is the fallback mechanism for intent classification
-   */
-  private detectToolHintInResponse(responseText: string, availableToolNames: string[]): boolean {
-    const lowerResponse = responseText.toLowerCase();
-    
-    // Pattern 1: LLM indicates inability to perform action
-    const inabilityPatterns = [
-      'i would need to',
-      'i can\'t',
-      'i cannot',
-      'i don\'t have access',
-      'i need permission',
-      'i require',
-      'unable to',
-      'not able to',
-      'i don\'t have the ability',
-      'i would have to',
-      'i\'d need to'
-    ];
-    
-    for (const pattern of inabilityPatterns) {
-      if (lowerResponse.includes(pattern)) {
-        console.log(`[IntentClassifier] Fallback hint detected: "${pattern}"`);
-        return true;
-      }
-    }
-    
-    // Pattern 2: LLM mentions available tool names
-    for (const toolName of availableToolNames) {
-      const toolLower = toolName.toLowerCase();
-      if (lowerResponse.includes(toolLower)) {
-        console.log(`[IntentClassifier] Fallback hint detected: mentions tool "${toolName}"`);
-        return true;
-      }
-    }
-    
-    return false;
   }
   
   async handle(message: AdvancedChatMessage, context: ProcessingContext) {
@@ -138,41 +96,17 @@ export class TextMessageHandler implements MessageHandler {
       console.log(`[TextMessageHandler] Added ephemeral reasoning context (${reasoningPrompt.length} chars) as assistant message`);
     }
 
-    // OPTIMIZATION: Classify user intent before loading tools
-    // This saves 665-910ms for simple conversations that don't need tools
-    const userMessage = (message as any).content?.text || '';
-    
-    // Prepare recent conversation context for better classification
-    // This helps with shorthand references like "Try now" which refer to previous context
-    const contextMessages = recentMessages.slice(-3).map((m: any) => ({
-      role: m.role,
-      content: String(m.content || '')
-    }));
-    
-    const intentClassifier = new IntentClassifier(this.openai);
-    const classification = await intentClassifier.classifyIntent(
-      userMessage,
-      context.agent_id || 'unknown',
-      contextMessages // Pass conversation context
-    );
-    
-    console.log(`[IntentClassifier] ${classification.requiresTools ? 'TOOLS NEEDED' : 'NO TOOLS'} (${classification.confidence}, ${classification.classificationTimeMs}ms)`);
-    
-    // Conditionally load tools only if needed (OPTIMIZATION)
+    // RAOR: Discover available tools (Gmail, Web Search, SendGrid in future)
     const authToken = (context as any)?.request_options?.auth?.token || '';
-    let availableTools: any[] = [];
-    let fcm: FunctionCallingManager | null = null;
+    console.log(`[FunctionCalling] Auth token available: ${!!authToken}`);
+    console.log(`[FunctionCalling] Context - agent_id: ${context.agent_id}, user_id: ${context.user_id}`);
+    const fcm = new FunctionCallingManager(this.supabase as any, authToken);
+    const availableTools = (context.agent_id && context.user_id)
+      ? await fcm.getAvailableTools(context.agent_id, context.user_id)
+      : [];
     
-    if (classification.requiresTools) {
-      console.log(`[IntentClassifier] Loading tools...`);
-      fcm = new FunctionCallingManager(this.supabase as any, authToken);
-      availableTools = (context.agent_id && context.user_id)
-        ? await fcm.getAvailableTools(context.agent_id, context.user_id)
-        : [];
-      console.log(`[IntentClassifier] ✅ Loaded ${availableTools.length} tools`);
-    } else {
-      console.log(`[IntentClassifier] ⚡ Skipped tool loading (~750ms saved)`);
-      // DO NOT create FCM - it's expensive and unnecessary for simple messages
+    if (!context.agent_id || !context.user_id) {
+      console.warn(`[FunctionCalling] Missing context - agent_id: ${!!context.agent_id}, user_id: ${!!context.user_id} - cannot fetch tools`);
     }
 
     // Nudge awareness: briefly declare available tools and guidelines in a system message
@@ -299,96 +233,47 @@ export class TextMessageHandler implements MessageHandler {
     }
 
     // Handle tool calls (Act → Observe → Reflect)
-    let toolCalls = (completion.choices?.[0]?.message?.tool_calls || []) as any[];
+    const toolCalls = (completion.choices?.[0]?.message?.tool_calls || []) as any[];
     const discoveredToolsForMetrics = availableTools.map(t => ({ name: t.name }));
     
-    // DEBUG: Log tool calls with parameters for debugging LLM parameter extraction issues
-    // Force rebuild timestamp: 2025-10-06T19:56:00Z
-    if (availableTools.length > 0) {
-      console.log(`[TextMessageHandler] LLM completion tool_calls count: ${toolCalls.length}`);
-      if (toolCalls.length > 0) {
-        // Log each tool call with its parameters for debugging
-        toolCalls.forEach((tc: any) => {
-          console.log(`[TextMessageHandler] 🔧 INITIAL TOOL CALL: ${tc.function?.name || tc.name}`);
-          console.log(`[TextMessageHandler] 📦 PARAMETERS:`, tc.function?.arguments || tc.arguments);
-        });
-      }
+    // DEBUG: Log tool calls from LLM
+    console.log(`[TextMessageHandler] LLM completion tool_calls count: ${toolCalls.length}`);
+    if (toolCalls.length > 0) {
+      console.log(`[TextMessageHandler] Tool calls:`, JSON.stringify(toolCalls, null, 2));
+    } else {
+      console.log(`[TextMessageHandler] No tool calls in LLM response. Response: ${completion.choices?.[0]?.message?.content?.substring(0, 200)}`);
     }
-    
-    // FALLBACK MECHANISM: DISABLED for now
-    // The fallback was too aggressive and loaded tools on every simple message
-    // TODO: Implement smarter fallback that doesn't defeat the optimization
-    // if (!classification.requiresTools && toolCalls.length === 0 && availableTools.length === 0) {
-    //   // Check response for hints that tools would be helpful
-    // }
     
     // Initialize token counters
     let promptTokens = completion.usage?.prompt_tokens || 0;
     let completionTokens = completion.usage?.completion_tokens || 0;
     
-    // OPTIMIZATION: Only execute tools if there are actual tool calls
-    // Skip ToolExecutor entirely for simple messages to save overhead
-    let toolExecResult;
-    let toolDetails: any[] = [];
-    
-    if (toolCalls.length > 0) {
-      // Execute tools and handle retries using ToolExecutor
-      // Safety check: FCM should always exist if we have tool calls
-      if (!fcm) {
-        throw new Error('[CRITICAL] FunctionCallingManager is null but tool calls exist - this should never happen');
-      }
-      
-      toolExecResult = await ToolExecutor.executeToolCalls(
-        toolCalls,
-        msgs,
-        fcm,
-        context,
-        availableTools,
-        this.openai,
-        router,
-        useRouter,
-        this.normalizeTools.bind(this)
-      );
-      toolDetails = toolExecResult.toolDetails;
-      promptTokens += toolExecResult.tokensUsed.prompt;
-      completionTokens += toolExecResult.tokensUsed.completion;
-    } else {
-      // No tool calls - create minimal result and skip all tool execution overhead
-      toolExecResult = {
-        toolDetails: [],
-        msgs,
-        tokensUsed: { prompt: 0, completion: 0, total: 0 }
-      };
-    }
+    // Execute tools and handle retries using ToolExecutor
+    let toolExecResult = await ToolExecutor.executeToolCalls(
+      toolCalls,
+      msgs,
+      fcm,
+      context,
+      availableTools,
+      this.openai,
+      router,
+      useRouter,
+      this.normalizeTools.bind(this)
+    );
+    let toolDetails = toolExecResult.toolDetails;
+    promptTokens += toolExecResult.tokensUsed.prompt;
+    completionTokens += toolExecResult.tokensUsed.completion;
     
     // MCP Protocol: Handle LLM retry loop for interactive errors
-    // OPTIMIZATION: Only run MCP retry logic if tools were actually executed
     let mcpRetryAttempts = 0;
     const MAX_MCP_RETRIES = 3;
     
-    if (toolCalls.length > 0 && toolExecResult.requiresLLMRetry && mcpRetryAttempts < MAX_MCP_RETRIES) {
-      console.log(`[TextMessageHandler] 🔍 CHECKING FOR MCP RETRY - requiresLLMRetry: ${toolExecResult.requiresLLMRetry}, retryGuidanceAdded: ${toolExecResult.retryGuidanceAdded}`);
-    }
+    console.log(`[TextMessageHandler] 🔍 CHECKING FOR MCP RETRY - requiresLLMRetry: ${toolExecResult.requiresLLMRetry}, retryGuidanceAdded: ${toolExecResult.retryGuidanceAdded}`);
     
-    while (toolCalls.length > 0 && toolExecResult.requiresLLMRetry && mcpRetryAttempts < MAX_MCP_RETRIES) {
+    while (toolExecResult.requiresLLMRetry && mcpRetryAttempts < MAX_MCP_RETRIES) {
       mcpRetryAttempts++;
       console.log(`[TextMessageHandler] 🔄 🔄 🔄 MCP RETRY LOOP STARTING - Attempt ${mcpRetryAttempts}/${MAX_MCP_RETRIES}`);
       console.log(`[TextMessageHandler] MCP guidance was added to conversation, calling LLM again`);
-      
-      // CRITICAL: Clean messages before sending to LLM for retry
-      // Responses API requirements:
-      // 1. No 'tool_calls' in input messages (only in responses)
-      // 2. No 'tool' role messages with call_ids from previous API calls
-      //    (function_call_output can only reference call_ids from the SAME request)
-      // Solution: Filter out tool result messages entirely - the MCP guidance message
-      // contains all the context needed for the LLM to retry with corrected parameters
-      const cleanedMsgs = msgs
-        .filter(msg => msg.role !== 'tool') // Remove tool results from previous calls
-        .map(msg => {
-          const cleaned: any = { role: msg.role, content: msg.content };
-          // Explicitly exclude tool_calls from input messages
-          return cleaned;
-        });
       
       // Call LLM again - it will read the MCP guidance and generate new tool calls
       let retryCompletion;
@@ -401,7 +286,7 @@ export class TextMessageHandler implements MessageHandler {
           parameters: tool.parameters
         }));
         
-        const retryResp = await router.chat(context.agent_id, cleanedMsgs as any, { 
+        const retryResp = await router.chat(context.agent_id, msgs as any, { 
           tools: llmTools, 
           temperature: 0.7, // Slightly higher for creativity in parameter generation
           maxTokens: 1200,
@@ -435,7 +320,7 @@ export class TextMessageHandler implements MessageHandler {
         const norm = this.normalizeTools(availableTools);
         retryCompletion = await this.openai.chat.completions.create({
           model: effectiveModel,
-          messages: cleanedMsgs,
+          messages: msgs,
           tools: norm.map(tool => ({
             type: 'function',
             function: {
@@ -456,14 +341,6 @@ export class TextMessageHandler implements MessageHandler {
       const retryToolCalls = retryCompletion.choices?.[0]?.message?.tool_calls || [];
       console.log(`[TextMessageHandler] MCP retry generated ${retryToolCalls.length} tool calls`);
       
-      // DEBUG: Log what parameters the LLM generated for debugging
-      if (retryToolCalls.length > 0) {
-        retryToolCalls.forEach((tc: any) => {
-          console.log(`[TextMessageHandler] 🔧 MCP RETRY TOOL CALL: ${tc.function?.name || tc.name}`);
-          console.log(`[TextMessageHandler] 📦 PARAMETERS:`, tc.function?.arguments || tc.arguments);
-        });
-      }
-      
       if (retryToolCalls.length === 0) {
         console.log(`[TextMessageHandler] No tool calls in MCP retry, stopping retry loop`);
         break;
@@ -471,11 +348,6 @@ export class TextMessageHandler implements MessageHandler {
       
       // Execute the retry tool calls
       console.log(`[TextMessageHandler] Executing MCP retry tool calls:`, retryToolCalls.map(tc => tc.function?.name).join(', '));
-      
-      // Safety check: FCM should always exist if we're in retry loop with tool calls
-      if (!fcm) {
-        throw new Error('[CRITICAL] FunctionCallingManager is null in MCP retry loop - this should never happen');
-      }
       
       toolExecResult = await ToolExecutor.executeToolCalls(
         retryToolCalls,
@@ -516,17 +388,8 @@ export class TextMessageHandler implements MessageHandler {
         content: this.promptBuilder.buildReflectionGuidance()
       } as any);
       
-      // CRITICAL: Clean messages for Responses API (same as retry logic)
-      // Remove tool role messages and tool_calls properties
-      const cleanedReflectionMsgs = msgs
-        .filter(msg => msg.role !== 'tool') // Remove tool results
-        .map(msg => {
-          const cleaned: any = { role: msg.role, content: msg.content };
-          return cleaned;
-        });
-      
       if (router && useRouter && context.agent_id) {
-        const resp2 = await router.chat(context.agent_id, cleanedReflectionMsgs as any, { temperature: 0.5, maxTokens: 1200 });
+        const resp2 = await router.chat(context.agent_id, msgs as any, { temperature: 0.5, maxTokens: 1200 });
         completion = {
           choices: [{ message: { content: resp2.text } }],
           usage: resp2.usage ? { prompt_tokens: resp2.usage.prompt, completion_tokens: resp2.usage.completion, total_tokens: resp2.usage.total } : undefined,
@@ -534,7 +397,7 @@ export class TextMessageHandler implements MessageHandler {
       } else {
         completion = await this.openai.chat.completions.create({
           model: 'gpt-4',
-          messages: cleanedReflectionMsgs,
+          messages: msgs,
           temperature: 0.5,
           max_tokens: 1200,
         });
