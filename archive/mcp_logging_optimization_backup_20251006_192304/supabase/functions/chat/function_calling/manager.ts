@@ -13,9 +13,6 @@
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { OpenAIFunction, MCPToolResult } from './base.ts';
-import { createLogger } from '../../shared/utils/logger.ts';
-
-const logger = createLogger('FunctionCallingManager');
 
 // NOTE: Removed separate providers - now using unified MCP architecture
 // All tools (Gmail, SMTP, WebSearch, Zapier) are now MCP tools
@@ -493,7 +490,8 @@ export class FunctionCallingManager {
    * Format tool execution result for display
    */
   async formatResult(functionName: string, result: MCPToolResult): Promise<string> {
-    logger.debug(`Formatting result for ${functionName} (success: ${result.success})`);
+    console.log(`[FunctionCallingManager] formatResult called for ${functionName}`);
+    console.log(`[FunctionCallingManager] result.success: ${result.success}, has data: ${!!result.data}`);
     
     if (result.success) {
       // Use provider-specific formatting if available
@@ -571,16 +569,18 @@ export class FunctionCallingManager {
       
       // Special handling for contact search
       if (functionName === 'search_contacts' && result.data?.contacts) {
-        logger.debug(`Using special contact formatting (${result.data.contacts.length} contacts)`);
+        console.log(`[FunctionCallingManager] 🎯 Using special contact formatting!`);
+        console.log(`[FunctionCallingManager] Contacts array length: ${result.data.contacts.length}`);
         
         const contacts = result.data.contacts;
         const summary = result.data.summary || `Found ${contacts.length} contact(s)`;
         
         if (contacts.length === 0) {
+          console.log(`[FunctionCallingManager] No contacts found, returning empty message`);
           return `No contacts found. ${summary}`;
         }
         
-        logger.debug(`Formatting ${contacts.length} contact(s)`);
+        console.log(`[FunctionCallingManager] Formatting ${contacts.length} contact(s)`);
         let formattedResult = `${summary}\n\n`;
         for (const contact of contacts) {
           formattedResult += `👤 **${contact.name || contact.display_name}**\n`;
@@ -603,7 +603,8 @@ export class FunctionCallingManager {
         }
         
         const finalResult = formattedResult.trim();
-        logger.debug(`Formatted result: ${finalResult.length} chars`);
+        console.log(`[FunctionCallingManager] 📤 Returning formatted result (${finalResult.length} chars)`);
+        console.log(`[FunctionCallingManager] Preview:`, finalResult.substring(0, 200));
         return finalResult;
       }
       

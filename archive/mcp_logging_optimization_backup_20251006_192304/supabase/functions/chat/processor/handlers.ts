@@ -7,9 +7,6 @@ import { MarkdownFormatter } from './utils/markdown-formatter.ts';
 import { ToolExecutor } from './utils/tool-executor.ts';
 import { IntentClassifier } from './utils/intent-classifier.ts';
 import { WorkingMemoryManager } from '../core/context/working_memory_manager.ts';
-import { createLogger } from '../../shared/utils/logger.ts';
-
-const logger = createLogger('TextMessageHandler');
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -399,10 +396,10 @@ export class TextMessageHandler implements MessageHandler {
     if (availableTools.length > 0) {
       console.log(`[TextMessageHandler] LLM completion tool_calls count: ${toolCalls.length}`);
       if (toolCalls.length > 0) {
-        // Log each tool call with its parameters for debugging (DEBUG level)
+        // Log each tool call with its parameters for debugging
         toolCalls.forEach((tc: any) => {
-          logger.debug(`Tool call: ${tc.function?.name || tc.name}`);
-          logger.debug(`Parameters:`, tc.function?.arguments || tc.arguments);
+          console.log(`[TextMessageHandler] 🔧 INITIAL TOOL CALL: ${tc.function?.name || tc.name}`);
+          console.log(`[TextMessageHandler] 📦 PARAMETERS:`, tc.function?.arguments || tc.arguments);
         });
       }
     }
@@ -551,8 +548,8 @@ export class TextMessageHandler implements MessageHandler {
       // DEBUG: Log what parameters the LLM generated for debugging
       if (retryToolCalls.length > 0) {
         retryToolCalls.forEach((tc: any) => {
-          logger.debug(`MCP retry tool call: ${tc.function?.name || tc.name}`);
-          logger.debug(`Retry parameters:`, tc.function?.arguments || tc.arguments);
+          console.log(`[TextMessageHandler] 🔧 MCP RETRY TOOL CALL: ${tc.function?.name || tc.name}`);
+          console.log(`[TextMessageHandler] 📦 PARAMETERS:`, tc.function?.arguments || tc.arguments);
         });
       }
       

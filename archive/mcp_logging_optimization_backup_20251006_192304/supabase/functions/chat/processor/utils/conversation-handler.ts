@@ -1,12 +1,8 @@
 /**
  * Conversation Message Handler
  * Handles adding tool calls and results to conversation messages
- * Updated: Oct 7, 2025 - Optimized logging with log levels
+ * Updated: Oct 6, 2025 - Enhanced logging for tool result delivery
  */
-
-import { createLogger } from '../../../shared/utils/logger.ts';
-
-const logger = createLogger('ConversationHandler');
 
 import type { ToolCall, ToolDetail } from './tool-execution-types.ts';
 
@@ -41,7 +37,8 @@ export class ConversationHandler {
     toolCalls: ToolCall[],
     fcm: any
   ): Promise<void> {
-    logger.debug(`Adding ${toolDetails.length} tool result(s) to conversation`);
+    console.log(`[ConversationHandler] 🚀 addToolResults called with ${toolDetails.length} tool details, ${toolCalls.length} tool calls`);
+    console.log(`[ConversationHandler] Current msgs length: ${msgs.length}`);
     
     for (let i = 0; i < toolDetails.length && i < toolCalls.length; i++) {
       const detail = toolDetails[i];
@@ -57,7 +54,10 @@ export class ConversationHandler {
       try {
         const formattedContent = await fcm.formatResult(detail.name, result);
         
-        logger.debug(`Adding result for ${detail.name} (${formattedContent.length} chars)`);
+        console.log(`[ConversationHandler] 📨 Adding tool result for ${detail.name} to msgs array`);
+        console.log(`[ConversationHandler] Formatted content length: ${formattedContent.length} chars`);
+        console.log(`[ConversationHandler] Content preview:`, formattedContent.substring(0, 150));
+        console.log(`[ConversationHandler] tool_call_id:`, toolCall.id);
         
         msgs.push({
           role: 'tool',
@@ -65,7 +65,7 @@ export class ConversationHandler {
           tool_call_id: toolCall.id,
         });
         
-        logger.debug(`Tool result added successfully`);
+        console.log(`[ConversationHandler] ✅ Tool result added. Total msgs: ${msgs.length}`);
       } catch (formatError: any) {
         console.error(`[ConversationHandler] Error formatting result for ${detail.name}:`, formatError);
         

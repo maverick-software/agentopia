@@ -1252,7 +1252,11 @@ export function AgentChatPage() {
       const v2Processing = responseData.processing_details || responseData.data?.processing_details;
       if (v2Processing) {
         console.log('Captured processing details:', v2Processing);
-        setCurrentProcessingDetails(v2Processing);
+        // Add conversation_id to processing details for manual summarization
+        setCurrentProcessingDetails({
+          ...v2Processing,
+          conversation_id: conversationId // Use the local conversationId variable from the request
+        });
       }
       
       // Support both V2 and V1 response shapes

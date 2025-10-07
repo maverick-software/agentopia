@@ -8,9 +8,6 @@
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { MCPToolResult } from './base.ts';
-import { createLogger } from '../../shared/utils/logger.ts';
-
-const logger = createLogger('UniversalToolExecutor');
 
 export interface MCPToolExecutionContext {
   agentId: string;
@@ -732,13 +729,13 @@ export class UniversalToolExecutor {
     const { toolName, parameters, supabase, agentId, userId, authToken } = context;
     
     try {
-      logger.debug(`Executing ${toolName} for agent ${agentId}`);
-      logger.debug(`Parameters:`, parameters);
+      console.log(`[UniversalToolExecutor] Executing ${toolName} for agent ${agentId}`);
+      console.log(`[UniversalToolExecutor] Parameters received:`, JSON.stringify(parameters, null, 2));
       
       // Check tool status before execution
       const toolStatus = await this.checkToolStatus(toolName, agentId, userId, supabase);
       if (toolStatus.status !== 'active') {
-        logger.warn(`Tool ${toolName} is ${toolStatus.status}: ${toolStatus.error_message}`);
+        console.log(`[UniversalToolExecutor] Tool ${toolName} is ${toolStatus.status}: ${toolStatus.error_message}`);
         return {
           success: false,
           data: null,
@@ -752,10 +749,10 @@ export class UniversalToolExecutor {
       
       // If no prefix match, check if this is an MCP tool
       if (!routingConfig) {
-        logger.debug(`No prefix match for ${toolName}, checking if it's an MCP tool...`);
+        console.log(`[UniversalToolExecutor] No prefix match for ${toolName}, checking if it's an MCP tool...`);
         mcpConnectionId = await this.getMCPToolConnection(toolName, agentId, supabase);
         if (mcpConnectionId) {
-          logger.debug(`${toolName} is an MCP tool, routing to mcp-execute`);
+          console.log(`[UniversalToolExecutor] ${toolName} is an MCP tool on connection ${mcpConnectionId}, routing to mcp-execute`);
           routingConfig = {
             edgeFunction: 'mcp-execute',
             actionMapping: (toolName: string) => toolName, // Pass through tool name
@@ -795,8 +792,8 @@ export class UniversalToolExecutor {
         ? routingConfig.parameterMapping(parameters, mappingContext)
         : { ...baseParams, params: parameters };
       
-      logger.info(`Routing ${toolName} -> ${routingConfig.edgeFunction}`);
-      logger.debug(`Edge function params:`, edgeFunctionParams);
+      console.log(`[UniversalToolExecutor] Routing ${toolName} -> ${routingConfig.edgeFunction} (action: ${action})`);
+      console.log(`[UniversalToolExecutor] Edge function params:`, JSON.stringify(edgeFunctionParams, null, 2));
       
       // Prepare headers for edge function call (only authorization)
       const invokeOptions: any = {
@@ -805,13 +802,13 @@ export class UniversalToolExecutor {
       
       // Include authorization header if auth token is provided and valid
       if (authToken && authToken.trim().length > 0 && authToken !== 'undefined' && authToken !== 'null') {
-        logger.debug(`Adding user auth token (length: ${authToken.length})`);
+        console.log(`[UniversalToolExecutor] Adding user auth token for ${toolName} (length: ${authToken.length})`);
         invokeOptions.headers = {
           'Authorization': `Bearer ${authToken}`
         };
       } else {
-        logger.debug(`No valid auth token - using service role`);
-        logger.debug(`Auth token debug:`, { 
+        console.log(`[UniversalToolExecutor] No valid auth token provided for ${toolName} - using service role`);
+        console.log(`[UniversalToolExecutor] Auth token debug:`, { 
           provided: !!authToken, 
           length: authToken?.length || 0,
           value: authToken ? `${authToken.substring(0, 20)}...` : 'null/undefined'
@@ -819,10 +816,10 @@ export class UniversalToolExecutor {
       }
       
       // Call the appropriate edge function
-      logger.debug(`Calling edge function: ${routingConfig.edgeFunction}`);
+      console.log(`[UniversalToolExecutor] Calling edge function: ${routingConfig.edgeFunction}`);
       const { data, error } = await supabase.functions.invoke(routingConfig.edgeFunction, invokeOptions);
       
-      logger.debug(`Edge function response:`, { hasError: !!error, hasData: !!data });
+      console.log(`[UniversalToolExecutor] Edge function response - error:`, error ? JSON.stringify(error) : 'null', ', data:', data ? JSON.stringify(data).substring(0, 500) : 'null');
       
       if (error) {
         console.error(`[UniversalToolExecutor] Edge function error for ${toolName}:`, error);
@@ -970,6 +967,6 @@ export class UniversalToolExecutor {
     }
   ) {
     TOOL_ROUTING_MAP[prefix] = config;
-    logger.debug(`Added routing for prefix: ${prefix} -> ${config.edgeFunction}`);
+    console.log(`[UniversalToolExecutor] Added routing for prefix: ${prefix} -> ${config.edgeFunction}`);
   }
 }

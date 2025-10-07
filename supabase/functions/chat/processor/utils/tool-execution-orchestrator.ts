@@ -14,6 +14,9 @@ import type {
 import { BasicToolExecutor } from './basic-tool-executor.ts';
 import { RetryCoordinator } from './retry-coordinator.ts';
 import { ConversationHandler } from './conversation-handler.ts';
+import { createLogger } from '../../../shared/utils/logger.ts';
+
+const logger = createLogger('ToolExecutionOrchestrator');
 
 export class ToolExecutionOrchestrator {
   /**
@@ -26,8 +29,9 @@ export class ToolExecutionOrchestrator {
     context: ToolExecutionContext,
     environment: ExecutionEnvironment
   ): Promise<ToolExecutionResult> {
-    console.log(`[ToolExecutionOrchestrator] 🚀 STARTING executeToolCalls with ${toolCalls.length} tool calls`);
-    console.log(`[ToolExecutionOrchestrator] Tool calls:`, toolCalls.map(tc => tc.function?.name).join(', '));
+    // Single consolidated log for tool execution start
+    const toolNames = toolCalls.map(tc => tc.function?.name || tc.name).join(', ');
+    logger.info(`🚀 Executing ${toolCalls.length} tool(s): ${toolNames}`);
     
     let promptTokens = 0;
     let completionTokens = 0;
@@ -45,21 +49,28 @@ export class ToolExecutionOrchestrator {
     ConversationHandler.addAssistantToolCallMessage(msgs, toolCalls);
 
     // Execute all tool calls
-    console.log(`[ToolExecutionOrchestrator] Executing ${toolCalls.length} tool calls`);
     const toolDetails = await BasicToolExecutor.executeToolCalls(toolCalls, fcm, context);
 
     // Add tool results to conversation
     await ConversationHandler.addToolResults(msgs, toolDetails, toolCalls, fcm);
 
-    // Process intelligent retries for failed tools
-    console.log(`[ToolExecutionOrchestrator] Processing retries for failed tools`);
-    const retryStats = await RetryCoordinator.processRetries(
-      toolDetails,
-      fcm,
-      context,
-      environment.openai,
-      msgs
-    );
+    // OPTIMIZATION: Skip retry processing if all tools succeeded
+    const failedTools = toolDetails.filter(td => !td.success);
+    let retryStats = { totalAttempts: 0, successfulRetries: 0, failedRetries: 0, requiresLLMRetry: false };
+    
+    if (failedTools.length > 0) {
+      // Process intelligent retries only for failed tools
+      logger.debug(`Processing retries for ${failedTools.length} failed tool(s)`);
+      retryStats = await RetryCoordinator.processRetries(
+        toolDetails,
+        fcm,
+        context,
+        environment.openai,
+        msgs
+      );
+    } else {
+      logger.debug(`All tools succeeded, skipping retry checks`);
+    }
 
     // Add retry summary to conversation (only if not requiring LLM retry)
     if (!retryStats.requiresLLMRetry) {
@@ -98,13 +109,8 @@ export class ToolExecutionOrchestrator {
     const successfulTools = toolDetails.filter(td => td.success).length;
     const failedTools = totalTools - successfulTools;
     
-    console.log(`[ToolExecutionOrchestrator] 📊 EXECUTION SUMMARY:`);
-    console.log(`[ToolExecutionOrchestrator] Total tools: ${totalTools}`);
-    console.log(`[ToolExecutionOrchestrator] Successful: ${successfulTools}`);
-    console.log(`[ToolExecutionOrchestrator] Failed: ${failedTools}`);
-    console.log(`[ToolExecutionOrchestrator] Retry attempts: ${retryStats.totalAttempts}`);
-    console.log(`[ToolExecutionOrchestrator] Successful retries: ${retryStats.successfulRetries}`);
-    console.log(`[ToolExecutionOrchestrator] Failed retries: ${retryStats.failedRetries}`);
+    // Consolidated execution summary (single log)
+    logger.info(`📊 Summary: ${successfulTools}/${totalTools} succeeded, ${failedTools} failed, ${retryStats.totalAttempts} retries`);
     
     if (failedTools > 0) {
       const failedToolNames = toolDetails.filter(td => !td.success).map(td => td.name);

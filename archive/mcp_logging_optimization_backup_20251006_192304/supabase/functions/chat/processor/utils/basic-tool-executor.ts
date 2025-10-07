@@ -5,9 +5,6 @@
 
 import type { FunctionCallingManager } from '../../function_calling/manager.ts';
 import type { ToolDetail, ToolCall, ToolExecutionContext } from './tool-execution-types.ts';
-import { createLogger } from '../../../shared/utils/logger.ts';
-
-const logger = createLogger('BasicToolExecutor');
 
 export class BasicToolExecutor {
   /**
@@ -52,8 +49,8 @@ export class BasicToolExecutor {
       // Use explicit retry flag if set, otherwise fall back to heuristic detection
       const needsRetry = explicitRetryFlag || isMCPQuestion;
       
-      // DEBUG: Retry detection details
-      logger.debug(`Tool ${toolCall.function.name} - success: ${result.success}, needs_retry: ${needsRetry}`);
+      console.log(`[BasicToolExecutor] Tool ${toolCall.function.name} - success: ${result.success}, explicit_retry: ${explicitRetryFlag}, heuristic_retry: ${isMCPQuestion}, final_retry: ${needsRetry}`);
+      console.log(`[BasicToolExecutor] Error message for retry detection: "${result.error}"`);
       
       if (needsRetry) {
         console.log(`[BasicToolExecutor] 🔄 Tool ${toolCall.function.name} FLAGGED FOR RETRY - will be processed in retry loop`);
@@ -92,7 +89,7 @@ export class BasicToolExecutor {
     fcm: FunctionCallingManager,
     context: ToolExecutionContext
   ): Promise<ToolDetail[]> {
-    logger.debug(`Executing ${toolCalls.length} tool call(s)`);
+    console.log(`[BasicToolExecutor] Executing ${toolCalls.length} tool calls`);
     
     const toolDetails: ToolDetail[] = [];
     

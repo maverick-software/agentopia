@@ -503,17 +503,95 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
               </div>
               
               <div className="space-y-3 text-sm text-muted-foreground">
+                {/* Conversation Summarization Status */}
                 <div>
-                  <span className="font-medium text-foreground">Sources Used:</span>
-                  <div className="ml-2 mt-1">
-                    {context_operations?.retrieval_sources?.map((source: string, idx: number) => (
-                      <span key={idx} className="inline-block bg-muted text-muted-foreground px-2 py-1 rounded text-xs mr-2 mb-1">
-                        {source}
-                      </span>
-                    )) || 'None'}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-foreground">Conversation Summary:</span>
+                    <button
+                      onClick={async () => {
+                        // Try to get conversation_id from multiple sources
+                        let conversationId = processingDetails?.conversation_id;
+                        
+                        // Fallback: Try to get from URL
+                        if (!conversationId) {
+                          const params = new URLSearchParams(window.location.search);
+                          conversationId = params.get('conv');
+                        }
+                        
+                        console.log('Trigger Summary - conversation_id:', conversationId);
+                        console.log('Processing details:', processingDetails);
+                        
+                        if (!conversationId) {
+                          alert('No conversation ID available');
+                          return;
+                        }
+                        try {
+                          const { createClient } = await import('@supabase/supabase-js');
+                          const supabase = createClient(
+                            import.meta.env.VITE_SUPABASE_URL,
+                            import.meta.env.VITE_SUPABASE_ANON_KEY
+                          );
+                          
+                          const { data, error } = await supabase.rpc('trigger_manual_summarization', {
+                            p_conversation_id: conversationId,
+                            p_force_full: true
+                          });
+                          
+                          if (error) throw error;
+                          alert('Summarization triggered successfully!');
+                        } catch (error: any) {
+                          alert(`Error: ${error.message}`);
+                        }
+                      }}
+                      className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Trigger Summary
+                    </button>
                   </div>
+                  
+                  {context_operations?.summary_status ? (
+                    <div className="ml-2 space-y-1">
+                      <div className="flex items-center gap-2">
+                        {context_operations.summary_status === 'active' ? (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-gray-400" />
+                        )}
+                        <span>Status: {context_operations.summary_status === 'active' ? 'Active' : 'Not Available'}</span>
+                      </div>
+                      {context_operations.messages_summarized && (
+                        <div className="text-xs">
+                          Messages Summarized: {context_operations.messages_summarized}
+                        </div>
+                      )}
+                      {context_operations.last_summary_update && (
+                        <div className="text-xs">
+                          Last Updated: {new Date(context_operations.last_summary_update).toLocaleString()}
+                        </div>
+                      )}
+                      {context_operations.important_facts_count && (
+                        <div className="text-xs">
+                          Key Facts: {context_operations.important_facts_count}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="ml-2 text-xs">
+                      Summary will be created after 5 messages
+                    </div>
+                  )}
                 </div>
                 
+                {/* Context Type */}
+                <div>
+                  <span className="font-medium text-foreground">Context Type:</span>
+                  <span className="ml-2">
+                    {context_operations?.using_summary ? 'Summary + Recent Messages' : 'Recent Messages Only'}
+                  </span>
+                </div>
+                
+                {/* Optimization Indicators */}
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1">
                     {context_operations?.optimization_applied ? 
@@ -530,11 +608,6 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                     }
                     <span>Compression Applied</span>
                   </div>
-                </div>
-                
-                <div>
-                  <span className="font-medium text-foreground">Quality Score:</span>
-                  <span className="ml-2">{formatPercent(context_operations?.quality_score || 0)}</span>
                 </div>
               </div>
             </div>
