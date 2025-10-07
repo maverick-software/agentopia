@@ -140,69 +140,69 @@
   --icon-monitoring: 47.9 85.8% 63.1%;    /* Amber - Lighter for dark */
   }
 
-  .grayscale {
-    /* Grayscale Theme - ChatGPT/Claude Dark Style with Strategic Color Accents */
-    --background: 0 0% 17%;              /* Main content area - lighter gray (#2b2b2b) */
-    --foreground: 0 0% 95%;              /* Light gray text */
-    --card: 0 0% 20%;                    /* Slightly lighter card background */
+  .chatgpt {
+    /* Dark Gray Theme - Clean dark theme with strategic accent colors */
+    --background: 0 0% 13%;              /* Main content area - dark gray (#212121) */
+    --foreground: 0 0% 95%;              /* Light text */
+    --card: 0 0% 16%;                    /* Card background */
     --card-foreground: 0 0% 95%;         /* Light card text */
-    --popover: 0 0% 20%;                 /* Popover background */
+    --popover: 0 0% 16%;                 /* Popover background */
     --popover-foreground: 0 0% 95%;      /* Light popover text */
-    --primary: 262 80% 60%;              /* Vibrant purple for user messages/avatars */
+    --primary: 142 70% 45%;              /* Green accent (ChatGPT style) */
     --primary-foreground: 0 0% 100%;     /* White text on primary */
-    --secondary: 0 0% 24%;               /* Medium-dark gray secondary */
+    --secondary: 0 0% 20%;               /* Secondary background */
     --secondary-foreground: 0 0% 95%;    /* Light text on secondary */
-    --muted: 0 0% 24%;                   /* Muted background */
-    --muted-foreground: 0 0% 60%;        /* Medium-light gray text */
-    --accent: 0 0% 24%;                  /* Accent background */
+    --muted: 0 0% 20%;                   /* Muted background */
+    --muted-foreground: 0 0% 65%;        /* Muted text */
+    --accent: 0 0% 20%;                  /* Accent background */
     --accent-foreground: 0 0% 95%;       /* Light accent text */
-    --destructive: 0 70% 55%;            /* Vibrant red for destructive */
+    --destructive: 0 70% 55%;            /* Red for destructive */
     --destructive-foreground: 0 0% 100%; /* White text on destructive */
-    --border: 0 0% 28%;                  /* Lighter borders for contrast */
-    --input: 0 0% 28%;                   /* Input field borders */
-    --ring: 262 80% 60%;                 /* Purple focus ring */
+    --border: 0 0% 25%;                  /* Borders */
+    --input: 0 0% 25%;                   /* Input field borders */
+    --ring: 142 70% 45%;                 /* Green focus ring */
 
-    /* Extended Grayscale Theme Colors */
-    --warning: 47.9 95.8% 53.1%;         /* Amber warning for visibility */
+    /* Extended Theme Colors */
+    --warning: 45 100% 51%;              /* Amber warning */
     --warning-foreground: 0 0% 13%;      /* Dark text on warning */
-    --success: 142.1 76.2% 36.3%;        /* Green success */
+    --success: 142 70% 45%;              /* Green success */
     --success-foreground: 0 0% 100%;     /* White text on success */
     
-    /* Sidebar Colors - Darker than main content like ChatGPT/Claude */
-    --sidebar-background: 0 0% 10%;      /* Very dark sidebar (#1a1a1a) */
-    --sidebar-foreground: 0 0% 85%;      /* Slightly muted text */
-    --sidebar-primary: 262 80% 60%;      /* Purple for active items */
+    /* Sidebar Colors - Darker than main content */
+    --sidebar-background: 0 0% 8%;       /* Very dark sidebar (#141414) */
+    --sidebar-foreground: 0 0% 85%;      /* Light text */
+    --sidebar-primary: 142 70% 45%;      /* Green for active items */
     --sidebar-primary-foreground: 0 0% 100%; /* White text on active */
-    --sidebar-accent: 0 0% 15%;          /* Hover state background */
+    --sidebar-accent: 0 0% 13%;          /* Hover state background */
     --sidebar-accent-foreground: 0 0% 95%; /* Light text on hover */
-    --sidebar-border: 0 0% 20%;          /* Subtle border color */
+    --sidebar-border: 0 0% 18%;          /* Subtle border color */
     
     /* Chat Interface Colors */
-    --chat-user-bubble: 262 80% 60%;     /* Vibrant purple user message background */
+    --chat-user-bubble: 0 0% 20%;        /* Dark gray user message background */
     --chat-user-text: 0 0% 100%;         /* White user message text */
-    --chat-ai-bubble: 0 0% 22%;          /* Slightly lighter gray AI message background */
+    --chat-ai-bubble: transparent;       /* No background for AI messages */
     --chat-ai-text: 0 0% 95%;            /* Light AI message text */
-    --chat-timestamp: 0 0% 60%;          /* Medium gray timestamp color */
+    --chat-timestamp: 0 0% 55%;          /* Muted timestamp color */
     
     /* Dashboard Colors */
-    --dashboard-card: 0 0% 20%;          /* Dashboard cards match card color */
-    --dashboard-card-border: 0 0% 28%;   /* Lighter borders */
-    --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
+    --dashboard-card: 0 0% 16%;          /* Dashboard cards */
+    --dashboard-card-border: 0 0% 25%;   /* Card borders */
+    --dashboard-stat-positive: 142 70% 45%; /* Green for positive stats */
     --dashboard-stat-negative: 0 70% 55%;  /* Red for negative stats */
-    --dashboard-stat-neutral: 0 0% 60%;  /* Gray for neutral stats */
+    --dashboard-stat-neutral: 0 0% 65%;  /* Gray for neutral stats */
 
-    /* Icon Colors - Vibrant colors for visual hierarchy */
-    --icon-dashboard: 262 100% 70%;      /* SUPER BRIGHT purple for analytics */
-    --icon-agents: 180 100% 50%;         /* SUPER BRIGHT cyan for agents */
-    --icon-memory: 120 100% 50%;         /* SUPER BRIGHT green for knowledge */
-    --icon-workflows: 30 100% 50%;       /* SUPER BRIGHT orange for automation */
-    --icon-integrations: 300 100% 50%;   /* SUPER BRIGHT magenta for connections */
-    --icon-credentials: 0 100% 50%;      /* SUPER BRIGHT red for security */
-    --icon-teams: 240 100% 50%;          /* SUPER BRIGHT blue for collaboration */
-    --icon-workspaces: 180 100% 50%;     /* SUPER BRIGHT cyan for spaces */
-    --icon-projects: 320 100% 50%;       /* SUPER BRIGHT pink for projects */
-    --icon-settings: 60 100% 50%;        /* SUPER BRIGHT yellow for settings */
-    --icon-monitoring: 40 100% 50%;      /* SUPER BRIGHT amber for monitoring */
+    /* Icon Colors - White for clean, minimal look */
+    --icon-dashboard: 0 0% 85%;          /* White for dashboard */
+    --icon-agents: 0 0% 85%;             /* White for agents */
+    --icon-memory: 0 0% 85%;             /* White for knowledge */
+    --icon-workflows: 0 0% 85%;          /* White for workflows */
+    --icon-integrations: 0 0% 85%;       /* White for integrations */
+    --icon-credentials: 0 0% 85%;        /* White for credentials */
+    --icon-teams: 0 0% 85%;              /* White for teams */
+    --icon-workspaces: 0 0% 85%;         /* White for workspaces */
+    --icon-projects: 0 0% 85%;           /* White for projects */
+    --icon-settings: 0 0% 85%;           /* White for settings */
+    --icon-monitoring: 0 0% 85%;         /* White for monitoring */
   }
 }
 
@@ -388,4 +388,26 @@ pre, code {
 /* Smooth textarea expansion */
 textarea {
   transition: height 0.1s ease-out;
+}
+
+/* React Split Pane Styles */
+.gutter {
+  background-color: hsl(var(--border));
+  background-repeat: no-repeat;
+  background-position: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.gutter:hover {
+  background-color: hsl(var(--primary) / 0.3);
+}
+
+.gutter.gutter-horizontal {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==');
+  cursor: col-resize;
+}
+
+.gutter.gutter-vertical {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAFCAMAAABl/6zIAAAABlBMVEUAAADMzMzIT8AyAAAAAXRSTlMAQObYZgAAABRJREFUeAFjYGRkYGJkZGRiYGRkAAA+AAExBgDKAAAAAElFTkSuQmCC');
+  cursor: row-resize;
 } 

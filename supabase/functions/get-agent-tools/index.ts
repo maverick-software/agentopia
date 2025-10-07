@@ -279,6 +279,42 @@ serve(async (req) => {
       providersProcessed.add('Temporary Chat Links');
     }
 
+    // Check for internal tools (Artifacts - Document Creation)
+    console.log(`[GetAgentTools] Checking for internal tools (Artifacts)...`);
+    
+    // Artifacts are available when Document Creation is enabled
+    if (toolSettings['document_creation_enabled']) {
+      console.log(`[GetAgentTools] Agent has document creation enabled, adding Artifact MCP tools`);
+      
+      const artifactTools = [
+        'create_artifact',
+        'update_artifact',
+        'list_artifacts',
+        'get_artifact',
+        'get_version_history',
+        'delete_artifact'
+      ];
+
+      console.log(`[GetAgentTools] Tools: ${artifactTools.join(', ')}`);
+      console.log(`[GetAgentTools] Added ${artifactTools.length} Artifact MCP tools`);
+      console.log(`[GetAgentTools] Providers: Artifacts`);
+
+      for (const toolName of artifactTools) {
+        const parameters = generateParametersForCapability(toolName);
+        
+        tools.push({
+          name: toolName,
+          description: `${toolName} - Artifacts`,
+          parameters,
+          status: 'active',
+          provider_name: 'Artifacts',
+          connection_name: 'Internal'
+        });
+      }
+
+      providersProcessed.add('Artifacts');
+    }
+
     // Contact Management tools are now handled through the standard integration system
     // They will be processed automatically with other integrations above
 

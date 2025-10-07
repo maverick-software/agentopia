@@ -72,13 +72,13 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
               }
             })()}`}
             className={`flex items-start space-x-4 animate-fade-in max-w-full ${
-              message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+              message.role === 'user' ? 'flex-row-reverse space-x-reverse !mb-10' : '!mt-10'
             }`}
           >
             {/* Avatar */}
             <div className="flex-shrink-0">
               {message.role === 'user' ? (
-                <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center">
                   <span className="text-sm font-medium">
                     {user?.email?.charAt(0)?.toUpperCase() || 'U'}
                   </span>
@@ -194,10 +194,10 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   })()}
                 </span>
               </div>
-            <div className={`block w-full text-left break-words overflow-wrap-anywhere ${
+            <div className={`text-left break-words overflow-wrap-anywhere ${
                 message.role === 'user' 
-                  ? 'bg-primary text-primary-foreground p-3 rounded-2xl shadow-sm' 
-                  : 'text-foreground'
+                  ? 'bg-[#343541] text-white px-4 py-2.5 rounded-2xl inline-block max-w-full' 
+                  : 'text-foreground w-full'
               }`}>
                 {message.role === 'assistant' ? (
                   <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words overflow-wrap-anywhere

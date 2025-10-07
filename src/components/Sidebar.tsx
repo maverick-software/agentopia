@@ -224,7 +224,7 @@ export function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     >
       <div className="flex-1 mb-2 flex flex-col min-h-0 overflow-y-auto">
         <div>
-          <div className={`flex items-center mb-3 transition-all duration-300 ${isCollapsed ? 'justify-center mt-4' : 'justify-between px-2'}`}>
+          <div className={`flex items-center mb-3 mt-1 transition-all duration-300 ${isCollapsed ? 'justify-center mt-4' : 'justify-between px-2'}`}>
             <div className="flex items-center">
               <Logo
                 size={isCollapsed ? 'sm' : 'md'}

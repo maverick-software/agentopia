@@ -1,8 +1,7 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../../lib/utils';
-import logoLight from './logo-light.png'; // Dark logo for light backgrounds
-import logoDark from './logo-dark.png';   // Light logo for dark backgrounds
+import gopherLogo from './logo-light.png'; // Gopher logo for all themes
 
 interface LogoProps {
   className?: string;
@@ -13,10 +12,10 @@ interface LogoProps {
 }
 
 const sizeClasses = {
-  sm: 'h-6 w-6',
-  md: 'h-8 w-8', 
-  lg: 'h-10 w-10',
-  xl: 'h-12 w-12'
+  sm: 'h-5 w-5',
+  md: 'h-6 w-6', 
+  lg: 'h-8 w-8',
+  xl: 'h-10 w-10'
 };
 
 export function Logo({ 
@@ -28,11 +27,8 @@ export function Logo({
 }: LogoProps) {
   const { theme } = useTheme();
   
-  // Determine which logo to use based on theme
-  // logo-dark.png = light logo (for dark backgrounds)
-  // logo-light.png = dark logo (for light backgrounds)
-  // For grayscale theme, use light logo since it has dark background
-  const logoSrc = (theme === 'dark' || theme === 'grayscale') ? logoDark : logoLight;
+  // Use the same gopher logo for all themes
+  const logoSrc = gopherLogo;
 
   return (
     <div className={cn("flex items-center", className)}>

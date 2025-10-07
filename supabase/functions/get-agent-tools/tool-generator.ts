@@ -489,6 +489,85 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+  // Artifact tools (Document Creation)
+  if (toolName === 'create_artifact') {
+    return {
+      ...baseSchema,
+      properties: {
+        title: { type: 'string', description: 'Title of the artifact (e.g., "API Client", "User Dashboard")' },
+        file_type: { 
+          type: 'string', 
+          description: 'File type: txt, md, json, html, javascript, typescript, python, java, css, csv, sql, yaml, xml, bash, shell, dockerfile',
+          enum: ['txt', 'md', 'json', 'html', 'javascript', 'typescript', 'python', 'java', 'css', 'csv', 'sql', 'yaml', 'xml', 'bash', 'shell', 'dockerfile']
+        },
+        content: { type: 'string', description: 'The actual content/code of the artifact' },
+        description: { type: 'string', description: 'Optional description of what this artifact does' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for categorization' },
+        conversation_session_id: { type: 'string', description: 'Optional: Link to conversation session' },
+        message_id: { type: 'string', description: 'Optional: Link to specific message' },
+        workspace_id: { type: 'string', description: 'Optional: Link to workspace' }
+      },
+      required: ['title', 'file_type', 'content']
+    };
+  }
+
+  if (toolName === 'update_artifact') {
+    return {
+      ...baseSchema,
+      properties: {
+        artifact_id: { type: 'string', description: 'The ID of the artifact to update' },
+        content: { type: 'string', description: 'The new content for the artifact' },
+        title: { type: 'string', description: 'Optional: Update the title' },
+        changes_note: { type: 'string', description: 'Optional: Note describing what changed in this version' }
+      },
+      required: ['artifact_id', 'content']
+    };
+  }
+
+  if (toolName === 'list_artifacts') {
+    return {
+      ...baseSchema,
+      properties: {
+        conversation_session_id: { type: 'string', description: 'Optional: Filter by conversation session' },
+        file_type: { type: 'string', description: 'Optional: Filter by file type (javascript, python, etc.)' },
+        limit: { type: 'number', description: 'Maximum number of results. Default: 50', default: 50 },
+        offset: { type: 'number', description: 'Offset for pagination. Default: 0', default: 0 },
+        include_archived: { type: 'boolean', description: 'Include archived artifacts. Default: false', default: false }
+      },
+      required: []
+    };
+  }
+
+  if (toolName === 'get_artifact') {
+    return {
+      ...baseSchema,
+      properties: {
+        artifact_id: { type: 'string', description: 'The ID of the artifact to retrieve' }
+      },
+      required: ['artifact_id']
+    };
+  }
+
+  if (toolName === 'get_version_history') {
+    return {
+      ...baseSchema,
+      properties: {
+        artifact_id: { type: 'string', description: 'The ID of the artifact to get version history for' }
+      },
+      required: ['artifact_id']
+    };
+  }
+
+  if (toolName === 'delete_artifact') {
+    return {
+      ...baseSchema,
+      properties: {
+        artifact_id: { type: 'string', description: 'The ID of the artifact to delete' }
+      },
+      required: ['artifact_id']
+    };
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,

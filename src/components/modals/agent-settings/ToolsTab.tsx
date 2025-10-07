@@ -282,8 +282,9 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       // Check if credentials exist for this tool
       const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links';
       
-      // Temporary chat links don't require external credentials, so skip credential check
-      if (toolType !== 'temporary_chat_links') {
+      // Skip credential check for built-in tools that don't require external APIs
+      const builtInTools = ['temporary_chat_links', 'document_creation'];
+      if (!builtInTools.includes(toolType)) {
         const availableCredentials = getAvailableCredentials(toolType);
         
         if (availableCredentials.length === 0) {
@@ -630,10 +631,10 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
     {
       id: 'document_creation_enabled' as keyof ToolSettings,
       name: 'Document Creation',
-      description: 'Enable agent to create and edit documents',
+      description: 'Enable agent to create and edit documents, code files, and artifacts (inline preview with Canvas mode)',
       icon: FileText,
       enabled: settings.document_creation_enabled,
-      requiresApi: 'Document API',
+      requiresApi: 'Built-in Artifacts System (No API required)',
       availableCredentials: getAvailableCredentials('document_creation'),
       toolType: 'document_creation' as const
     },

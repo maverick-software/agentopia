@@ -41,25 +41,25 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
 
-  const getThemeIcon = (themeMode: 'light' | 'dark' | 'grayscale') => {
+  const getThemeIcon = (themeMode: 'light' | 'dark' | 'chatgpt') => {
     switch (themeMode) {
       case 'light':
         return <Sun className="h-4 w-4" />;
       case 'dark':
         return <Moon className="h-4 w-4" />;
-      case 'grayscale':
+      case 'chatgpt':
         return <Palette className="h-4 w-4" />;
     }
   };
 
-  const getThemeLabel = (themeMode: 'light' | 'dark' | 'grayscale') => {
+  const getThemeLabel = (themeMode: 'light' | 'dark' | 'chatgpt') => {
     switch (themeMode) {
       case 'light':
         return 'Light';
       case 'dark':
         return 'Dark Blue';
-      case 'grayscale':
-        return 'Grayscale';
+      case 'chatgpt':
+        return 'Dark Gray';
     }
   };
 
@@ -139,14 +139,14 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
                       <span className="text-sm flex-1">Dark Blue</span>
                       {theme === 'dark' && <Check className="h-4 w-4 text-primary" />}
                     </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => setTheme('grayscale')}
-                      className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2"
-                    >
-                      <Palette className="mr-3 h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm flex-1">Grayscale</span>
-                      {theme === 'grayscale' && <Check className="h-4 w-4 text-primary" />}
-                    </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setTheme('chatgpt')}
+                              className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2"
+                            >
+                              <Palette className="mr-3 h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm flex-1">Dark Gray</span>
+                              {theme === 'chatgpt' && <Check className="h-4 w-4 text-primary" />}
+                            </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               </div>
