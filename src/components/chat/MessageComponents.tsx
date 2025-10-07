@@ -26,7 +26,7 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {messages.map((message, index) => {
         // Handle thinking messages with inline indicator
         if (message.role === 'thinking') {
@@ -194,10 +194,10 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   })()}
                 </span>
               </div>
-            <div className={`block w-full p-3 rounded-2xl shadow-sm text-left break-words overflow-wrap-anywhere ${
+            <div className={`block w-full text-left break-words overflow-wrap-anywhere ${
                 message.role === 'user' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-card text-card-foreground'
+                  ? 'bg-primary text-primary-foreground p-3 rounded-2xl shadow-sm' 
+                  : 'text-foreground'
               }`}>
                 {message.role === 'assistant' ? (
                   <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words overflow-wrap-anywhere

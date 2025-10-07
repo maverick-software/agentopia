@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-type ThemeMode = 'light' | 'dark';
+type ThemeMode = 'light' | 'dark' | 'grayscale';
 
 interface ThemeContextValue {
 	theme: ThemeMode;
@@ -14,7 +14,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 	const [theme, setThemeState] = useState<ThemeMode>(() => {
 		try {
 			const stored = localStorage.getItem('theme');
-			if (stored === 'dark' || stored === 'light') return stored;
+			if (stored === 'dark' || stored === 'light' || stored === 'grayscale') return stored as ThemeMode;
 		} catch {}
 		return 'light';
 	});
@@ -22,15 +22,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		try { localStorage.setItem('theme', theme); } catch {}
 		const root = document.documentElement;
+		
+		// Remove all theme classes first
+		root.classList.remove('dark', 'grayscale');
+		
+		// Add the appropriate theme class
 		if (theme === 'dark') {
 			root.classList.add('dark');
-		} else {
-			root.classList.remove('dark');
+		} else if (theme === 'grayscale') {
+			root.classList.add('grayscale');
 		}
+		// 'light' theme is the default, no class needed
 	}, [theme]);
 
 	const setTheme = (mode: ThemeMode) => setThemeState(mode);
-	const toggleTheme = () => setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
+	
+	// Toggle cycles through: light -> dark -> grayscale -> light
+	const toggleTheme = () => setThemeState((prev) => {
+		if (prev === 'light') return 'dark';
+		if (prev === 'dark') return 'grayscale';
+		return 'light';
+	});
 
 	const value = useMemo<ThemeContextValue>(() => ({ theme, setTheme, toggleTheme }), [theme]);
 

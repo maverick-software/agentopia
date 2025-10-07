@@ -9,7 +9,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Settings, LogOut, HelpCircle, Crown, CreditCard, Shield,
   Key,
-  Sun, Moon, Home
+  Sun, Moon, Home, Palette, Check
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -36,10 +36,32 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { subscription, getStatusColor, getStatusIcon, isFreePlan } = useSubscription();
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+
+  const getThemeIcon = (themeMode: 'light' | 'dark' | 'grayscale') => {
+    switch (themeMode) {
+      case 'light':
+        return <Sun className="h-4 w-4" />;
+      case 'dark':
+        return <Moon className="h-4 w-4" />;
+      case 'grayscale':
+        return <Palette className="h-4 w-4" />;
+    }
+  };
+
+  const getThemeLabel = (themeMode: 'light' | 'dark' | 'grayscale') => {
+    switch (themeMode) {
+      case 'light':
+        return 'Light';
+      case 'dark':
+        return 'Dark Blue';
+      case 'grayscale':
+        return 'Grayscale';
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -89,21 +111,44 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
             <div className={`px-3 py-3 mb-2 border-b ${
               isAdminArea ? 'border-gray-600' : 'border-border/50'
             }`}>
-              {/* Theme Toggle Icon - Top Right */}
+              {/* Theme Selector - Top Right */}
               <div className="flex justify-end mb-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTheme();
-                  }}
-                  className="p-1.5 hover:bg-accent rounded-md transition-colors"
-                  title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                >
-                  {theme === 'dark' ? 
-                    <Sun className="h-4 w-4 text-muted-foreground hover:text-foreground" /> : 
-                    <Moon className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                  }
-                </button>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger 
+                    className="p-1.5 hover:bg-accent rounded-md transition-colors cursor-pointer"
+                    title="Change Theme"
+                  >
+                    <div className="text-muted-foreground hover:text-foreground">
+                      {getThemeIcon(theme)}
+                    </div>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-44 bg-card border-border/50 text-foreground shadow-lg rounded-xl">
+                    <DropdownMenuItem 
+                      onClick={() => setTheme('light')}
+                      className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2"
+                    >
+                      <Sun className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1">Light</span>
+                      {theme === 'light' && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setTheme('dark')}
+                      className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2"
+                    >
+                      <Moon className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1">Dark Blue</span>
+                      {theme === 'dark' && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setTheme('grayscale')}
+                      className="cursor-pointer focus:bg-accent/50 focus:text-accent-foreground rounded-md px-3 py-2"
+                    >
+                      <Palette className="mr-3 h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1">Grayscale</span>
+                      {theme === 'grayscale' && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               </div>
 
               <DropdownMenuItem 

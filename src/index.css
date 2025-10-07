@@ -139,6 +139,71 @@
   --icon-settings: 210 15% 70%;            /* Gray - Light for dark mode */
   --icon-monitoring: 47.9 85.8% 63.1%;    /* Amber - Lighter for dark */
   }
+
+  .grayscale {
+    /* Grayscale Theme - ChatGPT/Claude Dark Style with Strategic Color Accents */
+    --background: 0 0% 17%;              /* Main content area - lighter gray (#2b2b2b) */
+    --foreground: 0 0% 95%;              /* Light gray text */
+    --card: 0 0% 20%;                    /* Slightly lighter card background */
+    --card-foreground: 0 0% 95%;         /* Light card text */
+    --popover: 0 0% 20%;                 /* Popover background */
+    --popover-foreground: 0 0% 95%;      /* Light popover text */
+    --primary: 262 80% 60%;              /* Vibrant purple for user messages/avatars */
+    --primary-foreground: 0 0% 100%;     /* White text on primary */
+    --secondary: 0 0% 24%;               /* Medium-dark gray secondary */
+    --secondary-foreground: 0 0% 95%;    /* Light text on secondary */
+    --muted: 0 0% 24%;                   /* Muted background */
+    --muted-foreground: 0 0% 60%;        /* Medium-light gray text */
+    --accent: 0 0% 24%;                  /* Accent background */
+    --accent-foreground: 0 0% 95%;       /* Light accent text */
+    --destructive: 0 70% 55%;            /* Vibrant red for destructive */
+    --destructive-foreground: 0 0% 100%; /* White text on destructive */
+    --border: 0 0% 28%;                  /* Lighter borders for contrast */
+    --input: 0 0% 28%;                   /* Input field borders */
+    --ring: 262 80% 60%;                 /* Purple focus ring */
+
+    /* Extended Grayscale Theme Colors */
+    --warning: 47.9 95.8% 53.1%;         /* Amber warning for visibility */
+    --warning-foreground: 0 0% 13%;      /* Dark text on warning */
+    --success: 142.1 76.2% 36.3%;        /* Green success */
+    --success-foreground: 0 0% 100%;     /* White text on success */
+    
+    /* Sidebar Colors - Darker than main content like ChatGPT/Claude */
+    --sidebar-background: 0 0% 10%;      /* Very dark sidebar (#1a1a1a) */
+    --sidebar-foreground: 0 0% 85%;      /* Slightly muted text */
+    --sidebar-primary: 262 80% 60%;      /* Purple for active items */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on active */
+    --sidebar-accent: 0 0% 15%;          /* Hover state background */
+    --sidebar-accent-foreground: 0 0% 95%; /* Light text on hover */
+    --sidebar-border: 0 0% 20%;          /* Subtle border color */
+    
+    /* Chat Interface Colors */
+    --chat-user-bubble: 262 80% 60%;     /* Vibrant purple user message background */
+    --chat-user-text: 0 0% 100%;         /* White user message text */
+    --chat-ai-bubble: 0 0% 22%;          /* Slightly lighter gray AI message background */
+    --chat-ai-text: 0 0% 95%;            /* Light AI message text */
+    --chat-timestamp: 0 0% 60%;          /* Medium gray timestamp color */
+    
+    /* Dashboard Colors */
+    --dashboard-card: 0 0% 20%;          /* Dashboard cards match card color */
+    --dashboard-card-border: 0 0% 28%;   /* Lighter borders */
+    --dashboard-stat-positive: 142.1 76.2% 36.3%; /* Green for positive stats */
+    --dashboard-stat-negative: 0 70% 55%;  /* Red for negative stats */
+    --dashboard-stat-neutral: 0 0% 60%;  /* Gray for neutral stats */
+
+    /* Icon Colors - Vibrant colors for visual hierarchy */
+    --icon-dashboard: 262 100% 70%;      /* SUPER BRIGHT purple for analytics */
+    --icon-agents: 180 100% 50%;         /* SUPER BRIGHT cyan for agents */
+    --icon-memory: 120 100% 50%;         /* SUPER BRIGHT green for knowledge */
+    --icon-workflows: 30 100% 50%;       /* SUPER BRIGHT orange for automation */
+    --icon-integrations: 300 100% 50%;   /* SUPER BRIGHT magenta for connections */
+    --icon-credentials: 0 100% 50%;      /* SUPER BRIGHT red for security */
+    --icon-teams: 240 100% 50%;          /* SUPER BRIGHT blue for collaboration */
+    --icon-workspaces: 180 100% 50%;     /* SUPER BRIGHT cyan for spaces */
+    --icon-projects: 320 100% 50%;       /* SUPER BRIGHT pink for projects */
+    --icon-settings: 60 100% 50%;        /* SUPER BRIGHT yellow for settings */
+    --icon-monitoring: 40 100% 50%;      /* SUPER BRIGHT amber for monitoring */
+  }
 }
 
 :root {

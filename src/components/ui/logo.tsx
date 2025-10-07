@@ -31,7 +31,8 @@ export function Logo({
   // Determine which logo to use based on theme
   // logo-dark.png = light logo (for dark backgrounds)
   // logo-light.png = dark logo (for light backgrounds)
-  const logoSrc = theme === 'dark' ? logoDark : logoLight;
+  // For grayscale theme, use light logo since it has dark background
+  const logoSrc = (theme === 'dark' || theme === 'grayscale') ? logoDark : logoLight;
 
   return (
     <div className={cn("flex items-center", className)}>

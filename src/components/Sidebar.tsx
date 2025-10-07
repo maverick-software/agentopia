@@ -38,8 +38,26 @@ interface NavItem {
 
 // Helper function to get icon color class based on route or label
 const getIconColorClass = (route: string, label: string): string => {
-  // All sidebar icons are white
-  return 'text-white';
+  // Map routes/labels to Tailwind icon color classes
+  if (route === '/' || label === 'Dashboard') return 'text-icon-dashboard';
+  if (route === '/agents' || label === 'Agents') return 'text-icon-agents';
+  if (route === '/datastores' || label === 'Library') return 'text-icon-memory';
+  if (route === '/knowledge' || label === 'Knowledge') return 'text-icon-memory';
+  if (route === '/workflows' || label === 'Workflows') return 'text-icon-workflows';
+  if (route === '/automations' || label === 'Automations') return 'text-icon-workflows';
+  if (route === '/integrations' || label === 'Integrations') return 'text-icon-integrations';
+  if (route === '/credentials' || label === 'Credentials') return 'text-icon-credentials';
+  if (route === '/teams' || label === 'Teams') return 'text-icon-teams';
+  if (route === '/workspaces' || label === 'Workspaces') return 'text-icon-workspaces';
+  if (route === '/projects' || label === 'Projects') return 'text-icon-projects';
+  if (route === '/settings' || label === 'Settings') return 'text-icon-settings';
+  if (route === '/monitoring' || label === 'Monitoring') return 'text-icon-monitoring';
+  if (route === '/contacts' || label === 'Contacts') return 'text-icon-integrations';
+  if (route === '/media-library' || label === 'Media Library') return 'text-icon-memory';
+  if (route === '/mcp-servers' || label === 'MCP Servers') return 'text-icon-integrations';
+  
+  // Default to sidebar foreground color
+  return 'text-sidebar-foreground';
 };
 
 // Updated navigation structure with organized hierarchical nesting
@@ -94,13 +112,13 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center w-full space-x-2 rounded-md transition-colors px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent text-sm ${
+          className={`flex items-center w-full space-x-2 rounded-md transition-colors px-3 py-2 hover:bg-sidebar-accent text-sm ${
             isActiveOrParent ? 'bg-sidebar-accent/50' : '' // Subtle highlight for active parent
           }`}
           style={{ paddingLeft: `${1 + level * 1.5}rem` }} // Indentation for submenus
         >
           <item.icon className={`w-4 h-4 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
-          <span className="font-normal flex-1 text-left truncate">{item.label}</span>
+          <span className="font-normal flex-1 text-left truncate text-sidebar-foreground">{item.label}</span>
           {isExpanded ? <ChevronDown size={16} className="text-sidebar-foreground" /> : <ChevronRight size={16} className="text-sidebar-foreground" />}
         </button>
         {isExpanded && (
@@ -128,14 +146,14 @@ const NavItemRenderer: React.FC<{ item: NavItem; isCollapsed: boolean; level?: n
                 : 'px-3 py-2' // Top-level item style (not collapsed)
           } ${
             isActive
-              ? 'bg-sidebar-accent/20 text-sidebar-foreground'
-              : 'text-sidebar-foreground hover:bg-sidebar-accent'
+              ? 'bg-sidebar-accent/20'
+              : 'hover:bg-sidebar-accent'
           }`
         }
         style={!isCollapsed ? { paddingLeft: `${1 + level * 1.5}rem` } : {}}
       >
         <item.icon className={`w-4 h-4 flex-shrink-0 ${getIconColorClass(item.to, item.label)}`} />
-        {!isCollapsed && <span className="font-normal truncate">{item.label}</span>}
+        {!isCollapsed && <span className="font-normal truncate text-sidebar-foreground">{item.label}</span>}
       </NavLink>
     );
   }
