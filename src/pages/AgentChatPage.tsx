@@ -521,7 +521,7 @@ export function AgentChatPage() {
     }, 500);
   }, [thinkingMessageIndex, processSteps]);
 
-  const completeAIProcessingWithResponse = useCallback(async (responseContent: string) => {
+  const completeAIProcessingWithResponse = useCallback(async (responseContent: string, additionalMetadata: any = {}) => {
     setAiState('completed');
     
     // Mark all steps as completed
@@ -551,7 +551,8 @@ export function AgentChatPage() {
               userId: user?.id,
               metadata: { 
                 isCompleted: true,
-                processingDetails: currentProcessingDetails
+                processingDetails: currentProcessingDetails,
+                ...additionalMetadata
               },
               aiProcessDetails: {
                 steps: done,
@@ -567,7 +568,7 @@ export function AgentChatPage() {
               timestamp: new Date(),
               agentId: agent?.id,
               userId: user?.id,
-              metadata: { isCompleted: true },
+              metadata: { isCompleted: true, ...additionalMetadata },
               aiProcessDetails: {
                 steps: done,
                 totalDuration: Date.now() - (done[0]?.startTime?.getTime() || Date.now()),
@@ -835,13 +836,24 @@ export function AgentChatPage() {
 					(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
 				);
 
-				const formatted: Message[] = rows.map((msg: any) => ({
+			const formatted: Message[] = rows.map((msg: any) => {
+				console.log('[AgentChatPage] Loading message from DB:', {
+					id: msg.id,
+					role: msg.role,
+					hasMetadata: !!msg.metadata,
+					metadata: msg.metadata,
+					hasArtifacts: !!msg.metadata?.artifacts
+				});
+				
+				return {
 					role: (msg.role === 'assistant' || msg.sender_agent_id) ? 'assistant' : 'user',
 					content: typeof msg.content === 'string' ? msg.content : (msg.content?.text ?? ''),
 					timestamp: new Date(msg.created_at),
 					agentId: msg.sender_agent_id,
 					userId: msg.sender_agent_id ? user.id : msg.sender_user_id,
-				}));
+					metadata: msg.metadata || undefined,
+				};
+			});
 
 				setMessages(formatted);
 			} catch (err) {
@@ -891,15 +903,16 @@ export function AgentChatPage() {
             setAiState('completed');
           }
           
-          // Convert database message to frontend Message format
-          const message: Message = {
-            role: newMessage.role,
-            content: typeof newMessage.content === 'string' ? newMessage.content : newMessage.content?.text || '',
-            timestamp: new Date(newMessage.created_at),
-            userId: newMessage.sender_user_id,
-            agentId: newMessage.sender_agent_id,
-            id: newMessage.id,
-          };
+        // Convert database message to frontend Message format
+        const message: Message = {
+          role: newMessage.role,
+          content: typeof newMessage.content === 'string' ? newMessage.content : newMessage.content?.text || '',
+          timestamp: new Date(newMessage.created_at),
+          userId: newMessage.sender_user_id,
+          agentId: newMessage.sender_agent_id,
+          id: newMessage.id,
+          metadata: newMessage.metadata || undefined,
+        };
           
           // Add to messages if not already present (avoid duplicates)
           setMessages(prev => {
@@ -1269,8 +1282,12 @@ export function AgentChatPage() {
           throw new Error('Received an invalid response format from the chat service.');
       }
 
+      // Extract metadata (including artifacts) from the response
+      const responseMetadata = responseData?.data?.message?.metadata || {};
+      console.log('[AgentChatPage] Response metadata from chat API:', responseMetadata);
+
       // Complete AI processing and convert thinking message to assistant response
-      await completeAIProcessingWithResponse(assistantReply);
+      await completeAIProcessingWithResponse(assistantReply, responseMetadata);
 
       // Scroll after updating message
       if (isMounted.current) {

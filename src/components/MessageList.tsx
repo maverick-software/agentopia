@@ -34,6 +34,14 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
 
   // Extract artifacts from message metadata
   const getArtifactsFromMessage = (message: ChatMessage): Artifact[] => {
+    // Debug logging
+    console.log('[MessageList] Checking message for artifacts:', {
+      messageId: message.id,
+      hasMetadata: !!message.metadata,
+      metadata: message.metadata,
+      hasArtifacts: !!message.metadata?.artifacts
+    });
+    
     if (!message.metadata?.artifacts) return [];
     
     // Handle both array and single artifact
@@ -41,7 +49,9 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
       ? message.metadata.artifacts
       : [message.metadata.artifacts];
     
-    return artifacts.filter((a: any) => a && typeof a === 'object');
+    const filtered = artifacts.filter((a: any) => a && typeof a === 'object');
+    console.log('[MessageList] Found artifacts:', filtered);
+    return filtered;
   };
 
   // Handle opening canvas mode

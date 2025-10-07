@@ -36,13 +36,36 @@ interface MCPToolResponse {
   };
 }
 
+// Helper: Get MIME content type for file type
+function getContentType(fileType: string): string {
+  const contentTypes: Record<string, string> = {
+    'txt': 'text/plain',
+    'md': 'text/markdown',
+    'json': 'application/json',
+    'html': 'text/html',
+    'javascript': 'text/javascript',
+    'typescript': 'text/typescript',
+    'python': 'text/x-python',
+    'java': 'text/x-java',
+    'css': 'text/css',
+    'csv': 'text/csv',
+    'sql': 'application/sql',
+    'yaml': 'text/yaml',
+    'xml': 'application/xml',
+    'bash': 'text/x-shellscript',
+    'shell': 'text/x-shellscript',
+    'dockerfile': 'text/x-dockerfile'
+  };
+  return contentTypes[fileType.toLowerCase()] || 'text/plain';
+}
+
 // =============================================
 // Action Handlers
 // =============================================
 
 /**
  * Create a new artifact
- * Params: title, file_type, content, description?, tags?, conversation_id?, message_id?, workspace_id?
+ * Params: title, file_type, content, description?, tags?, conversation_session_id?, message_id?, workspace_id?
  */
 async function handleCreateArtifact(
   supabase: any,
@@ -57,7 +80,7 @@ async function handleCreateArtifact(
       content,
       description,
       tags,
-      conversation_id,
+      conversation_session_id,
       message_id,
       workspace_id,
       metadata
@@ -99,27 +122,55 @@ async function handleCreateArtifact(
       };
     }
 
+    // Generate artifact ID first (we'll use this for storage path)
+    const artifactId = crypto.randomUUID();
+    
+    // Upload to storage: media-library/{user_id}/artifacts/{file_type}/{artifact_id}_v1.{file_type}
+    const storagePath = `${userId}/artifacts/${file_type.toLowerCase()}/${artifactId}_v1.${file_type.toLowerCase()}`;
+    
+    console.log(`[Artifacts MCP] Uploading to storage: media-library/${storagePath}`);
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('media-library')
+      .upload(storagePath, content, {
+        contentType: getContentType(file_type),
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('[Artifacts MCP] Storage upload failed:', uploadError);
+      return {
+        success: false,
+        error: `Failed to upload artifact to storage: ${uploadError.message}`
+      };
+    }
+    
+    console.log(`[Artifacts MCP] Storage upload successful:`, uploadData);
+
     // Calculate metadata
     const artifactMetadata = {
       ...metadata,
       file_size: content.length,
       line_count: content.split('\n').length,
       char_count: content.length,
-      created_via: 'mcp_tool'
+      created_via: 'mcp_tool',
+      storage_path: storagePath
     };
 
-    // Insert artifact
+    // Insert artifact record with storage_path
     const { data, error } = await supabase
       .from('artifacts')
       .insert({
+        id: artifactId, // Use the same ID we used for storage
         user_id: userId,
         agent_id: agentId,
         workspace_id: workspace_id || null,
-        conversation_id: conversation_id || null,
+        conversation_session_id: conversation_session_id || null,
         message_id: message_id || null,
         title: title.trim(),
         file_type: file_type.toLowerCase(),
-        content: content,
+        content: content, // Still store in DB for quick access
+        storage_path: storagePath, // Reference to storage location
         description: description || null,
         tags: tags || [],
         metadata: artifactMetadata,
@@ -131,10 +182,12 @@ async function handleCreateArtifact(
       .single();
 
     if (error) {
-      console.error('[Artifacts MCP] Error creating artifact:', error);
+      console.error('[Artifacts MCP] Error creating artifact record:', error);
+      // Try to clean up the uploaded file
+      await supabase.storage.from('media-library').remove([storagePath]);
       return {
         success: false,
-        error: `Failed to create artifact: ${error.message}`
+        error: `Failed to create artifact record: ${error.message}`
       };
     }
 
@@ -216,18 +269,43 @@ async function handleUpdateArtifact(
       };
     }
 
+    // Calculate new version number
+    const newVersion = currentArtifact.version + 1;
+    
+    // Upload new version to storage
+    const storagePath = `${userId}/artifacts/${currentArtifact.file_type}/${artifact_id}_v${newVersion}.${currentArtifact.file_type}`;
+    
+    console.log(`[Artifacts MCP] Uploading version ${newVersion} to storage: media-library/${storagePath}`);
+    
+    const { error: uploadError } = await supabase.storage
+      .from('media-library')
+      .upload(storagePath, content, {
+        contentType: getContentType(currentArtifact.file_type),
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('[Artifacts MCP] Storage upload failed:', uploadError);
+      return {
+        success: false,
+        error: `Failed to upload new version to storage: ${uploadError.message}`
+      };
+    }
+
     // Update metadata
     const updatedMetadata = {
       ...currentArtifact.metadata,
       file_size: content.length,
       line_count: content.split('\n').length,
       char_count: content.length,
-      last_modified_via: 'mcp_tool'
+      last_modified_via: 'mcp_tool',
+      storage_path: storagePath
     };
 
     // Update artifact (trigger will create version automatically)
     const updateData: any = {
       content: content,
+      storage_path: storagePath,
       metadata: updatedMetadata,
       updated_at: new Date().toISOString()
     };
@@ -277,7 +355,7 @@ async function handleUpdateArtifact(
 
 /**
  * List artifacts with filtering
- * Params: conversation_id?, file_type?, limit?, offset?
+ * Params: conversation_session_id?, file_type?, limit?, offset?
  */
 async function handleListArtifacts(
   supabase: any,
@@ -287,7 +365,7 @@ async function handleListArtifacts(
 ): Promise<MCPToolResponse> {
   try {
     const {
-      conversation_id,
+      conversation_session_id,
       file_type,
       limit = 50,
       offset = 0,
@@ -303,8 +381,8 @@ async function handleListArtifacts(
       .range(offset, offset + limit - 1);
 
     // Apply filters
-    if (conversation_id) {
-      query = query.eq('conversation_id', conversation_id);
+    if (conversation_session_id) {
+      query = query.eq('conversation_session_id', conversation_session_id);
     }
 
     if (file_type) {
@@ -557,6 +635,7 @@ serve(async (req: Request) => {
     const { action, agent_id, user_id, params } = requestData;
 
     console.log(`[Artifacts MCP] Action: ${action}, Agent: ${agent_id}, User: ${user_id}`);
+    console.log(`[Artifacts MCP] Params:`, JSON.stringify(params, null, 2));
 
     // Create Supabase client with service role key
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -565,7 +644,9 @@ serve(async (req: Request) => {
 
     switch (action) {
       case 'create_artifact':
+        console.log(`[Artifacts MCP] Calling handleCreateArtifact...`);
         response = await handleCreateArtifact(supabase, user_id, agent_id, params);
+        console.log(`[Artifacts MCP] handleCreateArtifact response:`, JSON.stringify(response, null, 2));
         break;
 
       case 'update_artifact':
@@ -599,6 +680,9 @@ serve(async (req: Request) => {
     if (response.metadata) {
       response.metadata.execution_time_ms = Date.now() - startTime;
     }
+
+    console.log(`[Artifacts MCP] Final response:`, JSON.stringify(response, null, 2));
+    console.log(`[Artifacts MCP] Execution time: ${Date.now() - startTime}ms`);
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

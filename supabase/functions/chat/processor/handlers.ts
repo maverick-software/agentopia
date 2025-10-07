@@ -632,9 +632,13 @@ export class TextMessageHandler implements MessageHandler {
           };
         }
         // Remove tool_calls property from assistant messages
+        // Skip messages with empty content (Anthropic doesn't allow them)
+        if (!msg.content || msg.content.trim() === '') {
+          return null;
+        }
         const cleaned: any = { role: msg.role, content: msg.content };
         return cleaned;
-      });
+      }).filter(msg => msg !== null);
       
       console.log(`[TextMessageHandler] 🎯 Calling LLM for final reflection with ${cleanedReflectionMsgs.length} messages`);
       console.log(`[TextMessageHandler] Tool results included: ${msgs.filter(m => m.role === 'tool').length}`);
@@ -676,6 +680,21 @@ export class TextMessageHandler implements MessageHandler {
     // This handles cases where the LLM doesn't follow formatting instructions perfectly
     text = this.ensureProperMarkdownFormatting(text);
     const tokensTotal = promptTokens + completionTokens;
+    
+    // Extract artifacts from tool execution results for UI display
+    console.log('[TextMessageHandler] Tool details for artifact extraction:', toolDetails.map(td => ({
+      name: td.name,
+      success: td.success,
+      output_result: td.output_result
+    })));
+    
+    const artifacts = toolDetails
+      .filter(td => td.success && (td.name === 'create_artifact' || td.name === 'update_artifact'))
+      .map(td => td.output_result?.data?.artifact || td.output_result?.artifact)
+      .filter(Boolean);
+    
+    console.log('[TextMessageHandler] Extracted artifacts for metadata:', artifacts);
+    
     const processed: AdvancedChatMessage = {
       ...message,
       id: crypto.randomUUID(),
@@ -685,7 +704,8 @@ export class TextMessageHandler implements MessageHandler {
       metadata: { 
         model: effectiveModel, 
         tokens: { prompt: promptTokens, completion: completionTokens, total: tokensTotal }, 
-        source: 'api' 
+        source: 'api',
+        ...(artifacts.length > 0 ? { artifacts } : {})
       },
       // Keep original context without reasoning (reasoning is ephemeral for this response only)
       context: {

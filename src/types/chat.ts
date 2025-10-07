@@ -3,6 +3,7 @@ import type { AIState, ToolExecutionStatus } from '../components/AIThinkingIndic
 import type { Message } from './index';
 
 export type Agent = Database['public']['Tables']['agents']['Row'];
+export type ChatMessage = Message; // Alias for compatibility
 
 export interface ChatState {
   agent: Agent | null;

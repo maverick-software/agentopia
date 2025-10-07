@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BarChart3, Brain, ChevronRight, FileText, Paperclip } from 'lucide-react';
@@ -6,6 +6,10 @@ import { InlineThinkingIndicator } from '../InlineThinkingIndicator';
 import type { Message } from '../../types';
 import type { Database } from '../../types/database.types';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
+import { ArtifactCard } from './ArtifactCard';
+import { CanvasMode } from './CanvasMode';
+import { useArtifacts } from '@/hooks/useArtifacts';
+import type { Artifact } from '@/types/artifacts';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -24,8 +28,43 @@ interface MessageListProps {
 
 export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps }: MessageListProps) {
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
+  const [canvasArtifact, setCanvasArtifact] = useState<Artifact | null>(null);
+  const { updateArtifact, downloadArtifact } = useArtifacts();
+
+  // Extract artifacts from message metadata
+  const getArtifactsFromMessage = (message: Message): Artifact[] => {
+    if (!message.metadata?.artifacts) return [];
+    const artifacts = Array.isArray(message.metadata.artifacts)
+      ? message.metadata.artifacts
+      : [message.metadata.artifacts];
+    return artifacts.filter((a: any) => a && typeof a === 'object');
+  };
+
+  // Handle opening canvas mode
+  const handleOpenCanvas = (artifact: Artifact) => {
+    setCanvasArtifact(artifact);
+  };
+
+  // Handle saving artifact from canvas
+  const handleSaveArtifact = async (content: string, changes_note?: string) => {
+    if (!canvasArtifact || !agent?.id) return;
+    
+    const updated = await updateArtifact(
+      {
+        artifact_id: canvasArtifact.id,
+        content,
+        changes_note
+      },
+      agent.id
+    );
+
+    if (updated) {
+      setCanvasArtifact(updated);
+    }
+  };
   
   return (
+    <>
     <div className="space-y-4">
       {messages.map((message, index) => {
         // Handle thinking messages with inline indicator
@@ -269,6 +308,26 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                     >
                       {formatMarkdown(message.content)}
                     </ReactMarkdown>
+                    
+                    {/* Render Artifact Cards for assistant messages */}
+                    {(() => {
+                      const artifacts = getArtifactsFromMessage(message);
+                      if (artifacts.length > 0) {
+                        return (
+                          <div className="mt-4 space-y-2">
+                            {artifacts.map((artifact) => (
+                              <ArtifactCard
+                                key={artifact.id}
+                                artifact={artifact}
+                                onOpenCanvas={handleOpenCanvas}
+                                onDownload={downloadArtifact}
+                              />
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 ) : (
                   <div className="text-sm leading-relaxed break-words overflow-wrap-anywhere">
@@ -299,6 +358,17 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
         );
       })}
     </div>
+
+    {/* Canvas Mode Modal */}
+    {canvasArtifact && (
+      <CanvasMode
+        artifact={canvasArtifact}
+        onClose={() => setCanvasArtifact(null)}
+        onSave={handleSaveArtifact}
+        onDownload={downloadArtifact}
+      />
+    )}
+    </>
   );
 }
 

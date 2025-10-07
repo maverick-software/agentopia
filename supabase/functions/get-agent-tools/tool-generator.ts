@@ -500,7 +500,10 @@ export function generateParametersForCapability(toolName: string) {
           description: 'File type: txt, md, json, html, javascript, typescript, python, java, css, csv, sql, yaml, xml, bash, shell, dockerfile',
           enum: ['txt', 'md', 'json', 'html', 'javascript', 'typescript', 'python', 'java', 'css', 'csv', 'sql', 'yaml', 'xml', 'bash', 'shell', 'dockerfile']
         },
-        content: { type: 'string', description: 'The actual content/code of the artifact' },
+        content: { 
+          type: 'string', 
+          description: 'REQUIRED: The full file content/code. You must generate and include the complete file content here. Do not leave this empty or omit it.'
+        },
         description: { type: 'string', description: 'Optional description of what this artifact does' },
         tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for categorization' },
         conversation_session_id: { type: 'string', description: 'Optional: Link to conversation session' },
