@@ -48,7 +48,7 @@ const SUMMARIZATION_CONFIG = {
   CHUNK_SIZE_MESSAGES: 10,
   MIN_MESSAGES_FOR_SUMMARY: 5,
   EMBEDDING_MODEL: 'text-embedding-3-small',
-  CHAT_MODEL: 'gpt-4',
+  CHAT_MODEL: 'gpt-4o',  // Use gpt-4o for JSON mode support
   TEMPERATURE: 0.3,  // Lower for more consistent summaries
 };
 
@@ -113,6 +113,12 @@ serve(async (req: Request) => {
         success: true,
         message: 'Not enough new messages for summarization',
         messages_count: messages?.length ?? 0
+      }, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST',
+          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        }
       });
     }
 
@@ -194,6 +200,12 @@ serve(async (req: Request) => {
       messages_processed: messages.length,
       execution_time_ms: duration,
       summary_id: conversationSummary?.id,
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      }
     });
 
   } catch (error) {
@@ -202,7 +214,14 @@ serve(async (req: Request) => {
       success: false,
       error: error.message || 'Internal server error',
       execution_time_ms: Date.now() - startTime,
-    }, { status: 500 });
+    }, { 
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      }
+    });
   }
 });
 
@@ -255,7 +274,7 @@ async function generateSummary(
 }
 
 function buildIncrementalSummaryPrompt(existingSummary: string, newMessages: string): string {
-  return `You are updating an ongoing conversation summary.
+  return `You are updating an ongoing conversation summary for an AI agent's working memory.
 
 PREVIOUS SUMMARY:
 ${existingSummary}
@@ -264,7 +283,13 @@ NEW MESSAGES:
 ${newMessages}
 
 INSTRUCTIONS:
-1. UPDATE the summary to incorporate new information
+1. UPDATE the summary to incorporate new information while maintaining structure:
+   - A SHORT PARAGRAPH (2-3 sentences) providing high-level context
+   - BULLET POINTS highlighting:
+     * What happened (key events and actions)
+     * Important decisions or outcomes
+     * Critical context for awareness
+     * Relevant background information
 2. PRESERVE important context from the previous summary
 3. CONSOLIDATE redundant information
 4. MAINTAIN chronological flow
@@ -272,7 +297,7 @@ INSTRUCTIONS:
 
 OUTPUT (JSON format):
 {
-  "summary": "Updated conversation summary (max 500 tokens)",
+  "summary": "A short paragraph (2-3 sentences) providing high-level context, followed by bullet points:\n• What happened: [key events]\n• Important events: [critical moments]\n• Context: [relevant background]\n• Decisions: [outcomes]",
   "key_facts": ["fact1", "fact2", "..."],
   "entities": {
     "people": ["name1", "name2"],
@@ -287,21 +312,27 @@ OUTPUT (JSON format):
 }
 
 function buildFullSummaryPrompt(messages: string): string {
-  return `You are creating a summary of a conversation.
+  return `You are creating a summary of a conversation for an AI agent's working memory.
 
 CONVERSATION:
 ${messages}
 
 INSTRUCTIONS:
-1. CREATE a clear, comprehensive summary of the conversation
+1. CREATE a structured summary with:
+   - A SHORT PARAGRAPH (2-3 sentences) providing high-level context
+   - BULLET POINTS highlighting:
+     * What happened (key events and actions)
+     * Important decisions or outcomes
+     * Critical context for awareness
+     * Relevant background information
 2. EXTRACT key facts, entities, and topics
 3. IDENTIFY action items and pending questions
 4. MAINTAIN chronological flow
-5. Keep summary concise (max 500 tokens)
+5. Keep summary concise but informative (max 500 tokens)
 
 OUTPUT (JSON format):
 {
-  "summary": "Complete conversation summary (max 500 tokens)",
+  "summary": "A short paragraph (2-3 sentences) providing high-level context, followed by bullet points:\n• What happened: [key events]\n• Important events: [critical moments]\n• Context: [relevant background]\n• Decisions: [outcomes]",
   "key_facts": ["fact1", "fact2", "..."],
   "entities": {
     "people": ["name1", "name2"],

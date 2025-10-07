@@ -16,7 +16,7 @@ interface MessageListProps {
   thinkingMessageIndex: number | null;
   formatMarkdown: (content: string) => string;
   currentProcessingDetails?: any;
-  onShowProcessModal?: () => void;
+  onShowProcessModal?: (messageDetails?: any) => void;
   aiState?: any;
   currentTool?: any;
   processSteps?: any[];
@@ -121,8 +121,8 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
                 </span>
                 
-                {/* Thoughts and Process buttons for assistant messages - ONLY show if there's actual data */}
-                {message.role === 'assistant' && (message.metadata?.aiProcessDetails || message.metadata?.processingDetails || currentProcessingDetails) && (
+                {/* Thoughts and Process buttons for assistant messages - ALWAYS show Process button */}
+                {message.role === 'assistant' && (
                   <div className="flex items-center space-x-2">
                     {/* Thoughts Dropdown - only show if there are process steps */}
                     {message.metadata?.aiProcessDetails?.steps && message.metadata.aiProcessDetails.steps.length > 0 && (
@@ -148,10 +148,13 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                       </details>
                     )}
                     
-                    {/* Process Button - only show if there are processing details */}
-                    {(message.metadata?.processingDetails || currentProcessingDetails) && onShowProcessModal && (
+                    {/* Process Button - ALWAYS show for assistant messages */}
+                    {onShowProcessModal && (
                       <button
-                        onClick={onShowProcessModal}
+                        onClick={() => {
+                          console.log('[MessageList] Process button clicked for message:', message);
+                          onShowProcessModal(message.metadata?.processingDetails || { conversation_id: message.metadata?.conversation_id });
+                        }}
                         className="flex items-center space-x-1 cursor-pointer hover:bg-muted/50 rounded-md px-1.5 py-0.5 transition-colors"
                         title="View detailed processing information"
                       >

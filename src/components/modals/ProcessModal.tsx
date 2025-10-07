@@ -1,5 +1,7 @@
 import React from 'react';
 import { X, Clock, Brain, Database, Zap, MessageSquare, BarChart3, CheckCircle, XCircle, AlertCircle, ChevronDown, ChevronRight, FileText, Hash, Settings, RotateCcw } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { supabase } from '../../lib/supabase';
 
 interface ProcessModalProps {
   isOpen: boolean;
@@ -94,6 +96,75 @@ const MemoryDropdown: React.FC<{
               )}
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Recent Messages Section Component
+const RecentMessagesSection: React.FC<{
+  messages: any[];
+}> = ({ messages }) => {
+  const [expandedIndices, setExpandedIndices] = React.useState<Set<number>>(new Set());
+  
+  const toggleExpanded = (idx: number) => {
+    setExpandedIndices(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(idx)) {
+        newSet.delete(idx);
+      } else {
+        newSet.add(idx);
+      }
+      return newSet;
+    });
+  };
+  
+  return (
+    <div>
+      <div className="font-medium text-foreground mb-2">
+        Last 5 Messages in Context:
+      </div>
+      {messages.length > 0 ? (
+        <div className="space-y-1">
+          {messages.map((msg: any, idx: number) => {
+            const isExpanded = expandedIndices.has(idx);
+            const preview = msg.content.substring(0, 60) + (msg.content.length > 60 ? '...' : '');
+            
+            return (
+              <div key={idx} className="bg-muted/30 border border-muted rounded overflow-hidden">
+                <button
+                  onClick={() => toggleExpanded(idx)}
+                  className="w-full px-3 py-2 flex items-center justify-between hover:bg-muted/50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs font-medium text-foreground shrink-0">
+                      {msg.role === 'user' ? '👤 User' : '🤖 Assistant'}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {preview}
+                    </span>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
+                </button>
+                {isExpanded && (
+                  <div className="px-3 py-2 border-t border-muted bg-muted/20">
+                    <div className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground">
+          Loading recent messages...
         </div>
       )}
     </div>
@@ -330,6 +401,107 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
   onClose,
   processingDetails,
 }) => {
+  // Local state for summary info that can be updated
+  const [localSummaryInfo, setLocalSummaryInfo] = React.useState<any>(null);
+  const [localRecentMessages, setLocalRecentMessages] = React.useState<any[]>([]);
+  const [isGenerating, setIsGenerating] = React.useState(false);
+  const [generationStatus, setGenerationStatus] = React.useState<'idle' | 'success' | 'error'>('idle');
+  const [generationMessage, setGenerationMessage] = React.useState('');
+  
+  // Update local state when processingDetails changes
+  React.useEffect(() => {
+    setLocalSummaryInfo(processingDetails?.summary_info || null);
+    setLocalRecentMessages(processingDetails?.recent_messages_used || []);
+  }, [processingDetails]);
+  
+  // Fetch summary and recent messages from database when modal opens
+  React.useEffect(() => {
+    if (!isOpen) return;
+    
+    const fetchContextData = async () => {
+      try {
+        // Try to get conversation_id from multiple sources
+        let conversationId = processingDetails?.conversation_id;
+        
+        // Fallback: Try to get from URL
+        if (!conversationId) {
+          const params = new URLSearchParams(window.location.search);
+          conversationId = params.get('conv');
+        }
+        
+        console.log('[ProcessModal] Fetching context data for conversation:', conversationId);
+        console.log('[ProcessModal] processingDetails:', processingDetails);
+        
+        if (!conversationId) {
+          console.warn('[ProcessModal] No conversation_id available');
+          return;
+        }
+        
+        // Fetch summary from database
+        const { data: summaryBoard, error: summaryError } = await supabase
+          .from('conversation_summary_boards')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .single();
+        
+        if (summaryError) {
+          console.log('[ProcessModal] No summary found (this is OK for new conversations):', summaryError.message);
+        } else if (summaryBoard) {
+          console.log('[ProcessModal] Summary found:', summaryBoard);
+          setLocalSummaryInfo({
+            summary: summaryBoard.current_summary,
+            facts_count: summaryBoard.important_facts?.length || 0,
+            action_items_count: summaryBoard.action_items?.length || 0,
+            pending_questions_count: summaryBoard.pending_questions?.length || 0,
+            message_count: summaryBoard.message_count,
+            last_updated: summaryBoard.last_updated,
+          });
+        }
+        
+        // ALWAYS fetch recent messages (last 5)
+        console.log('[ProcessModal] Fetching recent messages...');
+        const { data: recentMsgs, error: msgsError } = await supabase
+          .from('chat_messages_v2')
+          .select('role, content, created_at')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        
+        if (msgsError) {
+          console.error('[ProcessModal] Error fetching messages:', msgsError);
+        } else {
+          console.log('[ProcessModal] Fetched messages:', recentMsgs);
+          if (recentMsgs && recentMsgs.length > 0) {
+            setLocalRecentMessages(recentMsgs.reverse().map((msg: any) => ({
+              role: msg.role,
+              content: typeof msg.content === 'string' ? msg.content : msg.content?.text || '',
+              timestamp: msg.created_at,
+            })));
+          } else {
+            console.warn('[ProcessModal] No messages found for conversation');
+          }
+        }
+      } catch (error) {
+        console.error('[ProcessModal] Error fetching context data:', error);
+      }
+    };
+    
+    fetchContextData();
+  }, [isOpen, processingDetails?.conversation_id]);
+  
+  // Reset status after a few seconds
+  React.useEffect(() => {
+    if (generationStatus !== 'idle') {
+      const timer = setTimeout(() => {
+        setGenerationStatus('idle');
+        setGenerationMessage('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [generationStatus]);
+  
+  // Use local state if available, otherwise fall back to processingDetails
+  const displaySummaryInfo = localSummaryInfo || processingDetails?.summary_info;
   if (!isOpen || !processingDetails) return null;
 
   const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance, reasoning, discovered_tools } = processingDetails;
@@ -497,18 +669,17 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
 
             {/* Context Operations */}
             <div className="bg-card border border-border rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Database className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold text-foreground">Context Operations</h3>
-              </div>
-              
-              <div className="space-y-3 text-sm text-muted-foreground">
-                {/* Conversation Summarization Status */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-foreground">Conversation Summary:</span>
-                    <button
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="font-semibold text-foreground">Context Operations</h3>
+                </div>
+                <button
                       onClick={async () => {
+                        setIsGenerating(true);
+                        setGenerationStatus('idle');
+                        setGenerationMessage('');
+                        
                         // Try to get conversation_id from multiple sources
                         let conversationId = processingDetails?.conversation_id;
                         
@@ -518,97 +689,185 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                           conversationId = params.get('conv');
                         }
                         
-                        console.log('Trigger Summary - conversation_id:', conversationId);
+                        console.log('Generate Context - conversation_id:', conversationId);
                         console.log('Processing details:', processingDetails);
                         
                         if (!conversationId) {
-                          alert('No conversation ID available');
+                          setIsGenerating(false);
+                          setGenerationStatus('error');
+                          setGenerationMessage('No conversation ID available');
                           return;
                         }
                         try {
-                          const { createClient } = await import('@supabase/supabase-js');
-                          const supabase = createClient(
-                            import.meta.env.VITE_SUPABASE_URL,
-                            import.meta.env.VITE_SUPABASE_ANON_KEY
-                          );
+                          // Get agent_id from messages and user_id from auth
+                          const { data: messages, error: msgError } = await supabase
+                            .from('chat_messages_v2')
+                            .select('sender_agent_id')
+                            .eq('conversation_id', conversationId)
+                            .not('sender_agent_id', 'is', null)
+                            .limit(1);
                           
-                          const { data, error } = await supabase.rpc('trigger_manual_summarization', {
-                            p_conversation_id: conversationId,
-                            p_force_full: true
+                          if (msgError) throw msgError;
+                          if (!messages || messages.length === 0) {
+                            throw new Error('No messages found for this conversation');
+                          }
+                          
+                          const agentId = messages[0].sender_agent_id;
+                          
+                          // Get user_id from current session
+                          const { data: { user } } = await supabase.auth.getUser();
+                          if (!user) {
+                            throw new Error('User not authenticated');
+                          }
+                          const userId = user.id;
+                          
+                          // Call the edge function directly
+                          const { data, error } = await supabase.functions.invoke('conversation-summarizer', {
+                            body: {
+                              conversation_id: conversationId,
+                              agent_id: agentId,
+                              user_id: userId,
+                              force_full_summary: true,
+                              manual_trigger: true
+                            }
                           });
                           
                           if (error) throw error;
-                          alert('Summarization triggered successfully!');
+                          
+                          console.log('[ProcessModal] Context generation completed:', data);
+                          
+                          // Fetch the fresh summary from the database
+                          const { data: summaryBoard, error: fetchError } = await supabase
+                            .from('conversation_summary_boards')
+                            .select('*')
+                            .eq('conversation_id', conversationId)
+                            .single();
+                          
+                          if (fetchError) {
+                            console.error('[ProcessModal] Error fetching summary:', fetchError);
+                            setIsGenerating(false);
+                            setGenerationStatus('error');
+                            setGenerationMessage('Failed to fetch summary from database');
+                            return;
+                          }
+                          
+                          // Fetch recent messages (last 5)
+                          const { data: recentMsgs, error: msgsError } = await supabase
+                            .from('chat_messages_v2')
+                            .select('role, content, created_at')
+                            .eq('conversation_id', conversationId)
+                            .order('created_at', { ascending: false })
+                            .limit(5);
+                          
+                          if (msgsError) {
+                            console.error('[ProcessModal] Error fetching recent messages:', msgsError);
+                          }
+                          
+                          // Update the local summary state with fresh data
+                          if (summaryBoard) {
+                            setLocalSummaryInfo({
+                              summary: summaryBoard.current_summary,
+                              facts_count: summaryBoard.important_facts?.length || 0,
+                              action_items_count: summaryBoard.action_items?.length || 0,
+                              pending_questions_count: summaryBoard.pending_questions?.length || 0,
+                              message_count: summaryBoard.message_count,
+                              last_updated: summaryBoard.last_updated,
+                            });
+                            
+                            // Update recent messages
+                            if (recentMsgs && recentMsgs.length > 0) {
+                              setLocalRecentMessages(recentMsgs.reverse().map((msg: any) => ({
+                                role: msg.role,
+                                content: typeof msg.content === 'string' ? msg.content : msg.content?.text || '',
+                                timestamp: msg.created_at,
+                              })));
+                            }
+                            
+                            setIsGenerating(false);
+                            setGenerationStatus('success');
+                            setGenerationMessage('Context generated successfully!');
+                          }
                         } catch (error: any) {
-                          alert(`Error: ${error.message}`);
+                          console.error('[ProcessModal] Context generation error:', error);
+                          setIsGenerating(false);
+                          setGenerationStatus('error');
+                          setGenerationMessage(error.message || 'Failed to generate context');
                         }
                       }}
-                      className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center gap-1"
+                      disabled={isGenerating}
+                      className={`px-3 py-1.5 text-xs rounded transition-all flex items-center gap-2 ${
+                        isGenerating 
+                          ? 'bg-primary/50 text-primary-foreground cursor-wait' 
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      }`}
                     >
-                      <RotateCcw className="h-3 w-3" />
-                      Trigger Summary
+                      {isGenerating ? (
+                        <>
+                          <RotateCcw className="h-3 w-3 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="h-3 w-3" />
+                          Generate Context
+                        </>
+                      )}
                     </button>
+              </div>
+              
+              <div className="space-y-3 text-sm text-muted-foreground">
+                {/* Status Message */}
+                {generationStatus !== 'idle' && (
+                  <div className={`px-3 py-2 rounded text-xs flex items-center gap-2 ${
+                    generationStatus === 'success' 
+                      ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
+                      : 'bg-red-500/10 text-red-600 border border-red-500/20'
+                  }`}>
+                    {generationStatus === 'success' ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    <span className="font-medium">{generationMessage}</span>
                   </div>
-                  
-                  {context_operations?.summary_status ? (
-                    <div className="ml-2 space-y-1">
-                      <div className="flex items-center gap-2">
-                        {context_operations.summary_status === 'active' ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-gray-400" />
-                        )}
-                        <span>Status: {context_operations.summary_status === 'active' ? 'Active' : 'Not Available'}</span>
+                )}
+                
+                {/* Conversation Summarization Status */}
+                <div>
+                  {displaySummaryInfo ? (
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-foreground">Status: Active</span>
                       </div>
-                      {context_operations.messages_summarized && (
-                        <div className="text-xs">
-                          Messages Summarized: {context_operations.messages_summarized}
+                      <div className="text-muted-foreground leading-relaxed">
+                        <span className="font-medium">Summary:</span> {displaySummaryInfo.summary}
+                      </div>
+                      <div className="flex gap-4 text-muted-foreground pt-1">
+                        <span>{displaySummaryInfo.facts_count} facts</span>
+                        <span>{displaySummaryInfo.action_items_count} action items</span>
+                        <span>{displaySummaryInfo.message_count} messages summarized</span>
+                      </div>
+                      {displaySummaryInfo.pending_questions_count > 0 && (
+                        <div className="text-muted-foreground">
+                          <span className="font-medium">Pending Questions:</span> {displaySummaryInfo.pending_questions_count}
                         </div>
                       )}
-                      {context_operations.last_summary_update && (
-                        <div className="text-xs">
-                          Last Updated: {new Date(context_operations.last_summary_update).toLocaleString()}
-                        </div>
-                      )}
-                      {context_operations.important_facts_count && (
-                        <div className="text-xs">
-                          Key Facts: {context_operations.important_facts_count}
+                      {displaySummaryInfo.last_updated && (
+                        <div className="text-muted-foreground text-xs">
+                          Last Updated: {new Date(displaySummaryInfo.last_updated).toLocaleString()}
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="ml-2 text-xs">
+                    <div className="text-xs text-muted-foreground">
                       Summary will be created after 5 messages
                     </div>
                   )}
                 </div>
                 
-                {/* Context Type */}
-                <div>
-                  <span className="font-medium text-foreground">Context Type:</span>
-                  <span className="ml-2">
-                    {context_operations?.using_summary ? 'Summary + Recent Messages' : 'Recent Messages Only'}
-                  </span>
-                </div>
-                
-                {/* Optimization Indicators */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1">
-                    {context_operations?.optimization_applied ? 
-                      <CheckCircle className="h-4 w-4 text-green-600" /> : 
-                      <XCircle className="h-4 w-4 text-gray-400" />
-                    }
-                    <span>Optimization Applied</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-1">
-                    {context_operations?.compression_applied ? 
-                      <CheckCircle className="h-4 w-4 text-green-600" /> : 
-                      <XCircle className="h-4 w-4 text-gray-400" />
-                    }
-                    <span>Compression Applied</span>
-                  </div>
-                </div>
+                {/* Recent Messages Used - ALWAYS SHOWN */}
+                <RecentMessagesSection messages={localRecentMessages} />
               </div>
             </div>
 

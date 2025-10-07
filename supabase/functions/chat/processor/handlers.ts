@@ -125,8 +125,9 @@ export class TextMessageHandler implements MessageHandler {
     // This provides intelligent context while saving ~83% of tokens
     const conversationId = context.conversation_id || (message as any).conversation_id;
     
-    // Track recent messages for intent classification later
+    // Track recent messages for intent classification later and for metrics
     let recentMessages: Array<{ role: string; content: string }> = [];
+    let summaryInfo: any = null;
     
     if (conversationId && context.agent_id) {
       try {
@@ -144,6 +145,16 @@ export class TextMessageHandler implements MessageHandler {
           
           console.log(`[TextMessageHandler] ✅ Added working memory context (${memoryContext.facts.length} facts, ${memoryContext.metadata.message_count} messages summarized)`);
           console.log(`[TextMessageHandler] 📊 Token savings: ~${memoryContext.metadata.message_count * 100} tokens saved vs raw history`);
+          
+          // Store summary info for metrics
+          summaryInfo = {
+            summary: memoryContext.summary,
+            facts_count: memoryContext.facts.length,
+            action_items_count: memoryContext.action_items.length,
+            pending_questions_count: memoryContext.pending_questions.length,
+            message_count: memoryContext.metadata.message_count,
+            last_updated: memoryContext.metadata.last_updated,
+          };
           
           // HYBRID APPROACH: Always include last 5 messages for immediate context
           // This ensures the agent is aware of the very recent conversation flow
@@ -562,7 +573,7 @@ export class TextMessageHandler implements MessageHandler {
       }
       
       // Execute the retry tool calls
-      console.log(`[TextMessageHandler] Executing MCP retry tool calls:`, retryToolCalls.map(tc => tc.function?.name).join(', '));
+      console.log(`[TextMessageHandler] Executing MCP retry tool calls:`, retryToolCalls.map((tc: any) => tc.function?.name).join(', '));
       
       // Safety check: FCM should always exist if we're in retry loop with tool calls
       if (!fcm) {
@@ -614,9 +625,10 @@ export class TextMessageHandler implements MessageHandler {
       const cleanedReflectionMsgs = msgs.map(msg => {
         if (msg.role === 'tool') {
           // Convert tool result to user message so LLM can see it
+          const toolMsg = msg as any;
           return {
             role: 'user',
-            content: `[Tool Result from ${msg.tool_call_id || 'tool'}]:\n${msg.content}`
+            content: `[Tool Result from ${toolMsg.tool_call_id || 'tool'}]:\n${msg.content}`
           };
         }
         // Remove tool_calls property from assistant messages
@@ -752,6 +764,13 @@ export class TextMessageHandler implements MessageHandler {
         tool_details: toolDetails,
         discovered_tools: discoveredToolsForMetrics,
         tool_requested: toolCalls.length > 0,
+        // Context operations for UI display
+        summary_info: summaryInfo,
+        recent_messages_used: recentMessages.map((msg: any) => ({
+          role: msg.role,
+          content: String(msg.content || '').substring(0, 200), // Truncate for display
+          timestamp: msg.timestamp || msg.created_at,
+        })),
       },
     } as any;
   }

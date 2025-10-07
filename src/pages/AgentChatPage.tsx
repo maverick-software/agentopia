@@ -1277,6 +1277,39 @@ export function AgentChatPage() {
         requestAnimationFrame(scrollToBottom);
       }
 
+      // Check if we should trigger automatic summarization (every 5 messages)
+      try {
+        const { count } = await supabase
+          .from('chat_messages_v2')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', conversationId);
+        
+        if (count && count % 5 === 0 && count >= 5) {
+          console.log(`[AutoSummarization] Triggering summarization at ${count} messages`);
+          
+          // Call edge function asynchronously (don't await - fire and forget)
+          supabase.functions.invoke('conversation-summarizer', {
+            body: {
+              conversation_id: conversationId,
+              agent_id: agent.id,
+              user_id: user.id,
+              message_count: count,
+              force_full_summary: false,
+              manual_trigger: false
+            }
+          }).then(({ error }) => {
+            if (error) {
+              console.error('[AutoSummarization] Failed to trigger:', error);
+            } else {
+              console.log('[AutoSummarization] Successfully triggered');
+            }
+          });
+        }
+      } catch (summaryError) {
+        // Non-fatal - just log the error
+        console.error('[AutoSummarization] Error checking message count:', summaryError);
+      }
+
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('[handleSubmit] Chat request cancelled.');
@@ -1620,7 +1653,13 @@ export function AgentChatPage() {
                 currentTool={currentTool}
                 processSteps={processSteps}
                 currentProcessingDetails={currentProcessingDetails}
-                onShowProcessModal={() => setShowProcessModal(true)}
+                onShowProcessModal={(messageDetails) => {
+                  console.log('[AgentChatPage] Opening process modal with details:', messageDetails);
+                  if (messageDetails) {
+                    setCurrentProcessingDetails(messageDetails);
+                  }
+                  setShowProcessModal(true);
+                }}
               />
             </div>
                           )}
