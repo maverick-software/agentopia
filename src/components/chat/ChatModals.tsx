@@ -57,7 +57,8 @@ export function ChatModals({
           personality: agent?.personality,
           avatar_url: agent?.avatar_url,
           agent_datastores: agent?.agent_datastores,
-          metadata: agent?.metadata
+          metadata: agent?.metadata,
+          user_id: agent?.user_id
         }}
         initialTab={agentSettingsInitialTab}
         onAgentUpdated={async (updatedAgent) => {

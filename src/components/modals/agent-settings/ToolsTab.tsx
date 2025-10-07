@@ -490,36 +490,49 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
   };
 
   const handleRefreshCache = async () => {
-    if (!agentData?.user_id) {
+    console.log('[ToolsTab] Refresh cache button clicked');
+    
+    // Use user_id from agentData first, fallback to authenticated user
+    const userId = agentData?.user_id || user?.id;
+    
+    if (!userId) {
+      console.error('[ToolsTab] Missing user_id - agentData:', agentData, 'user:', user);
       toast.error('Unable to refresh cache: missing user information');
       return;
     }
 
+    console.log('[ToolsTab] Starting cache refresh for agent:', agentId, 'user:', userId);
     setRefreshingCache(true);
+    
     try {
+      toast.loading('Refreshing tool cache...', { duration: 1000 });
+
       const { data, error } = await supabase.functions.invoke('invalidate-agent-tool-cache', {
         body: {
           agent_id: agentId,
-          user_id: agentData.user_id
+          user_id: userId
         }
       });
 
+      console.log('[ToolsTab] Cache refresh response:', { data, error });
+
       if (error) {
-        console.error('Cache refresh error:', error);
-        toast.error('Failed to refresh tool cache');
+        console.error('[ToolsTab] Cache refresh error:', error);
+        toast.error(`Failed to refresh tool cache: ${error.message}`);
         return;
       }
 
       if (data?.success) {
-        toast.success(`Tool cache refreshed successfully! (${data.tools_count} tools updated)`);
+        toast.success(`Tool cache refreshed successfully! (${data.tools_count || 0} tools updated)`);
       } else {
         toast.error(data?.error || 'Failed to refresh cache');
       }
     } catch (error: any) {
-      console.error('Cache refresh error:', error);
-      toast.error('Failed to refresh tool cache');
+      console.error('[ToolsTab] Cache refresh exception:', error);
+      toast.error(`Failed to refresh tool cache: ${error.message || 'Unknown error'}`);
     } finally {
       setRefreshingCache(false);
+      console.log('[ToolsTab] Cache refresh complete');
     }
   };
 

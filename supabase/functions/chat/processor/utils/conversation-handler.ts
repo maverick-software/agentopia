@@ -1,6 +1,7 @@
 /**
  * Conversation Message Handler
  * Handles adding tool calls and results to conversation messages
+ * Updated: Oct 6, 2025 - Enhanced logging for tool result delivery
  */
 
 import type { ToolCall, ToolDetail } from './tool-execution-types.ts';
@@ -36,6 +37,9 @@ export class ConversationHandler {
     toolCalls: ToolCall[],
     fcm: any
   ): Promise<void> {
+    console.log(`[ConversationHandler] 🚀 addToolResults called with ${toolDetails.length} tool details, ${toolCalls.length} tool calls`);
+    console.log(`[ConversationHandler] Current msgs length: ${msgs.length}`);
+    
     for (let i = 0; i < toolDetails.length && i < toolCalls.length; i++) {
       const detail = toolDetails[i];
       const toolCall = toolCalls[i];
@@ -50,11 +54,18 @@ export class ConversationHandler {
       try {
         const formattedContent = await fcm.formatResult(detail.name, result);
         
+        console.log(`[ConversationHandler] 📨 Adding tool result for ${detail.name} to msgs array`);
+        console.log(`[ConversationHandler] Formatted content length: ${formattedContent.length} chars`);
+        console.log(`[ConversationHandler] Content preview:`, formattedContent.substring(0, 150));
+        console.log(`[ConversationHandler] tool_call_id:`, toolCall.id);
+        
         msgs.push({
           role: 'tool',
           content: formattedContent,
           tool_call_id: toolCall.id,
         });
+        
+        console.log(`[ConversationHandler] ✅ Tool result added. Total msgs: ${msgs.length}`);
       } catch (formatError: any) {
         console.error(`[ConversationHandler] Error formatting result for ${detail.name}:`, formatError);
         

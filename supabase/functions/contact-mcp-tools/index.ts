@@ -340,7 +340,8 @@ async function handleSearchContacts(
       throw new Error('Missing required parameters: agent_id and user_id are required');
     }
 
-    console.log(`[Contact MCP Tools] Searching contacts for agent ${agent_id}, query: "${query}"`);
+    console.log(`[Contact MCP Tools] Searching contacts for agent ${agent_id}, user ${user_id}, query: "${query}"`);
+    console.log(`[Contact MCP Tools] Raw parameters:`, { agent_id, user_id, query, contact_type, channel_type });
 
     // Parse the query for intelligent parameter extraction
     let parsedParams = {
@@ -392,6 +393,11 @@ async function handleSearchContacts(
       throw new Error(`Contact search failed: ${searchError.message}`);
     }
 
+    console.log(`[Contact MCP Tools] Database returned ${searchResults?.length || 0} results`);
+    if (searchResults && searchResults.length > 0) {
+      console.log(`[Contact MCP Tools] First result:`, searchResults[0]);
+    }
+
     // Format results for MCP tool response
     const formattedResults = (searchResults || []).map((contact: any) => ({
       id: contact.contact_id,
@@ -432,7 +438,7 @@ async function handleSearchContacts(
       searchSummary += '. Use get_contact_details with a contact ID to get detailed information about a specific contact.';
     }
 
-    return {
+    const response = {
       success: true,
       data: {
         contacts: formattedResults,
@@ -459,6 +465,11 @@ async function handleSearchContacts(
         user_id
       }
     };
+
+    console.log(`[Contact MCP Tools] Returning response with ${formattedResults.length} contacts`);
+    console.log(`[Contact MCP Tools] Summary: ${searchSummary}`);
+    
+    return response;
 
   } catch (error: any) {
     console.error('[Contact MCP Tools] Search contacts error:', error);

@@ -340,6 +340,40 @@ const TOOL_ROUTING_MAP: Record<string, {
     })
   },
   
+  // Conversation Memory tools (Working Memory System)
+  'search_working_memory': {
+    edgeFunction: 'conversation-memory-mcp',
+    actionMapping: () => 'search_working_memory',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'search_working_memory',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
+  'search_conversation_summaries': {
+    edgeFunction: 'conversation-memory-mcp',
+    actionMapping: () => 'search_conversation_summaries',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'search_conversation_summaries',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
+  'get_conversation_summary_board': {
+    edgeFunction: 'conversation-memory-mcp',
+    actionMapping: () => 'get_conversation_summary_board',
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: 'get_conversation_summary_board',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      params: params
+    })
+  },
+  
   // Advanced Reasoning tools (MCP-based)
   'reasoning_': {
     edgeFunction: 'advanced-reasoning',

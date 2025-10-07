@@ -452,6 +452,43 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+  // Conversation Memory tools (Working Memory System)
+  if (toolName === 'search_working_memory') {
+    return {
+      ...baseSchema,
+      properties: {
+        query: { type: 'string', description: 'The search query to find relevant conversation context' },
+        conversation_id: { type: 'string', description: 'The conversation ID to search within' },
+        similarity_threshold: { type: 'number', description: 'Minimum similarity score (0-1). Default: 0.7', default: 0.7 },
+        match_count: { type: 'number', description: 'Maximum number of results to return. Default: 5', default: 5 }
+      },
+      required: ['query', 'conversation_id']
+    };
+  }
+
+  if (toolName === 'search_conversation_summaries') {
+    return {
+      ...baseSchema,
+      properties: {
+        query: { type: 'string', description: 'The search query to find relevant conversation summaries' },
+        start_date: { type: 'string', description: 'Filter summaries after this date (ISO 8601 format)' },
+        end_date: { type: 'string', description: 'Filter summaries before this date (ISO 8601 format)' },
+        match_count: { type: 'number', description: 'Maximum number of results to return. Default: 5', default: 5 }
+      },
+      required: ['query']
+    };
+  }
+
+  if (toolName === 'get_conversation_summary_board') {
+    return {
+      ...baseSchema,
+      properties: {
+        conversation_id: { type: 'string', description: 'The conversation ID to get the summary board for' }
+      },
+      required: ['conversation_id']
+    };
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,

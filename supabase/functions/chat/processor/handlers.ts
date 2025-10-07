@@ -6,6 +6,7 @@ import { PromptBuilder } from './utils/prompt-builder.ts';
 import { MarkdownFormatter } from './utils/markdown-formatter.ts';
 import { ToolExecutor } from './utils/tool-executor.ts';
 import { IntentClassifier } from './utils/intent-classifier.ts';
+import { WorkingMemoryManager } from '../core/context/working_memory_manager.ts';
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -116,14 +117,71 @@ export class TextMessageHandler implements MessageHandler {
       }
       if (agent?.assistant_instructions) msgs.push({ role: 'assistant', content: agent.assistant_instructions });
     }
-    // ADD CONVERSATION HISTORY FROM CONTEXT!
-    const recentMessages = (message as any)?.context?.recent_messages || [];
-    for (const msg of recentMessages) {
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        msgs.push({ 
-          role: msg.role as 'user' | 'assistant', 
-          content: String(msg.content || '')
-        });
+    
+    // WORKING MEMORY INTEGRATION: Use summaries instead of raw message history
+    // This provides intelligent context while saving ~83% of tokens
+    const conversationId = context.conversation_id || (message as any).conversation_id;
+    
+    // Track recent messages for intent classification later
+    let recentMessages: Array<{ role: string; content: string }> = [];
+    
+    if (conversationId && context.agent_id) {
+      try {
+        const workingMemory = new WorkingMemoryManager(this.supabase as any);
+        const memoryContext = await workingMemory.getWorkingContext(
+          conversationId,
+          context.agent_id,
+          false  // Don't include chunks yet - just summary board
+        );
+        
+        if (memoryContext && memoryContext.summary) {
+          // Format working memory as assistant message for better LLM comprehension
+          const workingMemoryBlock = workingMemory.formatContextForLLM(memoryContext);
+          msgs.push({ role: 'assistant', content: workingMemoryBlock });
+          
+          console.log(`[TextMessageHandler] ✅ Added working memory context (${memoryContext.facts.length} facts, ${memoryContext.metadata.message_count} messages summarized)`);
+          console.log(`[TextMessageHandler] 📊 Token savings: ~${memoryContext.metadata.message_count * 100} tokens saved vs raw history`);
+          
+          // Get recent messages for intent classification (don't add to prompt, summary has it)
+          recentMessages = await workingMemory.getRecentMessages(conversationId, 3);
+        } else {
+          // Fallback: No summary yet, use recent messages (new conversations)
+          console.log(`[TextMessageHandler] ℹ️ No summary available, using recent messages`);
+          recentMessages = await workingMemory.getRecentMessages(conversationId, 5);
+          
+          for (const msg of recentMessages) {
+            if (msg.role === 'user' || msg.role === 'assistant') {
+              msgs.push({ 
+                role: msg.role as 'user' | 'assistant', 
+                content: String(msg.content || '')
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[TextMessageHandler] Error fetching working memory, falling back to recent messages:', error);
+        
+        // Fallback: Use recent messages from context if working memory fails
+        recentMessages = (message as any)?.context?.recent_messages || [];
+        for (const msg of recentMessages.slice(-5)) {  // Limit to last 5 messages
+          if (msg.role === 'user' || msg.role === 'assistant') {
+            msgs.push({ 
+              role: msg.role as 'user' | 'assistant', 
+              content: String(msg.content || '')
+            });
+          }
+        }
+      }
+    } else {
+      // No conversation ID - use recent messages from context (workspace chats, etc.)
+      recentMessages = (message as any)?.context?.recent_messages || [];
+      for (const msg of recentMessages.slice(-5)) {  // Limit to last 5 messages
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          msgs.push({ 
+            role: msg.role as 'user' | 'assistant', 
+            content: String(msg.content || '')
+          });
+        }
       }
     }
     
@@ -240,15 +298,24 @@ export class TextMessageHandler implements MessageHandler {
           }
         }
       } else {
+        console.log('[TextMessageHandler] Using LLMRouter for agent:', context.agent_id);
         const resolved = await router.resolveAgent(context.agent_id).catch(() => null);
         effectiveModel = resolved?.prefs?.model || effectiveModel;
+        console.log('[TextMessageHandler] Resolved model:', effectiveModel);
         // Convert OpenAI format tools to LLMTool format for router
         const llmTools = availableTools.map(tool => ({
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters
         }));
+        console.log('[TextMessageHandler] Calling router.chat() with', msgs.length, 'messages and', llmTools.length, 'tools');
         const resp = await router.chat(context.agent_id, msgs as any, { tools: llmTools, temperature: 0.7, maxTokens: 1200 });
+        console.log('[TextMessageHandler] ✅ Router response received:', {
+          hasText: !!resp.text,
+          textLength: resp.text?.length,
+          hasToolCalls: !!resp.toolCalls,
+          toolCallsCount: resp.toolCalls?.length || 0
+        });
         const respToolCalls = (resp.toolCalls || []) as Array<{ id: string; name: string; arguments: string }>;
         completion = {
           choices: [{ message: { content: resp.text, tool_calls: respToolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) } }],
@@ -265,6 +332,7 @@ export class TextMessageHandler implements MessageHandler {
       console.log('[DEBUG] Formatted tools for OpenAI:', JSON.stringify(formattedTools, null, 2));
       
       try {
+        console.log('[TextMessageHandler] Calling OpenAI with', msgs.length, 'messages and', formattedTools.length, 'tools');
         completion = await this.openai.chat.completions.create({
           model: 'gpt-4',
           messages: msgs,
@@ -273,7 +341,17 @@ export class TextMessageHandler implements MessageHandler {
           tools: formattedTools,
           tool_choice: 'auto',
         });
+        console.log('[TextMessageHandler] ✅ OpenAI response received:', {
+          hasChoices: !!completion.choices,
+          choicesLength: completion.choices?.length,
+          hasMessage: !!completion.choices?.[0]?.message,
+          hasContent: !!completion.choices?.[0]?.message?.content,
+          contentLength: completion.choices?.[0]?.message?.content?.length,
+          hasToolCalls: !!completion.choices?.[0]?.message?.tool_calls,
+          toolCallsCount: completion.choices?.[0]?.message?.tool_calls?.length || 0
+        });
       } catch (toolError: any) {
+        console.error('[TextMessageHandler] ❌ OpenAI call failed:', toolError.message);
         // Handle tool validation errors gracefully
         if (toolError?.error?.param?.includes('tools') || toolError?.message?.includes('tools')) {
           console.warn('[TextMessageHandler] Tool validation failed, falling back to no-tools mode:', toolError.message);
@@ -541,6 +619,19 @@ export class TextMessageHandler implements MessageHandler {
       }
     }
 
+    // Log completion structure before extracting text
+    if (!completion.choices?.[0]?.message?.content) {
+      console.error('[TextMessageHandler] ❌ EMPTY RESPONSE from LLM!', {
+        hasCompletion: !!completion,
+        hasChoices: !!completion.choices,
+        choicesLength: completion.choices?.length,
+        firstChoice: completion.choices?.[0],
+        hasMessage: !!completion.choices?.[0]?.message,
+        messageKeys: completion.choices?.[0]?.message ? Object.keys(completion.choices[0].message) : [],
+        content: completion.choices?.[0]?.message?.content
+      });
+    }
+    
     let text = completion.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
     
     // Post-process the response to ensure proper Markdown formatting

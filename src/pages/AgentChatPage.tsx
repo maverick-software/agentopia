@@ -1009,10 +1009,10 @@ export function AgentChatPage() {
     setAttachedDocuments([]);
     setSending(true);
 
-    // Establish conversation ID FIRST (before adding messages or starting AI processing)
-    // This ensures the UI switches to chat history view immediately
+    // Establish conversation ID variables FIRST
     let convId = selectedConversationId;
     let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+    let wasTemporary = isTemporaryConversation;
     
     if (isTemporaryConversation) {
       // Set flag to prevent fetchHistory from clearing our messages
@@ -1024,21 +1024,12 @@ export function AgentChatPage() {
       convId = selectedConversationId || convId || crypto.randomUUID();
       console.log('[AgentChatPage] handleSubmit - convId after:', convId);
       sessId = crypto.randomUUID();
-      
-      // Mark as no longer temporary since we're persisting it
-      setIsTemporaryConversation(false);
-      setSelectedConversationId(convId);
-      
-      // Reflect in URL for consistency
-      navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
-      localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
-      localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
     }
 
     // Get attached document IDs for metadata
     const completedAttachments = attachedDocuments.filter(doc => doc.uploadStatus === 'completed');
     
-    // Add user message after conversation context is established
+    // Add user message FIRST (before any conversation state changes)
     const userMessage: Message = {
       role: 'user',
       content: messageText,
@@ -1056,8 +1047,20 @@ export function AgentChatPage() {
 
     setMessages(prev => [...prev, userMessage]);
     
-    // Start AI processing indicator
+    // Start AI processing indicator BEFORE changing conversation state
     startAIProcessing();
+    
+    // NOW update conversation state (after message and AI indicator are set)
+    if (wasTemporary) {
+      // Mark as no longer temporary since we're persisting it
+      setIsTemporaryConversation(false);
+      setSelectedConversationId(convId);
+      
+      // Reflect in URL for consistency
+      navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
+      localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
+      localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+    }
     
     // Immediate scroll for better UX
     requestAnimationFrame(() => {

@@ -97,12 +97,35 @@ DECLARE
   v_user_id UUID;
   v_message_count INTEGER;
 BEGIN
-  -- Get conversation details
-  SELECT sender_agent_id, sender_user_id INTO v_agent_id, v_user_id
+  -- Get agent_id from messages (try assistant messages first)
+  SELECT sender_agent_id INTO v_agent_id
   FROM chat_messages_v2
   WHERE conversation_id = p_conversation_id
     AND sender_agent_id IS NOT NULL
   LIMIT 1;
+  
+  -- Get user_id from messages (try user messages first)
+  SELECT sender_user_id INTO v_user_id
+  FROM chat_messages_v2
+  WHERE conversation_id = p_conversation_id
+    AND sender_user_id IS NOT NULL
+  LIMIT 1;
+  
+  -- If no agent_id found, this might be a user-only conversation
+  -- Try to get the agent from the current user's context
+  IF v_agent_id IS NULL THEN
+    -- Default to authenticated user's first agent
+    SELECT id INTO v_agent_id
+    FROM agents
+    WHERE user_id = auth.uid()
+    ORDER BY created_at DESC
+    LIMIT 1;
+  END IF;
+  
+  -- If still no user_id, use authenticated user
+  IF v_user_id IS NULL THEN
+    v_user_id := auth.uid();
+  END IF;
   
   -- Get message count
   SELECT COUNT(*) INTO v_message_count
@@ -112,7 +135,9 @@ BEGIN
   IF v_agent_id IS NULL OR v_user_id IS NULL THEN
     RETURN json_build_object(
       'success', FALSE,
-      'error', 'Could not find agent_id or user_id for conversation'
+      'error', 'Could not find agent_id or user_id for conversation. Please ensure conversation exists and you have access.',
+      'conversation_id', p_conversation_id,
+      'message_count', v_message_count
     );
   END IF;
   
