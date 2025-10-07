@@ -110,19 +110,8 @@ export const TempChatPage: React.FC = () => {
         setSession(sessionData);
         console.log('Session set successfully:', sessionData);
         
-        // ✅ NEW: Prioritize initial_agent_message over welcome_message
-        // The initial_agent_message is automatically sent by the database and is more context-specific
-        if (sessionData.initial_agent_message && sessionData.should_send_initial !== false) {
-          console.log('Adding initial agent message from session');
-          setMessages([{
-            id: 'initial-greeting',
-            content: sessionData.initial_agent_message,
-            role: 'assistant',
-            timestamp: new Date().toISOString()
-          }]);
-        } else if (linkData?.welcome_message) {
-          // Fallback to welcome_message if no initial_agent_message
-          console.log('Adding welcome message from link data');
+        // Add welcome message if available
+        if (linkData?.welcome_message) {
           setMessages([{
             id: 'welcome',
             content: linkData.welcome_message,

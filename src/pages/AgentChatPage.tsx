@@ -1683,14 +1683,7 @@ export function AgentChatPage() {
                   
                   console.log('[Canvas] Sending message:', message, 'for artifact:', artifactId);
                   
-                  // Add canvas context to the message for the LLM
-                  const enhancedMessage = `[CANVAS MODE - Editing Artifact ID: ${artifactId}]
-
-${message}
-
-[System Instructions: You are in Canvas Mode editing this specific artifact. The user's request is about modifying this document. When making changes, use the update_artifact tool with artifact_id "${artifactId}" and provide the complete updated content.]`;
-                  
-                  const messageText = enhancedMessage;
+                  const messageText = message;
                   setSending(true);
 
                   // Establish conversation ID variables

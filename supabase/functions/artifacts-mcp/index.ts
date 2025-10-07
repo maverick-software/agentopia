@@ -38,23 +38,24 @@ interface MCPToolResponse {
 
 // Helper: Get MIME content type for file type
 function getContentType(fileType: string): string {
+  // Supabase Storage is picky about MIME types - use text/plain for most text files
   const contentTypes: Record<string, string> = {
     'txt': 'text/plain',
-    'md': 'text/markdown',
+    'md': 'text/plain',  // Changed from text/markdown
     'json': 'application/json',
     'html': 'text/html',
-    'javascript': 'text/javascript',
-    'typescript': 'text/typescript',
-    'python': 'text/x-python',
-    'java': 'text/x-java',
+    'javascript': 'text/plain',  // Changed from text/javascript
+    'typescript': 'text/plain',  // Changed from text/typescript
+    'python': 'text/plain',  // Changed from text/x-python
+    'java': 'text/plain',  // Changed from text/x-java
     'css': 'text/css',
     'csv': 'text/csv',
-    'sql': 'application/sql',
-    'yaml': 'text/yaml',
+    'sql': 'text/plain',  // Changed from application/sql
+    'yaml': 'text/plain',  // Changed from text/yaml
     'xml': 'application/xml',
-    'bash': 'text/x-shellscript',
-    'shell': 'text/x-shellscript',
-    'dockerfile': 'text/x-dockerfile'
+    'bash': 'text/plain',  // Changed from text/x-shellscript
+    'shell': 'text/plain',  // Changed from text/x-shellscript
+    'dockerfile': 'text/plain'  // Changed from text/x-dockerfile
   };
   return contentTypes[fileType.toLowerCase()] || 'text/plain';
 }
@@ -130,11 +131,11 @@ async function handleCreateArtifact(
     
     console.log(`[Artifacts MCP] Uploading to storage: media-library/${storagePath}`);
     
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError} = await supabase.storage
       .from('media-library')
       .upload(storagePath, content, {
         contentType: getContentType(file_type),
-        upsert: false
+        upsert: true  // Allow overwriting if file exists
       });
     
     if (uploadError) {
@@ -281,7 +282,7 @@ async function handleUpdateArtifact(
       .from('media-library')
       .upload(storagePath, content, {
         contentType: getContentType(currentArtifact.file_type),
-        upsert: false
+        upsert: true  // Allow overwriting if version exists
       });
     
     if (uploadError) {

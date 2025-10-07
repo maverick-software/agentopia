@@ -6,7 +6,8 @@
 -- Add new columns to temporary_chat_links table
 ALTER TABLE temporary_chat_links
   -- Link to the original conversation where this link was created
-  ADD COLUMN source_conversation_id UUID REFERENCES conversation_sessions(conversation_id),
+  -- Note: No foreign key constraint as conversation_id is not unique in conversation_sessions
+  ADD COLUMN source_conversation_id UUID,
   
   -- Custom intent/purpose for this temporary chat
   ADD COLUMN chat_intent TEXT CHECK (LENGTH(chat_intent) <= 2000),

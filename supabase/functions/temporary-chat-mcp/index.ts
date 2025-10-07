@@ -236,6 +236,12 @@ async function createTemporaryChatLink(
     rate_limit_per_minute?: number
     allowed_domains?: string[]
     ui_customization?: Record<string, any>
+    // ✅ NEW: Context preservation fields
+    source_conversation_id?: string
+    chat_intent?: string
+    system_prompt_override?: string
+    initial_agent_message?: string
+    send_initial_message?: boolean
   }
 ): Promise<MCPToolResponse> {
   console.log(`[createTemporaryChatLink] Starting with params:`, JSON.stringify(params, null, 2))
@@ -331,7 +337,13 @@ async function createTemporaryChatLink(
       session_timeout_minutes: defaults.session_timeout_minutes,
       rate_limit_per_minute: defaults.rate_limit_per_minute,
       allowed_domains: defaults.allowed_domains,
-      ui_customization: defaults.ui_customization
+      ui_customization: defaults.ui_customization,
+      // ✅ NEW: Context preservation fields
+      source_conversation_id: params.source_conversation_id || null,
+      chat_intent: params.chat_intent || null,
+      system_prompt_override: params.system_prompt_override || null,
+      initial_agent_message: params.initial_agent_message || null,
+      send_initial_message: params.send_initial_message !== undefined ? params.send_initial_message : true
     }
     
     console.log(`[createTemporaryChatLink] Inserting data:`, JSON.stringify(insertData, null, 2))
@@ -378,7 +390,13 @@ async function createTemporaryChatLink(
         max_sessions: link.max_sessions,
         created_at: link.created_at,
         public_url: actualToken ? `${getBaseUrl(req)}/temp-chat/${actualToken.trim()}` : null,
-        token_hint: actualToken ? actualToken.substring(0, 8) + '...' : 'Token created securely'
+        token_hint: actualToken ? actualToken.substring(0, 8) + '...' : 'Token created securely',
+        // ✅ NEW: Include context preservation info
+        source_conversation_id: params.source_conversation_id || null,
+        chat_intent: params.chat_intent || null,
+        has_system_prompt_override: !!params.system_prompt_override,
+        has_initial_message: !!params.initial_agent_message,
+        send_initial_message: params.send_initial_message !== undefined ? params.send_initial_message : true
       },
       metadata: {
         agent_id: params.agent_id,

@@ -292,14 +292,9 @@ serve(async (req) => {
           participant_name: metadata.participant_name,
           is_temporary_chat: true,
           max_messages: session.max_messages_per_session,
-          current_messages: session.current_message_count + 1,
-          // ✅ NEW: Pass context preservation fields to chat function
-          chat_intent: session.chat_intent || null,
-          system_prompt_override: session.system_prompt_override || null
+          current_messages: session.current_message_count + 1
         }
       }
-      
-      console.log(`[temporary-chat-handler] Context fields - chat_intent: ${session.chat_intent ? 'present' : 'null'}, system_prompt_override: ${session.system_prompt_override ? 'present' : 'null'}`)
 
       const chatFunctionResponse = await fetch(chatUrl, {
         method: 'POST',

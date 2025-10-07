@@ -93,24 +93,7 @@ export class TextMessageHandler implements MessageHandler {
         .single();
       
       // Build comprehensive system prompt using PromptBuilder
-      let systemPrompt = this.promptBuilder.buildSystemPromptString(agent);
-      
-      // ✅ NEW: Append system_prompt_override from sessionContext (for temporary chats)
-      const sessionContext = (message as any)?.context?.sessionContext || (context as any)?.sessionContext;
-      if (sessionContext?.system_prompt_override) {
-        console.log('[TextMessageHandler] Appending system_prompt_override from sessionContext');
-        systemPrompt = systemPrompt 
-          ? `${systemPrompt}\n\n=== TEMPORARY CHAT INSTRUCTIONS ===\n${sessionContext.system_prompt_override}\n=== END TEMPORARY CHAT INSTRUCTIONS ===`
-          : sessionContext.system_prompt_override;
-      }
-      
-      // ✅ NEW: Add chat_intent context if present
-      if (sessionContext?.chat_intent) {
-        console.log('[TextMessageHandler] Adding chat_intent context from sessionContext');
-        const intentContext = `\n\n=== CHAT PURPOSE ===\nThis temporary chat session has a specific purpose: ${sessionContext.chat_intent}\nFocus your responses on gathering information related to this purpose.\n=== END CHAT PURPOSE ===`;
-        systemPrompt = systemPrompt ? `${systemPrompt}${intentContext}` : intentContext;
-      }
-      
+      const systemPrompt = this.promptBuilder.buildSystemPromptString(agent);
       if (systemPrompt) {
         msgs.push({ role: 'system', content: systemPrompt });
       }

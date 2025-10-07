@@ -223,7 +223,7 @@ BEGIN
             OLD.version,
             OLD.content,
             OLD.storage_path,
-            auth.uid(),
+            COALESCE(auth.uid(), OLD.user_id),  -- Use user_id if auth.uid() is NULL
             OLD.metadata
         );
         

@@ -34,10 +34,6 @@ interface SessionResponse {
   current_messages: number
   rate_limit: number
   expires_at: string
-  // ✅ NEW: Context preservation fields
-  initial_agent_message?: string
-  should_send_initial?: boolean
-  chat_intent?: string
 }
 
 serve(async (req) => {
@@ -398,7 +394,6 @@ async function handleCreateSession(req: Request, supabase: any): Promise<Respons
     }
 
     console.log(`[temporary-chat-api] Session created successfully: ${sessionData.session_id}`)
-    console.log(`[temporary-chat-api] Initial message info - has_message: ${!!sessionData.initial_agent_message}, should_send: ${sessionData.should_send_initial}`)
 
     return new Response(
       JSON.stringify({
@@ -411,10 +406,7 @@ async function handleCreateSession(req: Request, supabase: any): Promise<Respons
             agent_id: sessionData.agent_id,
             agent_name: sessionData.agent_name,
             message_count: 0,
-            status: 'active',
-            // ✅ NEW: Include initial message info for frontend
-            initial_agent_message: sessionData.initial_agent_message || null,
-            should_send_initial: sessionData.should_send_initial || false
+            status: 'active'
           }
         }
       }),

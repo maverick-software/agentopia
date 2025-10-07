@@ -273,7 +273,13 @@ export function generateParametersForCapability(toolName: string) {
         session_timeout_minutes: { type: 'number', description: 'Session timeout in minutes (default: 60)', default: 60 },
         rate_limit_per_minute: { type: 'number', description: 'Rate limit per minute (default: 10)', default: 10 },
         allowed_domains: { type: 'array', items: { type: 'string' }, description: 'Allowed domains (optional)' },
-        ui_customization: { type: 'object', description: 'UI customization options (optional)' }
+        ui_customization: { type: 'object', description: 'UI customization options (optional)' },
+        // ✅ NEW: Context preservation parameters
+        source_conversation_id: { type: 'string', description: 'The conversation ID from which this temporary chat link is being created. Messages from temporary chats will appear in this conversation, allowing you to see and reference them. If not provided, a new conversation will be created.' },
+        chat_intent: { type: 'string', description: 'The specific purpose/goal of this temporary chat (e.g., "Gather feedback on project X", "Ask about availability"). This guides your behavior in the temporary chat to focus on gathering specific information.' },
+        system_prompt_override: { type: 'string', description: 'Additional instructions to adjust your behavior for this temporary chat. Use this to change tone, focus, or approach (e.g., "Be encouraging and focus on solutions"). Maximum 4000 characters.' },
+        initial_agent_message: { type: 'string', description: 'The first message you will automatically send when someone opens the link. Should introduce the purpose and ask the first question (e.g., "Hi! I\'d love to hear your feedback on our new feature. What are your initial thoughts?"). Maximum 2000 characters.' },
+        send_initial_message: { type: 'boolean', description: 'Whether to automatically send the initial_agent_message when a user opens the link (default: true). Set to false if you want users to initiate the conversation.', default: true }
       },
       required: []
     };
