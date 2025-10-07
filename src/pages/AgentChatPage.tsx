@@ -1677,6 +1677,214 @@ export function AgentChatPage() {
                   }
                   setShowProcessModal(true);
                 }}
+                onCanvasSendMessage={async (message, artifactId) => {
+                  // Handle canvas mode message sending with artifact context
+                  if (!agent || !user?.id || sending) return;
+                  
+                  console.log('[Canvas] Sending message:', message, 'for artifact:', artifactId);
+                  
+                  // Add canvas context to the message for the LLM
+                  const enhancedMessage = `[CANVAS MODE - Editing Artifact ID: ${artifactId}]
+
+${message}
+
+[System Instructions: You are in Canvas Mode editing this specific artifact. The user's request is about modifying this document. When making changes, use the update_artifact tool with artifact_id "${artifactId}" and provide the complete updated content.]`;
+                  
+                  const messageText = enhancedMessage;
+                  setSending(true);
+
+                  // Establish conversation ID variables
+                  let convId = selectedConversationId;
+                  let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
+                  let wasTemporary = isTemporaryConversation;
+                  
+                  if (isTemporaryConversation) {
+                    setIsCreatingNewConversation(true);
+                    convId = selectedConversationId || convId || crypto.randomUUID();
+                    sessId = crypto.randomUUID();
+                  }
+
+                  // Add user message (show only the original message, not the system instructions)
+                  const userMessage: Message = {
+                    role: 'user',
+                    content: message,
+                    timestamp: new Date(),
+                    userId: user.id,
+                    metadata: { canvas_mode: true, artifact_id: artifactId }
+                  };
+
+                  setMessages(prev => [...prev, userMessage]);
+                  
+                  // Start AI processing indicator
+                  startAIProcessing();
+                  
+                  // Update conversation state if temporary
+                  if (wasTemporary) {
+                    setIsTemporaryConversation(false);
+                    setSelectedConversationId(convId);
+                    navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
+                    localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
+                    localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+                  }
+                  
+                  requestAnimationFrame(() => {
+                    scrollToBottom();
+                  });
+
+                  try {
+                    setSending(true);
+                    setError(null);
+
+                    // Save user message to database
+                    const { error: saveError } = await supabase
+                      .from('chat_messages_v2')
+                      .insert({
+                        conversation_id: convId,
+                        session_id: sessId,
+                        channel_id: null,
+                        role: 'user',
+                        content: { type: 'text', text: message },
+                        sender_user_id: user.id,
+                        sender_agent_id: null,
+                        metadata: { target_agent_id: agent.id, canvas_mode: true, artifact_id: artifactId },
+                        context: { agent_id: agent.id, user_id: user.id }
+                      });
+
+                    if (saveError) throw saveError;
+
+                    // Ensure conversation session exists
+                    try {
+                      const fallbackTitle = (() => {
+                        const words = message.trim().split(/\s+/).slice(0, 6);
+                        const titleCase = words
+                          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                          .join(' ');
+                        return titleCase || 'Canvas Edit';
+                      })();
+
+                      const { data: existing } = await supabase
+                        .from('conversation_sessions')
+                        .select('conversation_id, title')
+                        .eq('conversation_id', convId)
+                        .maybeSingle();
+
+                      const needsTitle = !existing || !existing.title || existing.title.toLowerCase() === 'new conversation';
+                      if (needsTitle) {
+                        const base: any = {
+                          agent_id: agent.id,
+                          user_id: user.id,
+                          title: fallbackTitle,
+                          status: 'active',
+                          last_active: new Date().toISOString(),
+                        };
+                        const upd = await supabase
+                          .from('conversation_sessions')
+                          .update(base)
+                          .eq('conversation_id', convId)
+                          .select('conversation_id');
+                        if (!upd || !upd.data || upd.data.length === 0) {
+                          await supabase
+                            .from('conversation_sessions')
+                            .insert({ conversation_id: convId, ...base });
+                        }
+                      }
+                    } catch { /* non-fatal */ }
+                    
+                    setIsCreatingNewConversation(false);
+
+                    // Run AI processing simulation
+                    const processingPromise = simulateAIProcessing();
+
+                    // Create abort controller
+                    const controller = new AbortController();
+                    abortControllerRef.current = controller;
+
+                    // Get session token
+                    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                    if (sessionError || !session?.access_token) {
+                        throw new Error(`Authentication error: ${sessionError?.message || 'Could not get session token.'}`);
+                    }
+                    const accessToken = session.access_token;
+
+                    const contextSize = parseInt(
+                      localStorage.getItem(`agent_${agent.id}_context_size`) || '25'
+                    );
+
+                    const conversationId = convId;
+                    const sessionId = sessId;
+
+                    const requestBody: any = {
+                      version: '2.0.0',
+                      context: {
+                        agent_id: agent.id,
+                        user_id: user.id,
+                        conversation_id: conversationId,
+                        session_id: sessionId,
+                      },
+                      message: {
+                        role: 'user',
+                        content: { type: 'text', text: enhancedMessage },
+                        metadata: {
+                          canvas_mode: true,
+                          artifact_id: artifactId
+                        }
+                      },
+                      options: { 
+                        context: { max_messages: contextSize },
+                        reasoning: { enabled: reasoningEnabled, threshold: 0.3 }
+                      }
+                    };
+
+                    console.log('[Canvas] Sending chat request:', requestBody);
+
+                    const response = await fetch(
+                      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
+                      {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${accessToken}`
+                        },
+                        body: JSON.stringify(requestBody),
+                        signal: controller.signal
+                      }
+                    );
+
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}));
+                      throw new Error(errorData.error || `HTTP error ${response.status}`);
+                    }
+
+                    const responseData = await response.json();
+                    console.log('[Canvas] Chat response:', responseData);
+
+                    await processingPromise;
+
+                    const assistantReply = responseData?.data?.message?.content?.text || 
+                                          responseData?.data?.content?.text || 
+                                          responseData?.message?.content?.text ||
+                                          'I apologize, but I encountered an error processing your request.';
+
+                    const responseMetadata = responseData?.data?.message?.metadata || {};
+                    await completeAIProcessingWithResponse(assistantReply, responseMetadata);
+                    
+                    toast.success('Canvas message sent!');
+                  } catch (error: any) {
+                    console.error('[Canvas] Error:', error);
+                    
+                    if (error.name === 'AbortError') {
+                      toast.error('Request cancelled');
+                    } else {
+                      setError(error.message || 'Failed to send message');
+                      toast.error(error.message || 'Failed to send message');
+                    }
+                    
+                    completeAIProcessing();
+                  } finally {
+                    setSending(false);
+                    abortControllerRef.current = null;
+                  }
+                }}
               />
             </div>
                           )}

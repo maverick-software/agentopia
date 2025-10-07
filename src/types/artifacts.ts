@@ -104,6 +104,10 @@ export interface CanvasModeProps {
   onClose: () => void;
   onSave: (content: string, changes_note?: string) => Promise<void>;
   onDownload: (artifact: Artifact) => void;
+  messages?: any[];
+  agent?: any;
+  user?: any;
+  onSendMessage?: (message: string) => void;
 }
 
 // Monaco Editor language mapping

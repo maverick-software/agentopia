@@ -24,9 +24,10 @@ interface MessageListProps {
   aiState?: any;
   currentTool?: any;
   processSteps?: any[];
+  onCanvasSendMessage?: (message: string, artifactId: string) => Promise<void>;
 }
 
-export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps }: MessageListProps) {
+export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps, onCanvasSendMessage }: MessageListProps) {
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   const [canvasArtifact, setCanvasArtifact] = useState<Artifact | null>(null);
   const { updateArtifact, downloadArtifact } = useArtifacts();
@@ -366,6 +367,14 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
         onClose={() => setCanvasArtifact(null)}
         onSave={handleSaveArtifact}
         onDownload={downloadArtifact}
+        messages={messages}
+        agent={agent}
+        user={user}
+        onSendMessage={async (message) => {
+          if (onCanvasSendMessage && canvasArtifact) {
+            await onCanvasSendMessage(message, canvasArtifact.id);
+          }
+        }}
       />
     )}
     </>

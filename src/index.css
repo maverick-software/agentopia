@@ -390,24 +390,44 @@ textarea {
   transition: height 0.1s ease-out;
 }
 
-/* React Split Pane Styles */
+/* React Split Pane Styles - Hidden by default, visible on hover */
 .gutter {
-  background-color: hsl(var(--border));
+  background-color: transparent;
   background-repeat: no-repeat;
   background-position: 50%;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+/* Add a subtle indicator line only on hover */
+.gutter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background-color: transparent;
   transition: background-color 0.2s ease;
 }
 
-.gutter:hover {
-  background-color: hsl(var(--primary) / 0.3);
+.gutter:hover::before {
+  background-color: hsl(var(--primary) / 0.5);
 }
 
 .gutter.gutter-horizontal {
-  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==');
   cursor: col-resize;
 }
 
 .gutter.gutter-vertical {
-  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAFCAMAAABl/6zIAAAABlBMVEUAAADMzMzIT8AyAAAAAXRSTlMAQObYZgAAABRJREFUeAFjYGRkYGJkZGRiYGRkAAA+AAExBgDKAAAAAElFTkSuQmCC');
   cursor: row-resize;
+}
+
+.gutter.gutter-vertical::before {
+  width: 100%;
+  height: 2px;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
 } 
