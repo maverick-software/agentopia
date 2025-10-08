@@ -329,6 +329,42 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                       }
                       return null;
                     })()}
+                    
+                    {/* Copy Button for assistant messages */}
+                    <div className="mt-3 flex items-center justify-start">
+                      <button
+                        onClick={(e) => {
+                          navigator.clipboard.writeText(message.content);
+                          const button = e.currentTarget;
+                          const icon = button.querySelector('svg');
+                          if (icon) {
+                            icon.innerHTML = '<path d="M20 6L9 17l-5-5"></path>'; // Checkmark icon
+                            button.classList.add('text-green-500');
+                            setTimeout(() => {
+                              icon.innerHTML = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>'; // Copy icon
+                              button.classList.remove('text-green-500');
+                            }, 2000);
+                          }
+                        }}
+                        className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors p-1.5 rounded-md hover:bg-muted/50"
+                        title="Copy message"
+                      >
+                        <svg 
+                          xmlns="http://www.w3.org/2000/svg" 
+                          width="16" 
+                          height="16" 
+                          viewBox="0 0 24 24" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        >
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-sm leading-relaxed break-words overflow-wrap-anywhere">

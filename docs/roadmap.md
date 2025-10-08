@@ -1,4 +1,15 @@
 
+## Edit Message ##
+
+We want to be able to edit messages and start the chat from that point forward.
+
+## Clone Chat ##
+
+We want to be able to clone chats from specific checkpoint (every agent message and back) the same way we do in Cursor.
+
+## Like/Dislike Tracker ##
+
+We need to be able to track bad responses to help refine agent prompts. We want to track these for individual agents, and make this available via the admin page. Where we can view agents, their system prompts, how many messages they've produced, and how many likes/dislikes. Getting percentages and reports on their accuracy and capabilities.
 
 ## Agent 2 Agent Job Queue ##
 
@@ -15,21 +26,6 @@ We need to add agent contact tab into the settings modal for agents. This way we
 Rather than having our message history sent to the agent every time we send a message, I would rather have the agent maintain a conversation summary board, where it updates its board as the conversation itself updates. This would operate as a sort of background agent independent of the agent itself and run asynchronously from the user/agent chat session. The conversation history can become available for the agent via MCP tools and a vector search. We can save the chat history for posterity in the existing way, but for our 'working memory' for the agent, it would be better to offer the agent a conversation history search tool to use that used vector-based similarity search rather than just dumping 25 previous messages. We already have a long-term memory vector-based search using pinecone--let's investigate and find out if we can supabase pg_vector for this working memory system. Research and report on how this can work.
 
 https://cursor.com/docs/agent/chat/summarization
-
-**✅ Implemented (Phase 1 - Foundation)**:
-- Database tables with pg_vector (conversation_summaries, working_memory_chunks, conversation_summary_boards)
-- Background summarization Edge Function (deployed to cloud)
-- Automatic trigger system (every 5 messages)
-- Vector similarity search with HNSW indexes
-- Entity extraction, topic modeling, action item tracking
-
-**📋 Next Phase** (Phase 2 - Integration):
-- Replace raw message history in chat handler
-- Add MCP search tools for agents
-- Integrate working memory context
-- Test token savings (expect 83% reduction)
-
-**📁 Documentation**: `docs/plans/chat_summary_system/`
 
 ## Plans and Pricing ##
 
