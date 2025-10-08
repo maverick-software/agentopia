@@ -11,7 +11,10 @@ import {
   Download,
   Send,
   Paperclip,
-  Sliders
+  Sliders,
+  FileText,
+  X as CloseIcon,
+  Code
 } from 'lucide-react';
 import { CanvasModeProps, ARTIFACT_LANGUAGE_MAP } from '@/types/artifacts';
 import { toast } from 'react-hot-toast';
@@ -19,6 +22,8 @@ import type { Message } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
+import { useCanvasSession } from '@/hooks/useCanvasSession';
+import { Sidebar } from '@/components/Sidebar';
 
 export const CanvasMode: React.FC<CanvasModeProps> = ({
   artifact,
@@ -36,8 +41,34 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [canvasInput, setCanvasInput] = useState('');
   const [localMessages, setLocalMessages] = useState(messages);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Always collapsed in canvas mode
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [showSelectionMenu, setShowSelectionMenu] = useState(false);
+  const [selectionMenuPosition, setSelectionMenuPosition] = useState({ x: 0, y: 0 });
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+  const editorRef = React.useRef<any>(null);
+  const [selectedContexts, setSelectedContexts] = useState<Array<{ 
+    id: string;
+    text: string; 
+    lines: string; 
+    language: string;
+  }>>([]);
+
+  // Canvas session for auto-saving work-in-progress
+  const canvasSession = useCanvasSession({
+    userId: user?.id || '',
+    agentId: agent?.id || '',
+    artifactId: artifact.id,
+    conversationSessionId: null, // TODO: Pass actual conversation session ID if available
+    autoSaveInterval: 3000 // 3 seconds
+  });
+
+  // Sync content when artifact prop changes (after successful save)
+  useEffect(() => {
+    setContent(artifact.content);
+  }, [artifact.content, artifact.version]); // Re-sync when version changes
 
   // Detect content changes
   useEffect(() => {
@@ -66,16 +97,31 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
     setLocalMessages(messages);
   }, [messages]);
 
-  // Auto-save with debounce
+  // Load canvas session on mount
   useEffect(() => {
-    if (!hasUnsavedChanges) return;
+    const initSession = async () => {
+      if (user?.id && agent?.id) {
+        try {
+          const savedContent = await canvasSession.loadSession(artifact.content);
+          if (savedContent && savedContent !== artifact.content) {
+            setContent(savedContent);
+            toast.info('Restored your previous work-in-progress');
+          }
+        } catch (error) {
+          console.error('[Canvas] Error loading session:', error);
+          // Continue with artifact content
+        }
+      }
+    };
+    initSession();
+  }, []); // Only run once on mount
 
-    const timeoutId = setTimeout(() => {
-      handleSave();
-    }, 2000); // 2 second debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [content, hasUnsavedChanges]);
+  // Auto-save to canvas session (not artifacts)
+  useEffect(() => {
+    if (content && user?.id && agent?.id && canvasSession.session) {
+      canvasSession.autoSave(content);
+    }
+  }, [content, canvasSession, user?.id, agent?.id]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -109,9 +155,15 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
     setSaveSuccess(false);
 
     try {
+      // Save to artifacts (creates new version)
       await onSave(content);
+      
+      // Clear canvas session after successful artifact save
+      await canvasSession.clearSession();
+      
       setHasUnsavedChanges(false);
       setSaveSuccess(true);
+      toast.success('Saved to database and cleared draft!');
       
       // Reset success indicator after 2 seconds
       setTimeout(() => {
@@ -137,23 +189,34 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
     e.preventDefault();
     if (!canvasInput.trim()) return;
     
-    const messageContent = canvasInput.trim();
+    // Build message with selected contexts if present
+    let messageContent = canvasInput.trim();
+    
+    if (selectedContexts.length > 0) {
+      // Build context block with all selections
+      const contextBlocks = selectedContexts.map((ctx, idx) => 
+        `[Selection ${idx + 1} - ${ctx.lines}]:\n\`\`\`${ctx.language}\n${ctx.text}\n\`\`\``
+      ).join('\n\n');
+      
+      messageContent = `${contextBlocks}\n\n${messageContent}`;
+    }
     
     // Add user message to local state immediately for UI feedback
     const userMessage: any = {
       role: 'user',
-      content: messageContent,
+      content: canvasInput.trim(), // Show only the user's question in UI
       timestamp: new Date()
     };
     setLocalMessages(prev => [...prev, userMessage]);
     
-    // Clear input and reset height
+    // Clear input, contexts, and reset height
     setCanvasInput('');
+    setSelectedContexts([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
     
-    // If parent provided a send handler, use it
+    // If parent provided a send handler, use it (sends full context to agent)
     if (onSendMessage) {
       try {
         await onSendMessage(messageContent);
@@ -178,47 +241,178 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
     setCanvasInput(e.target.value);
   };
 
+  // Handle text selection in Monaco editor
+  const handleEditorSelection = (editor: any) => {
+    const selection = editor.getSelection();
+    
+    if (selection && !selection.isEmpty()) {
+      const selectedText = editor.getModel().getValueInRange(selection);
+      const startLine = selection.startLineNumber;
+      const endLine = selection.endLineNumber;
+      
+      // Use Monaco's layoutContentWidget to get the actual screen position
+      // Create a temporary measurement element at the selection position
+      const position = selection.getStartPosition();
+      
+      // Get the coordinates for the position
+      const coords = editor.getScrolledVisiblePosition(position);
+      
+      if (coords) {
+        // Get the editor's DOM node bounding rect
+        const editorDom = editor.getDomNode();
+        const editorRect = editorDom?.getBoundingClientRect();
+        
+        // Get the scroll offset
+        const scrollTop = editor.getScrollTop();
+        const scrollLeft = editor.getScrollLeft();
+        
+        if (editorRect) {
+          // Calculate the actual screen position
+          // Monaco's coords are relative to the viewport after scrolling
+          const menuX = editorRect.left + coords.left;
+          const menuY = editorRect.top + coords.top - 45; // 45px above
+          
+          console.log('[Canvas] Position details:', {
+            editorRect: { left: editorRect.left, top: editorRect.top, width: editorRect.width },
+            monacoCoords: coords,
+            scroll: { top: scrollTop, left: scrollLeft },
+            final: { x: menuX, y: menuY }
+          });
+          
+          setSelectedText(selectedText);
+          setSelectionRange({ start: startLine, end: endLine });
+          setSelectionMenuPosition({ x: menuX, y: menuY });
+          setShowSelectionMenu(true);
+        }
+      }
+    } else {
+      setShowSelectionMenu(false);
+    }
+  };
+
+  // Add selected text to chat as a context bubble
+  const handleAddToChat = () => {
+    // Check if we've reached the limit
+    if (selectedContexts.length >= 5) {
+      toast.error('Maximum 5 selections allowed');
+      setShowSelectionMenu(false);
+      return;
+    }
+    
+    const language = ARTIFACT_LANGUAGE_MAP[artifact.file_type] || artifact.file_type;
+    const lineInfo = selectionRange 
+      ? `Lines ${selectionRange.start}-${selectionRange.end}` 
+      : 'Selection';
+    
+    // Add to contexts array
+    const newContext = {
+      id: `sel-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      text: selectedText,
+      lines: lineInfo,
+      language: language
+    };
+    
+    setSelectedContexts(prev => [...prev, newContext]);
+    setShowSelectionMenu(false);
+    
+    // Focus the chat input
+    textareaRef.current?.focus();
+    
+    toast.success(`Selection ${selectedContexts.length + 1}/5 added`);
+  };
+
+  // Remove a specific context
+  const removeContext = (id: string) => {
+    setSelectedContexts(prev => prev.filter(ctx => ctx.id !== id));
+  };
+
+  // Clear all contexts
+  const clearAllContexts = () => {
+    setSelectedContexts([]);
+  };
+
   const editorLanguage = ARTIFACT_LANGUAGE_MAP[artifact.file_type] || 'plaintext';
 
+  // Determine if this is a new artifact or existing
+  const isNewArtifact = !artifact.id || artifact.id === 'new';
+  const saveButtonText = isNewArtifact ? 'Create Artifact' : 'Save';
+
   return (
-    <div className="fixed inset-0 z-50 bg-[#212121]">
-      {/* Header - ChatGPT style */}
-      <div className="h-12 border-b border-[#444] bg-[#2f2f2f] flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <h2 className="font-semibold text-sm text-white">{artifact.title}</h2>
-          {hasUnsavedChanges && (
-            <span className="text-xs text-gray-400">• Unsaved</span>
-          )}
-          {isSaving && (
-            <span className="text-xs text-blue-400">• Saving...</span>
-          )}
-          {saveSuccess && (
-            <span className="text-xs text-green-400">• Saved</span>
+    <div className="fixed inset-0 z-40 bg-[#212121] flex">
+      {/* Sidebar - Always collapsed in canvas mode */}
+      <Sidebar 
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
+      />
+      
+      {/* Canvas content area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header - Canvas Mode */}
+        <div className="h-12 bg-[#2f2f2f] flex items-center justify-between px-4">
+        {/* Left: File name and draft status */}
+        <div className="flex items-center gap-3 flex-1">
+          <FileText className="h-4 w-4 text-gray-400" />
+          <h2 className="font-medium text-sm text-white">{artifact.title}</h2>
+          {canvasSession.saving ? (
+            <span className="text-xs text-gray-400">
+              • Saving draft...
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400">
+              • Draft saved
+            </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Center: Canvas Mode badge */}
+        <div className="absolute left-1/2 transform -translate-x-1/2">
+          <span className="text-xs font-medium text-white">
+            Canvas Mode
+          </span>
+        </div>
+
+        {/* Right: Action buttons */}
+        <div className="flex items-center gap-2 flex-1 justify-end">
           {/* Save Button */}
           <button
             onClick={handleSave}
             disabled={!hasUnsavedChanges || isSaving}
-            className="px-3 py-1.5 text-xs text-gray-300 hover:text-white hover:bg-[#3f3f3f] rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${
+              hasUnsavedChanges
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'bg-[#3f3f3f] text-gray-500 cursor-not-allowed'
+            }`}
+            title={hasUnsavedChanges ? `${saveButtonText} (Ctrl+S)` : 'No changes to save'}
           >
-            {isSaving ? 'Saving...' : saveSuccess ? 'Saved' : 'Save'}
+            {isSaving ? (
+              <>
+                <span className="inline-block animate-spin mr-2">⟳</span>
+                Saving...
+              </>
+            ) : saveSuccess && !hasUnsavedChanges ? (
+              <>
+                <span className="mr-1">✓</span>
+                Saved
+              </>
+            ) : (
+              saveButtonText
+            )}
           </button>
 
           {/* Download Button */}
           <button
             onClick={() => onDownload(artifact)}
-            className="px-3 py-1.5 text-xs text-gray-300 hover:text-white hover:bg-[#3f3f3f] rounded-md transition-colors"
+            className="p-2 text-gray-400 hover:text-white hover:bg-[#3f3f3f] rounded-lg transition-colors"
+            title="Download file"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-4 w-4" />
           </button>
 
           {/* Close Button */}
           <button
             onClick={handleClose}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-[#3f3f3f] rounded-md transition-colors"
+            className="p-2 text-gray-400 hover:text-white hover:bg-[#3f3f3f] rounded-lg transition-colors"
+            title="Close canvas"
           >
             <X className="h-4 w-4" />
           </button>
@@ -370,6 +564,51 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
           {/* Chat Input - exactly matches AgentChatPage style */}
           <div className="border-t border-border px-4 py-4">
             <form onSubmit={handleCanvasSend} className="relative">
+              {/* Selected context bubbles */}
+              {selectedContexts.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  {/* Header with count and clear all */}
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {selectedContexts.length} selection{selectedContexts.length > 1 ? 's' : ''} ({selectedContexts.length}/5)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearAllContexts}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  
+                  {/* Context bubbles */}
+                  {selectedContexts.map((context, idx) => (
+                    <div 
+                      key={context.id}
+                      className="bg-muted/40 border border-border/50 rounded-md px-2.5 py-1.5 flex items-center gap-2"
+                    >
+                      <Code className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {idx + 1}. {context.lines}
+                        </span>
+                        <span className="text-xs text-muted-foreground/70 truncate">
+                          {context.text.split('\n')[0]}
+                          {context.text.split('\n').length > 1 && '...'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeContext(context.id)}
+                        className="flex-shrink-0 p-0.5 hover:bg-muted rounded transition-colors"
+                      >
+                        <CloseIcon className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
               {/* Text input container */}
               <div className="relative bg-card border border-border/50 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 focus-within:border-ring/40 focus-within:shadow-md">
                 <div className="px-4 py-3">
@@ -438,6 +677,15 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
                 language={editorLanguage}
                 value={content}
                 onChange={(value) => setContent(value || '')}
+                onMount={(editor) => {
+                  console.log('[Canvas] Monaco editor mounted, setting up selection listener');
+                  editorRef.current = editor;
+                  
+                  // Listen for selection changes
+                  editor.onDidChangeCursorSelection(() => {
+                    handleEditorSelection(editor);
+                  });
+                }}
                 theme="vs-dark"
                 options={{
                   minimap: { enabled: false },
@@ -478,6 +726,26 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
           </div>
         </div>
       </Split>
+
+      {/* Floating "Add to Chat" button for text selection */}
+      {showSelectionMenu && (
+        <div
+          className="fixed z-50 animate-in fade-in-0 slide-in-from-bottom-1 duration-100"
+          style={{
+            left: `${selectionMenuPosition.x}px`,
+            top: `${selectionMenuPosition.y}px`,
+          }}
+        >
+          <button
+            onClick={handleAddToChat}
+            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded shadow-md flex items-center gap-1.5 transition-all whitespace-nowrap"
+          >
+            <Send className="h-3 w-3" />
+            Add to Chat
+          </button>
+        </div>
+      )}
+      </div>
     </div>
   );
 };

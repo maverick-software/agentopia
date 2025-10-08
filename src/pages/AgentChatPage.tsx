@@ -1683,7 +1683,17 @@ export function AgentChatPage() {
                   
                   console.log('[Canvas] Sending message:', message, 'for artifact:', artifactId);
                   
-                  const messageText = message;
+                  // Add canvas context for the agent
+                  const canvasContext = `\n\n[CANVAS MODE CONTEXT]
+You are in Canvas editing mode. The user is working on artifact ID: ${artifactId}
+IMPORTANT: The user sees their changes in real-time in the canvas editor. DO NOT use update_artifact or create_artifact tools - these would save to the database, but the user is working in memory and will manually save when ready.
+
+Instead, provide the updated content directly in your response. The user can copy it or save it manually when they're satisfied with the changes.
+
+If the user asks you to make changes, provide the complete updated content in a markdown code block or plain text that they can use.
+[END CANVAS MODE CONTEXT]\n\n`;
+                  
+                  const messageText = canvasContext + message;
                   setSending(true);
 
                   // Establish conversation ID variables

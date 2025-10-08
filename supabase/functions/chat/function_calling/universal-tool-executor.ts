@@ -567,6 +567,58 @@ const TOOL_ROUTING_MAP: Record<string, {
       user_id: context.userId,
       params: params
     })
+  },
+
+  // Canvas MCP Tools (line-by-line editing)
+  'canvas_get_content': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_get_content',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_get_content', params })
+  },
+  'canvas_replace_lines': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_replace_lines',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_replace_lines', params })
+  },
+  'canvas_insert_lines': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_insert_lines',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_insert_lines', params })
+  },
+  'canvas_delete_lines': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_delete_lines',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_delete_lines', params })
+  },
+  'canvas_search_replace': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_search_replace',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_search_replace', params })
+  },
+  'canvas_get_diff': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_get_diff',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_get_diff', params })
+  },
+  'canvas_save_snapshot': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_save_snapshot',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_save_snapshot', params })
+  },
+  'canvas_revert_to_snapshot': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_revert_to_snapshot',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_revert_to_snapshot', params })
+  },
+  'canvas_undo': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_undo',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_undo', params })
+  },
+  'canvas_redo': {
+    edgeFunction: 'canvas-mcp',
+    actionMapping: () => 'canvas_redo',
+    parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_redo', params })
   }
 };
 

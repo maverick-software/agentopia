@@ -12,7 +12,10 @@
 | **[README.md](README.md)** | 📖 This file - Project overview and quick reference | ✅ Current |
 | **[REVISED_PLAN.md](REVISED_PLAN.md)** | ⭐ **IMPLEMENTATION PLAN** - Complete technical specification | ✅ Current |
 | **[WBS_CHECKLIST.md](WBS_CHECKLIST.md)** | ✅ **WORK BREAKDOWN** - Detailed task checklist with progress tracking | ✅ Current |
-| **[PHASE_2_COMPLETION.md](PHASE_2_COMPLETION.md)** | 🎉 **PHASE 2 REPORT** - Canvas Mode & UI completion summary | ✅ New |
+| **[TEXT_SELECTION_FEATURE.md](TEXT_SELECTION_FEATURE.md)** | 🎯 **TEXT SELECTION** - "Add to Chat" button for selected text in canvas | ✅ Oct 8 |
+| **[CANVAS_AGENT_ARCHITECTURE.md](CANVAS_AGENT_ARCHITECTURE.md)** | 🤖 **CANVAS AGENT** - Dedicated editing agent with line-by-line precision | 📋 Planned |
+| **[CANVAS_AUTOSAVE_IMPLEMENTATION.md](CANVAS_AUTOSAVE_IMPLEMENTATION.md)** | 💾 **AUTO-SAVE SYSTEM** - Canvas session persistence and draft management | ✅ Oct 8 |
+| **[PHASE_2_COMPLETION.md](PHASE_2_COMPLETION.md)** | 🎉 **PHASE 2 REPORT** - Canvas Mode & UI completion summary | ✅ Oct 7 |
 | **[SUMMARY.md](SUMMARY.md)** | 📋 Quick reference summary for developers | ✅ Current |
 | **[ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)** | 🎨 Visual diagrams and data flows | ✅ Current |
 
@@ -31,8 +34,14 @@
    - Current progress: Phase 1 & 2 Complete (85%)
    - Next steps clearly marked
 
-2.5. **🎉 Latest Update**: [PHASE_2_COMPLETION.md](PHASE_2_COMPLETION.md)
-   - Phase 2: Canvas Mode & UI completion report
+2.5. **💾 Auto-Save System**: [CANVAS_AUTOSAVE_IMPLEMENTATION.md](CANVAS_AUTOSAVE_IMPLEMENTATION.md)
+   - Canvas session auto-save implementation
+   - Work-in-progress persistence
+   - Draft management and restoration
+   - User-friendly like ChatGPT/Claude
+
+2.6. **🎉 Phase 2 Complete**: [PHASE_2_COMPLETION.md](PHASE_2_COMPLETION.md)
+   - Canvas Mode & UI completion report
    - All features implemented and tested
    - 16 file types supported
    - Ready for Phase 3

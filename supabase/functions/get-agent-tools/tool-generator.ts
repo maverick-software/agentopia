@@ -577,6 +577,129 @@ export function generateParametersForCapability(toolName: string) {
     };
   }
 
+  // Canvas MCP Tools (for Canvas Agent line-by-line editing)
+  if (toolName === 'canvas_get_content') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        start_line: { type: 'number', description: 'Optional: Start line number to retrieve' },
+        end_line: { type: 'number', description: 'Optional: End line number to retrieve' }
+      },
+      required: ['canvas_session_id']
+    };
+  }
+
+  if (toolName === 'canvas_replace_lines') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        start_line: { type: 'number', description: 'Start line number to replace (1-indexed)' },
+        end_line: { type: 'number', description: 'End line number to replace (inclusive)' },
+        new_content: { type: 'string', description: 'New content to replace with' },
+        reason: { type: 'string', description: 'Optional: Explanation of the change' }
+      },
+      required: ['canvas_session_id', 'start_line', 'end_line', 'new_content']
+    };
+  }
+
+  if (toolName === 'canvas_insert_lines') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        insert_after_line: { type: 'number', description: 'Insert after this line (0 = start of file)' },
+        content: { type: 'string', description: 'Content to insert' },
+        reason: { type: 'string', description: 'Optional: Explanation of the change' }
+      },
+      required: ['canvas_session_id', 'insert_after_line', 'content']
+    };
+  }
+
+  if (toolName === 'canvas_delete_lines') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        start_line: { type: 'number', description: 'Start line number to delete' },
+        end_line: { type: 'number', description: 'End line number to delete (inclusive)' },
+        reason: { type: 'string', description: 'Optional: Explanation of the change' }
+      },
+      required: ['canvas_session_id', 'start_line', 'end_line']
+    };
+  }
+
+  if (toolName === 'canvas_search_replace') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        search_pattern: { type: 'string', description: 'Text or regex pattern to search for' },
+        replace_with: { type: 'string', description: 'Replacement text' },
+        case_sensitive: { type: 'boolean', description: 'Whether search is case sensitive', default: true },
+        regex: { type: 'boolean', description: 'Whether to use regex matching', default: false },
+        max_replacements: { type: 'number', description: 'Maximum number of replacements (0 = unlimited)', default: 0 },
+        reason: { type: 'string', description: 'Optional: Explanation of the change' }
+      },
+      required: ['canvas_session_id', 'search_pattern', 'replace_with']
+    };
+  }
+
+  if (toolName === 'canvas_get_diff') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        format: { type: 'string', description: 'Diff format: "unified" or "split"', enum: ['unified', 'split'], default: 'unified' }
+      },
+      required: ['canvas_session_id']
+    };
+  }
+
+  if (toolName === 'canvas_save_snapshot') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        label: { type: 'string', description: 'Optional: Label for this snapshot (e.g., "Before refactor")' },
+        description: { type: 'string', description: 'Optional: Description of this snapshot' }
+      },
+      required: ['canvas_session_id']
+    };
+  }
+
+  if (toolName === 'canvas_revert_to_snapshot') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' },
+        snapshot_id: { type: 'string', description: 'The snapshot ID to revert to' }
+      },
+      required: ['canvas_session_id', 'snapshot_id']
+    };
+  }
+
+  if (toolName === 'canvas_undo') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' }
+      },
+      required: ['canvas_session_id']
+    };
+  }
+
+  if (toolName === 'canvas_redo') {
+    return {
+      ...baseSchema,
+      properties: {
+        canvas_session_id: { type: 'string', description: 'The canvas session ID' }
+      },
+      required: ['canvas_session_id']
+    };
+  }
+
   // Default fallback for any unrecognized tool
   return {
     ...baseSchema,
