@@ -375,6 +375,11 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
             await onCanvasSendMessage(message, canvasArtifact.id);
           }
         }}
+        thinkingMessageIndex={thinkingMessageIndex}
+        currentProcessingDetails={currentProcessingDetails}
+        aiState={aiState}
+        currentTool={currentTool}
+        processSteps={processSteps}
       />
     )}
     </>

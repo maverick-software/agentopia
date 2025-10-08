@@ -23,6 +23,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 import { useCanvasSession } from '@/hooks/useCanvasSession';
+import { InlineThinkingIndicator } from '../InlineThinkingIndicator';
 import { Sidebar } from '@/components/Sidebar';
 
 export const CanvasMode: React.FC<CanvasModeProps> = ({
@@ -33,7 +34,12 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
   messages = [],
   agent,
   user,
-  onSendMessage
+  onSendMessage,
+  thinkingMessageIndex,
+  currentProcessingDetails,
+  aiState,
+  currentTool,
+  processSteps
 }) => {
   const [content, setContent] = useState(artifact.content);
   const [isSaving, setIsSaving] = useState(false);
@@ -191,20 +197,22 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
     
     // Build message with selected contexts if present
     let messageContent = canvasInput.trim();
+    let displayContent = canvasInput.trim();
     
     if (selectedContexts.length > 0) {
-      // Build context block with all selections
+      // Build context block with all selections for agent
       const contextBlocks = selectedContexts.map((ctx, idx) => 
         `[Selection ${idx + 1} - ${ctx.lines}]:\n\`\`\`${ctx.language}\n${ctx.text}\n\`\`\``
       ).join('\n\n');
       
       messageContent = `${contextBlocks}\n\n${messageContent}`;
+      displayContent = `${contextBlocks}\n\n${messageContent}`; // Show full context in UI too
     }
     
     // Add user message to local state immediately for UI feedback
     const userMessage: any = {
       role: 'user',
-      content: canvasInput.trim(), // Show only the user's question in UI
+      content: displayContent, // Show the full message with selections
       timestamp: new Date()
     };
     setLocalMessages(prev => [...prev, userMessage]);
@@ -436,7 +444,32 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <div className="space-y-4">
               {localMessages.length > 0 ? (
-                localMessages.map((message, index) => (
+                localMessages.map((message, index) => {
+                  // Handle thinking messages with inline indicator
+                  if (message.role === 'thinking') {
+                    const isCurrentThinking = index === thinkingMessageIndex && !message.metadata?.isCompleted;
+                    if (!isCurrentThinking) {
+                      return null; // Hide completed thinking messages
+                    }
+                    return (
+                      <InlineThinkingIndicator
+                        key={`thinking-${index}`}
+                        isVisible={true}
+                        currentState={aiState}
+                        currentTool={currentTool}
+                        processSteps={processSteps?.map(step => ({
+                          state: step.state,
+                          label: step.label,
+                          duration: step.duration,
+                          details: step.details,
+                          completed: step.completed,
+                          toolInfo: step.toolInfo
+                        }))}
+                      />
+                    );
+                  }
+
+                  return (
                   <div
                     key={index}
                     className={`flex items-start space-x-4 animate-fade-in max-w-full ${
@@ -545,13 +578,36 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
                           </ReactMarkdown>
                         </div>
                       ) : (
-                        <div className="bg-[#343541] text-white text-sm leading-relaxed px-4 py-2.5 rounded-2xl inline-block max-w-full text-left break-words overflow-wrap-anywhere">
-                          {message.content}
+                        <div className="bg-[#343541] text-white rounded-2xl inline-block max-w-full text-left overflow-hidden">
+                          <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none break-words overflow-wrap-anywhere px-4 py-2.5
+                            prose-headings:mt-2 prose-headings:mb-2 prose-headings:font-semibold
+                            prose-p:my-2 prose-p:leading-6 prose-p:break-words prose-p:overflow-wrap-anywhere
+                            prose-pre:my-0 prose-pre:p-3 prose-pre:bg-[#2a2b32] prose-pre:rounded prose-pre:overflow-x-auto prose-pre:max-w-full
+                            prose-code:px-1.5 prose-code:py-0.5 prose-code:bg-[#2a2b32] prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:break-words prose-code:text-gray-200
+                            prose-strong:font-semibold prose-strong:text-white
+                            [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                            <ReactMarkdown 
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                p: ({children}: any) => (
+                                  <p className="my-2 leading-6 break-words overflow-wrap-anywhere max-w-full">{children}</p>
+                                ),
+                                code: ({inline, children, ...props}: any) => (
+                                  inline 
+                                    ? <code className="px-1.5 py-0.5 bg-[#2a2b32] rounded text-xs font-mono text-gray-200" {...props}>{children}</code>
+                                    : <code className="block text-xs font-mono text-gray-200" {...props}>{children}</code>
+                                )
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
                         </div>
                       )}
                     </div>
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-center text-muted-foreground py-12">
                   <p className="text-sm mb-2">Continue the conversation</p>

@@ -903,16 +903,16 @@ export function AgentChatPage() {
             setAiState('completed');
           }
           
-        // Convert database message to frontend Message format
-        const message: Message = {
-          role: newMessage.role,
-          content: typeof newMessage.content === 'string' ? newMessage.content : newMessage.content?.text || '',
-          timestamp: new Date(newMessage.created_at),
-          userId: newMessage.sender_user_id,
-          agentId: newMessage.sender_agent_id,
-          id: newMessage.id,
+          // Convert database message to frontend Message format
+          const message: Message = {
+            role: newMessage.role,
+            content: typeof newMessage.content === 'string' ? newMessage.content : newMessage.content?.text || '',
+            timestamp: new Date(newMessage.created_at),
+            userId: newMessage.sender_user_id,
+            agentId: newMessage.sender_agent_id,
+            id: newMessage.id,
           metadata: newMessage.metadata || undefined,
-        };
+          };
           
           // Add to messages if not already present (avoid duplicates)
           setMessages(prev => {
@@ -1647,19 +1647,21 @@ export function AgentChatPage() {
         onShowAgentSettings={() => setShowAgentSettingsModal(true)}
       />
 
-      {/* Messages Container - Hidden scrollbar */}
-      <div className="flex-1 overflow-y-auto hide-scrollbar min-h-0 relative">
+      {/* Messages Container - Visible scrollbar */}
+      <div className="flex-1 min-h-0 relative flex justify-center">
         {/* Gradient fade effect at top of messages - Fixed positioning to prevent shifts */}
         <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10 opacity-0 transition-opacity duration-300" 
              style={{ opacity: messages.length > 0 ? 1 : 0 }} />
         {isHistoryLoading ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full w-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : messages.length === 0 ? (
-            <ChatStarterScreen agent={agent} />
+            <div className="w-full">
+              <ChatStarterScreen agent={agent} />
+            </div>
           ) : (
-            <div className="max-w-3xl mx-auto px-4 py-6 pb-8 min-h-full">
+            <div className="max-w-3xl w-full overflow-y-auto chat-scrollbar px-4 py-6 pb-8">
               <MessageList 
                 messages={messages}
                 agent={agent}
@@ -1681,19 +1683,26 @@ export function AgentChatPage() {
                   // Handle canvas mode message sending with artifact context
                   if (!agent || !user?.id || sending) return;
                   
-                  console.log('[Canvas] Sending message:', message, 'for artifact:', artifactId);
+                  console.log('[Canvas] Sending message with selections:', message.substring(0, 200), '... for artifact:', artifactId);
                   
                   // Add canvas context for the agent
                   const canvasContext = `\n\n[CANVAS MODE CONTEXT]
 You are in Canvas editing mode. The user is working on artifact ID: ${artifactId}
-IMPORTANT: The user sees their changes in real-time in the canvas editor. DO NOT use update_artifact or create_artifact tools - these would save to the database, but the user is working in memory and will manually save when ready.
 
-Instead, provide the updated content directly in your response. The user can copy it or save it manually when they're satisfied with the changes.
+IMPORTANT INSTRUCTIONS:
+- The user sees their changes in real-time in the canvas editor
+- DO NOT use update_artifact or create_artifact tools - these save to database, but user is working in memory
+- The user will manually save when ready using the "Save to Database" button
+- The user may have selected specific lines from the canvas to give you context (see [Selection X - Lines Y-Z] blocks above if present)
 
-If the user asks you to make changes, provide the complete updated content in a markdown code block or plain text that they can use.
+RESPONSE FORMAT:
+When making changes, provide the updated content directly in a markdown code block that the user can review in the canvas.
+
 [END CANVAS MODE CONTEXT]\n\n`;
                   
                   const messageText = canvasContext + message;
+                  
+                  console.log('[Canvas] Full message to agent:', messageText.substring(0, 500));
                   setSending(true);
 
                   // Establish conversation ID variables
@@ -1826,7 +1835,7 @@ If the user asks you to make changes, provide the complete updated content in a 
                       },
                       message: {
                         role: 'user',
-                        content: { type: 'text', text: enhancedMessage },
+                        content: { type: 'text', text: messageText },
                         metadata: {
                           canvas_mode: true,
                           artifact_id: artifactId

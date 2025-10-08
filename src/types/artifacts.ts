@@ -108,6 +108,12 @@ export interface CanvasModeProps {
   agent?: any;
   user?: any;
   onSendMessage?: (message: string) => void;
+  // AI processing state (for showing stages)
+  thinkingMessageIndex?: number | null;
+  currentProcessingDetails?: any;
+  aiState?: any;
+  currentTool?: any;
+  processSteps?: any[];
 }
 
 // Monaco Editor language mapping
