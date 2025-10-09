@@ -70,6 +70,8 @@ export function AgentChatPage() {
   
   // Track if we're creating a new conversation to prevent race conditions
   const [isCreatingNewConversation, setIsCreatingNewConversation] = useState(false);
+  // Use a ref to track this without triggering useEffect re-runs
+  const isCreatingNewConversationRef = useRef(false);
   // Track if this is a temporary conversation (not yet persisted to database)
   const [isTemporaryConversation, setIsTemporaryConversation] = useState(() => {
     const params = new URLSearchParams(location.search);
@@ -245,31 +247,13 @@ export function AgentChatPage() {
         console.log('[AgentChatPage] Same conversation clicked, forcing reload:', conv);
         setConversationRefreshKey(prev => prev + 1);
       }
-    } else if (!conv && !selectedConversationId && agentId) {
-      // No conversation ID in URL or state - generate temporary one and update URL
-      const tempConvId = crypto.randomUUID();
-      console.log('[AgentChatPage] Generating new temporary conversation ID:', tempConvId);
-      setSelectedConversationId(tempConvId);
+    } else if (!conv) {
+      // No conversation ID in URL - show clean slate
+      // Don't generate ID until user sends first message
+      console.log('[AgentChatPage] No conversation ID, showing clean slate');
+      setSelectedConversationId(null);
       setIsTemporaryConversation(true);
       setMessages([]);
-      // Update URL to include the temporary conversation ID
-      navigate(`/agents/${agentId}/chat?conv=${tempConvId}`, { replace: true });
-      if (agentId) {
-        try { 
-          localStorage.removeItem(`agent_${agentId}_conversation_id`);
-          localStorage.removeItem(`agent_${agentId}_session_id`);
-        } catch {}
-      }
-    } else if (!conv && selectedConversationId) {
-      // URL has no conversation ID but we have one in state
-      // Generate a new temporary conversation for better UX
-      const tempConvId = crypto.randomUUID();
-      console.log('[AgentChatPage] URL cleared but state has conversation, generating new:', tempConvId, 'previous:', selectedConversationId);
-      setSelectedConversationId(tempConvId);
-      setIsTemporaryConversation(true);
-      setMessages([]);
-      // Update URL to include the new temporary conversation ID
-      navigate(`/agents/${agentId}/chat?conv=${tempConvId}`, { replace: true });
       if (agentId) {
         try { 
           localStorage.removeItem(`agent_${agentId}_conversation_id`);
@@ -282,9 +266,16 @@ export function AgentChatPage() {
 
   // Reset messages when switching agent or conversation
   useEffect(() => {
+    // Don't clear messages if we're actively creating a new conversation
+    // This prevents the thinking indicator from disappearing on the first message
+    if (isCreatingNewConversation) {
+      console.log('[AgentChatPage] Skipping message clear - creating new conversation');
+      return;
+    }
+    
     setMessages([]);
     setIsHistoryLoading(true);
-  }, [agentId, selectedConversationId]);
+  }, [agentId, selectedConversationId, isCreatingNewConversation]);
   const adjustTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
       // Reset height to auto to get the correct scrollHeight
@@ -518,6 +509,9 @@ export function AgentChatPage() {
       setAiState(null);
       setCurrentTool(null);
       setThinkingMessageIndex(null);
+      // Clear the new conversation flag on error/cancel too
+      setIsCreatingNewConversation(false);
+      isCreatingNewConversationRef.current = false; // Clear ref too
     }, 500);
   }, [thinkingMessageIndex, processSteps]);
 
@@ -594,6 +588,9 @@ export function AgentChatPage() {
       setAiState(null);
       setCurrentTool(null);
       setThinkingMessageIndex(null);
+      // NOW it's safe to clear the new conversation flag
+      setIsCreatingNewConversation(false);
+      isCreatingNewConversationRef.current = false; // Clear ref too
     }, 500);
   }, [agent?.id, user?.id]);
 
@@ -778,27 +775,29 @@ export function AgentChatPage() {
 		const fetchHistory = async () => {
 			if (!agentId || !user?.id) return;
 			
-			// Skip fetching if we're in the process of creating a new conversation
-			if (isCreatingNewConversation) return;
+			// If no conversation is selected, show a clean slate (no loading needed)
+			if (!selectedConversationId) {
+				setMessages([]);
+				setIsHistoryLoading(false);
+				return;
+			}
+			
+			// If we're actively creating a conversation (sending first message),
+			// skip fetching entirely to preserve the thinking indicator
+			if (isCreatingNewConversationRef.current) {
+				console.log('[fetchHistory] Skipping - currently sending first message');
+				setIsHistoryLoading(false);
+				return;
+			}
 			
 			setIsHistoryLoading(true);
 			try {
-				// If no conversation is selected, show a clean slate
-				if (!selectedConversationId) {
-					setMessages([]);
-					return;
-				}
-
-				// Skip database validation for temporary conversations
-				if (isTemporaryConversation) {
-					setMessages([]);
-					return;
-				}
 
 				// Removed the early return logic that prevented reloading when switching conversations
 				// The conversationRefreshKey dependency will trigger proper reloads when needed
 
-				// Validate conversation is active; if archived or missing, clear selection and redirect
+				// Check if conversation session exists
+				// For new conversations, the session might not exist yet - that's OK
 				try {
 					const { data: sessionRow } = await supabase
 						.from('conversation_sessions')
@@ -807,7 +806,11 @@ export function AgentChatPage() {
 						.eq('agent_id', agentId)
 						.eq('user_id', user.id)
 						.maybeSingle();
-					if (!sessionRow || sessionRow.status !== 'active') {
+					
+					// Only clear if conversation exists but is archived
+					// If no session exists, it might just be a new conversation
+					if (sessionRow && sessionRow.status !== 'active') {
+						console.log('[fetchHistory] Conversation is archived, clearing');
 						setSelectedConversationId(null);
 						setIsTemporaryConversation(true);
 						try { localStorage.removeItem(`agent_${agentId}_conversation_id`); } catch {}
@@ -865,7 +868,8 @@ export function AgentChatPage() {
 		};
 
 		fetchHistory();
-	}, [agentId, user?.id, selectedConversationId, isCreatingNewConversation, isTemporaryConversation, conversationRefreshKey]);
+	}, [agentId, user?.id, selectedConversationId, conversationRefreshKey]);
+	// NOTE: isCreatingNewConversation is NOT in deps - we use the ref instead to avoid re-running
 
   // Set up real-time message subscription
   useEffect(() => {
@@ -1027,16 +1031,16 @@ export function AgentChatPage() {
     let sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
     let wasTemporary = isTemporaryConversation;
     
-    if (isTemporaryConversation) {
+    // If no conversation ID exists, this is the first message - create one now
+    if (!convId || isTemporaryConversation) {
+      // Generate new conversation and session IDs
+      convId = crypto.randomUUID();
+      sessId = crypto.randomUUID();
+      console.log('[AgentChatPage] First message - creating new conversation:', convId);
+      
       // Set flag to prevent fetchHistory from clearing our messages
       setIsCreatingNewConversation(true);
-      
-      // Use the existing temporary conversation ID or create a new one
-      // Defensive: preserve existing convId if selectedConversationId was reset unexpectedly
-      console.log('[AgentChatPage] handleSubmit - selectedConversationId:', selectedConversationId, 'convId before:', convId);
-      convId = selectedConversationId || convId || crypto.randomUUID();
-      console.log('[AgentChatPage] handleSubmit - convId after:', convId);
-      sessId = crypto.randomUUID();
+      isCreatingNewConversationRef.current = true;
     }
 
     // Get attached document IDs for metadata
@@ -1064,15 +1068,16 @@ export function AgentChatPage() {
     startAIProcessing();
     
     // NOW update conversation state (after message and AI indicator are set)
-    if (wasTemporary) {
-      // Mark as no longer temporary since we're persisting it
+    if (wasTemporary || !selectedConversationId) {
+      // Mark as no longer temporary since we're creating/persisting it
       setIsTemporaryConversation(false);
       setSelectedConversationId(convId);
       
-      // Reflect in URL for consistency
+      // Update URL to include the new conversation ID
       navigate(`/agents/${agentId}/chat?conv=${convId}`, { replace: true });
       localStorage.setItem(`agent_${agent.id}_conversation_id`, convId);
       localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
+      console.log('[AgentChatPage] Moved to permanent conversation:', convId);
     }
     
     // Immediate scroll for better UX
@@ -1140,8 +1145,8 @@ export function AgentChatPage() {
         }
       } catch { /* non-fatal */ }
       
-      // Clear the flag now that the conversation is saved
-      setIsCreatingNewConversation(false);
+      // DON'T clear the flag yet - keep it true until response is complete
+      // This prevents fetchHistory from running and interfering with the thinking indicator
 
       // Run AI processing simulation in parallel with actual request
       const processingPromise = simulateAIProcessing();
@@ -1344,7 +1349,8 @@ export function AgentChatPage() {
       }
     } finally {
       setSending(false);
-      setIsCreatingNewConversation(false); // Ensure flag is cleared
+      // DON'T clear isCreatingNewConversation here - let completeAIProcessing handle it
+      // This ensures the flag stays true until the full response cycle is complete
     }
   }, [input, agent, sending, user?.id, scrollToBottom, startAIProcessing, simulateAIProcessing, completeAIProcessing]);
 
