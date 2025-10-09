@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
-import { Smartphone, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 function LoginPage() {
   const [step, setStep] = useState<'email' | 'password' | 'signup'>('email');
@@ -26,40 +26,36 @@ function LoginPage() {
     clearError();
     
     try {
-      // Check if user exists by attempting to get user data
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', (await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })).data?.user?.id || '')
-        .single();
-
-      // Alternative: Try to sign in with a dummy password to check if account exists
-      // This is a workaround since Supabase doesn't have a direct "check if user exists" API
-      const { error: checkError } = await supabase.auth.signInWithPassword({
+      // Use signInWithOtp with shouldCreateUser: false to check if user exists
+      // This won't create a user or send an OTP, just checks existence
+      const { data, error: otpError } = await supabase.auth.signInWithOtp({
         email,
-        password: 'dummy_check_password_' + Math.random(), // Random password that will fail
+        options: {
+          shouldCreateUser: false,
+        }
       });
 
-      // If error is "Invalid login credentials", user exists but password was wrong
-      // If error is "Email not confirmed" or similar, user exists
-      // If error is something else, we'll assume user doesn't exist
-      if (checkError) {
-        if (checkError.message.includes('Invalid login credentials') || 
-            checkError.message.includes('Email not confirmed')) {
-          // User exists - go to login
-          setIsExistingUser(true);
-          setStep('password');
-        } else {
+      // If there's no error, the user exists (OTP was prepared but not sent in test mode)
+      // If there's an error about user not found, user doesn't exist
+      if (otpError) {
+        // Check the error message to determine if user exists
+        if (otpError.message.includes('User not found') || 
+            otpError.message.includes('not found') ||
+            otpError.message.includes('Signups not allowed')) {
           // User doesn't exist - go to signup
           setIsExistingUser(false);
           setStep('signup');
+        } else {
+          // Other error, but user might exist - default to login
+          setIsExistingUser(true);
+          setStep('password');
         }
       } else {
-        // If no error, user somehow logged in (shouldn't happen with random password)
+        // No error means user exists - go to login
         setIsExistingUser(true);
         setStep('password');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error checking email:', err);
       // Default to signup flow if we can't determine
       setIsExistingUser(false);
@@ -109,26 +105,6 @@ function LoginPage() {
     }
   };
 
-  const handleMicrosoftLogin = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'azure',
-        options: {
-          redirectTo: `${window.location.origin}/`,
-          scopes: 'email openid profile',
-        }
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      console.error('Microsoft login error:', err);
-    }
-  };
-
-
-  const handlePhoneLogin = () => {
-    // TODO: Implement phone/SMS login modal
-    console.log('Phone/SMS login not yet implemented');
-  };
 
   const handleClose = () => {
     navigate('/');
@@ -173,8 +149,41 @@ function LoginPage() {
 
         {step === 'email' ? (
           <>
+            {/* Email Form */}
+            <form onSubmit={handleEmailSubmit} className="space-y-4 mb-6">
+              <div>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
+                  placeholder="Email address"
+                />
+              </div>
+
+              {/* Continue Button */}
+              <Button
+                type="submit"
+                disabled={checkingEmail}
+                className="w-full h-[52px] bg-white hover:bg-gray-100 text-gray-900 font-medium py-3.5 rounded-[26px] transition-colors shadow-sm"
+              >
+                {checkingEmail ? 'Checking...' : 'Login or Sign up'}
+              </Button>
+            </form>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-600"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-[#2C2C2C] text-gray-400">OR</span>
+              </div>
+            </div>
+
             {/* OAuth Buttons */}
-            <div className="space-y-2 mb-6">
+            <div className="space-y-2">
               {/* Google Login */}
               <Button
                 type="button"
@@ -202,68 +211,7 @@ function LoginPage() {
                 </svg>
                 Continue with Google
               </Button>
-
-              {/* Microsoft Login */}
-              <Button
-                type="button"
-                onClick={handleMicrosoftLogin}
-                className="w-full bg-transparent hover:bg-white/5 text-white font-normal py-3.5 h-[52px] rounded-[26px] transition-colors border border-gray-600 flex items-center justify-center gap-3"
-                variant="outline"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 23 23">
-                  <path fill="#f3f3f3" d="M0 0h23v23H0z"/>
-                  <path fill="#f35325" d="M1 1h10v10H1z"/>
-                  <path fill="#81bc06" d="M12 1h10v10H12z"/>
-                  <path fill="#05a6f0" d="M1 12h10v10H1z"/>
-                  <path fill="#ffba08" d="M12 12h10v10H12z"/>
-                </svg>
-                Continue with Microsoft
-              </Button>
-
-              {/* Phone Login */}
-              <Button
-                type="button"
-                onClick={handlePhoneLogin}
-                className="w-full bg-transparent hover:bg-white/5 text-white font-normal py-3.5 h-[52px] rounded-[26px] transition-colors border border-gray-600 flex items-center justify-center gap-3"
-                variant="outline"
-              >
-                <Smartphone className="w-4 h-4" />
-                Continue with phone
-              </Button>
             </div>
-
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-600"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-[#2C2C2C] text-gray-400">OR</span>
-              </div>
-            </div>
-
-            {/* Email Form */}
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
-                  placeholder="Email address"
-                />
-              </div>
-
-              {/* Continue Button */}
-              <Button
-                type="submit"
-                disabled={checkingEmail}
-                className="w-full h-[52px] bg-white hover:bg-gray-100 text-gray-900 font-medium py-3.5 rounded-[26px] transition-colors shadow-sm"
-              >
-                {checkingEmail ? 'Checking...' : 'Login or Sign up'}
-              </Button>
-            </form>
           </>
         ) : step === 'password' ? (
           <>

@@ -58,6 +58,11 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   }, [isOpen, user]);
 
   const loadUserProfile = async () => {
+    if (!user?.id) {
+      console.error('Cannot load profile: user ID is missing');
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -65,7 +70,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user?.id)
+        .eq('id', user.id)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -74,12 +79,12 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
       // Create profile object with user data
       const userProfile: UserProfile = {
-        id: user?.id || '',
-        email: user?.email || '',
+        id: user.id,
+        email: user.email || '',
         full_name: profileData?.full_name || '',
         avatar_url: profileData?.avatar_url || '',
-        created_at: user?.created_at || '',
-        updated_at: profileData?.updated_at || user?.created_at || '',
+        created_at: user.created_at || '',
+        updated_at: profileData?.updated_at || user.created_at || '',
       };
 
       setProfile(userProfile);
