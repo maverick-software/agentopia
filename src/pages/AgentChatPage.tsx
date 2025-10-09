@@ -1588,9 +1588,9 @@ export function AgentChatPage() {
   // Loading state
   if (!user) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
-          <div className="text-[hsl(210,20%,98%)] text-lg">Please sign in to chat with agents.</div>
+          <div className="text-foreground text-lg">Please sign in to chat with agents.</div>
         </div>
       </div>
     );
@@ -1598,10 +1598,10 @@ export function AgentChatPage() {
 
   if (loading && !agent) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-[hsl(210,15%,70%)] mx-auto mb-4" />
-          <div className="text-[hsl(210,20%,98%)]">Loading agent...</div>
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <div className="text-foreground">Loading agent...</div>
         </div>
       </div>
     );
@@ -1609,13 +1609,13 @@ export function AgentChatPage() {
 
   if (error && !agent) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-4" />
-          <div className="text-red-400 mb-4">Error loading agent: {error}</div>
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-4" />
+          <div className="text-destructive mb-4">Error loading agent: {error}</div>
           <button 
             onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             Retry
           </button>
@@ -1626,10 +1626,10 @@ export function AgentChatPage() {
 
   if (!loading && !agent) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[hsl(215,28%,9%)]">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-yellow-400 mx-auto mb-4" />
-          <div className="text-yellow-400">Agent not found.</div>
+          <AlertCircle className="h-8 w-8 text-warning mx-auto mb-4" />
+          <div className="text-warning">Agent not found.</div>
         </div>
       </div>
     );

@@ -26,6 +26,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PricingModal } from '@/components/billing/PricingModal';
 import { UserProfileModal } from '@/components/modals/UserProfileModal';
+import { LogoutConfirmDialog } from '@/components/modals/LogoutConfirmDialog';
 
 interface AccountMenuProps {
   isCollapsed: boolean;
@@ -40,6 +41,7 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
   const { subscription, getStatusColor, getStatusIcon, isFreePlan } = useSubscription();
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   const getThemeIcon = (themeMode: 'light' | 'dark' | 'chatgpt') => {
     switch (themeMode) {
@@ -63,7 +65,12 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
     }
   };
 
-  const handleSignOut = async () => {
+  const handleLogoutClick = () => {
+    setShowLogoutDialog(true);
+  };
+
+  const handleConfirmLogout = async () => {
+    setShowLogoutDialog(false);
     try {
       await signOut();
       navigate('/login');
@@ -262,7 +269,7 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
             <div className={`pt-3 border-t ${
               isAdminArea ? 'border-gray-600' : 'border-border/50'
             }`}>
-              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer focus:bg-red-50 dark:focus:bg-red-900/20 focus:text-red-600 dark:focus:text-red-400 rounded-md px-3 py-2">
+              <DropdownMenuItem onClick={handleLogoutClick} className="cursor-pointer focus:bg-red-50 dark:focus:bg-red-900/20 focus:text-red-600 dark:focus:text-red-400 rounded-md px-3 py-2">
                 <LogOut className="mr-3 h-4 w-4" />
                 <span className="text-sm">Log out</span>
               </DropdownMenuItem>
@@ -285,6 +292,13 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
       <UserProfileModal
         isOpen={showUserProfileModal}
         onClose={() => setShowUserProfileModal(false)}
+      />
+
+      <LogoutConfirmDialog
+        isOpen={showLogoutDialog}
+        onClose={() => setShowLogoutDialog(false)}
+        onConfirm={handleConfirmLogout}
+        userEmail={user?.email}
       />
     </>
   );

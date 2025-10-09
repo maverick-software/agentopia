@@ -324,8 +324,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Only block render while waiting for the initial session check
   if (loading) { 
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading Session...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground">Loading Session...</div>
       </div>
     );
   }
