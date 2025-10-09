@@ -424,10 +424,22 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
 
 interface ChatStarterScreenProps {
   agent: Agent | null;
+  user?: any;
 }
 
-export function ChatStarterScreen({ agent }: ChatStarterScreenProps) {
+export function ChatStarterScreen({ agent, user }: ChatStarterScreenProps) {
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
+  
+  // Extract first name from user's first_name or email
+  const getUserFirstName = () => {
+    if (user?.first_name) {
+      return user.first_name;
+    }
+    if (user?.email) {
+      return user.email.split('@')[0];
+    }
+    return 'there';
+  };
   
   return (
     <div className="flex items-center justify-center h-full">
@@ -454,20 +466,12 @@ export function ChatStarterScreen({ agent }: ChatStarterScreenProps) {
             {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
           </span>
         </div>
-        <h3 className="text-2xl font-semibold text-foreground mb-3">
-          Chat with {agent?.name || 'Agent'}
+        <h2 className="text-xl font-medium text-muted-foreground mb-2">
+          {agent?.name || 'Agent'}
+        </h2>
+        <h3 className="text-4xl font-semibold text-foreground">
+          Hi {getUserFirstName()}, How Can I Help?
         </h3>
-        <p className="text-muted-foreground mb-8 leading-relaxed">
-          Start a conversation with your AI assistant. Ask questions, get help, or just chat!
-        </p>
-        <div className="flex flex-col gap-1 text-xs">
-          <div className="px-2 py-1 rounded text-left border border-border/30 bg-background/50">
-            <div className="text-muted-foreground/70">"What can you help me with?"</div>
-          </div>
-          <div className="px-2 py-1 rounded text-left border border-border/30 bg-background/50">
-            <div className="text-muted-foreground/70">"Help me analyze this data"</div>
-          </div>
-        </div>
       </div>
     </div>
   );

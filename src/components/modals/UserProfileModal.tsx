@@ -12,16 +12,15 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   User, 
   Mail, 
   Calendar, 
   Save, 
   X, 
-  Shield,
-  Crown,
-  Settings
+  Settings,
+  Phone
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -36,7 +35,10 @@ interface UserProfileModalProps {
 interface UserProfile {
   id: string;
   email: string;
-  full_name?: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  mobile_number?: string;
   avatar_url?: string;
   created_at: string;
   updated_at: string;
@@ -46,9 +48,61 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const { user } = useAuth();
   const { subscription, getStatusColor, getStatusIcon } = useSubscription();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [countryCode, setCountryCode] = useState('+1');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [showEmailChangeModal, setShowEmailChangeModal] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailChangeError, setEmailChangeError] = useState('');
+  const [currentEmail, setCurrentEmail] = useState('');
+
+  // Country codes for North America
+  const countryCodes = [
+    { value: '+1', label: '+1 (USA/Canada)', flag: '🇺🇸' },
+    { value: '+52', label: '+52 (Mexico)', flag: '🇲🇽' },
+  ];
+
+  // Helper to extract display username (remove _number suffix)
+  const getDisplayUsername = (fullUsername: string | undefined) => {
+    if (!fullUsername) return '';
+    const match = fullUsername.match(/^(.+)_\d+$/);
+    return match ? match[1] : fullUsername;
+  };
+
+  // Helper to generate unique username with suffix
+  const generateUniqueUsername = async (baseUsername: string): Promise<string> => {
+    const sanitized = baseUsername.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+    if (!sanitized) throw new Error('Invalid username');
+
+    // Check if base username exists
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('username')
+      .like('username', `${sanitized}%`)
+      .order('username', { ascending: false });
+
+    if (!existing || existing.length === 0) {
+      return `${sanitized}_1`;
+    }
+
+    // Find highest number suffix
+    let maxNumber = 0;
+    existing.forEach((profile) => {
+      const match = profile.username?.match(/^.+_(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNumber) maxNumber = num;
+      }
+    });
+
+    return `${sanitized}_${maxNumber + 1}`;
+  };
 
   // Load user profile when modal opens
   useEffect(() => {
@@ -57,11 +111,36 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   }, [isOpen, user]);
 
+  // Listen for auth state changes (e.g., email verification)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[UserProfileModal] Auth state changed:', event);
+      
+      // Reload profile if user data changed (e.g., email verified)
+      if (event === 'USER_UPDATED' && session?.user) {
+        console.log('[UserProfileModal] User updated, reloading profile');
+        loadUserProfile();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [isOpen]);
+
   const loadUserProfile = async () => {
-    if (!user?.id) {
+    // Always get the latest user from session, don't rely on stale props
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = session?.user;
+    
+    if (!currentUser?.id) {
       console.error('Cannot load profile: user ID is missing');
       return;
     }
+    
+    console.log('[UserProfileModal] Loading profile with email:', currentUser.email);
     
     try {
       setLoading(true);
@@ -70,25 +149,43 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', currentUser.id)
         .single();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading profile:', error);
       }
 
-      // Create profile object with user data
+      // Create profile object with FRESH user data from session
       const userProfile: UserProfile = {
-        id: user.id,
-        email: user.email || '',
-        full_name: profileData?.full_name || '',
+        id: currentUser.id,
+        email: currentUser.email || '',
+        username: profileData?.username || '',
+        first_name: profileData?.first_name || '',
+        last_name: profileData?.last_name || '',
+        mobile_number: profileData?.mobile_number || '',
         avatar_url: profileData?.avatar_url || '',
-        created_at: user.created_at || '',
-        updated_at: profileData?.updated_at || user.created_at || '',
+        created_at: currentUser.created_at || '',
+        updated_at: profileData?.updated_at || currentUser.created_at || '',
       };
 
       setProfile(userProfile);
-      setFullName(userProfile.full_name || '');
+      setCurrentEmail(userProfile.email);
+      setUsername(getDisplayUsername(userProfile.username));
+      setFirstName(userProfile.first_name || '');
+      setLastName(userProfile.last_name || '');
+      
+      // Parse country code and mobile number
+      const fullMobile = userProfile.mobile_number || '';
+      if (fullMobile.startsWith('+52')) {
+        setCountryCode('+52');
+        setMobileNumber(fullMobile.substring(3).trim());
+      } else if (fullMobile.startsWith('+1')) {
+        setCountryCode('+1');
+        setMobileNumber(fullMobile.substring(2).trim());
+      } else if (fullMobile) {
+        setMobileNumber(fullMobile);
+      }
     } catch (error) {
       console.error('Failed to load user profile:', error);
       toast.error('Failed to load profile');
@@ -102,20 +199,57 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
     try {
       setSaving(true);
+      setUsernameError('');
+      
+      // Generate unique username if username is provided or changed
+      let finalUsername = profile.username;
+      if (username.trim() && getDisplayUsername(profile.username) !== username.trim()) {
+        try {
+          finalUsername = await generateUniqueUsername(username.trim());
+        } catch (err) {
+          setUsernameError('Invalid username. Use only letters, numbers, and underscores.');
+          setSaving(false);
+          return;
+        }
+      }
+      
+      // Combine country code with mobile number
+      const fullMobileNumber = mobileNumber.trim() 
+        ? `${countryCode} ${mobileNumber.trim()}`
+        : null;
       
       // Update or insert profile
       const { error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
-          full_name: fullName.trim() || null,
+          username: finalUsername || null,
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          mobile_number: fullMobileNumber,
           updated_at: new Date().toISOString(),
         });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') { // Unique constraint violation
+          setUsernameError('Username already taken. Please try another.');
+        } else {
+          throw error;
+        }
+        return;
+      }
 
       // Update local state
-      setProfile(prev => prev ? { ...prev, full_name: fullName.trim() } : null);
+      setProfile(prev => prev ? { 
+        ...prev,
+        username: finalUsername,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        mobile_number: fullMobileNumber || undefined
+      } : null);
+      
+      // Update display username
+      setUsername(getDisplayUsername(finalUsername));
       
       toast.success('Profile updated successfully');
     } catch (error) {
@@ -123,6 +257,97 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       toast.error('Failed to save profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEmailChange = async () => {
+    if (!user || !newEmail.trim()) {
+      setEmailChangeError('Please enter a new email address');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      setEmailChangeError('Please enter a valid email address');
+      return;
+    }
+
+    // Check if same as current (use currentEmail state, not profile)
+    if (newEmail.toLowerCase() === currentEmail.toLowerCase()) {
+      setEmailChangeError('New email must be different from current email');
+      return;
+    }
+
+    try {
+      setChangingEmail(true);
+      setEmailChangeError('');
+
+      console.log('[UserProfileModal] Requesting email change to:', newEmail);
+
+      // Get the current session to ensure we have a valid auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('You must be logged in to change your email');
+      }
+
+      console.log('[UserProfileModal] Session valid, calling edge function');
+
+      const { data, error } = await supabase.functions.invoke('change-email', {
+        body: { newEmail: newEmail.trim() }
+      });
+
+      console.log('[UserProfileModal] Edge function response:', { data, error });
+
+      if (error) {
+        console.error('[UserProfileModal] Email change error:', error);
+        throw new Error(error.message || 'Failed to change email');
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to change email');
+      }
+
+      console.log('[UserProfileModal] Email change initiated successfully');
+
+      // Close modal
+      setShowEmailChangeModal(false);
+      setNewEmail('');
+
+      // Show success message
+      toast.success(
+        `Email updated successfully to ${data.newEmail}!`,
+        { duration: 5000 }
+      );
+
+      // Update the UI immediately
+      console.log('[UserProfileModal] BEFORE UPDATE - currentEmail:', currentEmail);
+      console.log('[UserProfileModal] Setting currentEmail to:', data.newEmail);
+      setCurrentEmail(data.newEmail);
+      console.log('[UserProfileModal] AFTER UPDATE - setCurrentEmail called with:', data.newEmail);
+      
+      // Force refresh the auth session to update sidebar and all UI
+      console.log('[UserProfileModal] Forcing auth session refresh...');
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('[UserProfileModal] Error refreshing session:', refreshError);
+        console.log('[UserProfileModal] Email changed but sidebar may not update until page refresh');
+      } else if (refreshData?.session?.user) {
+        console.log('[UserProfileModal] ✅ Session refreshed successfully!');
+        console.log('[UserProfileModal] New user email in session:', refreshData.session.user.email);
+        setProfile(prev => prev ? {
+          ...prev,
+          email: refreshData.session.user.email || prev.email
+        } : null);
+      }
+
+    } catch (error: any) {
+      console.error('[UserProfileModal] Email change failed:', error);
+      setEmailChangeError(error.message || 'Failed to change email');
+      toast.error(error.message || 'Failed to change email');
+    } finally {
+      setChangingEmail(false);
     }
   };
 
@@ -135,6 +360,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl bg-background border-border rounded-2xl p-0 [&>button]:hidden">
         {/* Header */}
@@ -173,13 +399,19 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                 </Avatar>
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold">
-                    {profile?.full_name || profile?.email?.split('@')[0] || 'User'}
+                    {profile?.first_name 
+                      ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+                      : profile?.email?.split('@')[0] || 'User'}
                   </h3>
-                  <p className="text-muted-foreground">{profile?.email}</p>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-3 mt-1">
                     <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getStatusColor()}`}>
                       <span className="text-xs">{getStatusIcon()}</span>
                       {subscription?.display_name || 'Free Plan'}
+                    </div>
+                    <span className="text-xs text-muted-foreground">•</span>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="w-3 h-3" />
+                      Member since {formatDate(profile?.created_at || '')}
                     </div>
                   </div>
                 </div>
@@ -196,85 +428,234 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Row 1: Username (full width) */}
+                  <div>
+                    <Label htmlFor="username" className="flex items-center gap-2 mb-2">
+                      <User className="w-4 h-4" />
+                      Username
+                    </Label>
+                    <Input
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value);
+                        setUsernameError('');
+                      }}
+                      placeholder="Enter a unique username"
+                      className="rounded-lg"
+                    />
+                    {usernameError && (
+                      <p className="text-xs text-red-500 mt-1">{usernameError}</p>
+                    )}
+                  </div>
+                  
+                  {/* Row 2: First Name, Last Name */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="email">Email Address</Label>
+                      <Label htmlFor="firstName" className="flex items-center gap-2 mb-2">
+                        <User className="w-4 h-4" />
+                        First Name
+                      </Label>
                       <Input
-                        id="email"
-                        type="email"
-                        value={profile?.email || ''}
-                        disabled
-                        className="bg-muted"
+                        id="firstName"
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Enter your first name"
+                        className="rounded-lg"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Email cannot be changed
-                      </p>
                     </div>
                     <div>
-                      <Label htmlFor="fullName">Full Name</Label>
+                      <Label htmlFor="lastName" className="mb-2 block">Last Name</Label>
                       <Input
-                        id="fullName"
+                        id="lastName"
                         type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Enter your full name"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Enter your last name"
+                        className="rounded-lg"
                       />
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                  
+                  {/* Row 3: Email Address (full width) */}
+                  <div>
+                    <Label htmlFor="email" className="flex items-center gap-2 mb-2">
+                      <Mail className="w-4 h-4" />
+                      Email Address
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="email"
+                        type="email"
+                        value={currentEmail}
+                        disabled
+                        className="bg-muted rounded-lg flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowEmailChangeModal(true)}
+                        className="rounded-lg whitespace-nowrap"
+                      >
+                        Change Email
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Row 4: Mobile Number with Country Code */}
+                  <div>
+                    <Label htmlFor="mobileNumber" className="flex items-center gap-2 mb-2">
+                      <Phone className="w-4 h-4" />
+                      Mobile Number <span className="text-muted-foreground text-xs">(optional)</span>
+                    </Label>
+                    <div className="flex gap-2">
+                      <Select value={countryCode} onValueChange={setCountryCode}>
+                        <SelectTrigger className="w-[140px] rounded-lg">
+                          <SelectValue>
+                            {countryCodes.find(c => c.value === countryCode)?.flag} {countryCode}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg">
+                          {countryCodes.map((country) => (
+                            <SelectItem key={country.value} value={country.value} className="rounded-md">
+                              {country.flag} {country.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        id="mobileNumber"
+                        type="tel"
+                        value={mobileNumber}
+                        onChange={(e) => setMobileNumber(e.target.value)}
+                        placeholder="(555) 123-4567"
+                        className="flex-1 rounded-lg"
+                      />
+                    </div>
+                  </div>
 
-              {/* Account Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Shield className="w-5 h-5" />
-                    Account Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Member since:</span>
-                      <span className="font-medium">
-                        {profile?.created_at ? formatDate(profile.created_at) : 'Unknown'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Crown className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Current plan:</span>
-                      <Badge className={getStatusColor()}>
-                        {subscription?.display_name || 'Free Plan'}
-                      </Badge>
-                    </div>
+                  {/* Save Button */}
+                  <div className="flex justify-end pt-4">
+                    <Button 
+                      onClick={saveProfile} 
+                      disabled={saving || loading} 
+                      className="group rounded-lg transition-all duration-300 ease-out hover:scale-[1.05] active:scale-95 disabled:scale-100 disabled:hover:scale-100"
+                    >
+                      {saving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2 transition-transform duration-300 group-hover:rotate-[15deg]" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             </>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-border bg-muted/30 rounded-b-2xl flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={saveProfile} disabled={saving || loading}>
-            {saving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
+    {/* Email Change Modal */}
+    <Dialog open={showEmailChangeModal} onOpenChange={setShowEmailChangeModal}>
+      <DialogContent className="sm:max-w-[500px] rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+            <Mail className="w-5 h-5" />
+            Change Email Address
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            You'll receive a verification email at your new address. Your email won't change until you click the verification link.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="currentEmail" className="mb-2 block">Current Email</Label>
+              <Input
+                id="currentEmail"
+                type="email"
+                value={currentEmail}
+                disabled
+                className="bg-muted rounded-lg"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="newEmailInput" className="mb-2 block">New Email Address</Label>
+              <Input
+                id="newEmailInput"
+                type="email"
+                value={newEmail}
+                onChange={(e) => {
+                  setNewEmail(e.target.value);
+                  setEmailChangeError('');
+                }}
+                placeholder="Enter your new email"
+                className="rounded-lg"
+                disabled={changingEmail}
+              />
+              {emailChangeError && (
+                <p className="text-xs text-red-500 mt-1">{emailChangeError}</p>
+              )}
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <p className="text-sm text-blue-900 dark:text-blue-100">
+                <strong>What happens next:</strong>
+                <br />
+                1. We'll send a verification link to your new email
+                <br />
+                2. Click the link to confirm the change
+                <br />
+                3. Your email will be updated automatically
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEmailChangeModal(false);
+                setNewEmail('');
+                setEmailChangeError('');
+              }}
+              disabled={changingEmail}
+              className="rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEmailChange}
+              disabled={changingEmail || !newEmail.trim()}
+              className="rounded-lg"
+            >
+              {changingEmail ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="w-4 h-4 mr-2" />
+                  Send Verification
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+  </>
   );
 }

@@ -1658,7 +1658,7 @@ export function AgentChatPage() {
             </div>
           ) : messages.length === 0 ? (
             <div className="w-full">
-              <ChatStarterScreen agent={agent} />
+              <ChatStarterScreen agent={agent} user={user} />
             </div>
           ) : (
             <div className="max-w-3xl w-full overflow-y-auto chat-scrollbar px-4 py-6 pb-8">

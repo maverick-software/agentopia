@@ -4,7 +4,7 @@
  * Provides user profile, settings, billing, and navigation options
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Settings, LogOut, HelpCircle, Crown, CreditCard, Shield,
@@ -27,6 +27,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PricingModal } from '@/components/billing/PricingModal';
 import { UserProfileModal } from '@/components/modals/UserProfileModal';
 import { LogoutConfirmDialog } from '@/components/modals/LogoutConfirmDialog';
+import { supabase } from '@/lib/supabase';
 
 interface AccountMenuProps {
   isCollapsed: boolean;
@@ -42,6 +43,26 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [currentEmail, setCurrentEmail] = useState('');
+
+  // Load fresh email from session on mount and when modal closes
+  const loadCurrentEmail = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const email = session?.user?.email || '';
+    console.log('[AccountMenu] Loaded email from session:', email);
+    setCurrentEmail(email);
+  };
+
+  // Load email on mount
+  useEffect(() => {
+    loadCurrentEmail();
+  }, []);
+
+  // Refresh email when profile modal closes
+  const handleProfileModalClose = () => {
+    setShowUserProfileModal(false);
+    loadCurrentEmail(); // Refresh email after modal closes
+  };
 
   const getThemeIcon = (themeMode: 'light' | 'dark' | 'chatgpt') => {
     switch (themeMode) {
@@ -84,22 +105,27 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
   return (
     <>
       <div className="pb-2">
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={(open) => {
+          if (open) {
+            // Refresh email when dropdown opens to catch any changes
+            loadCurrentEmail();
+          }
+        }}>
           <DropdownMenuTrigger asChild>
             <button 
               className={`w-full flex items-center gap-2 p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-left ${
                 isCollapsed ? 'justify-center' : ''
               }`}
-              title={isCollapsed ? user.email : undefined}
+              title={isCollapsed ? currentEmail : undefined}
             >
               <Avatar className="w-8 h-8 flex-shrink-0">
                 <AvatarFallback className="bg-indigo-600 text-white text-sm">
-                  {user.email?.substring(0, 2).toUpperCase() || '??'}
+                  {currentEmail?.substring(0, 2).toUpperCase() || '??'}
                 </AvatarFallback>
               </Avatar>
               {!isCollapsed && (
                 <span className="text-sm text-sidebar-foreground truncate">
-                  {user.email}
+                  {currentEmail}
                 </span>
               )}
             </button>
@@ -165,12 +191,12 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
                 <div className="flex items-center gap-3 w-full">
                   <Avatar className="w-10 h-10">
                     <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
-                      {user.email?.substring(0, 2).toUpperCase() || '??'}
+                      {currentEmail?.substring(0, 2).toUpperCase() || '??'}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
-                      {user.email?.split('@')[0] || 'User'}
+                      {currentEmail?.split('@')[0] || 'User'}
                     </p>
                     <div className="mt-1">
                       <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getStatusColor()}`}>
@@ -291,7 +317,7 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
 
       <UserProfileModal
         isOpen={showUserProfileModal}
-        onClose={() => setShowUserProfileModal(false)}
+        onClose={handleProfileModalClose}
       />
 
       <LogoutConfirmDialog
