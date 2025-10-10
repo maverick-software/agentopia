@@ -3,6 +3,26 @@
 
 Adding Voice, Creating Admin Agent Repository, A Simple AI description to create an agent
 
+## Deep Research Capabilities ##
+
+I want users to be able to select 'Deep Research'  from the input area of the agent chat page. This is like an 'enable/disable' toggle. They click it, and it enables the mode. This would cause the agent to, instead of using its assigned LLM model, use the o4-mini-deep-research model, which should use background mode to operate in. When the client enables deep research, they should be notified that cost is significantly higher than standard rates. 
+
+https://platform.openai.com/docs/models/o4-mini-deep-research
+https://platform.openai.com/docs/guides/deep-research
+Background Mode: https://platform.openai.com/docs/guides/background
+
+## Image Generation ##
+
+We want to add an image generation MCP tool for the agent to use. For now, because we are using responses API, we will we use OpenAI's GPT-image-1 models. The user should be able to turn on/off image generation capabilities in the Settings modal > Tools tab.
+
+https://platform.openai.com/docs/guides/image-generation?image-generation-model=gpt-image-1
+
+## Vision ##
+
+We want users to be able to submit images via chat to agents. They can use the file open tool on the chat input or they can drag and drop the image into the chat area. The responses API automatically supports this for the OpenAI models we have selected, so we just need to make sure we update our responses API and UI to handle sending images to the LLM. 
+
+https://platform.openai.com/docs/guides/images-vision?api-mode=responses#calculating-costs
+
 ## Edit Message ##
 
 We want to be able to edit messages and start the chat from that point forward.
@@ -14,6 +34,10 @@ We want to be able to clone chats from specific checkpoint (every agent message 
 ## Like/Dislike Tracker ##
 
 We need to be able to track bad responses to help refine agent prompts. We want to track these for individual agents, and make this available via the admin page. Where we can view agents, their system prompts, how many messages they've produced, and how many likes/dislikes. Getting percentages and reports on their accuracy and capabilities.
+
+## AI Video Conferencing ##
+
+Ability for agent to start an AI video conference using D-ID realtime streaming. These can be in platform, or they can be made public links so they can be sent to others. The entire video, including the agent and the participants must be transcribed using OpenAI Whisper or another technology, and saved in the database as an artifact. We will need a video conferences table that stores conference ID with a link to the conversation ID they took place in. The transcripts must then be made available in that conversation for the agent to use as context. Transcripts become artifacts in our existing artifact system, so they can be used again later .
 
 ## Agent 2 Agent Job Queue ##
 
@@ -57,7 +81,7 @@ We need to be able to save prompts with custom variables. They become forms with
 
 ## Artifacts ##
 
-Agents needs to be able to create word documents, PDFs, text files (with various extensions) and html pages.'
+Agents needs to be able to create word documents, PDFs, text files (with various extensions) and html pages.' These artifacts should be shown on the Library page as their own tab. Artifacts can be shared with other agents and other accounts as well, or inside of teams.
 
 ## Canvas ##
 
