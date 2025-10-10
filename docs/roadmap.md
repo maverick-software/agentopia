@@ -1,4 +1,8 @@
 
+## Priorities ##
+
+Adding Voice, Creating Admin Agent Repository, A Simple AI description to create an agent
+
 ## Edit Message ##
 
 We want to be able to edit messages and start the chat from that point forward.

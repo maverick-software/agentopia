@@ -10,6 +10,7 @@ import { ArtifactCard } from './ArtifactCard';
 import { CanvasMode } from './CanvasMode';
 import { useArtifacts } from '@/hooks/useArtifacts';
 import type { Artifact } from '@/types/artifacts';
+import { supabase } from '@/lib/supabase';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -429,17 +430,30 @@ interface ChatStarterScreenProps {
 
 export function ChatStarterScreen({ agent, user }: ChatStarterScreenProps) {
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
+  const [firstName, setFirstName] = React.useState('');
   
-  // Extract first name from user's first_name or email
-  const getUserFirstName = () => {
-    if (user?.first_name) {
-      return user.first_name;
-    }
-    if (user?.email) {
-      return user.email.split('@')[0];
-    }
-    return 'there';
-  };
+  // Fetch user's first name from profile
+  React.useEffect(() => {
+    const fetchFirstName = async () => {
+      if (!user?.id) return;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile?.first_name) {
+        setFirstName(profile.first_name);
+      } else if (user?.email) {
+        setFirstName(user.email.split('@')[0]);
+      } else {
+        setFirstName('there');
+      }
+    };
+    
+    fetchFirstName();
+  }, [user?.id, user?.email]);
   
   return (
     <div className="flex items-center justify-center h-full">
@@ -470,7 +484,7 @@ export function ChatStarterScreen({ agent, user }: ChatStarterScreenProps) {
           {agent?.name || 'Agent'}
         </h2>
         <h3 className="text-4xl font-semibold text-foreground">
-          Hi {getUserFirstName()}, How Can I Help?
+          Hi {firstName || 'there'}, How Can I Help?
         </h3>
       </div>
     </div>

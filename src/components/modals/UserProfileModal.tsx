@@ -20,7 +20,10 @@ import {
   Save, 
   X, 
   Settings,
-  Phone
+  Phone,
+  Check,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -55,6 +58,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [mobileNumber, setMobileNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [usernameError, setUsernameError] = useState('');
   const [changingEmail, setChangingEmail] = useState(false);
   const [showEmailChangeModal, setShowEmailChangeModal] = useState(false);
@@ -62,10 +66,39 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const [emailChangeError, setEmailChangeError] = useState('');
   const [currentEmail, setCurrentEmail] = useState('');
 
-  // Country codes for North America
+  // Country codes for North America with flag components
+  const CountryFlag = ({ country }: { country: string }) => {
+    const flags = {
+      'US': (
+        <svg className="w-5 h-4 rounded-sm" viewBox="0 0 640 480">
+          <path fill="#bd3d44" d="M0 0h640v480H0"/>
+          <path stroke="#fff" strokeWidth="37" d="M0 55.3h640M0 129h640M0 203h640M0 277h640M0 351h640M0 425h640"/>
+          <path fill="#192f5d" d="M0 0h364.8v258.5H0"/>
+        </svg>
+      ),
+      'CA': (
+        <svg className="w-5 h-4 rounded-sm" viewBox="0 0 640 480">
+          <path fill="#d52b1e" d="M0 0h150v480H0zm490 0h150v480H490z"/>
+          <path fill="#fff" d="M150 0h340v480H150z"/>
+          <path fill="#d52b1e" d="M318 349.5l-41.5-30.8-41.7 30.6 15.7-49.7-41.6-30.8h51.4l15.8-49.7 16 49.7h51.3l-41.4 30.8"/>
+        </svg>
+      ),
+      'MX': (
+        <svg className="w-5 h-4 rounded-sm" viewBox="0 0 640 480">
+          <path fill="#006847" d="M0 0h213.3v480H0z"/>
+          <path fill="#fff" d="M213.3 0h213.4v480H213.3z"/>
+          <path fill="#ce1126" d="M426.7 0H640v480H426.7z"/>
+          <circle cx="320" cy="240" r="60" fill="#fcdd09"/>
+        </svg>
+      ),
+    };
+    return flags[country as keyof typeof flags] || null;
+  };
+
   const countryCodes = [
-    { value: '+1', label: '+1 (USA/Canada)', flag: '🇺🇸' },
-    { value: '+52', label: '+52 (Mexico)', flag: '🇲🇽' },
+    { value: '+1', label: 'US +1', country: 'US' },
+    { value: '+1-ca', label: 'CA +1', country: 'CA' },
+    { value: '+52', label: 'MX +52', country: 'MX' },
   ];
 
   // Helper to extract display username (remove _number suffix)
@@ -197,8 +230,12 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
   const saveProfile = async () => {
     if (!user || !profile) return;
 
+    const startTime = Date.now();
+    const minLoadingTime = 1000; // Minimum 1 second loading
+
     try {
       setSaving(true);
+      setSaveStatus('saving');
       setUsernameError('');
       
       // Generate unique username if username is provided or changed
@@ -208,7 +245,16 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
           finalUsername = await generateUniqueUsername(username.trim());
         } catch (err) {
           setUsernameError('Invalid username. Use only letters, numbers, and underscores.');
+          
+          // Ensure minimum loading time
+          const elapsed = Date.now() - startTime;
+          const remainingTime = Math.max(0, minLoadingTime - elapsed);
+          
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+          
           setSaving(false);
+          setSaveStatus('error');
+          setTimeout(() => setSaveStatus('idle'), 2000);
           return;
         }
       }
@@ -236,6 +282,15 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
         } else {
           throw error;
         }
+        
+        // Ensure minimum loading time
+        const elapsed = Date.now() - startTime;
+        const remainingTime = Math.max(0, minLoadingTime - elapsed);
+        
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+        
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 2000);
         return;
       }
 
@@ -251,10 +306,27 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
       // Update display username
       setUsername(getDisplayUsername(finalUsername));
       
+      // Ensure minimum loading time before showing success
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, minLoadingTime - elapsed);
+      
+      await new Promise(resolve => setTimeout(resolve, remainingTime));
+      
+      setSaveStatus('success');
       toast.success('Profile updated successfully');
+      setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
       console.error('Failed to save profile:', error);
       toast.error('Failed to save profile');
+      
+      // Ensure minimum loading time
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, minLoadingTime - elapsed);
+      
+      await new Promise(resolve => setTimeout(resolve, remainingTime));
+      
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
     } finally {
       setSaving(false);
     }
@@ -512,15 +584,22 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                     </Label>
                     <div className="flex gap-2">
                       <Select value={countryCode} onValueChange={setCountryCode}>
-                        <SelectTrigger className="w-[140px] rounded-lg">
+                        <SelectTrigger className="w-[120px] rounded-lg">
                           <SelectValue>
-                            {countryCodes.find(c => c.value === countryCode)?.flag} {countryCode}
+                            <span className="flex items-center gap-2">
+                              <CountryFlag country={countryCodes.find(c => c.value === countryCode)?.country || 'US'} />
+                              <span>{countryCodes.find(c => c.value === countryCode)?.label?.split(' ')[1]}</span>
+                            </span>
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent className="rounded-lg">
                           {countryCodes.map((country) => (
                             <SelectItem key={country.value} value={country.value} className="rounded-md">
-                              {country.flag} {country.value}
+                              <div className="flex items-center gap-2">
+                                <CountryFlag country={country.country} />
+                                <span className="font-medium">{country.label.split(' ')[0]}</span>
+                                <span className="text-muted-foreground">{country.label.split(' ')[1]}</span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -540,15 +619,31 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                   <div className="flex justify-end pt-4">
                     <Button 
                       onClick={saveProfile} 
-                      disabled={saving || loading} 
-                      className="group rounded-lg transition-all duration-300 ease-out hover:scale-[1.05] active:scale-95 disabled:scale-100 disabled:hover:scale-100"
+                      disabled={saveStatus !== 'idle'} 
+                      className={`group rounded-lg transition-all duration-300 ease-out hover:scale-[1.05] active:scale-95 disabled:scale-100 disabled:hover:scale-100 ${
+                        saveStatus === 'success' ? 'bg-green-600 hover:bg-green-600' : 
+                        saveStatus === 'error' ? 'bg-red-600 hover:bg-red-600' : ''
+                      }`}
                     >
-                      {saving ? (
+                      {saveStatus === 'saving' && (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Saving...
                         </>
-                      ) : (
+                      )}
+                      {saveStatus === 'success' && (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Saved!
+                        </>
+                      )}
+                      {saveStatus === 'error' && (
+                        <>
+                          <AlertCircle className="w-4 h-4 mr-2" />
+                          Error!
+                        </>
+                      )}
+                      {saveStatus === 'idle' && (
                         <>
                           <Save className="w-4 h-4 mr-2 transition-transform duration-300 group-hover:rotate-[15deg]" />
                           Save Changes

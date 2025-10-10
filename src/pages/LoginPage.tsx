@@ -3,18 +3,31 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
-import { X } from 'lucide-react';
+import { X, Eye, EyeOff } from 'lucide-react';
 
 function LoginPage() {
-  const [step, setStep] = useState<'email' | 'password' | 'signup'>('email');
+  const [step, setStep] = useState<'email' | 'password' | 'name' | 'create-password'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [isExistingUser, setIsExistingUser] = useState<boolean | null>(null);
   const [checkingEmail, setCheckingEmail] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordMatchError, setPasswordMatchError] = useState(false);
   const { signIn, signUp, error, clearError } = useAuth();
   const navigate = useNavigate();
+
+  // Password validation rules
+  const passwordValidation = {
+    minLength: password.length >= 8,
+    hasUpperCase: /[A-Z]/.test(password),
+    hasLowerCase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecialChar: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+  };
 
   useEffect(() => {
     clearError();
@@ -42,9 +55,9 @@ function LoginPage() {
         if (otpError.message.includes('User not found') || 
             otpError.message.includes('not found') ||
             otpError.message.includes('Signups not allowed')) {
-          // User doesn't exist - go to signup
+          // User doesn't exist - go to name collection
           setIsExistingUser(false);
-          setStep('signup');
+          setStep('name');
         } else {
           // Other error, but user might exist - default to login
           setIsExistingUser(true);
@@ -59,10 +72,16 @@ function LoginPage() {
       console.error('Error checking email:', err);
       // Default to signup flow if we can't determine
       setIsExistingUser(false);
-      setStep('signup');
+      setStep('name');
     } finally {
       setCheckingEmail(false);
     }
+  };
+
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Move to password creation step
+    setStep('create-password');
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -74,17 +93,18 @@ function LoginPage() {
     }
   };
 
-  const handleSignupSubmit = async (e: React.FormEvent) => {
+  const handleCreatePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (password !== confirmPassword) {
-      // You might want to set a local error state here
-      console.error('Passwords do not match');
+      setPasswordMatchError(true);
       return;
     }
     
+    setPasswordMatchError(false);
+    
     try {
-      await signUp(email, password, fullName);
+      await signUp(email, password, firstName, lastName);
       // After successful signup, user will be redirected by AuthContext
     } catch (err) {
       console.error('Sign up error:', err);
@@ -111,11 +131,20 @@ function LoginPage() {
   };
 
   const handleBack = () => {
-    setStep('email');
-    setPassword('');
-    setConfirmPassword('');
-    setFullName('');
-    setIsExistingUser(null);
+    if (step === 'password' || step === 'name') {
+      // Go back to email
+      setStep('email');
+      setPassword('');
+      setConfirmPassword('');
+      setFirstName('');
+      setLastName('');
+      setIsExistingUser(null);
+    } else if (step === 'create-password') {
+      // Go back to name
+      setStep('name');
+      setPassword('');
+      setConfirmPassword('');
+    }
     clearError();
   };
 
@@ -133,11 +162,13 @@ function LoginPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-[26px] font-semibold text-white mb-3">
-            Log in or sign up
+            {step === 'name' ? 'Nice to meet you! What is your name?' : 'Log in or sign up'}
           </h1>
-          <p className="text-[15px] text-gray-300 leading-relaxed px-2">
-            You'll get smarter responses and can upload files, images, and more.
-          </p>
+          {step !== 'name' && (
+            <p className="text-[15px] text-gray-300 leading-relaxed px-2">
+              You'll get smarter responses and can upload files, images, and more.
+            </p>
+          )}
         </div>
 
         {/* Error Message */}
@@ -225,24 +256,23 @@ function LoginPage() {
 
             {/* Password Form - Login */}
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <div>
+              <div className="relative">
                 <input
-                  type="email"
-                  disabled
-                  value={email}
-                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-gray-400 mb-3"
-                />
-              </div>
-              <div>
-                <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoFocus
-                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
+                  className="w-full h-[52px] px-4 py-3.5 pr-12 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
                   placeholder="Password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
 
               {/* Log in Button */}
@@ -264,7 +294,7 @@ function LoginPage() {
               </button>
             </div>
           </>
-        ) : (
+        ) : step === 'name' ? (
           <>
             {/* Back to Email */}
             <button
@@ -274,49 +304,125 @@ function LoginPage() {
               ← Back
             </button>
 
-            {/* Sign Up Form */}
-            <form onSubmit={handleSignupSubmit} className="space-y-4">
+            {/* Name Collection Form */}
+            <form onSubmit={handleNameSubmit} className="space-y-4">
               <div>
                 <input
-                  type="email"
-                  disabled
-                  value={email}
-                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-gray-400"
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  autoFocus
+                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
+                  placeholder="First name"
                 />
               </div>
               <div>
                 <input
                   type="text"
                   required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  autoFocus
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                   className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
-                  placeholder="Full name"
-                />
-              </div>
-              <div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
-                  placeholder="Create password"
-                />
-              </div>
-              <div>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full h-[52px] px-4 py-3.5 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
-                  placeholder="Confirm password"
+                  placeholder="Last name"
                 />
               </div>
 
-              {/* Sign up Button */}
+              {/* Continue Button */}
+              <Button
+                type="submit"
+                className="w-full h-[52px] bg-white hover:bg-gray-100 text-gray-900 font-medium py-3.5 rounded-[26px] transition-colors shadow-sm"
+              >
+                Continue
+              </Button>
+            </form>
+          </>
+        ) : (
+          <>
+            {/* Back to Name */}
+            <button
+              onClick={handleBack}
+              className="mb-6 text-sm text-gray-400 hover:text-gray-300 flex items-center gap-2"
+            >
+              ← Back
+            </button>
+
+            {/* Create Password Form */}
+            <form onSubmit={handleCreatePasswordSubmit} className="space-y-4">
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoFocus
+                  className="w-full h-[52px] px-4 py-3.5 pr-12 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
+                  placeholder="Create password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {/* Password Requirements */}
+              {password.length > 0 && (
+                <div className="bg-[#3C3C3C] border border-gray-600 rounded-2xl p-4 space-y-2">
+                  <p className="text-xs text-gray-300 font-medium mb-2">Password Rules:</p>
+                  <div className="space-y-1.5">
+                    <div className={`flex items-center gap-2 text-xs ${passwordValidation.minLength ? 'text-green-400' : 'text-gray-400'}`}>
+                      <span>{passwordValidation.minLength ? '✓' : '○'}</span>
+                      <span>At least 8 characters</span>
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs ${passwordValidation.hasUpperCase ? 'text-green-400' : 'text-gray-400'}`}>
+                      <span>{passwordValidation.hasUpperCase ? '✓' : '○'}</span>
+                      <span>One uppercase letter</span>
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs ${passwordValidation.hasLowerCase ? 'text-green-400' : 'text-gray-400'}`}>
+                      <span>{passwordValidation.hasLowerCase ? '✓' : '○'}</span>
+                      <span>One lowercase letter</span>
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs ${passwordValidation.hasNumber ? 'text-green-400' : 'text-gray-400'}`}>
+                      <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                      <span>One number</span>
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs ${passwordValidation.hasSpecialChar ? 'text-green-400' : 'text-gray-400'}`}>
+                      <span>{passwordValidation.hasSpecialChar ? '✓' : '○'}</span>
+                      <span>One special character (!@#$%^&*...)</span>
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs ${confirmPassword.length > 0 && password === confirmPassword ? 'text-green-400' : 'text-gray-400'}`}>
+                      <span>{confirmPassword.length > 0 && password === confirmPassword ? '✓' : '○'}</span>
+                      <span>Passwords must match</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (passwordMatchError) setPasswordMatchError(false);
+                  }}
+                  className="w-full h-[52px] px-4 py-3.5 pr-12 bg-[#3C3C3C] border border-gray-600 rounded-[26px] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent transition-all"
+                  placeholder="Confirm password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {/* Create Account Button */}
               <Button
                 type="submit"
                 className="w-full h-[52px] bg-white hover:bg-gray-100 text-gray-900 font-medium py-3.5 rounded-[26px] transition-colors shadow-sm"

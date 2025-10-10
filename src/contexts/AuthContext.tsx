@@ -17,7 +17,7 @@ interface AuthContextType {
   isAdmin: boolean;
   rolesLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
   error: string | null;
@@ -179,13 +179,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
     setLoading(true);
     setError(null);
     try {
-      // Validate fullName is not empty
-      if (!fullName || fullName.trim().length === 0) {
-        throw new Error('Full name is required for registration.');
+      // Validate names are not empty
+      if (!firstName || firstName.trim().length === 0) {
+        throw new Error('First name is required for registration.');
+      }
+      if (!lastName || lastName.trim().length === 0) {
+        throw new Error('Last name is required for registration.');
       }
 
       const { data: authData, error: signUpError } = await supabase.auth.signUp({ 
@@ -193,7 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           password,
           options: {
             data: {
-              full_name: fullName.trim()
+              first_name: firstName.trim(),
+              last_name: lastName.trim()
             }
           }
       });
@@ -215,7 +219,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .from('profiles')
           .insert({ 
               id: authData.user.id,
-              full_name: fullName.trim(),
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
           });

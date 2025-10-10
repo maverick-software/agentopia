@@ -44,19 +44,48 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [currentEmail, setCurrentEmail] = useState('');
+  const [displayName, setDisplayName] = useState(user?.email?.split('@')[0] || 'User');
+  const [initials, setInitials] = useState(user?.email?.substring(0, 2).toUpperCase() || '??');
 
-  // Load fresh email from session on mount and when modal closes
+  // Load fresh user data from session and profile on mount and when modal closes
   const loadCurrentEmail = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const email = session?.user?.email || '';
     console.log('[AccountMenu] Loaded email from session:', email);
     setCurrentEmail(email);
+    
+    // Fetch profile data for first_name and last_name
+    if (session?.user?.id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profile?.first_name) {
+        const firstName = profile.first_name;
+        const lastInitial = profile.last_name ? profile.last_name.charAt(0).toUpperCase() : '';
+        const displayNameStr = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+        setDisplayName(displayNameStr);
+        
+        // Set initials for avatar
+        const firstInitial = firstName.charAt(0).toUpperCase();
+        const avatarInitials = lastInitial ? `${firstInitial}${lastInitial}` : `${firstInitial}${firstName.charAt(1)?.toUpperCase() || ''}`;
+        setInitials(avatarInitials);
+      } else {
+        // Fallback to email
+        setDisplayName(email.split('@')[0] || 'User');
+        setInitials(email.substring(0, 2).toUpperCase() || '??');
+      }
+    }
   };
 
-  // Load email on mount
+  // Load email on mount and when user changes
   useEffect(() => {
-    loadCurrentEmail();
-  }, []);
+    if (user?.id) {
+      loadCurrentEmail();
+    }
+  }, [user?.id]);
 
   // Refresh email when profile modal closes
   const handleProfileModalClose = () => {
@@ -116,16 +145,16 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
               className={`w-full flex items-center gap-2 p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-left ${
                 isCollapsed ? 'justify-center' : ''
               }`}
-              title={isCollapsed ? currentEmail : undefined}
+              title={isCollapsed ? displayName : undefined}
             >
               <Avatar className="w-8 h-8 flex-shrink-0">
                 <AvatarFallback className="bg-indigo-600 text-white text-sm">
-                  {currentEmail?.substring(0, 2).toUpperCase() || '??'}
+                  {initials}
                 </AvatarFallback>
               </Avatar>
               {!isCollapsed && (
                 <span className="text-sm text-sidebar-foreground truncate">
-                  {currentEmail}
+                  {displayName}
                 </span>
               )}
             </button>
@@ -191,12 +220,12 @@ export function AccountMenu({ isCollapsed, isAdminArea = false }: AccountMenuPro
                 <div className="flex items-center gap-3 w-full">
                   <Avatar className="w-10 h-10">
                     <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
-                      {currentEmail?.substring(0, 2).toUpperCase() || '??'}
+                      {initials}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
-                      {currentEmail?.split('@')[0] || 'User'}
+                      {displayName}
                     </p>
                     <div className="mt-1">
                       <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${getStatusColor()}`}>
