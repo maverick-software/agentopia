@@ -86,6 +86,34 @@ export class PromptBuilder {
   }
 
   /**
+   * Build artifact creation instructions
+   */
+  buildArtifactInstructions(): string[] {
+    return [
+      `=== ARTIFACT CREATION INSTRUCTIONS ===`,
+      `CRITICAL: When creating artifacts with 'create_artifact', you MUST ALWAYS provide the 'content' parameter with the COMPLETE file content.`,
+      ``,
+      `Rules for artifact creation:`,
+      `1. ALWAYS generate the full content first, then call create_artifact`,
+      `2. The 'content' parameter is REQUIRED and must contain the complete text/code`,
+      `3. Never call create_artifact with just a title and file_type - always include content`,
+      `4. Think of content as "what the user will see when they open the file"`,
+      ``,
+      `Examples of CORRECT usage:`,
+      `- create_artifact(title="California Article", file_type="txt", content="California is a state located on the West Coast...")`,
+      `- create_artifact(title="API Client", file_type="javascript", content="function fetchData() { return fetch('/api/data'); }")`,
+      `- create_artifact(title="README", file_type="md", content="# Project Title\\n\\nThis project does...")`,
+      ``,
+      `Examples of INCORRECT usage (missing content):`,
+      `- create_artifact(title="Article", file_type="txt") ❌ WRONG`,
+      `- create_artifact(title="Script", file_type="python") ❌ WRONG`,
+      ``,
+      `When users ask you to "create a document", "write a file", or "save this as", immediately generate the full content and call create_artifact with all three parameters.`,
+      `=== END ARTIFACT CREATION INSTRUCTIONS ===\n`
+    ];
+  }
+
+  /**
    * Build memory handling instructions
    */
   buildMemoryInstructions(): string[] {
@@ -345,6 +373,28 @@ Examples of when to use document tools:
 - "What are the key points in..."
 - "Tell me about the document I uploaded"
 === END DOCUMENT ACCESS INSTRUCTIONS ===`);
+    
+    // Artifact creation guidance
+    sections.push(`=== ARTIFACT CREATION INSTRUCTIONS ===
+CRITICAL: When creating artifacts with 'create_artifact', you MUST ALWAYS provide the 'content' parameter with the COMPLETE file content.
+
+Rules for artifact creation:
+1. ALWAYS generate the full content first, then call create_artifact
+2. The 'content' parameter is REQUIRED and must contain the complete text/code
+3. Never call create_artifact with just a title and file_type - always include content
+4. Think of content as "what the user will see when they open the file"
+
+Examples of CORRECT usage:
+- create_artifact(title="California Article", file_type="txt", content="California is a state located on the West Coast...")
+- create_artifact(title="API Client", file_type="javascript", content="function fetchData() { return fetch('/api/data'); }")
+- create_artifact(title="README", file_type="md", content="# Project Title\\n\\nThis project does...")
+
+Examples of INCORRECT usage (missing content):
+- create_artifact(title="Article", file_type="txt") ❌ WRONG
+- create_artifact(title="Script", file_type="python") ❌ WRONG
+
+When users ask you to "create a document", "write a file", or "save this as", immediately generate the full content and call create_artifact with all three parameters.
+=== END ARTIFACT CREATION INSTRUCTIONS ===`);
     
     // Memory handling guidance
     sections.push(`=== MEMORY HANDLING INSTRUCTIONS ===

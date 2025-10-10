@@ -500,21 +500,36 @@ export function generateParametersForCapability(toolName: string) {
     return {
       ...baseSchema,
       properties: {
-        title: { type: 'string', description: 'Title of the artifact (e.g., "API Client", "User Dashboard")' },
+        title: { 
+          type: 'string', 
+          description: 'Title of the artifact',
+          examples: ['API Client', 'User Dashboard', 'California Article', 'Data Processing Script']
+        },
         file_type: { 
           type: 'string', 
-          description: 'File type: txt, md, json, html, javascript, typescript, python, java, css, csv, sql, yaml, xml, bash, shell, dockerfile',
+          description: 'File type/language',
           enum: ['txt', 'md', 'json', 'html', 'javascript', 'typescript', 'python', 'java', 'css', 'csv', 'sql', 'yaml', 'xml', 'bash', 'shell', 'dockerfile']
         },
         content: { 
           type: 'string', 
-          description: 'REQUIRED: The full file content/code. You must generate and include the complete file content here. Do not leave this empty or omit it.'
+          description: '**REQUIRED** - The COMPLETE file content. You MUST generate and provide the full text/code here. Never leave this empty. Examples:\n- For txt: "California is a state located on the West Coast..."\n- For javascript: "function calculateTotal() { return items.reduce((sum, item) => sum + item.price, 0); }"\n- For python: "def process_data(df):\\n    return df.groupby(\'category\').sum()"',
+          examples: [
+            'California is a state located on the West Coast of the United States. It is the most populous state...',
+            'function fetchUserData(userId) {\n  return fetch(`/api/users/${userId}`)\n    .then(res => res.json());\n}',
+            '# California: The Golden State\n\nCalifornia is known for its diverse geography...'
+          ]
         },
-        description: { type: 'string', description: 'Optional description of what this artifact does' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for categorization' },
-        conversation_session_id: { type: 'string', description: 'Optional: Link to conversation session' },
-        message_id: { type: 'string', description: 'Optional: Link to specific message' },
-        workspace_id: { type: 'string', description: 'Optional: Link to workspace' }
+        description: { 
+          type: 'string', 
+          description: 'Brief description of the artifact (optional)',
+          examples: ['Comprehensive article about California', 'API client for user management', 'Data processing utility']
+        },
+        tags: { 
+          type: 'array', 
+          items: { type: 'string' }, 
+          description: 'Tags for categorization (optional)',
+          examples: [['california', 'geography', 'usa'], ['javascript', 'api', 'client'], ['python', 'data', 'processing']]
+        }
       },
       required: ['title', 'file_type', 'content']
     };
