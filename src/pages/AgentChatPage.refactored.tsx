@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { useAgents } from '../hooks/useAgents';
+import { useConnections } from '@/integrations/_shared';
+import { toast } from 'react-hot-toast';
 import { refreshAgentAvatarUrl } from '../lib/avatarUtils';
 import type { Database } from '../types/database.types';
 
 // Import extracted components
+import { ConversationSelector, SidebarConversations } from '../components/chat/ConversationComponents';
 import { MessageList, ChatStarterScreen } from '../components/chat/MessageComponents';
 import { ChatInput } from '../components/chat/ChatInput';
 import { ChatHeader } from '../components/chat/ChatHeader';
@@ -24,7 +27,9 @@ type Agent = Database['public']['Tables']['agents']['Row'];
 export function AgentChatPage() {
   const { user } = useAuth();
   const { agentId } = useParams<{ agentId: string }>();
+  const navigate = useNavigate();
   const { updateAgent } = useAgents();
+  const { connections } = useConnections({ includeRevoked: false });
   
   const [agent, setAgent] = useState<Agent | null>(null);
   const [input, setInput] = useState('');
@@ -43,7 +48,7 @@ export function AgentChatPage() {
     conversationHook.conversationLifecycle,
     conversationHook.conversationRefreshKey
   );
-  const aiHook = useAIProcessing(agent, user, input);
+  const aiHook = useAIProcessing(agent, input);
   const uploadHook = useFileUpload(user, agent);
 
   // Fetch agent data
@@ -64,7 +69,7 @@ export function AgentChatPage() {
 
         let finalAgent = data;
         if (data.avatar_url) {
-          const refreshedUrl = await refreshAgentAvatarUrl(supabase, data.id, data.avatar_url);
+          const refreshedUrl = await refreshAgentAvatarUrl(data.avatar_url);
           if (refreshedUrl !== data.avatar_url) {
             finalAgent = { ...data, avatar_url: refreshedUrl };
           }
@@ -103,12 +108,9 @@ export function AgentChatPage() {
       sessId = crypto.randomUUID();
       console.log('[AgentChatPage] First message - creating new conversation:', convId);
       conversationHook.startNewConversation(convId);
-      messageHook.markConversationAsFresh(convId); // Mark as fresh - don't fetch history
       localStorage.setItem(`agent_${agent.id}_session_id`, sessId);
     } else {
-      convId = conversationHook.conversationLifecycle.status === 'active' || conversationHook.conversationLifecycle.status === 'creating'
-        ? conversationHook.conversationLifecycle.id
-        : crypto.randomUUID();
+      convId = conversationHook.conversationLifecycle.id;
       sessId = localStorage.getItem(`agent_${agent.id}_session_id`) || crypto.randomUUID();
       console.log('[AgentChatPage] Subsequent message in conversation:', convId);
     }
@@ -122,7 +124,7 @@ export function AgentChatPage() {
     };
 
     messageHook.setMessages(prev => [...prev, userMessage]);
-    aiHook.startAIProcessing(messageHook.setMessages);
+    aiHook.startAIProcessing();
     
     requestAnimationFrame(() => {
       messageHook.scrollToBottom();
@@ -246,6 +248,18 @@ export function AgentChatPage() {
     adjustTextareaHeight();
   }, [input, adjustTextareaHeight]);
 
+  // Conversation actions
+  const handleShareConversation = useCallback(async () => {
+    const link = conversationHook.getShareLink();
+    if (!link) return;
+    
+    try {
+      await navigator.clipboard.writeText(link);
+      alert('Shareable link copied to clipboard');
+    } catch {
+      prompt('Copy link to share:', link);
+    }
+  }, [conversationHook]);
 
   // Loading state
   if (!user) {
@@ -301,29 +315,22 @@ export function AgentChatPage() {
         <div className="flex-1 min-h-0 relative flex justify-center">
           <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10 opacity-0 transition-opacity duration-300" 
                style={{ opacity: messageHook.messages.length > 0 ? 1 : 0 }} />
-          
-          {/* Show Chat Starter only when no conversation exists */}
-          {conversationHook.conversationLifecycle.status === 'none' ? (
-            <div className="w-full">
-              <ChatStarterScreen agent={agent} user={user} />
-            </div>
-          ) : messageHook.isHistoryLoading ? (
-            // Show loading spinner only when actually loading history from database
+          {messageHook.isHistoryLoading ? (
             <div className="flex items-center justify-center h-full w-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : messageHook.messages.length === 0 ? (
+            <div className="w-full">
+              <ChatStarterScreen agent={agent} user={user} />
+            </div>
           ) : (
-            // Show messages (even if empty - will show thinking indicator)
             <div className="max-w-3xl w-full overflow-y-auto chat-scrollbar px-4 py-6 pb-8">
               <MessageList 
                 messages={messageHook.messages}
                 agent={agent}
-                user={user}
                 aiState={aiHook.aiState}
                 currentTool={aiHook.currentTool}
                 processSteps={aiHook.processSteps}
-                thinkingMessageIndex={aiHook.thinkingMessageIndex}
-                formatMarkdown={(text: string) => text}
               />
               <div ref={messageHook.messagesEndRef} />
             </div>
@@ -350,14 +357,10 @@ export function AgentChatPage() {
 
       {/* Chat Modals */}
       <ChatModals
-        agentId={agent.id}
         agent={agent}
         showAgentSettingsModal={showAgentSettingsModal}
         setShowAgentSettingsModal={setShowAgentSettingsModal}
-        onAgentUpdated={(updatedAgent) => setAgent(updatedAgent)}
-        updateAgent={async (id: string, data: any) => {
-          await updateAgent(id, data);
-        }}
+        updateAgent={updateAgent}
       />
     </div>
   );
