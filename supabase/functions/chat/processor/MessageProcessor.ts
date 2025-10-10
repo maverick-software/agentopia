@@ -348,12 +348,12 @@ export class MessageProcessor {
       // Create processing context
       const context: ProcessingContext = {
         request_id: requestId,
-        agent_id: request.context?.agent_id || request.message?.context?.agent_id || '',
-        user_id: request.context?.user_id || request.message?.context?.user_id,
-        conversation_id: request.context?.conversation_id || request.message?.context?.conversation_id,
-        session_id: request.context?.session_id || request.message?.context?.session_id,
-        workspace_id: request.context?.workspace_id || request.message?.context?.workspace_id,
-        channel_id: request.context?.channel_id || request.message?.context?.channel_id,
+        agent_id: request.context?.agent_id || request.message?.context?.agent_id || request.agent_id || undefined,
+        user_id: request.context?.user_id || request.message?.context?.user_id || request.user_id || undefined,
+        conversation_id: request.context?.conversation_id || request.message?.context?.conversation_id || request.conversation_id || undefined,
+        session_id: request.context?.session_id || request.message?.context?.session_id || request.session_id || undefined,
+        workspace_id: request.context?.workspace_id || request.message?.context?.workspace_id || undefined,
+        channel_id: request.context?.channel_id || request.message?.context?.channel_id || undefined,
         request_options: request.options,
       };
       

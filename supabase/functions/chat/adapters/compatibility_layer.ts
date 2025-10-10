@@ -38,6 +38,9 @@ export class DualWriteService {
           ? message 
           : MessageFormatAdapter.toV2(message, options?.context);
         
+        // Helper to convert empty strings to null for UUID fields
+        const toUuidOrNull = (value: any) => (value && value !== '') ? value : null;
+        
         const { error } = await this.supabaseClient
           .from('chat_messages_v2')
           .insert({
@@ -45,16 +48,16 @@ export class DualWriteService {
             version: v2Message.version,
             conversation_id: v2Message.context.conversation_id,
             session_id: v2Message.context.session_id,
-            channel_id: v2Message.context.channel_id,
-            sender_user_id: v2Message.context.user_id,
-            sender_agent_id: v2Message.context.agent_id,
+            channel_id: toUuidOrNull(v2Message.context.channel_id),
+            sender_user_id: toUuidOrNull(v2Message.context.user_id),
+            sender_agent_id: toUuidOrNull(v2Message.context.agent_id),
             role: v2Message.role,
             content: v2Message.content,
             metadata: v2Message.metadata,
             context: v2Message.context,
             tools: v2Message.tools,
             memory_refs: v2Message.memory,
-            state_snapshot_id: v2Message.state?.id,
+            state_snapshot_id: toUuidOrNull(v2Message.state?.id),
             audit: v2Message.audit,
             created_at: v2Message.created_at,
             updated_at: v2Message.updated_at,

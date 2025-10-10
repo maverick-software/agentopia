@@ -15,7 +15,7 @@ Background Mode: https://platform.openai.com/docs/guides/background
 
 We want to add an image generation MCP tool for the agent to use. For now, because we are using responses API, we will we use OpenAI's GPT-image-1 models. The user should be able to turn on/off image generation capabilities in the Settings modal > Tools tab.
 
-https://platform.openai.com/docs/guides/image-generation?image-generation-model=gpt-image-1
+https://platform.openai.com/docs/guides/image-generation?image-generation-model=gpt-image-1ro,
 
 ## Vision ##
 

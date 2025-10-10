@@ -31,7 +31,7 @@ interface MessageListProps {
 export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps, onCanvasSendMessage }: MessageListProps) {
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   const [canvasArtifact, setCanvasArtifact] = useState<Artifact | null>(null);
-  const { updateArtifact, downloadArtifact } = useArtifacts();
+  const { updateArtifact, downloadArtifact, getArtifact } = useArtifacts();
 
   // Extract artifacts from message metadata
   const getArtifactsFromMessage = (message: Message): Artifact[] => {
@@ -43,13 +43,34 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
   };
 
   // Handle opening canvas mode
-  const handleOpenCanvas = (artifact: Artifact) => {
-    setCanvasArtifact(artifact);
+  const handleOpenCanvas = async (artifact: Artifact) => {
+    // Always fetch the latest version from the database
+    console.log('[MessageList] Opening canvas for artifact:', artifact.id);
+    const latest = await getArtifact(artifact.id);
+    if (latest) {
+      console.log('[MessageList] Loaded latest artifact version:', latest.version, 'content length:', latest.content?.length);
+      setCanvasArtifact(latest);
+    } else {
+      console.warn('[MessageList] Could not load latest artifact, using message version');
+      setCanvasArtifact(artifact);
+    }
   };
 
   // Handle saving artifact from canvas
   const handleSaveArtifact = async (content: string, changes_note?: string) => {
-    if (!canvasArtifact || !agent?.id) return;
+    if (!canvasArtifact || !agent?.id) {
+      console.error('[MessageList] Cannot save - missing artifact or agent', {
+        hasArtifact: !!canvasArtifact,
+        hasAgent: !!agent?.id
+      });
+      return;
+    }
+    
+    console.log('[MessageList] Saving artifact...', {
+      artifactId: canvasArtifact.id,
+      contentLength: content.length,
+      contentPreview: content.substring(0, 100)
+    });
     
     const updated = await updateArtifact(
       {
@@ -61,7 +82,13 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
     );
 
     if (updated) {
+      console.log('[MessageList] Artifact updated successfully', {
+        newVersion: updated.version,
+        newContentLength: updated.content?.length
+      });
       setCanvasArtifact(updated);
+    } else {
+      console.error('[MessageList] updateArtifact returned null/undefined');
     }
   };
   
@@ -162,8 +189,23 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   {message.role === 'user' ? 'You' : (agent?.name || 'Assistant')}
                 </span>
                 
+                {/* Process button for assistant messages */}
+                {message.role === 'assistant' && onShowProcessModal && (
+                  <button
+                    onClick={() => {
+                      console.log('[MessageList] Process button clicked');
+                      onShowProcessModal(message.metadata || {});
+                    }}
+                    className="flex items-center space-x-1 px-2 py-1 bg-muted/50 hover:bg-muted rounded-md transition-colors"
+                    title="View processing details"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Process</span>
+                  </button>
+                )}
+                
                 {/* Thoughts and Process buttons for assistant messages - ALWAYS show Process button */}
-                {message.role === 'assistant' && (
+                {message.role === 'assistant' && false && (
                   <div className="flex items-center space-x-2">
                     {/* Thoughts Dropdown - only show if there are process steps */}
                     {message.metadata?.aiProcessDetails?.steps && message.metadata.aiProcessDetails.steps.length > 0 && (

@@ -307,183 +307,133 @@ async function handler(req: Request): Promise<Response> {
       }
     }
     
-    // Infer API version: prefer explicit, but fall back to body shape
-    let apiVersion = APIVersionRouter.detectVersion(req);
-    // If no explicit version header/path, detect by payload
-    const looksLikeV2 = body?.version === '2.0.0' || (body?.message && typeof body.message === 'object' && body.message.content);
-    const looksLikeV1 = !looksLikeV2; // legacy shape `{ agentId, message }`
-    if (!req.headers.get('X-API-Version')) {
-      apiVersion = looksLikeV2 ? '2.0' : '1.0';
+    // Only support v2 requests - no backward compatibility
+    const acceptHeader = req.headers.get('Accept');
+    const wantsStream = acceptHeader?.includes('text/event-stream');
+    const requestType = wantsStream && body.options?.response?.stream ? 'streaming' : 'standard';
+    
+    log.info('Processing v2 request', { type: requestType, method: req.method });
+    
+    // Validate as v2 request
+    const validation = validator.validateChatRequest(body);
+    if (!validation.valid) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request', details: validation.errors }),
+        { status: 400, headers: createResponseHeaders() }
+      );
     }
     
-    // Initialize message adapter for conversions
-    const messageAdapter = new MessageAdapter();
+    if (wantsStream && body.options?.response?.stream) {
+      return handleStreamingRequest(body, requestId);
+    }
     
-    if (apiVersion.startsWith('2')) {
-      // Handle v2 requests
-      const acceptHeader = req.headers.get('Accept');
-      const wantsStream = acceptHeader?.includes('text/event-stream');
-      const requestType = wantsStream && body.options?.response?.stream ? 'streaming' : 'standard';
+    // Ensure user_id is set from authenticated user
+    if (!body.context) body.context = {};
+    if (!body.context.user_id && authenticatedUserId) {
+      body.context.user_id = authenticatedUserId;
+    }
       
-      log.info('Processing v2 request', { type: requestType, method: req.method });
-      
-      // Validate as v2 request
-      const validation = validator.validateChatRequest(body);
-      if (!validation.valid) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid request', details: validation.errors }),
-          { status: 400, headers: createResponseHeaders() }
-        );
+    // Ensure conversation record + AI title (only for first user message flows)
+    let conversationId: string | null = null;
+    try {
+      const convId = body?.context?.conversation_id;
+      const agentId = body?.context?.agent_id || body?.message?.context?.agent_id;
+      const userId = body?.context?.user_id || authenticatedUserId;
+      const userText = (body?.message?.content?.text ?? '') as string;
+      if (convId && agentId && userId && userText) {
+        conversationId = convId; // Store for later title update
+        await ensureConversationSession(convId, agentId, userId, userText);
       }
-      
-      if (wantsStream && body.options?.response?.stream) {
-        return handleStreamingRequest(body, requestId);
-      }
-      
-      // Ensure user_id is set from authenticated user
-      if (!body.context) body.context = {};
-      if (!body.context.user_id && authenticatedUserId) {
-        body.context.user_id = authenticatedUserId;
-      }
-      
-      // Ensure conversation record + AI title (only for first user message flows)
-      let conversationId: string | null = null;
+    } catch (_e) {}
+    
+    // Robust overflow handling: retry up to 3 times trimming history via max_messages
+    let response: any = null;
+    const originalMax = Number((body?.options?.context?.max_messages ?? 0)) || undefined;
+    let attempt = 0;
+    let currentMax = originalMax;
+    while (attempt < 3) {
       try {
-        const convId = body?.context?.conversation_id;
-        const agentId = body?.context?.agent_id || body?.message?.context?.agent_id;
-        const userId = body?.context?.user_id || authenticatedUserId;
-        const userText = (body?.message?.content?.text ?? '') as string;
-        if (convId && agentId && userId && userText) {
-          conversationId = convId; // Store for later title update
-          await ensureConversationSession(convId, agentId, userId, userText);
+        response = await messageProcessor.process(body, { validate: true, timeout: 30000 });
+        break;
+      } catch (err: any) {
+        const msg = String(err?.message || '');
+        const code = String((err as any)?.code || '');
+        const looksLikeOverflow =
+          code === 'context_length_exceeded' ||
+          /context[_\s-]?length|maximum context|token limit|too many tokens/i.test(msg);
+        if (!looksLikeOverflow) throw err;
+        // Reduce max_messages aggressively but safely
+        const prev = currentMax ?? 20;
+        const next = Math.max(1, prev > 10 ? Math.floor(prev * 0.5) : prev - 1);
+        currentMax = next;
+        body.options = body.options || {};
+        body.options.context = { ...(body.options.context || {}), max_messages: next };
+        attempt += 1;
+        if (attempt >= 3) {
+          const headers = createResponseHeaders({ requestId });
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'context_window_exceeded',
+              error_type: 'CONTEXT_WINDOW_EXCEEDED',
+              title: 'Document Too Large for Context Window',
+              message: 'I apologize, but the document you\'re asking about is too large to process in our current conversation context. The document contains a lot of content that would exceed my context window limits.',
+              agent_instructions: 'Please inform the user that the document is too large for the current conversation context. Suggest they either: 1) Ask specific questions about particular topics in the document, 2) Request a search within the document using search_document_content tool, or 3) Start a new conversation to discuss the document.',
+              technical_details: {
+                reason: 'Request exceeds context window limits after multiple optimization attempts',
+                attempts_made: 'Tried trimming conversation history three times',
+                suggestion: 'Use targeted document search or start fresh conversation'
+              },
+              tips: [
+                'Ask specific questions about the document content',
+                'Use document search to find specific information',
+                'Start a new conversation to discuss this document',
+                'Break your question into smaller, more focused parts'
+              ]
+            }),
+            { status: 413, headers: { ...headers, ...CORS_HEADERS } }
+          );
         }
-      } catch (_e) {}
-      // Robust overflow handling: retry up to 3 times trimming history via max_messages
-      let response: any = null;
-      const originalMax = Number((body?.options?.context?.max_messages ?? 0)) || undefined;
-      let attempt = 0;
-      let currentMax = originalMax;
-      while (attempt < 3) {
-        try {
-          response = await messageProcessor.process(body, { validate: true, timeout: 30000 });
-          break;
-        } catch (err: any) {
-          const msg = String(err?.message || '');
-          const code = String((err as any)?.code || '');
-          const looksLikeOverflow =
-            code === 'context_length_exceeded' ||
-            /context[_\s-]?length|maximum context|token limit|too many tokens/i.test(msg);
-          if (!looksLikeOverflow) throw err;
-          // Reduce max_messages aggressively but safely
-          const prev = currentMax ?? 20;
-          const next = Math.max(1, prev > 10 ? Math.floor(prev * 0.5) : prev - 1);
-          currentMax = next;
-          body.options = body.options || {};
-          body.options.context = { ...(body.options.context || {}), max_messages: next };
-          attempt += 1;
-          if (attempt >= 3) {
-            const headers = createResponseHeaders({ requestId });
-            return new Response(
-              JSON.stringify({
-                success: false,
-                error: 'context_window_exceeded',
-                error_type: 'CONTEXT_WINDOW_EXCEEDED',
-                title: 'Document Too Large for Context Window',
-                message: 'I apologize, but the document you\'re asking about is too large to process in our current conversation context. The document contains a lot of content that would exceed my context window limits.',
-                agent_instructions: 'Please inform the user that the document is too large for the current conversation context. Suggest they either: 1) Ask specific questions about particular topics in the document, 2) Request a search within the document using search_document_content tool, or 3) Start a new conversation to discuss the document.',
-                technical_details: {
-                  reason: 'Request exceeds context window limits after multiple optimization attempts',
-                  attempts_made: 'Tried trimming conversation history three times',
-                  suggestion: 'Use targeted document search or start fresh conversation'
-                },
-                tips: [
-                  'Ask specific questions about the document content',
-                  'Use document search to find specific information',
-                  'Start a new conversation to discuss this document',
-                  'Break your question into smaller, more focused parts'
-                ]
-              }),
-              { status: 413, headers: { ...headers, ...CORS_HEADERS } }
-            );
-          }
-          // Continue loop with reduced history
-          continue;
-        }
+        // Continue loop with reduced history
+        continue;
       }
-      // Persist assistant message (dual-write v1/v2) so the UI can load it later
-      try {
-        const dual = new DualWriteService(supabase as any);
-        await dual.saveMessage(response.data.message, {
-          context: {
-            channel_id: body?.context?.channel_id ?? body?.channelId ?? null,
-            sender_user_id: response.data.message?.context?.user_id,
-            sender_agent_id: response.data.message?.context?.agent_id,
-          },
-        });
-      } catch (persistErr) {
-        log.warn('Assistant message persistence failed (non-fatal)', persistErr as Error);
-      }
-      
-      // Update conversation title after 3rd message (non-blocking)
-      if (conversationId) {
-        // Run asynchronously without waiting
-        updateConversationTitleAfterThirdMessage(conversationId).catch(err => {
-          log.warn('Title update after 3rd message failed (non-fatal)', err as Error);
-        });
-      }
-      
-      // Create response headers
-      const headers = createResponseHeaders({
-        requestId,
-        processingTime: response.metrics?.processing_time_ms,
-      });
-      
-      return new Response(JSON.stringify(response), {
-        status: 200,
-        headers: {
-          ...headers,
-          ...CORS_HEADERS,
+    }
+    
+    // Persist assistant message so the UI can load it later
+    try {
+      const dual = new DualWriteService(supabase as any);
+      await dual.saveMessage(response.data.message, {
+        context: {
+          channel_id: body?.context?.channel_id ?? null,
+          sender_user_id: response.data.message?.context?.user_id,
+          sender_agent_id: response.data.message?.context?.agent_id,
         },
       });
-    } else {
-      // Handle v1 requests (backward compatibility)
-      log.info('Processing v1 request (backward compatibility)');
-      
-      // Convert v1 to v2 format
-      const v2Request = messageAdapter.v1ToV2(body);
-      
-      // Process with v2 processor
-      const v2Response = await messageProcessor.process(v2Request, {
-        validate: true,
-        timeout: 30000,
-      });
-      // Persist assistant message (dual-write v1/v2) for legacy clients
-      try {
-        const dual = new DualWriteService(supabase as any);
-        await dual.saveMessage(v2Response.data.message, {
-          context: {
-            channel_id: body?.channelId ?? null,
-            sender_user_id: v2Response.data.message?.context?.user_id,
-            sender_agent_id: v2Response.data.message?.context?.agent_id,
-          },
-        });
-      } catch (persistErr) {
-        log.warn('Assistant message persistence failed (non-fatal)', persistErr as Error);
-      }
-      
-      // Convert response back to v1 format
-      const v1Response = messageAdapter.v2ToV1Response(v2Response);
-      
-      return new Response(JSON.stringify(v1Response), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': requestId,
-          'X-API-Version': '1.0',
-          ...CORS_HEADERS,
-        },
+    } catch (persistErr) {
+      log.warn('Assistant message persistence failed (non-fatal)', persistErr as Error);
+    }
+    
+    // Update conversation title after 3rd message (non-blocking)
+    if (conversationId) {
+      // Run asynchronously without waiting
+      updateConversationTitleAfterThirdMessage(conversationId).catch(err => {
+        log.warn('Title update after 3rd message failed (non-fatal)', err as Error);
       });
     }
+    
+    // Create response headers
+    const headers = createResponseHeaders({
+      requestId,
+      processingTime: response.metrics?.processing_time_ms,
+    });
+    
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: {
+        ...headers,
+        ...CORS_HEADERS,
+      },
+    });
     
   } catch (error) {
     log.error('Request handling failed', error as Error);

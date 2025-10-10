@@ -1,6 +1,7 @@
 /**
  * useArtifacts Hook
  * Manages artifact CRUD operations via MCP tools
+ * Updated: 2025-01-10 - Direct artifacts-mcp function calls
  */
 
 import { useState, useCallback } from 'react';
@@ -48,27 +49,46 @@ export const useArtifacts = (): UseArtifactsReturn => {
         throw new Error('Not authenticated');
       }
 
-      const response = await supabase.functions.invoke('chat', {
-        body: {
-          action: 'execute_tool',
-          tool_name: toolName,
-          parameters,
-          agent_id: agentId,
-          user_id: session.user.id
-        }
+      const requestBody = {
+        action: toolName,
+        agent_id: agentId,
+        user_id: session.user.id,
+        params: parameters
+      };
+
+      console.log('[useArtifacts] Calling artifacts-mcp function', {
+        toolName,
+        parameters: { ...parameters, content: parameters.content ? `${parameters.content.substring(0, 50)}...` : undefined },
+        agentId,
+        userId: session.user.id,
+        requestBody: { ...requestBody, params: { ...requestBody.params, content: requestBody.params.content ? `${requestBody.params.content.substring(0, 50)}...` : undefined }}
+      });
+
+      // Call artifacts-mcp Edge Function directly
+      const response = await supabase.functions.invoke('artifacts-mcp', {
+        body: requestBody
+      });
+
+      console.log('[useArtifacts] artifacts-mcp response', {
+        error: response.error,
+        success: response.data?.success,
+        hasData: !!response.data?.data,
+        fullResponse: response.data
       });
 
       if (response.error) {
+        console.error('[useArtifacts] Response error:', response.error);
         throw new Error(response.error.message || 'Tool execution failed');
       }
 
       if (!response.data?.success) {
+        console.error('[useArtifacts] Tool returned success=false:', response.data);
         throw new Error(response.data?.error || 'Tool execution failed');
       }
 
-      return response.data.result;
+      return response.data.data;
     } catch (err: any) {
-      console.error(`MCP tool ${toolName} failed:`, err);
+      console.error(`[useArtifacts] MCP tool ${toolName} failed:`, err);
       throw err;
     }
   };
@@ -113,6 +133,14 @@ export const useArtifacts = (): UseArtifactsReturn => {
       try {
         const result = await callMCPTool('update_artifact', params, agentId);
         
+        console.log('[useArtifacts] updateArtifact result:', {
+          hasResult: !!result,
+          hasArtifact: !!result?.artifact,
+          artifactId: result?.artifact?.id,
+          artifactVersion: result?.artifact?.version,
+          artifactContentLength: result?.artifact?.content?.length
+        });
+        
         if (result?.artifact) {
           toast.success('Artifact updated');
           
@@ -124,6 +152,7 @@ export const useArtifacts = (): UseArtifactsReturn => {
           return result.artifact;
         }
 
+        console.warn('[useArtifacts] updateArtifact - no artifact in result:', result);
         return null;
       } catch (err: any) {
         const errorMsg = err.message || 'Failed to update artifact';

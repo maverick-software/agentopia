@@ -32,6 +32,8 @@ export function AgentChatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -131,6 +133,12 @@ export function AgentChatPage() {
       setSending(true);
       setError(null);
 
+      // Validate agent.id before saving
+      if (!agent?.id || agent.id === '') {
+        console.error('[AgentChatPage] CRITICAL: Cannot save message - invalid agent.id:', { agent });
+        throw new Error('Agent ID is invalid');
+      }
+
       // Save user message to database
       const { error: saveError } = await supabase
         .from('chat_messages_v2')
@@ -160,6 +168,22 @@ export function AgentChatPage() {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
+      // Validate required IDs before making API call
+      if (!user?.id) {
+        throw new Error('User ID is missing - please refresh the page and try again');
+      }
+      if (!agent?.id || agent.id === '') {
+        console.error('[AgentChatPage] CRITICAL: Invalid agent.id:', { agent, agentId: agent?.id });
+        throw new Error('Agent ID is missing or invalid');
+      }
+
+      console.log('[AgentChatPage] Calling chat API with:', {
+        agent_id: agent.id,
+        user_id: user.id,
+        conversation_id: convId,
+        session_id: sessId
+      });
+
       // Call chat API
       const [response] = await Promise.all([
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
@@ -169,12 +193,25 @@ export function AgentChatPage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: messageText,
-            agent_id: agent.id,
-            user_id: user.id,
-            conversation_id: convId,
-            session_id: sessId,
-            context_size: 25,
+            version: '2.0.0',
+            message: {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: messageText
+              }
+            },
+            context: {
+              agent_id: agent.id,
+              user_id: user.id,
+              conversation_id: convId,
+              session_id: sessId
+            },
+            options: {
+              context: {
+                max_messages: 25
+              }
+            }
           }),
           signal: abortController.signal,
         }),
@@ -323,6 +360,12 @@ export function AgentChatPage() {
                 processSteps={aiHook.processSteps}
                 thinkingMessageIndex={aiHook.thinkingMessageIndex}
                 formatMarkdown={(text: string) => text}
+                currentProcessingDetails={currentProcessingDetails}
+                onShowProcessModal={(details) => {
+                  console.log('[AgentChatPage] Process modal opened with details:', details);
+                  setCurrentProcessingDetails(details);
+                  setShowProcessModal(true);
+                }}
               />
               <div ref={messageHook.messagesEndRef} />
             </div>
@@ -353,6 +396,9 @@ export function AgentChatPage() {
         agent={agent}
         showAgentSettingsModal={showAgentSettingsModal}
         setShowAgentSettingsModal={setShowAgentSettingsModal}
+        showProcessModal={showProcessModal}
+        setShowProcessModal={setShowProcessModal}
+        currentProcessingDetails={currentProcessingDetails}
         onAgentUpdated={(updatedAgent) => setAgent(updatedAgent)}
         updateAgent={async (id: string, data: any) => {
           await updateAgent(id, data);

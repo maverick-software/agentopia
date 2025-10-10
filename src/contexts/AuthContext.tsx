@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { authSync } from '../lib/auth-sync';
 
 // Define Profile type locally since it's not imported
 interface Profile {
@@ -86,6 +87,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Track the current user ID to prevent unnecessary re-renders on token refresh
   const currentUserIdRef = useRef<string | undefined>(undefined);
   
+  // Multi-tab logout synchronization
+  useEffect(() => {
+    console.log('[AuthContext] Setting up multi-tab auth sync listener');
+    
+    const unsubscribe = authSync.addListener((event, data) => {
+      console.log('[AuthContext] Received auth sync event from another tab:', event, data);
+      
+      if (event === 'LOGOUT') {
+        console.log('[AuthContext] LOGOUT detected from another tab - signing out this tab');
+        
+        // Clear any draft/session storage that might prevent logout
+        try {
+          // Clear canvas sessions
+          const canvasKeys = Object.keys(sessionStorage).filter(key => 
+            key.includes('canvas') || key.includes('draft') || key.includes('integration')
+          );
+          canvasKeys.forEach(key => sessionStorage.removeItem(key));
+          console.log('[AuthContext] Cleared canvas/draft storage:', canvasKeys);
+        } catch (e) {
+          console.warn('[AuthContext] Error clearing storage:', e);
+        }
+        
+        // Clear user state immediately
+        setUser(null);
+        setUserRoles([]);
+        
+        // Force immediate redirect to login page
+        // Use setTimeout to ensure state updates complete first
+        setTimeout(() => {
+          console.log('[AuthContext] Redirecting to login page...');
+          window.location.href = '/login';
+        }, 100);
+      } else if (event === 'LOGIN') {
+        console.log('[AuthContext] LOGIN detected from another tab - refreshing session');
+        // Refresh session to sync login across tabs
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            setUser(session.user);
+          }
+        });
+      }
+    });
+
+    return () => {
+      console.log('[AuthContext] Cleaning up multi-tab auth sync listener');
+      unsubscribe();
+    };
+  }, []);
+  
   useEffect(() => {
     setLoading(true); 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -168,8 +218,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setError(null);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
+      
+      // Broadcast login event to all other tabs
+      if (data?.user) {
+        console.log('[AuthContext] Broadcasting LOGIN event to other tabs');
+        authSync.broadcast('LOGIN', data.user.id);
+      }
     } catch (err: any) {
       console.error('Sign in error:', err);
       setError(err.message || 'Failed to sign in.');
@@ -235,6 +291,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log(`[AuthContext] Profile already exists for user ${authData.user.id} (created by trigger)`);
       }
 
+      // Broadcast login event to all other tabs after successful signup
+      console.log('[AuthContext] Broadcasting LOGIN event to other tabs after signup');
+      authSync.broadcast('LOGIN', authData.user.id);
+
     } catch (err: any) {
       console.error('[AuthContext] Sign up or profile creation error:', err);
       setError(err.message || 'Failed to sign up.');
@@ -248,8 +308,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setError(null);
     try {
+      const userId = user?.id;
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
+      
+      // Broadcast logout event to all other tabs
+      console.log('[AuthContext] Broadcasting LOGOUT event to other tabs');
+      authSync.broadcast('LOGOUT', userId);
+      
       setUser(null);
     } catch (err: any) {
       console.error('Sign out error:', err);

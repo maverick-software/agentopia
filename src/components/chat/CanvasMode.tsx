@@ -73,12 +73,25 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
 
   // Sync content when artifact prop changes (after successful save)
   useEffect(() => {
+    console.log('[Canvas] Artifact changed - syncing content', {
+      newContent: artifact.content?.substring(0, 100),
+      newVersion: artifact.version,
+      currentContent: content?.substring(0, 100)
+    });
     setContent(artifact.content);
   }, [artifact.content, artifact.version]); // Re-sync when version changes
 
   // Detect content changes
   useEffect(() => {
-    setHasUnsavedChanges(content !== artifact.content);
+    const hasChanges = content !== artifact.content;
+    console.log('[Canvas] Content change detection', {
+      hasChanges,
+      contentLength: content?.length,
+      artifactContentLength: artifact.content?.length,
+      contentPreview: content?.substring(0, 50),
+      artifactContentPreview: artifact.content?.substring(0, 50)
+    });
+    setHasUnsavedChanges(hasChanges);
   }, [content, artifact.content]);
 
   // Auto-resize textarea when input changes
@@ -155,7 +168,21 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
   }, [content]);
 
   const handleSave = async () => {
-    if (!hasUnsavedChanges) return;
+    console.log('[Canvas] handleSave called!', {
+      hasUnsavedChanges,
+      contentLength: content?.length,
+      isSaving
+    });
+    
+    if (!hasUnsavedChanges) {
+      console.log('[Canvas] No unsaved changes, skipping save');
+      return;
+    }
+
+    console.log('[Canvas] Starting save...', {
+      contentLength: content.length,
+      contentPreview: content.substring(0, 100)
+    });
 
     setIsSaving(true);
     setSaveSuccess(false);
@@ -163,20 +190,22 @@ export const CanvasMode: React.FC<CanvasModeProps> = ({
     try {
       // Save to artifacts (creates new version)
       await onSave(content);
+      console.log('[Canvas] Successfully saved to artifacts');
       
       // Clear canvas session after successful artifact save
       await canvasSession.clearSession();
+      console.log('[Canvas] Cleared canvas session');
       
       setHasUnsavedChanges(false);
       setSaveSuccess(true);
-      toast.success('Saved to database and cleared draft!');
+      toast.success('Saved to database!');
       
       // Reset success indicator after 2 seconds
       setTimeout(() => {
         setSaveSuccess(false);
       }, 2000);
     } catch (error: any) {
-      console.error('Failed to save artifact:', error);
+      console.error('[Canvas] Failed to save artifact:', error);
       toast.error('Failed to save changes');
     } finally {
       setIsSaving(false);

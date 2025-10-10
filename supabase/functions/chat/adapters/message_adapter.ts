@@ -231,16 +231,23 @@ export class MessageAdapter {
    * Convert V1 request to V2 format
    */
   v1ToV2(v1Request: any): any {
+    // Support both camelCase (agentId) and snake_case (agent_id) for backward compatibility
+    const agentId = v1Request.agentId || v1Request.agent_id;
+    const userId = v1Request.userId || v1Request.user_id;
+    const conversationId = v1Request.conversationId || v1Request.conversation_id;
+    const sessionId = v1Request.sessionId || v1Request.session_id;
+    const channelId = v1Request.channelId || v1Request.channel_id;
+    
     // Get the last message from V1 request (the actual user message)
     const messages = v1Request.messages || [];
     const lastMessage = messages[messages.length - 1];
     
     // Create a proper V2 message
     const v2Message = lastMessage ? MessageFormatAdapter.toV2(lastMessage, {
-      conversation_id: v1Request.conversationId || generateConversationId(),
-      session_id: v1Request.sessionId || generateConversationId(),
-      user_id: v1Request.userId || '',
-      agent_id: v1Request.agentId || '',
+      conversation_id: conversationId || generateConversationId(),
+      session_id: sessionId || generateConversationId(),
+      user_id: userId || undefined,
+      agent_id: agentId || undefined,
     }) : {
       id: generateMessageId(),
       version: '2.0.0',
@@ -252,20 +259,20 @@ export class MessageAdapter {
       },
       timestamp: generateTimestamp(),
       context: {
-        conversation_id: v1Request.conversationId || generateConversationId(),
-        session_id: v1Request.sessionId || generateConversationId(),
-        user_id: v1Request.userId || '',
-        agent_id: v1Request.agentId || '',
+        conversation_id: conversationId || generateConversationId(),
+        session_id: sessionId || generateConversationId(),
+        user_id: userId || undefined,
+        agent_id: agentId || undefined,
       },
       metadata: {},
     };
     
     // Build context object, omitting null/undefined values
     const context: any = {
-      agent_id: v1Request.agentId,
-      user_id: v1Request.userId,
-      conversation_id: v1Request.conversationId || generateConversationId(),
-      session_id: v1Request.sessionId || generateConversationId(),
+      agent_id: agentId || undefined,
+      user_id: userId || undefined,
+      conversation_id: conversationId || generateConversationId(),
+      session_id: sessionId || generateConversationId(),
     };
     
     // Only include channel_id if it's not null/undefined

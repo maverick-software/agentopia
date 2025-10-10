@@ -83,6 +83,13 @@ export class TextMessageHandler implements MessageHandler {
   
   async handle(message: AdvancedChatMessage, context: ProcessingContext) {
     const startTime = Date.now();
+    
+    // CRITICAL FIX: Ensure context.agent_id is never an empty string
+    if (context.agent_id === '') {
+      console.error('[TextMessageHandler] CRITICAL: context.agent_id is empty string, setting to undefined');
+      context.agent_id = undefined as any;
+    }
+    
     const msgs: Array<{ role: 'system'|'user'|'assistant'|'tool'; content: string }> = [];
     
     if (context.agent_id) {
@@ -712,6 +719,13 @@ export class TextMessageHandler implements MessageHandler {
     
     console.log('[TextMessageHandler] Extracted artifacts for metadata:', artifacts);
     
+    // Log incoming message context to debug
+    console.log('[TextMessageHandler] Creating processed message with context:', {
+      messageContext: (message as any).context,
+      processingContextAgentId: context.agent_id,
+      processingContextUserId: context.user_id
+    });
+    
     const processed: AdvancedChatMessage = {
       ...message,
       id: crypto.randomUUID(),
@@ -724,11 +738,18 @@ export class TextMessageHandler implements MessageHandler {
         source: 'api',
         ...(artifacts.length > 0 ? { artifacts } : {})
       },
-      // Keep original context without reasoning (reasoning is ephemeral for this response only)
+      // Build context explicitly with agent_id and user_id at top level
       context: {
-        ...((message as any).context || {})
+        conversation_id: context.conversation_id,
+        session_id: context.session_id,
+        agent_id: context.agent_id || undefined,  // Use ProcessingContext agent_id
+        user_id: undefined,  // Clear user_id since this is from the assistant
+        // Preserve other context fields (like metadata) as nested properties
+        ...((message as any).context?.metadata ? { metadata: (message as any).context.metadata } : {})
       }
     } as any;
+    
+    console.log('[TextMessageHandler] Processed message context:', processed.context);
 
     // FEEDBACK LOOP: Persist memories (episodic always; semantic if Pinecone configured)
     try {

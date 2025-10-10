@@ -303,10 +303,69 @@ async function handleUpdateArtifact(
       storage_path: storagePath
     };
 
-    // Update artifact (trigger will create version automatically)
+    // First, manually create artifact version (since trigger uses auth.uid() which is NULL in service role)
+    const { error: versionError } = await supabase
+      .from('artifact_versions')
+      .insert({
+        artifact_id: currentArtifact.id,
+        version_number: currentArtifact.version,
+        content: currentArtifact.content,
+        storage_path: currentArtifact.storage_path,
+        created_by: userId,  // Explicitly use the userId from the request
+        metadata: currentArtifact.metadata
+      });
+
+    if (versionError) {
+      console.error('[Artifacts MCP] Error creating artifact version:', versionError);
+      return {
+        success: false,
+        error: `Failed to create artifact version: ${versionError.message}`
+      };
+    }
+
+    // Clean up old versions - keep only the last 10
+    const MAX_VERSIONS = 10;
+    try {
+      // Get all versions for this artifact, ordered by version number descending
+      const { data: allVersions, error: versionsError } = await supabase
+        .from('artifact_versions')
+        .select('id, version_number, storage_path')
+        .eq('artifact_id', currentArtifact.id)
+        .order('version_number', { ascending: false });
+
+      if (!versionsError && allVersions && allVersions.length > MAX_VERSIONS) {
+        const versionsToDelete = allVersions.slice(MAX_VERSIONS);
+        console.log(`[Artifacts MCP] Cleaning up ${versionsToDelete.length} old versions (keeping ${MAX_VERSIONS} most recent)`);
+
+        // Delete old version records from database
+        const versionIds = versionsToDelete.map(v => v.id);
+        await supabase
+          .from('artifact_versions')
+          .delete()
+          .in('id', versionIds);
+
+        // Delete old version files from storage
+        const storagePaths = versionsToDelete
+          .map(v => v.storage_path)
+          .filter(path => path); // Filter out null paths
+        
+        if (storagePaths.length > 0) {
+          await supabase.storage
+            .from('media-library')
+            .remove(storagePaths);
+          console.log(`[Artifacts MCP] Deleted ${storagePaths.length} old version files from storage`);
+        }
+      }
+    } catch (cleanupError) {
+      console.warn('[Artifacts MCP] Warning: Failed to clean up old versions:', cleanupError);
+      // Don't fail the update if cleanup fails
+    }
+
+    // Now update artifact with new content and incremented version
     const updateData: any = {
       content: content,
       storage_path: storagePath,
+      version: newVersion,
       metadata: updatedMetadata,
       updated_at: new Date().toISOString()
     };
