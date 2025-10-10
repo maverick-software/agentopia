@@ -148,14 +148,28 @@ Deno.serve(async (req) => {
 
       const tools = mcpResponse.result?.tools || []
       
+      // Deduplicate tools by name (in case MCP server returns duplicates)
+      const uniqueTools = Array.from(
+        new Map(tools.map((tool: any) => [tool.name, tool])).values()
+      )
+      
+      if (uniqueTools.length !== tools.length) {
+        console.log(`[Refresh MCP Tools] Deduplicated ${tools.length} tools to ${uniqueTools.length} unique tools`)
+      }
+      
       // Clear existing tools for this connection
-      await supabase
+      const { error: deleteError } = await supabase
         .from('mcp_tools_cache')
         .delete()
         .eq('connection_id', connectionId)
+      
+      if (deleteError) {
+        console.warn('[Refresh MCP Tools] Warning - could not delete existing tools:', deleteError)
+        // Continue anyway - we'll use upsert below
+      }
 
-      // Insert new tools
-      if (tools.length > 0) {
+      // Insert new tools (use upsert to handle any remaining duplicates)
+      if (uniqueTools.length > 0) {
         // Generate schema hash for change detection
         const generateSchemaHash = (schema: any): string => {
           const schemaStr = JSON.stringify(schema, Object.keys(schema).sort())
@@ -169,7 +183,7 @@ Deno.serve(async (req) => {
           return hash.toString(36)
         }
 
-        const toolsToInsert = tools.map((tool: any) => {
+        const toolsToInsert = uniqueTools.map((tool: any) => {
           const openaiSchema = {
             name: tool.name,
             description: tool.description || '',
@@ -188,12 +202,15 @@ Deno.serve(async (req) => {
           }
         })
 
-        console.log(`[Refresh MCP Tools] Inserting ${toolsToInsert.length} tools for connection ${connectionId}`)
+        console.log(`[Refresh MCP Tools] Upserting ${toolsToInsert.length} tools for connection ${connectionId}`)
         console.log(`[Refresh MCP Tools] First tool sample:`, JSON.stringify(toolsToInsert[0], null, 2))
 
         const { data: insertedTools, error: insertError } = await supabase
           .from('mcp_tools_cache')
-          .insert(toolsToInsert)
+          .upsert(toolsToInsert, {
+            onConflict: 'connection_id,tool_name',
+            ignoreDuplicates: false
+          })
           .select()
 
         if (insertError) {
@@ -221,7 +238,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          toolCount: tools.length 
+          toolCount: uniqueTools.length 
         }),
         { 
           status: 200, 

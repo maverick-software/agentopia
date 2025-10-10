@@ -56,6 +56,11 @@ Deno.serve(async (req) => {
 
     // Test MCP connection before saving
     let toolCount = 0
+    let detectedType: string = 'generic'
+    let serverCapabilities: string[] = []
+    let serverDisplayName = 'MCP Server'
+    let initResult: any = {}
+    
     try {
       // Initialize connection
       const initResponse = await fetch(serverUrl, {
@@ -108,10 +113,10 @@ Deno.serve(async (req) => {
       }
 
       // Detect server type from initialization response
-      const detectedType = detectServerType(serverUrl, initResult.result || {});
+      detectedType = detectServerType(serverUrl, initResult.result || {});
       const serverMetadata = getServerTypeMetadata(detectedType);
-      const serverCapabilities = extractCapabilities(initResult.result || {});
-      const serverDisplayName = formatServerInfo(detectedType, initResult.result || {});
+      serverCapabilities = extractCapabilities(initResult.result || {});
+      serverDisplayName = formatServerInfo(detectedType, initResult.result || {});
       
       console.log(`Detected MCP server type: ${detectedType} (${serverDisplayName})`);
       console.log(`Server capabilities: ${serverCapabilities.join(', ')}`);

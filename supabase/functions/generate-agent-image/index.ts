@@ -39,14 +39,16 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { agentId, prompt: userPrompt } = await req.json()
+    const { agentId, agentName, prompt: userPrompt, theme, gender, hairColor, eyeColor, customInstructions } = await req.json()
 
-    if (!agentId) {
-      throw new Error('Agent ID is required')
+    // Use agentName if agentId is not provided (for agent creation flow)
+    const identifier = agentId || agentName
+    if (!identifier) {
+      throw new Error('Agent ID or Agent Name is required')
     }
 
-    if (!userPrompt) {
-      throw new Error('Prompt is required')
+    if (!userPrompt && !theme) {
+      throw new Error('Prompt or theme is required')
     }
 
     // Use the prompt as provided by the frontend (already includes quality modifiers)
@@ -90,7 +92,7 @@ serve(async (req) => {
     // Convert base64 to blob and upload to Media Library system
     const imageBuffer = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0))
     const timestamp = Date.now()
-    const fileName = `avatar-${agentId}-${timestamp}.png`
+    const fileName = `avatar-${identifier}-${timestamp}.png`
     const storagePath = `${user.id}/avatars/${fileName}`
     
     // Upload to media-library bucket (existing system)
@@ -112,7 +114,7 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         file_name: fileName,
-        display_name: `Avatar for Agent ${agentId}`,
+        display_name: `Avatar for Agent ${identifier}`,
         file_type: 'image/png',
         file_size: imageBuffer.length,
         file_extension: 'png',
