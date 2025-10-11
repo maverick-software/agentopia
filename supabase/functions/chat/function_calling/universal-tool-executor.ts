@@ -739,8 +739,9 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
     }
   }
   
-  // Generic enhancement for any error
-  return `Please provide the correct parameters for ${toolName}. ${error}`;
+  // Pass through the actual error message - don't mask it with generic text
+  // The error from the edge function is already descriptive and useful
+  return error;
 }
 
 export class UniversalToolExecutor {
@@ -878,12 +879,72 @@ export class UniversalToolExecutor {
       
       if (error) {
         console.error(`[UniversalToolExecutor] Edge function error for ${toolName}:`, error);
+        
+        // Check if the error has a response body with detailed error information
+        // Supabase Functions client puts the Response in error.context for non-2xx status codes
+        if (error.context && error.context.body) {
+          try {
+            // The response body is a ReadableStream, we need to read it
+            const errorBody = await error.context.json();
+            console.log(`[UniversalToolExecutor] Parsed error response body:`, errorBody);
+            
+            // If the error body has our structured response, use it
+            if (errorBody && typeof errorBody === 'object') {
+              // Build comprehensive error message with guidance
+              let comprehensiveError = errorBody.error || error.message || 'Unknown error';
+              
+              if (errorBody.guidance) {
+                // Add suggestions
+                if (errorBody.guidance.suggestions && errorBody.guidance.suggestions.length > 0) {
+                  comprehensiveError += '\n\n💡 SUGGESTIONS:\n' + errorBody.guidance.suggestions.map((s: string) => `  • ${s}`).join('\n');
+                }
+                
+                // Add example parameters
+                if (errorBody.guidance.example_parameters) {
+                  comprehensiveError += '\n\n✅ EXAMPLE PARAMETERS THAT WORK:\n' + JSON.stringify(errorBody.guidance.example_parameters, null, 2);
+                }
+                
+                // Add available filters
+                if (errorBody.guidance.available_filters) {
+                  comprehensiveError += '\n\n📋 AVAILABLE FILTERS:\n';
+                  for (const [key, value] of Object.entries(errorBody.guidance.available_filters)) {
+                    if (Array.isArray(value)) {
+                      comprehensiveError += `  • ${key}: [${value.join(', ')}]\n`;
+                    } else {
+                      comprehensiveError += `  • ${key}: ${value}\n`;
+                    }
+                  }
+                }
+              }
+              
+              return {
+                success: false,
+                error: comprehensiveError,
+                requires_retry: errorBody.requires_retry !== false, // Default to true unless explicitly false
+                metadata: { 
+                  ...errorBody.metadata,
+                  toolName, 
+                  edgeFunction: routingConfig.edgeFunction, 
+                  action,
+                  originalError: errorBody.error,
+                  hasGuidance: !!errorBody.guidance
+                }
+              };
+            }
+          } catch (parseError) {
+            console.error(`[UniversalToolExecutor] Failed to parse error response body:`, parseError);
+            // Fall through to generic error handling
+          }
+        }
+        
+        // Generic error handling if we couldn't parse the response body
         const originalError = error.message || 'Unknown error';
         const enhancedError = enhanceErrorForRetry(toolName, originalError);
         
         return {
           success: false,
           error: enhancedError,  // Use enhanced error for retry mechanism
+          requires_retry: true,  // Default to retry for generic errors
           metadata: { 
             toolName, 
             edgeFunction: routingConfig.edgeFunction, 
@@ -898,12 +959,42 @@ export class UniversalToolExecutor {
       if (data && typeof data === 'object') {
         // If the response already has a success field, use it as-is
         if ('success' in data) {
-          // If it's an error response, enhance the error message for retry
+          // If it's an error response, build comprehensive error message with all guidance
           if (!data.success && data.error) {
-            const enhancedError = enhanceErrorForRetry(toolName, data.error);
+            // Build a comprehensive error message that includes:
+            // 1. The actual error
+            // 2. Suggestions from the edge function
+            // 3. Example parameters if provided
+            // 4. Available filters/options if provided
+            let comprehensiveError = data.error;
+            
+            if (data.guidance) {
+              // Add suggestions
+              if (data.guidance.suggestions && data.guidance.suggestions.length > 0) {
+                comprehensiveError += '\n\n💡 SUGGESTIONS:\n' + data.guidance.suggestions.map((s: string) => `  • ${s}`).join('\n');
+              }
+              
+              // Add example parameters
+              if (data.guidance.example_parameters) {
+                comprehensiveError += '\n\n✅ EXAMPLE PARAMETERS THAT WORK:\n' + JSON.stringify(data.guidance.example_parameters, null, 2);
+              }
+              
+              // Add available filters
+              if (data.guidance.available_filters) {
+                comprehensiveError += '\n\n📋 AVAILABLE FILTERS:\n';
+                for (const [key, value] of Object.entries(data.guidance.available_filters)) {
+                  if (Array.isArray(value)) {
+                    comprehensiveError += `  • ${key}: [${value.join(', ')}]\n`;
+                  } else {
+                    comprehensiveError += `  • ${key}: ${value}\n`;
+                  }
+                }
+              }
+            }
+            
             return {
               ...data,
-              error: enhancedError,  // Use enhanced error for retry mechanism
+              error: comprehensiveError,  // Comprehensive error with all guidance
               requires_retry: data.requires_retry,  // Preserve requires_retry flag from edge function
               metadata: { 
                 ...data.metadata, 
@@ -911,7 +1002,7 @@ export class UniversalToolExecutor {
                 edgeFunction: routingConfig.edgeFunction,
                 action,
                 originalError: data.error,
-                enhanced: enhancedError !== data.error  // Flag if error was enhanced
+                hasGuidance: !!data.guidance
               }
             };
           }

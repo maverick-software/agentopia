@@ -474,14 +474,71 @@ async function handleSearchContacts(
   } catch (error: any) {
     console.error('[Contact MCP Tools] Search contacts error:', error);
     
+    // Build intelligent error response with guidance
+    const errorMessage = error.message || 'Failed to search contacts';
+    let enhancedError = errorMessage;
+    let suggestions: string[] = [];
+    
+    // Provide specific guidance based on error type
+    let shouldRetry = false;
+    
+    if (errorMessage.includes('agent_id') || errorMessage.includes('user_id')) {
+      enhancedError = `Missing required parameters: agent_id and user_id are required for contact search.`;
+      suggestions = [
+        'Ensure agent_id is included in the request',
+        'Ensure user_id is included in the request',
+        'These parameters are automatically provided - this should not happen in normal operation'
+      ];
+      shouldRetry = true; // Retry - LLM might be able to fix parameter issues
+    } else if (errorMessage.includes('permission') || errorMessage.includes('access')) {
+      enhancedError = `Permission denied: ${errorMessage}`;
+      suggestions = [
+        'Check that the agent has permission to access contacts',
+        'Verify the user has appropriate role and permissions',
+        'Contact management permissions may need to be enabled for this agent'
+      ];
+      shouldRetry = false; // Don't retry - permission issues need human intervention
+    } else if (errorMessage.includes('function') || errorMessage.includes('database')) {
+      enhancedError = `Database error: ${errorMessage}`;
+      suggestions = [
+        'The contact search function may not be properly configured',
+        'Database connection or schema issue detected',
+        'Contact system administrator'
+      ];
+      shouldRetry = false; // Don't retry - database issues need system fixes
+    } else {
+      // Unknown error - let LLM try to fix it
+      shouldRetry = true;
+    }
+    
     return {
       success: false,
-      error: error.message || 'Failed to search contacts',
+      error: enhancedError,
+      requires_retry: shouldRetry,
+      guidance: {
+        suggestions,
+        example_parameters: {
+          query: 'John Doe',
+          contact_type: 'customer',
+          channel_type: 'email',
+          limit: 20
+        },
+        available_filters: {
+          query: 'Text search across name, organization, notes',
+          contact_type: ['internal', 'external', 'customer', 'vendor', 'partner', 'prospect'],
+          channel_type: ['phone', 'mobile', 'email', 'whatsapp', 'telegram', 'slack', 'discord', 'sms'],
+          phone_pattern: 'Search phone numbers (e.g., "661" for numbers starting with 661)',
+          email_pattern: 'Search emails by pattern or domain',
+          organization_filter: 'Filter by company name',
+          job_title_filter: 'Filter by job title or role'
+        }
+      },
       metadata: {
         execution_time_ms: Date.now() - startTime,
         tool_name: 'search_contacts',
         agent_id: params.agent_id,
-        user_id: params.user_id
+        user_id: params.user_id,
+        error_type: 'validation_error'
       }
     };
   }

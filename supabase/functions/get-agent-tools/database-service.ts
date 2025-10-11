@@ -105,7 +105,7 @@ export async function hasAgentContactPermissions(agentId: string, userId: string
   try {
     const { data: contactPermissions, error } = await supabase
       .from('agent_contact_permissions')
-      .select('id')
+      .select('id, permission_type')
       .eq('agent_id', agentId)
       .limit(1);
     
@@ -114,8 +114,13 @@ export async function hasAgentContactPermissions(agentId: string, userId: string
       return false;
     }
 
-    const hasPermissions = contactPermissions && contactPermissions.length > 0;
-    console.log(`[DatabaseService] Found ${contactPermissions?.length || 0} contact permission records`);
+    // Check if permission exists AND is not 'no_access'
+    const hasPermissions = contactPermissions && 
+                          contactPermissions.length > 0 && 
+                          contactPermissions[0].permission_type !== 'no_access';
+    
+    console.log(`[DatabaseService] Found ${contactPermissions?.length || 0} contact permission records, permission_type: ${contactPermissions?.[0]?.permission_type}`);
+    console.log(`[DatabaseService] Has contact permissions: ${hasPermissions}`);
     return hasPermissions;
   } catch (error) {
     console.error('[DatabaseService] Error checking contact permissions:', error);

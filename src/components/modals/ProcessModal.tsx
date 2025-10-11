@@ -442,10 +442,15 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
           .from('conversation_summary_boards')
           .select('*')
           .eq('conversation_id', conversationId)
-          .single();
+          .maybeSingle();
         
         if (summaryError) {
-          console.log('[ProcessModal] No summary found (this is OK for new conversations):', summaryError.message);
+          // Check if it's a table missing error
+          if (summaryError.code === 'PGRST116' || summaryError.message.includes('relation') || summaryError.message.includes('does not exist')) {
+            console.warn('[ProcessModal] conversation_summary_boards table does not exist yet. Run: supabase db push');
+          } else {
+            console.log('[ProcessModal] No summary found (this is OK for new conversations):', summaryError.message);
+          }
         } else if (summaryBoard) {
           console.log('[ProcessModal] Summary found:', summaryBoard);
           setLocalSummaryInfo({
@@ -750,13 +755,13 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
                             .from('conversation_summary_boards')
                             .select('*')
                             .eq('conversation_id', conversationId)
-                            .single();
+                            .maybeSingle();
                           
                           if (fetchError) {
                             console.error('[ProcessModal] Error fetching summary:', fetchError);
                             setIsGenerating(false);
                             setGenerationStatus('error');
-                            setGenerationMessage('Failed to fetch summary from database');
+                            setGenerationMessage('Failed to fetch summary from database. Table may not exist yet.');
                             return;
                           }
                           

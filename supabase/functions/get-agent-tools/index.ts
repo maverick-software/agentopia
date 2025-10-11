@@ -367,13 +367,36 @@ serve(async (req) => {
         
         for (const mcpTool of mcpTools) {
           if (mcpTool.openai_schema && mcpTool.tool_name) {
+            // Build enhanced description with successful parameter examples
+            let enhancedDescription = mcpTool.openai_schema.description || `${mcpTool.tool_name} - MCP Tool`;
+            
+            // Add successful parameters guidance if available
+            if (mcpTool.successful_parameters && Array.isArray(mcpTool.successful_parameters) && mcpTool.successful_parameters.length > 0) {
+              const latestSuccess = mcpTool.successful_parameters[mcpTool.successful_parameters.length - 1];
+              const paramKeys = Object.keys(latestSuccess);
+              
+              if (paramKeys.length > 0) {
+                enhancedDescription += `\n\n✅ **Successful Parameter Example:**\n${JSON.stringify(latestSuccess, null, 2)}`;
+                enhancedDescription += `\n\n📊 Success Count: ${mcpTool.success_count || 0} executions`;
+                
+                if (mcpTool.last_successful_call) {
+                  enhancedDescription += `\nLast Success: ${new Date(mcpTool.last_successful_call).toISOString()}`;
+                }
+              }
+            }
+            
             tools.push({
               name: mcpTool.tool_name,
-              description: mcpTool.openai_schema.description || `${mcpTool.tool_name} - MCP Tool`,
+              description: enhancedDescription,
               parameters: mcpTool.openai_schema.parameters || {},
               status: 'active',
               provider_name: 'Zapier MCP',
-              connection_name: mcpTool.connection_name || 'MCP Server'
+              connection_name: mcpTool.connection_name || 'MCP Server',
+              _mcp_metadata: {
+                successful_parameters: mcpTool.successful_parameters || [],
+                success_count: mcpTool.success_count || 0,
+                last_successful_call: mcpTool.last_successful_call
+              }
             });
           }
         }

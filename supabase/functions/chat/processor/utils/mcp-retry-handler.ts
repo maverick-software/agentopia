@@ -16,6 +16,8 @@ export interface MCPRetryContext {
     param: string;
     value: string;
   };
+  successfulParameters?: any[]; // Previously successful parameter combinations
+  successCount?: number; // Number of successful executions
 }
 
 export class MCPRetryHandler {
@@ -54,6 +56,18 @@ export class MCPRetryHandler {
       }
     }
     
+    // Build successful parameters section if available
+    let successfulParamsSection = '';
+    if (context.successfulParameters && context.successfulParameters.length > 0) {
+      const latestSuccess = context.successfulParameters[context.successfulParameters.length - 1];
+      successfulParamsSection = `\n✅ PREVIOUSLY SUCCESSFUL PARAMETERS (${context.successCount || 0} successful executions):
+${JSON.stringify(latestSuccess, null, 2)}
+
+These parameters have worked before. Use them as a reference for the correct format and structure.
+
+`;
+    }
+    
     // Build suggested fix section if available
     let suggestedFixSection = '';
     if (context.suggestedFix) {
@@ -88,7 +102,7 @@ The tool "${context.toolName}" returned an interactive error message:
 
 ERROR MESSAGE:
 ${context.errorMessage}
-${parameterGuidance}${userIntentSection}${inferredValueSection}${suggestedFixSection}
+${parameterGuidance}${successfulParamsSection}${userIntentSection}${inferredValueSection}${suggestedFixSection}
 📋 MCP PROTOCOL INSTRUCTIONS:
 1. READ the error message carefully - it tells you EXACTLY what's needed
 2. ${context.suggestedFix ? 'FOLLOW the AI-generated fix suggestion above' : 'Generate a BRAND NEW tool call with ONLY the correct parameters'}

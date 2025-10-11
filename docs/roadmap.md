@@ -3,6 +3,28 @@
 
 Adding Voice, Creating Admin Agent Repository, A Simple AI description to create an agent
 
+## Investigate mcp_tool_cache ##
+
+Let's make sure that, when we get a successful tool call, we are saving that in our mcp_tool_cache. We should check against what is currently in the database, and if it is the same, then no update, but if it is different, then save the schema. Also, there should only be one record per tool. Let's make sure that constraint is already there. Then, we need to make sure we are providing this tool cache to the agent during mcp calls, 'here are the required parameters that have worked for this tool call: [parameters]" in the initial and every retry, along with the mcp server's feedback.
+
+## Update 'Tools' inside agent Behavior Tab ##
+
+I want to create a button on the Agent Chat Page > Settings Moda > Behavior Tab > Tools that queries the MCP tools for an agent, and then uses an LLM responds to format them like the following:
+
+You have the following set of MCP tools:
+
+## Contact Management System ##
+
+search_contacts - searches our internal database for contact information.
+
+## QuickBooks Online ##
+
+quickbooks_online_update_estimate - updates estimates in QuickBook Online
+
+..
+
+and then stores that information in the 'Tools' section o f the Behavior Tab.
+
 ## Deep Research Capabilities ##
 
 I want users to be able to select 'Deep Research'  from the input area of the agent chat page. This is like an 'enable/disable' toggle. They click it, and it enables the mode. This would cause the agent to, instead of using its assigned LLM model, use the o4-mini-deep-research model, which should use background mode to operate in. When the client enables deep research, they should be notified that cost is significantly higher than standard rates. 

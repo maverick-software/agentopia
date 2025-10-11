@@ -55,6 +55,7 @@ export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agen
   const [loading, setLoading] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [formattingTools, setFormattingTools] = useState(false);
   
   // Track original values for change detection
   const [originalRole, setOriginalRole] = useState('');
@@ -501,8 +502,8 @@ export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agen
                   >
                     Done
                   </Button>
-                </div>
-              </div>
+                      </div>
+                    </div>
             ) : (
               <div 
                 className="group flex items-center justify-between py-2 px-1 hover:bg-muted/50 rounded relative"
@@ -536,7 +537,7 @@ export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agen
                     </div>
                   )}
                 </div>
-              </div>
+          </div>
             )}
 
             {/* Separator */}
@@ -545,17 +546,56 @@ export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agen
             {/* Tools */}
             {editingSection === 'tools' ? (
               <div className="bg-muted/30 rounded p-3 space-y-2">
-                <Label htmlFor="tools" className="text-sm font-medium">Tools</Label>
+          <div className="flex items-center justify-between">
+                  <Label htmlFor="tools" className="text-sm font-medium">Tools</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={formattingTools}
+                    onClick={async () => {
+                      setFormattingTools(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('format-mcp-tools', {
+                          body: { agentId }
+                        });
+                        
+                        if (error) throw error;
+                        
+                        if (data?.success && data?.formattedTools) {
+                          setTools(data.formattedTools);
+                          toast.success('MCP tools formatted successfully!');
+                        } else {
+                          throw new Error(data?.error || 'Failed to format tools');
+                        }
+                      } catch (err: any) {
+                        console.error('Error formatting MCP tools:', err);
+                        toast.error(err.message || 'Failed to format MCP tools');
+                      } finally {
+                        setFormattingTools(false);
+                      }
+                    }}
+                  >
+                    {formattingTools ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Formatting...
+                      </>
+                    ) : (
+                      'Update from MCP'
+                    )}
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  How should your agent use available tools and integrations?
+                  How should your agent use available tools and integrations? Click "Update from MCP" to auto-generate from connected MCP servers.
                 </p>
                 <Textarea
                   id="tools"
                   value={tools}
                   onChange={(e) => setTools(e.target.value)}
                   placeholder="Example: Use the knowledge base search tool for technical documentation. Use email integration to send follow-up confirmations after resolving issues."
-                  rows={4}
-                  className="w-full"
+                  rows={8}
+                  className="w-full font-mono text-sm"
                   autoFocus
                 />
                 <div className="flex justify-end">
@@ -601,8 +641,8 @@ export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agen
                       </button>
                     </div>
                   )}
-                </div>
               </div>
+            </div>
             )}
 
             {/* Custom Contexts */}
@@ -828,7 +868,7 @@ export const BehaviorTab = forwardRef<TabRef, BehaviorTabProps>(({ agentId, agen
                             </button>
                           </div>
                         )}
-                      </div>
+            </div>
             </div>
                     </React.Fragment>
                   );

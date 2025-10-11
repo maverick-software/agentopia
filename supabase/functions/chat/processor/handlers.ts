@@ -201,35 +201,50 @@ export class TextMessageHandler implements MessageHandler {
       }
 
       // Get final LLM response after tool execution
-      // CRITICAL FIX: Clean messages before final synthesis to remove orphaned tool_calls
-      // OpenAI API requires: assistant messages with tool_calls MUST be followed by tool responses
-      // Since we're passing tools: [], we must remove tool_calls from assistant messages
-      console.log(`[TextMessageHandler] Cleaning messages for final synthesis (original: ${msgs.length} messages)`);
+      console.log(`[TextMessageHandler] Preparing messages for final synthesis (original: ${msgs.length} messages)`);
       
-      const synthesisMessages = msgs
-        .filter((msg: any) => msg.role !== 'tool') // Remove all tool response messages
-        .map((msg: any) => {
-          // Keep system and user messages as-is
-          if (msg.role === 'system' || msg.role === 'user') {
-            return msg;
-          }
-          
-          // For assistant messages, remove tool_calls property to avoid orphaned tool_calls error
-          if (msg.role === 'assistant') {
-            return {
-              role: msg.role,
-              content: msg.content || '' // Ensure content is not undefined
-            };
-          }
-          
+      // Add reflection guidance to ensure clean, results-focused response
+      msgs.push({
+        role: 'system',
+        content: this.promptBuilder.buildReflectionGuidance()
+      } as any);
+      
+      // CRITICAL: Clean messages for synthesis
+      // OpenAI requirement: tool messages MUST follow assistant messages with tool_calls
+      // Since we're passing tools: [] (no more tool calls allowed), we must convert tool messages to user messages
+      // This way the LLM can still see the results but we don't violate OpenAI's API constraints
+      const synthesisMessages = msgs.map((msg: any, index: number) => {
+        // Keep system and user messages as-is
+        if (msg.role === 'system' || msg.role === 'user') {
           return msg;
-        });
+        }
+        
+        // Convert tool messages to user messages with clear labeling
+        // This preserves the tool results for LLM synthesis while avoiding API errors
+        if (msg.role === 'tool') {
+          return {
+            role: 'user',
+            content: `[Tool Result]\n${msg.content}`
+          };
+        }
+        
+        // For assistant messages, remove tool_calls property to avoid orphaned tool_calls error
+        if (msg.role === 'assistant') {
+          const { tool_calls, ...rest } = msg;
+          return {
+            ...rest,
+            content: rest.content || '' // Ensure content is not undefined
+          };
+        }
+        
+        return msg;
+      });
       
-      console.log(`[TextMessageHandler] Cleaned messages for synthesis (cleaned: ${synthesisMessages.length} messages)`);
+      console.log(`[TextMessageHandler] Prepared ${synthesisMessages.length} messages for synthesis (converted ${msgs.filter((m: any) => m.role === 'tool').length} tool messages to user messages)`);
       
       // CRITICAL: Use empty tools array to force text synthesis (no more tool calls)
       const finalLLMResult = await llmCaller.call({
-        messages: synthesisMessages, // ✅ Use cleaned messages
+        messages: synthesisMessages, // Include tool results as user messages for proper synthesis
         tools: [], // Empty tools = model MUST synthesize with text
         temperature: 0.5,
         maxTokens: 1200,

@@ -32,7 +32,7 @@ export class MessagePreparation {
     if (context.agent_id) {
       const { data: agent } = await this.supabase
         .from('agents')
-        .select('system_instructions, assistant_instructions, description, personality, name')
+        .select('system_instructions, assistant_instructions, description, personality, name, metadata')
         .eq('id', context.agent_id)
         .single();
 

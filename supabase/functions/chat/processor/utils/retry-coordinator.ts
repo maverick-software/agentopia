@@ -109,6 +109,11 @@ export class RetryCoordinator {
           }
         }
         
+        // Get successful parameters from tool metadata if available
+        const toolMetadata = context.availableTools?.find(t => t.name === toolDetail.name);
+        const successfulParams = (toolMetadata as any)?._mcp_metadata?.successful_parameters;
+        const successCount = (toolMetadata as any)?._mcp_metadata?.success_count;
+        
         // Add MCP retry system message following protocol
         const mcpRetryMessage = MCPRetryHandler.generateRetrySystemMessage({
           toolName: toolDetail.name,
@@ -121,7 +126,9 @@ export class RetryCoordinator {
           inferredParameterValue: (inferredValue && inferredParam) ? {
             param: inferredParam,
             value: inferredValue
-          } : undefined
+          } : undefined,
+          successfulParameters: successfulParams,
+          successCount: successCount
         });
         
         msgs.push({

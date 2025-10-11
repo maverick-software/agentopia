@@ -344,27 +344,72 @@ Deno.serve(async (req) => {
       // Log tool execution for analytics and health monitoring
       console.log(`[MCP Execute] Updating tool usage and connection health...`)
       try {
-        // Update tool cache timestamp
-        await supabase
-          .from('mcp_tools_cache')
-          .update({ last_updated: new Date().toISOString() })
-          .eq('connection_id', connection_id)
-          .eq('tool_name', tool_name)
+        // Record successful tool execution with parameters for learning
+        console.log(`[MCP Execute] Recording successful parameters:`, JSON.stringify(parameters).substring(0, 200))
+        await supabase.rpc('record_mcp_tool_execution', {
+          p_connection_id: connection_id,
+          p_tool_name: tool_name,
+          p_parameters: parameters,
+          p_success: true
+        })
         
-        // Record successful tool execution for health monitoring
+        // Also update connection health
         await supabase.rpc('record_mcp_tool_success', {
           p_connection_id: connection_id
         })
+        
+        console.log(`[MCP Execute] ✅ Successfully recorded tool execution and parameters`)
       } catch (err) {
         console.warn('[MCP Execute] Failed to update tool usage/health:', err)
         // Don't fail the request if logging fails
+      }
+
+      // Parse and format Zapier MCP responses for better LLM comprehension
+      let formattedResult = result
+      
+      if (connection.connection_type === 'zapier' && result.content && Array.isArray(result.content)) {
+        try {
+          // Extract the nested JSON from the text field
+          const textContent = result.content[0]?.text
+          if (textContent && typeof textContent === 'string') {
+            const parsedData = JSON.parse(textContent)
+            
+            // Format based on whether results were found
+            if (parsedData.results && Array.isArray(parsedData.results)) {
+              if (parsedData.results.length === 0) {
+                // No results found - make this crystal clear to the LLM
+                formattedResult = {
+                  type: 'text',
+                  text: `Search completed successfully but returned no results. The query "${JSON.stringify(parameters)}" did not match any records in the system.`
+                }
+              } else {
+                // Results found - format them nicely
+                formattedResult = {
+                  type: 'text',
+                  text: `Found ${parsedData.results.length} result(s):\n\n${JSON.stringify(parsedData.results, null, 2)}`
+                }
+              }
+            } else {
+              // Non-search result, keep formatted data
+              formattedResult = {
+                type: 'text',
+                text: JSON.stringify(parsedData, null, 2)
+              }
+            }
+            
+            console.log(`[MCP Execute] Formatted Zapier response for LLM comprehension`)
+          }
+        } catch (parseError) {
+          console.warn('[MCP Execute] Could not parse Zapier response for formatting:', parseError)
+          // Keep original result if parsing fails
+        }
       }
 
       console.log(`[MCP Execute] ✅ Returning success response`)
       return new Response(
         JSON.stringify({ 
           success: true, 
-          data: result 
+          data: formattedResult 
         }),
         { 
           status: 200, 

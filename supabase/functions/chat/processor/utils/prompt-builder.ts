@@ -212,7 +212,26 @@ Remember: ALWAYS use blank lines between elements for readability!`
    * Build final reflection guidance (for after tool execution)
    */
   buildReflectionGuidance(): string {
-    return `Now provide a FINAL, clean response to the user. Your response should:\n\n✅ Be concise and professional\n✅ Summarize what was accomplished\n✅ Report any results or outcomes clearly\n✅ Use markdown formatting for readability\n\n❌ DO NOT repeat intermediate steps or explanations\n❌ DO NOT include raw JSON or code blocks\n❌ DO NOT say "I'll do X now" - just report what was done\n\nThe user only needs to know the final outcome in a clear, friendly way.`;
+    return `CRITICAL INSTRUCTION - FINAL RESPONSE FORMAT:
+
+You have just executed tools on behalf of the user. Now provide a DIRECT, RESULTS-FOCUSED response.
+
+✅ CORRECT FORMAT EXAMPLES:
+- "I found 3 customers matching your search: [results]"
+- "I searched QuickBooks but found no customer named 'Steve Hubble'. The name might be spelled differently or may not exist in your system."
+- "Here are the invoice details: [data]"
+- "The email has been sent successfully to john@example.com."
+- "I attempted to [action] but it failed because [reason]. Would you like me to try [alternative]?"
+
+❌ NEVER DO THIS:
+- "I will search for..." (Don't say what you WILL do - you already DID it!)
+- "Let's proceed with that now..." (It's already done!)
+- "[Executing the search...]" (Don't narrate the process!)
+- Step-by-step explanations of what you're doing
+- Raw JSON dumps or technical data
+- Tool execution summaries
+
+RESPOND AS IF THE TASK IS COMPLETE. Report what happened and what was found (or not found). Be direct and professional.`;
   }
 
   /**
@@ -343,21 +362,67 @@ Remember: ALWAYS use blank lines between elements for readability!`
    */
   buildSystemPromptString(agent: any): string {
     const sections: string[] = [];
+    const behavior = agent?.metadata?.behavior || {};
     
     // CRITICAL: Agent Identity - Must be first and explicit
+    const identityRole = behavior.role || agent?.description || '';
     sections.push(`=== AGENT IDENTITY ===
 Your name is "${agent?.name || 'Assistant'}".
 You MUST always identify yourself by this name when asked.
-${agent?.description ? `Your description/role: ${agent.description}` : ''}
+${identityRole ? `Your role: ${identityRole}` : ''}
 ${agent?.personality ? `Your personality traits: ${agent.personality}\nYou MUST maintain these personality characteristics consistently in all interactions.` : ''}
 When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is ${agent?.name || 'Assistant'}"
 === END AGENT IDENTITY ===`);
+    
+    // Behavior Instructions (from metadata)
+    if (behavior.instructions) {
+      sections.push(`=== BEHAVIOR INSTRUCTIONS ===
+${behavior.instructions}
+=== END BEHAVIOR INSTRUCTIONS ===`);
+    }
     
     // System instructions come after identity
     if (agent?.system_instructions) {
       sections.push(`=== SYSTEM INSTRUCTIONS ===
 ${agent.system_instructions}
 === END SYSTEM INSTRUCTIONS ===`);
+    }
+    
+    // Behavior Constraints (from metadata)
+    if (behavior.constraints) {
+      sections.push(`=== CONSTRAINTS ===
+${behavior.constraints}
+=== END CONSTRAINTS ===`);
+    }
+    
+    // Behavior Tools (from metadata) - formatted MCP tools
+    if (behavior.tools) {
+      sections.push(`=== AVAILABLE TOOLS ===
+${behavior.tools}
+=== END AVAILABLE TOOLS ===`);
+    }
+    
+    // Custom Contexts (from metadata)
+    if (behavior.custom_contexts && Array.isArray(behavior.custom_contexts)) {
+      for (const context of behavior.custom_contexts) {
+        if (context.name && context.content) {
+          sections.push(`=== ${context.name.toUpperCase()} ===
+${context.content}
+=== END ${context.name.toUpperCase()} ===`);
+        }
+      }
+    }
+    
+    // Rules (from metadata)
+    if (behavior.rules && Array.isArray(behavior.rules)) {
+      const rulesContent = behavior.rules
+        .map((rule: any, idx: number) => `${idx + 1}. ${rule.content}`)
+        .join('\n');
+      if (rulesContent) {
+        sections.push(`=== RULES ===
+${rulesContent}
+=== END RULES ===`);
+      }
     }
     
     // Document tools guidance
