@@ -370,6 +370,11 @@ serve(async (req) => {
             // Build enhanced description with successful parameter examples
             let enhancedDescription = mcpTool.openai_schema.description || `${mcpTool.tool_name} - MCP Tool`;
             
+            // Add tool-specific guidance for common API issues
+            if (mcpTool.tool_name.includes('quickbooks_online_api_request')) {
+              enhancedDescription += `\n\n⚠️ **IMPORTANT - HTTPS REQUIREMENT:**\nThe 'url' parameter MUST be a FULL HTTPS URL, not a relative path.\n\n✅ CORRECT: "https://quickbooks.api.intuit.com/v3/company/{realmId}/reports/ProfitAndLoss"\n❌ WRONG: "/reports/profit_and_loss"\n\nAlways include the full protocol (https://) and domain name.`;
+            }
+            
             // Add successful parameters guidance if available
             if (mcpTool.successful_parameters && Array.isArray(mcpTool.successful_parameters) && mcpTool.successful_parameters.length > 0) {
               const latestSuccess = mcpTool.successful_parameters[mcpTool.successful_parameters.length - 1];
@@ -385,10 +390,25 @@ serve(async (req) => {
               }
             }
             
+            // Enhance the parameter schema for url parameters in API tools
+            let enhancedParameters = mcpTool.openai_schema.parameters || {};
+            if (mcpTool.tool_name.includes('api_request') && enhancedParameters.properties && enhancedParameters.properties.url) {
+              enhancedParameters = {
+                ...enhancedParameters,
+                properties: {
+                  ...enhancedParameters.properties,
+                  url: {
+                    ...enhancedParameters.properties.url,
+                    description: (enhancedParameters.properties.url.description || 'API endpoint URL') + ' (MUST be a full HTTPS URL with protocol and domain, not a relative path)'
+                  }
+                }
+              };
+            }
+            
             tools.push({
               name: mcpTool.tool_name,
               description: enhancedDescription,
-              parameters: mcpTool.openai_schema.parameters || {},
+              parameters: enhancedParameters,
               status: 'active',
               provider_name: 'Zapier MCP',
               connection_name: mcpTool.connection_name || 'MCP Server',
