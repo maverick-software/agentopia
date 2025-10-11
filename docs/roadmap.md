@@ -182,7 +182,20 @@ We need to add voice and speech capabilities to the agents. Integrate OpenAI str
 
 Add the ability to record voice and have it transcribed into text for the agent as well, independent of voice chat.
 
-## Centaralized LLM Calls and Model Selection ##
+https://platform.openai.com/docs/guides/realtime
+
+
+
+
+
+---
+
+## Completed: ##
+
+4. Public Accessibility - I would like to create an API interface where agents can be accessed by outside systems like an app using authentication, etc.
+
+## Centaralized LLM Calls and Model Selection ## (Complete)
+
 We need to  create a centralized LLM API request system so we are not statically writing the model into functions. Our chat functions throughout code should be flexible and based on classes, and the API calls we make should be centralized and based on which model is currently set for the model variable. 
 
 This will allow us to add a model selection to the admin settings/setup area, without breaking the entire application.
@@ -191,12 +204,6 @@ This will allow us to add a model selection to the admin settings/setup area, wi
 1. A memory based system that reviews and analyzes chat history (maybe a certain number of previous chats for every new message), reviews the knowledge graph data associated, and comes up with value statements that help it towards its end goal. We should probably give each agent its primary imperative, so it has an end goal that it views every request through. We will create a 'values' area in the JSON chat structure,, and we will provide a 'priority of consideration' mechanism within the chat so it knows where to focus its attention.
 
 2. We will give users an area where they can add rules just like Cursor, and they can manage memories just like in Cursor. 
-
-4. Public Accessibility - I would like to create an API interface where agents can be accessed by outside systems like an app using authentication, etc.
-
----
-
-## Completed: ##
 
 ## Contact List ## (complete)
 

@@ -68,9 +68,10 @@ export function generateStateId(): string {
 
 /**
  * Generate a message-specific ID
+ * Note: Returns pure UUID format for database compatibility (id field is UUID type)
  */
 export function generateMessageId(): string {
-  return generatePrefixedId('msg');
+  return generateId(); // Use pure UUID format for database compatibility
 }
 
 /**

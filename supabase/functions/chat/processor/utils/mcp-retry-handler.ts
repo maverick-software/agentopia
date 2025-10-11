@@ -11,6 +11,11 @@ export interface MCPRetryContext {
   attempt: number;
   maxAttempts: number;
   suggestedFix?: string; // LLM-generated fix suggestion
+  userIntent?: string; // User's original request
+  inferredParameterValue?: { // AI-inferred parameter value
+    param: string;
+    value: string;
+  };
 }
 
 export class MCPRetryHandler {
@@ -58,13 +63,32 @@ ${context.suggestedFix}
 `;
     }
     
+    // Build user intent section
+    let userIntentSection = '';
+    if (context.userIntent) {
+      userIntentSection = `\n📝 USER'S ORIGINAL REQUEST: "${context.userIntent}"
+`;
+    }
+    
+    // Build inferred parameter value section
+    let inferredValueSection = '';
+    if (context.inferredParameterValue) {
+      inferredValueSection = `\n🎯 AI-INFERRED PARAMETER VALUE:
+Based on the user's request, use this value:
+  ${context.inferredParameterValue.param}: "${context.inferredParameterValue.value}"
+
+This value was intelligently inferred from the user's intent. Use it in your tool call.
+
+`;
+    }
+    
     return `🔄 MCP TOOL RETRY - Attempt ${context.attempt}/${context.maxAttempts}
 
 The tool "${context.toolName}" returned an interactive error message:
 
 ERROR MESSAGE:
 ${context.errorMessage}
-${parameterGuidance}${suggestedFixSection}
+${parameterGuidance}${userIntentSection}${inferredValueSection}${suggestedFixSection}
 📋 MCP PROTOCOL INSTRUCTIONS:
 1. READ the error message carefully - it tells you EXACTLY what's needed
 2. ${context.suggestedFix ? 'FOLLOW the AI-generated fix suggestion above' : 'Generate a BRAND NEW tool call with ONLY the correct parameters'}

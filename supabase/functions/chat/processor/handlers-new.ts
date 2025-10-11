@@ -10,10 +10,12 @@ import { PromptBuilder } from './utils/prompt-builder.ts';
 import { MarkdownFormatter } from './utils/markdown-formatter.ts';
 import { ToolExecutor } from './utils/tool-executor.ts';
 import { IntentClassifier } from './utils/intent-classifier.ts';
+import { createLogger } from '../../shared/utils/logger.ts';
 import { MessagePreparation } from './handlers/message-preparation.ts';
 import { LLMCaller } from './handlers/llm-caller.ts';
 import { MCPRetryLoop } from './handlers/mcp-retry-loop.ts';
-import { generateMessageId, generateTimestamp } from '../types/utils.ts';
+
+const logger = createLogger('TextMessageHandler');
 
 export interface MessageHandler {
   canHandle(message: AdvancedChatMessage): boolean;
@@ -61,8 +63,7 @@ export class TextMessageHandler implements MessageHandler {
 
     // STEP 2: Intent classification (determine if tools are needed)
     const userText = (message as any).content?.text || (message as any).content || '';
-    const classifier = new IntentClassifier(this.openai);
-    const classification = await classifier.classifyIntent(userText, context.agent_id || 'default', recentMessages);
+    const classification = await IntentClassifier.classifyIntent(userText, recentMessages, this.openai);
     console.log(`[IntentClassifier] Classification result:`, classification);
 
     // STEP 3: Conditionally load tools only if needed (OPTIMIZATION)
@@ -122,11 +123,7 @@ export class TextMessageHandler implements MessageHandler {
     const llmCaller = new LLMCaller(this.openai, router, context.agent_id);
 
     // STEP 6: Initial LLM call
-    const normalizedTools = this.normalizeTools(availableTools).map(t => ({
-      name: t.name,
-      description: t.description || '',
-      parameters: t.parameters
-    }));
+    const normalizedTools = this.normalizeTools(availableTools);
     const llmResult = await llmCaller.call({
       messages: msgs,
       tools: normalizedTools,
@@ -158,8 +155,7 @@ export class TextMessageHandler implements MessageHandler {
         msgs,
         fcm,
         {
-          agent_id: context.agent_id,
-          user_id: context.user_id,
+          ...context,
           originalUserMessage: userText,
           availableTools: normalizedTools,
         },
@@ -201,40 +197,12 @@ export class TextMessageHandler implements MessageHandler {
       }
 
       // Get final LLM response after tool execution
-      // CRITICAL FIX: Clean messages before final synthesis to remove orphaned tool_calls
-      // OpenAI API requires: assistant messages with tool_calls MUST be followed by tool responses
-      // Since we're passing tools: [], we must remove tool_calls from assistant messages
-      console.log(`[TextMessageHandler] Cleaning messages for final synthesis (original: ${msgs.length} messages)`);
-      
-      const synthesisMessages = msgs
-        .filter((msg: any) => msg.role !== 'tool') // Remove all tool response messages
-        .map((msg: any) => {
-          // Keep system and user messages as-is
-          if (msg.role === 'system' || msg.role === 'user') {
-            return msg;
-          }
-          
-          // For assistant messages, remove tool_calls property to avoid orphaned tool_calls error
-          if (msg.role === 'assistant') {
-            return {
-              role: msg.role,
-              content: msg.content || '' // Ensure content is not undefined
-            };
-          }
-          
-          return msg;
-        });
-      
-      console.log(`[TextMessageHandler] Cleaned messages for synthesis (cleaned: ${synthesisMessages.length} messages)`);
-      
-      // CRITICAL: Use empty tools array to force text synthesis (no more tool calls)
       const finalLLMResult = await llmCaller.call({
-        messages: synthesisMessages, // ✅ Use cleaned messages
-        tools: [], // Empty tools = model MUST synthesize with text
+        messages: msgs,
+        tools: normalizedTools,
         temperature: 0.5,
         maxTokens: 1200,
-        toolChoice: undefined, // Explicitly undefined
-        userMessage: undefined, // Don't detect tool intent for synthesis
+        toolChoice: 'none', // No more tools needed - just synthesis
       });
 
       promptTokens += finalLLMResult.usage?.prompt || 0;
@@ -270,43 +238,25 @@ export class TextMessageHandler implements MessageHandler {
       tool_executions: toolDetails.length,
       stages: {
         message_prep: 100, // Estimate
-        intent_classification: classification.classificationTimeMs || 0,
+        intent_classification: classification.confidence || 0,
         tool_loading: availableTools.length > 0 ? 750 : 0,
         llm_calls: endTime - startTime,
       },
-      discovered_tools: availableTools.map((t) => ({ name: t.name, description: t.description })), // Tools that were available
-      tool_details: toolDetails, // Tools that were actually executed
+      working_memory_summary: summaryInfo,
+      discovered_tools: availableTools.map((t) => ({ name: t.name })),
     };
 
-    // Return final response - CRITICAL: Create proper V2 message with all required fields
-    const timestamp = generateTimestamp();
-    const responseMessage: AdvancedChatMessage = {
-      id: generateMessageId(),
-      version: '2.0.0',
-      role: 'assistant',
-      content: { type: 'text', text },
-      timestamp: timestamp,
-      created_at: timestamp,
-      updated_at: timestamp,
-      metadata: {
-        tokens: promptTokens + completionTokens,
-        processing_time_ms: endTime - startTime,
-        tool_execution_count: toolDetails.length,
-        memory_searches: summaryInfo ? 1 : 0,
-      },
-      context: {
-        conversation_id: context.conversation_id!,
-        session_id: context.session_id!,
+    // Return final response
+    return {
+      message: {
+        role: 'assistant',
+        content: { type: 'text', text },
+        conversation_id: context.conversation_id,
         agent_id: context.agent_id,
         user_id: context.user_id,
-        channel_id: context.channel_id,
-      },
-      artifacts: artifacts.length > 0 ? artifacts : undefined,
-      tool_details: toolDetails.length > 0 ? toolDetails : undefined,
-    } as any;
-
-    return {
-      message: responseMessage,
+        artifacts: artifacts.length > 0 ? artifacts : undefined,
+        tool_details: toolDetails.length > 0 ? toolDetails : undefined,
+      } as any,
       context,
       metrics,
     };

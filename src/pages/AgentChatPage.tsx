@@ -223,13 +223,36 @@ export function AgentChatPage() {
       }
 
       const responseData = await response.json();
+      
+      // DEBUG: Log the entire response structure
+      console.log('[AgentChatPage] Full response:', responseData);
+      console.log('[AgentChatPage] Response keys:', Object.keys(responseData));
+      console.log('[AgentChatPage] processing_details:', responseData?.processing_details);
+      console.log('[AgentChatPage] discovered_tools:', responseData?.processing_details?.discovered_tools);
+      
       const assistantReply = responseData?.data?.message?.content?.text || responseData?.message;
 
       if (typeof assistantReply !== 'string') {
         throw new Error('Received an invalid response format from the chat service.');
       }
 
+      // Capture processing details for the Process modal
+      const processingDetails = responseData?.processing_details;
+      if (processingDetails) {
+        // Add conversation_id for context
+        processingDetails.conversation_id = conversationHook.conversationId;
+        console.log('[AgentChatPage] Captured processing details:', processingDetails);
+        console.log('[AgentChatPage] Discovered tools count:', processingDetails?.discovered_tools?.length || 0);
+      } else {
+        console.error('[AgentChatPage] No processing_details in response!');
+      }
+
       const responseMetadata = responseData?.data?.message?.metadata || {};
+      // Store processing details in metadata so it can be accessed from the message
+      responseMetadata.processingDetails = processingDetails;
+      
+      console.log('[AgentChatPage] Final metadata with processingDetails:', responseMetadata);
+      
       await aiHook.completeAIProcessingWithResponse(assistantReply, responseMetadata, messageHook.setMessages);
 
       if (aiHook.isMounted.current) {
@@ -248,9 +271,22 @@ export function AgentChatPage() {
       } else {
         console.error('Error submitting chat message:', err);
         aiHook.completeAIProcessing(false);
+        
         if (aiHook.isMounted.current) {
-          setError(`Failed to send message: ${err.message}. Please try again.`);
-          messageHook.setMessages(prev => prev.filter(msg => msg !== userMessage));
+          // Add an error message from the agent instead of removing the user message
+          const errorMessage: Message = {
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: `I'm sorry, I encountered an error while processing your message: ${err.message}. Please try again or start a new conversation if the problem persists.`,
+            created_at: new Date().toISOString(),
+            metadata: {
+              error: true,
+              originalError: err.message
+            }
+          };
+          
+          messageHook.setMessages(prev => [...prev, errorMessage]);
+          requestAnimationFrame(messageHook.scrollToBottom);
         }
       }
     } finally {

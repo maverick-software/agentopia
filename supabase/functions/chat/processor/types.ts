@@ -91,6 +91,12 @@ export interface ProcessingMetrics {
     error?: string;
   }>;
   
+  // Discovered tools (available but not necessarily used)
+  discovered_tools?: Array<{
+    name: string;
+    description?: string;
+  }>;
+  
   // Reasoning chain details
   reasoning_steps?: Array<{
     step: number;

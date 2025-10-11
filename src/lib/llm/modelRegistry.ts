@@ -14,20 +14,34 @@ export interface ModelCard {
 }
 
 export const MODEL_CARDS: ModelCard[] = [
-  // OpenAI Models - GPT-5 Series (Latest)
-  { id: 'gpt-5-chat', provider: 'openai', displayName: 'GPT-5 Chat', context: 200000, supportsTools: true, supportsStreaming: true, category: 'general' },
-  { id: 'gpt-5', provider: 'openai', displayName: 'GPT-5', context: 200000, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
-  { id: 'gpt-5-mini', provider: 'openai', displayName: 'GPT-5 Mini', context: 200000, supportsTools: true, supportsStreaming: true, category: 'general' },
-  { id: 'gpt-5-nano', provider: 'openai', displayName: 'GPT-5 Nano', context: 128000, supportsTools: true, supportsStreaming: true, category: 'fast' },
+  // OpenAI Models - GPT-5 Series (Official Release)
+  { id: 'gpt-5-pro-2025-10-06', provider: 'openai', displayName: 'GPT-5 Pro', context: 200000, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
+  { id: 'gpt-5-2025-08-07', provider: 'openai', displayName: 'GPT-5', context: 200000, supportsTools: true, supportsStreaming: true, category: 'general' },
+  { id: 'gpt-5-mini-2025-08-07', provider: 'openai', displayName: 'GPT-5 Mini', context: 200000, supportsTools: true, supportsStreaming: true, category: 'general' },
+  { id: 'gpt-5-nano-2025-08-07', provider: 'openai', displayName: 'GPT-5 Nano', context: 128000, supportsTools: true, supportsStreaming: true, category: 'fast' },
   
   // OpenAI Models - GPT-4.1 Series
-  { id: 'gpt-4.1', provider: 'openai', displayName: 'GPT-4.1', context: 128000, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
-  { id: 'gpt-4.1-mini', provider: 'openai', displayName: 'GPT-4.1 Mini', context: 128000, supportsTools: true, supportsStreaming: true, category: 'general' },
-  { id: 'gpt-4.1-nano', provider: 'openai', displayName: 'GPT-4.1 Nano', context: 128000, supportsTools: true, supportsStreaming: true, category: 'fast' },
+  { id: 'gpt-4.1-latest', provider: 'openai', displayName: 'GPT-4.1', context: 128000, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
+  { id: 'gpt-4.1-mini-latest', provider: 'openai', displayName: 'GPT-4.1 Mini', context: 128000, supportsTools: true, supportsStreaming: true, category: 'general' },
+  { id: 'gpt-4.1-nano-latest', provider: 'openai', displayName: 'GPT-4.1 Nano', context: 128000, supportsTools: true, supportsStreaming: true, category: 'fast' },
   
-  // OpenAI Models - GPT-4o Series
+  // OpenAI Models - GPT-4o Series (October 2024)
   { id: 'gpt-4o', provider: 'openai', displayName: 'GPT-4o', context: 128000, supportsTools: true, supportsStreaming: true, category: 'general' },
   { id: 'gpt-4o-mini', provider: 'openai', displayName: 'GPT-4o Mini', context: 128000, supportsTools: true, supportsStreaming: true, category: 'fast' },
+  { id: 'gpt-4o-2024-08-06', provider: 'openai', displayName: 'GPT-4o (Aug 2024)', context: 128000, supportsTools: true, supportsStreaming: true, category: 'general' },
+  { id: 'gpt-4o-2024-05-13', provider: 'openai', displayName: 'GPT-4o (May 2024)', context: 128000, supportsTools: true, supportsStreaming: true, category: 'general' },
+  
+  // OpenAI Models - GPT-4 Turbo
+  { id: 'gpt-4-turbo', provider: 'openai', displayName: 'GPT-4 Turbo', context: 128000, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
+  { id: 'gpt-4-turbo-preview', provider: 'openai', displayName: 'GPT-4 Turbo Preview', context: 128000, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
+  
+  // OpenAI Models - GPT-4
+  { id: 'gpt-4', provider: 'openai', displayName: 'GPT-4', context: 8192, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
+  { id: 'gpt-4-0613', provider: 'openai', displayName: 'GPT-4 (June 2023)', context: 8192, supportsTools: true, supportsStreaming: true, category: 'reasoning' },
+  
+  // OpenAI Models - GPT-3.5
+  { id: 'gpt-3.5-turbo', provider: 'openai', displayName: 'GPT-3.5 Turbo', context: 16385, supportsTools: true, supportsStreaming: true, category: 'fast' },
+  { id: 'gpt-3.5-turbo-0125', provider: 'openai', displayName: 'GPT-3.5 Turbo (Jan 2024)', context: 16385, supportsTools: true, supportsStreaming: true, category: 'fast' },
   
   // Anthropic Models (Claude 4.5 Series - Latest)
   { id: 'claude-sonnet-4-5-20250929', provider: 'anthropic', displayName: 'Claude Sonnet 4.5', context: 200000, supportsTools: true, supportsStreaming: true, category: 'reasoning', defaultParams: { temperature: 0.7 } },

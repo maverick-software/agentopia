@@ -11,26 +11,26 @@ export class OpenAIProvider implements LLMProvider {
 	}
 
 	private toResponsesTools(tools: LLMTool[] = []) {
-		// Responses API uses internally-tagged format (no nested 'function' object)
+		// Responses API format with strict mode requirements:
+		// 1. additionalProperties: false
+		// 2. ALL properties must be in required array
+		// 3. Optional fields should use type: ["string", "null"]
 		return tools.map(t => {
-			// Ensure parameters meet strict mode requirements
+			// Clone parameters to avoid modifying original
 			const parameters = { ...t.parameters };
 			
-			// Add additionalProperties: false if not present
+			// Add additionalProperties: false (required for strict mode)
 			if (!parameters.hasOwnProperty('additionalProperties')) {
 				parameters.additionalProperties = false;
 			}
 			
-			// Ensure required array includes all properties when in strict mode
+			// For strict mode, ALL properties must be in required array
 			if (parameters.properties && typeof parameters.properties === 'object') {
 				const allPropertyKeys = Object.keys(parameters.properties);
-				if (!parameters.required || !Array.isArray(parameters.required)) {
-					// If no required array, make all properties required for strict mode
-					parameters.required = allPropertyKeys;
-				} else {
-					// Ensure required includes all properties
-					parameters.required = allPropertyKeys;
-				}
+				
+				// Always include all properties in required for strict mode
+				// If a property is optional, it should use type: ["string", "null"] in the schema
+				parameters.required = allPropertyKeys;
 			}
 			
 			return {
@@ -38,7 +38,7 @@ export class OpenAIProvider implements LLMProvider {
 				name: t.name, 
 				description: t.description, 
 				parameters: parameters,
-				strict: true // Functions are strict by default in Responses API
+				strict: true // Enable strict mode for better reliability
 			};
 		});
 	}
@@ -106,7 +106,22 @@ export class OpenAIProvider implements LLMProvider {
 		}
 
 		if (options.tools && options.tools.length > 0) {
-			requestBody.tools = this.toResponsesTools(options.tools);
+			// Skip tools entirely if tool_choice is 'none'
+			if (options.tool_choice === 'none') {
+				// Don't add tools at all
+			} else {
+				requestBody.tools = this.toResponsesTools(options.tools);
+				
+				// Note: OpenAI Responses API doesn't support tool_choice or tool_constraints
+				// It automatically decides whether to use tools based on the request
+				// To "force" tool use, we need to be more explicit in the instructions
+				if (options.tool_choice === 'required') {
+					// Add explicit instruction to use tools in the instructions
+					if (requestBody.instructions) {
+						requestBody.instructions += '\n\nIMPORTANT: You MUST use one of the available function tools to complete this request. Do not respond without calling a function.';
+					}
+				}
+			}
 		}
 
 		if (options.previousResponseId) {
@@ -154,7 +169,7 @@ export class OpenAIProvider implements LLMProvider {
 		}
 
 		// Build response
-		return {
+		const response = {
 			text: text || undefined,
 			toolCalls: toolCalls.length ? toolCalls : undefined,
 			usage: res.usage ? { 
@@ -164,6 +179,17 @@ export class OpenAIProvider implements LLMProvider {
 			} : undefined,
 			responseId: res.id, // Store response ID for multi-turn conversations
 		};
+		
+		console.log('[OpenAI Responses API] Response:', {
+			hasText: !!response.text,
+			textLength: response.text?.length,
+			hasToolCalls: !!response.toolCalls,
+			toolCallsCount: response.toolCalls?.length || 0,
+			outputItems: res.output?.length || 0,
+			outputTypes: res.output?.map((item: any) => item.type).join(', ') || 'none'
+		});
+		
+		return response;
 	}
 
 	stream(messages: LLMMessage[], options: LLMChatOptions = {}) {

@@ -82,6 +82,33 @@ export class RetryCoordinator {
       if (isMCPError) {
         console.log(`[RetryCoordinator] 🎯 🎯 🎯 MCP INTERACTIVE ERROR DETECTED - USING MCP PROTOCOL RETRY`);
         
+        // Try to infer missing parameter value from user intent
+        let inferredValue: string | null = null;
+        let inferredParam: string | null = null;
+        
+        if (context.originalUserMessage) {
+          inferredParam = IntelligentRetrySystem.extractMissingParamName(toolDetail.error || '');
+          
+          if (inferredParam) {
+            console.log(`[RetryCoordinator] 🧠 Attempting to infer value for parameter: ${inferredParam}`);
+            
+            // Get tool description from available tools if possible
+            const toolDescription = context.availableTools?.find(t => t.name === toolDetail.name)?.description || '';
+            
+            inferredValue = await IntelligentRetrySystem.inferMissingParameterValue(
+              toolDetail.name,
+              inferredParam,
+              context.originalUserMessage,
+              toolDescription,
+              openai
+            );
+            
+            if (inferredValue) {
+              console.log(`[RetryCoordinator] 💡 Successfully inferred value for ${inferredParam}: "${inferredValue}"`);
+            }
+          }
+        }
+        
         // Add MCP retry system message following protocol
         const mcpRetryMessage = MCPRetryHandler.generateRetrySystemMessage({
           toolName: toolDetail.name,
@@ -89,7 +116,12 @@ export class RetryCoordinator {
           errorMessage: toolDetail.error || '',
           attempt: retryAttempts,
           maxAttempts: this.MAX_RETRY_ATTEMPTS,
-          suggestedFix: retryAnalysis.suggestedFix // Include LLM's suggested fix!
+          suggestedFix: retryAnalysis.suggestedFix, // Include LLM's suggested fix!
+          userIntent: context.originalUserMessage, // Include user's original request
+          inferredParameterValue: (inferredValue && inferredParam) ? {
+            param: inferredParam,
+            value: inferredValue
+          } : undefined
         });
         
         msgs.push({
@@ -97,7 +129,7 @@ export class RetryCoordinator {
           content: mcpRetryMessage
         });
         
-        console.log(`[RetryCoordinator] Added MCP retry guidance to conversation`);
+        console.log(`[RetryCoordinator] Added MCP retry guidance to conversation with ${inferredValue ? 'INFERRED VALUE' : 'no inference'}`);
         
         // Signal that LLM needs to be called again with retry guidance
         requiresLLMRetry = true;

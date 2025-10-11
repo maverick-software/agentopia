@@ -27,6 +27,8 @@ export interface ToolDetail {
 export interface ToolExecutionContext {
   agent_id?: string;
   user_id?: string;
+  originalUserMessage?: string; // User's original request for parameter inference
+  availableTools?: any[]; // Available tools for looking up descriptions
 }
 
 export interface TokenUsage {

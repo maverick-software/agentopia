@@ -22,6 +22,7 @@ export interface LLMUsage { prompt: number; completion: number; total: number }
 
 export interface LLMChatOptions {
 	tools?: LLMTool[];
+	tool_choice?: 'auto' | 'required' | 'none'; // Control whether LLM must call tools
 	temperature?: number;
 	maxTokens?: number;
 	topP?: number;

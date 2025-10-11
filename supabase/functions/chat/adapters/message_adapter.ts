@@ -24,15 +24,21 @@ export class MessageFormatAdapter {
   ): Partial<AdvancedChatMessage> {
     // Extract any existing metadata from the content
     let metadata: MessageMetadata = {};
-    let textContent = oldMessage.content;
+    
+    // Handle content that might be a string or object
+    const contentStr = typeof oldMessage.content === 'string' 
+      ? oldMessage.content 
+      : (oldMessage.content?.text || JSON.stringify(oldMessage.content));
+    
+    let textContent = contentStr;
     
     // Check if content has embedded metadata (some V1 messages might)
-    if (oldMessage.content.includes('[METADATA:') && oldMessage.content.includes(']')) {
-      const metadataMatch = oldMessage.content.match(/\[METADATA:(.*?)\]/);
+    if (contentStr.includes('[METADATA:') && contentStr.includes(']')) {
+      const metadataMatch = contentStr.match(/\[METADATA:(.*?)\]/);
       if (metadataMatch) {
         try {
           metadata = JSON.parse(metadataMatch[1]);
-          textContent = oldMessage.content.replace(metadataMatch[0], '').trim();
+          textContent = contentStr.replace(metadataMatch[0], '').trim();
         } catch (e) {
           console.warn('Failed to parse embedded metadata:', e);
         }

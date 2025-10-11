@@ -36,6 +36,100 @@ export interface ParameterTransformation {
 }
 
 export class IntelligentRetrySystem {
+  /**
+   * Infer the appropriate value for a missing parameter based on user intent
+   */
+  static async inferMissingParameterValue(
+    toolName: string,
+    missingParam: string,
+    userMessage: string,
+    toolDescription: string,
+    openai: any
+  ): Promise<string | null> {
+    console.log(`[IntelligentRetry] 🧠 Inferring value for ${missingParam} in ${toolName} from user message: "${userMessage}"`);
+    
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{
+          role: 'system',
+          content: `You are a parameter inference system. Given a tool call that failed due to a missing parameter, infer the most appropriate value for that parameter based on the user's original request.
+
+Tool: ${toolName}
+Tool Purpose: ${toolDescription || 'General purpose tool'}
+Missing Parameter: ${missingParam}
+User's Request: "${userMessage}"
+
+Your task: Infer what value the user would want for the '${missingParam}' parameter based on their request.
+
+Examples:
+- Tool: search_emails, Param: query, User: "show my emails from john" → "from:john"
+- Tool: search_emails, Param: searchValue, User: "find recent messages" → ""
+- Tool: api_request, Param: instructions, User: "get customer list" → "Retrieve customer list"
+- Tool: api_request, Param: instructions, User: "show invoices" → "Get list of invoices"
+- Tool: send_email, Param: subject, User: "email john about the meeting" → "Meeting"
+- Tool: send_email, Param: to, User: "email john@example.com" → "john@example.com"
+
+Return ONLY the inferred parameter value as a plain string. Do not include quotes, JSON, or explanations.
+If you cannot infer a reasonable value, return the text "CANNOT_INFER".`
+        }],
+        max_tokens: 100,
+        temperature: 0.3
+      });
+      
+      const inferredValue = completion.choices[0].message.content?.trim();
+      
+      if (!inferredValue || inferredValue === 'CANNOT_INFER') {
+        console.log(`[IntelligentRetry] ❌ Could not infer value for ${missingParam}`);
+        return null;
+      }
+      
+      console.log(`[IntelligentRetry] 💡 Inferred value for ${missingParam}: "${inferredValue}"`);
+      return inferredValue;
+      
+    } catch (error) {
+      console.error(`[IntelligentRetry] Error inferring parameter value:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Extract the missing parameter name from an error message
+   */
+  static extractMissingParamName(errorMessage: string): string | null {
+    if (!errorMessage) return null;
+    
+    const lowerError = errorMessage.toLowerCase();
+    
+    // Pattern 1: "parameter 'xxx' is missing"
+    const pattern1 = /parameter ['"`](\w+)['"`].*(?:missing|required|undefined)/i;
+    let match = errorMessage.match(pattern1);
+    if (match) return match[1];
+    
+    // Pattern 2: "'xxx' parameter is missing"
+    const pattern2 = /['"`](\w+)['"`]\s*parameter.*(?:missing|required|undefined)/i;
+    match = errorMessage.match(pattern2);
+    if (match) return match[1];
+    
+    // Pattern 3: "field 'xxx' is missing"
+    const pattern3 = /field ['"`](\w+)['"`].*(?:missing|required|undefined)/i;
+    match = errorMessage.match(pattern3);
+    if (match) return match[1];
+    
+    // Pattern 4: "'xxx' is missing" or "'xxx' field is missing"
+    const pattern4 = /['"`](\w+)['"`].*(?:is missing|is required|is undefined|missing|required)/i;
+    match = errorMessage.match(pattern4);
+    if (match) return match[1];
+    
+    // Pattern 5: "missing 'xxx'"
+    const pattern5 = /missing ['"`](\w+)['"`]/i;
+    match = errorMessage.match(pattern5);
+    if (match) return match[1];
+    
+    console.log(`[IntelligentRetry] Could not extract parameter name from: "${errorMessage}"`);
+    return null;
+  }
+
   private static parameterTransformations: ParameterTransformation[] = [
     // Zapier MCP Outlook Tools - Handle undefined instructions
     {

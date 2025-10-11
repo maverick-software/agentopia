@@ -137,6 +137,16 @@ export class AnthropicProvider implements LLMProvider {
 
     if (options.tools && options.tools.length > 0) {
       requestBody.tools = this.toAnthropicTools(options.tools);
+      
+      // Handle tool_choice parameter
+      // Anthropic supports: { type: "auto" | "any" | "tool", name?: string }
+      if (options.tool_choice === 'required') {
+        requestBody.tool_choice = { type: 'any' }; // Force tool use
+      } else if (options.tool_choice === 'none') {
+        // Remove tools if tool_choice is 'none'
+        delete requestBody.tools;
+      }
+      // 'auto' is the default behavior in Anthropic
     }
 
     try {

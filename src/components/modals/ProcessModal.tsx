@@ -504,8 +504,17 @@ export const ProcessModal: React.FC<ProcessModalProps> = ({
   const displaySummaryInfo = localSummaryInfo || processingDetails?.summary_info;
   if (!isOpen || !processingDetails) return null;
 
-  const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance, reasoning, discovered_tools } = processingDetails;
-  const reasoningGraph = processingDetails?.reasoning_graph as { states?: string[] } | undefined;
+  // CRITICAL FIX: Handle nested processingDetails structure
+  // Sometimes the data is nested as: { processingDetails: { actual_data } }
+  const actualDetails = processingDetails.processingDetails || processingDetails;
+  
+  const { memory_operations, context_operations, tool_operations, reasoning_chain, chat_history, performance, reasoning, discovered_tools } = actualDetails;
+  const reasoningGraph = actualDetails?.reasoning_graph as { states?: string[] } | undefined;
+  
+  // DEBUG: Log discovered_tools
+  console.log('[ProcessModal] actualDetails:', actualDetails);
+  console.log('[ProcessModal] discovered_tools:', discovered_tools);
+  console.log('[ProcessModal] discovered_tools length:', discovered_tools?.length);
 
   const [showStepModal, setShowStepModal] = React.useState(false);
   const [selectedStep, setSelectedStep] = React.useState<any | null>(null);

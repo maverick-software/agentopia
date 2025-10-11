@@ -41,6 +41,31 @@ export class DualWriteService {
         // Helper to convert empty strings to null for UUID fields
         const toUuidOrNull = (value: any) => (value && value !== '') ? value : null;
         
+        // CRITICAL: Enforce actor exclusivity constraint based on role
+        // - User messages: sender_user_id required, sender_agent_id null
+        // - Assistant messages: sender_agent_id required, sender_user_id null
+        // - System messages: both null
+        let sender_user_id = toUuidOrNull(v2Message.context.user_id);
+        let sender_agent_id = toUuidOrNull(v2Message.context.agent_id);
+        
+        if (v2Message.role === 'user') {
+          // User messages must have sender_user_id, not sender_agent_id
+          sender_agent_id = null;
+          // If no user_id provided, this will fail the constraint (as it should)
+        } else if (v2Message.role === 'assistant') {
+          // Assistant messages must have sender_agent_id, not sender_user_id
+          sender_user_id = null;
+          // If no agent_id, try to get from context or options
+          if (!sender_agent_id && options?.context?.agent_id) {
+            sender_agent_id = toUuidOrNull(options.context.agent_id);
+          }
+          // If still no agent_id, this will fail the constraint (as it should)
+        } else if (v2Message.role === 'system') {
+          // System messages must have both null
+          sender_user_id = null;
+          sender_agent_id = null;
+        }
+        
         const { error } = await this.supabaseClient
           .from('chat_messages_v2')
           .insert({
@@ -49,8 +74,8 @@ export class DualWriteService {
             conversation_id: v2Message.context.conversation_id,
             session_id: v2Message.context.session_id,
             channel_id: toUuidOrNull(v2Message.context.channel_id),
-            sender_user_id: toUuidOrNull(v2Message.context.user_id),
-            sender_agent_id: toUuidOrNull(v2Message.context.agent_id),
+            sender_user_id: sender_user_id,
+            sender_agent_id: sender_agent_id,
             role: v2Message.role,
             content: v2Message.content,
             metadata: v2Message.metadata,
