@@ -777,18 +777,18 @@ export class UniversalToolExecutor {
       
       // Check if we need to fetch session values (for tools that save values across conversation)
       if (requiresUserInput.save_for_session) {
-        // Check if values already exist in session context
-        // For QuickBooks, check if realm_id is in parameters or session
-        const sessionValueName = requiresUserInput.fields[0]?.name; // e.g., 'quickbooks_realm_id'
-        
-        if (parameters[sessionValueName]) {
-          // Value provided in this call
-          return { requiresInput: false };
+        // Check if values already exist in parameters
+        for (const field of requiresUserInput.fields) {
+          if (parameters[field.name]) {
+            logger.debug(`Session value ${field.name} found in parameters`);
+            return { requiresInput: false };
+          }
         }
         
-        // Try to get from session context
-        // TODO: Implement session context retrieval from conversation metadata
-        // For now, we'll require user input each time
+        // Try to get from session context (tool_user_input_requests table)
+        // Get conversation_id from somewhere... for now, skip this check
+        // The LLM will learn from conversation context that the user provided this value
+        logger.debug(`Session value not in parameters, will require user input`);
       }
 
       // Check if all required fields are present in parameters

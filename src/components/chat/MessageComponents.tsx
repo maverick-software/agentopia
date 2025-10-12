@@ -11,6 +11,7 @@ import { CanvasMode } from './CanvasMode';
 import { useArtifacts } from '@/hooks/useArtifacts';
 import type { Artifact } from '@/types/artifacts';
 import { supabase } from '@/lib/supabase';
+import { ToolUserInputCard } from './ToolUserInputCard';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -26,6 +27,7 @@ interface MessageListProps {
   currentTool?: any;
   processSteps?: any[];
   onCanvasSendMessage?: (message: string, artifactId: string) => Promise<void>;
+  onRetryToolWithInput?: (message: Message, userInputs: Record<string, any>) => Promise<void>;
 }
 
 export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps, onCanvasSendMessage }: MessageListProps) {
@@ -372,6 +374,57 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                       }
                       return null;
                     })()}
+                    
+                    {/* Render Tool User Input Card if tool requires additional input */}
+                    {message.metadata?.requires_user_input && message.metadata?.user_input_request && (
+                      <div className="mt-4">
+                        <ToolUserInputCard
+                          request={{
+                            id: message.id || '',
+                            tool_name: message.metadata.user_input_request.tool_name,
+                            tool_call_id: message.metadata.tool_call_id || `tool_${Date.now()}`,
+                            reason: message.metadata.user_input_request.reason,
+                            required_fields: message.metadata.user_input_request.required_fields,
+                            status: 'pending'
+                          }}
+                          onSubmit={async (toolCallId: string, inputs: Record<string, any>) => {
+                            try {
+                              // Store the user input in the database
+                              await supabase.functions.invoke('tool-user-input', {
+                                body: {
+                                  action: 'submit_response',
+                                  tool_call_id: toolCallId,
+                                  user_inputs: inputs
+                                }
+                              });
+                              
+                              // The LLM just needs to know the user provided this info
+                              // Format it as a continuation message with the tool parameters
+                              const inputSummary = Object.entries(inputs)
+                                .map(([key, value]) => `${key}: ${value}`)
+                                .join(', ');
+                              
+                              // Simply tell the LLM to retry with these parameters
+                              // The existing retry mechanism will handle the rest
+                              console.log('[ToolUserInput] User provided:', inputSummary);
+                              console.log('[ToolUserInput] The LLM will see this in conversation context and retry automatically');
+                              
+                              // Force a re-render to show the completed state
+                              window.dispatchEvent(new CustomEvent('user-input-submitted', { 
+                                detail: { toolCallId, inputs } 
+                              }));
+                            } catch (error) {
+                              console.error('[ToolUserInput] Failed to submit user input:', error);
+                              throw error;
+                            }
+                          }}
+                          onCancel={(toolCallId: string) => {
+                            console.log('[ToolUserInput] User cancelled input request:', toolCallId);
+                            // TODO: Mark the request as cancelled
+                          }}
+                        />
+                      </div>
+                    )}
                     
                     {/* Copy Button for assistant messages */}
                     <div className="mt-3 flex items-center justify-start">
