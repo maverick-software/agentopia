@@ -372,7 +372,28 @@ serve(async (req) => {
             
             // Add tool-specific guidance for common API issues
             if (mcpTool.tool_name.includes('quickbooks_online_api_request')) {
-              enhancedDescription += `\n\n⚠️ **IMPORTANT - HTTPS REQUIREMENT:**\nThe 'url' parameter MUST be a FULL HTTPS URL, not a relative path.\n\n✅ CORRECT: "https://quickbooks.api.intuit.com/v3/company/{realmId}/reports/ProfitAndLoss"\n❌ WRONG: "/reports/profit_and_loss"\n\nAlways include the full protocol (https://) and domain name.`;
+              enhancedDescription += `\n\n⚠️ **IMPORTANT - HTTPS & REALM ID REQUIREMENTS:**
+
+1. The 'url' parameter MUST be a FULL HTTPS URL, not a relative path.
+   ✅ CORRECT: "https://quickbooks.api.intuit.com/v3/company/REALM_ID_HERE/reports/ProfitAndLoss"
+   ❌ WRONG: "/reports/profit_and_loss"
+   ✅ CORRECT: replace the REALM_ID_HERE with the actual QuickBooks Company ID (realm ID).
+   ✅ CORRECT: https://quickbooks.api.intuit.com/v3/company/9130346988354456/reports/ProfitAndLoss?start_date=2025-01-01&end_date=2025-03-31
+
+2. The {realmId} placeholder is NOT automatically replaced by Zapier.
+   You MUST provide the actual QuickBooks Company ID (realm ID).
+   
+3. For reports, use query parameters for date ranges:
+   Example: "?start_date=2025-01-01&end_date=2025-03-31"
+
+⚠️ **LIMITATION:** This tool requires the actual QuickBooks Company ID which may not be available.
+For most QuickBooks operations, use the specific tools like:
+- quickbooks_online_find_invoice
+- quickbooks_online_find_customer
+- quickbooks_online_create_invoice
+etc.
+
+Only use this API Request tool if the specific operation is not available as a dedicated tool.`;
             }
             
             // Add successful parameters guidance if available
@@ -405,6 +426,26 @@ serve(async (req) => {
               };
             }
             
+            // Check if this tool requires user input before execution
+            let requiresUserInput = null;
+            if (mcpTool.tool_name.includes('quickbooks_online_api_request')) {
+              requiresUserInput = {
+                reason: 'QuickBooks API requests require your Company ID (Realm ID)',
+                fields: [
+                  {
+                    name: 'quickbooks_realm_id',
+                    label: 'QuickBooks Company ID',
+                    description: 'Find this in your QuickBooks URL when logged in: https://app.qbo.intuit.com/app/homepage?realmId=YOUR_ID_HERE',
+                    type: 'text',
+                    required: true,
+                    placeholder: '9130346988354456',
+                    validation: '^[0-9]{10,20}$'
+                  }
+                ],
+                save_for_session: true // Remember this value for the entire conversation
+              };
+            }
+            
             tools.push({
               name: mcpTool.tool_name,
               description: enhancedDescription,
@@ -412,6 +453,7 @@ serve(async (req) => {
               status: 'active',
               provider_name: 'Zapier MCP',
               connection_name: mcpTool.connection_name || 'MCP Server',
+              requires_user_input: requiresUserInput,
               _mcp_metadata: {
                 successful_parameters: mcpTool.successful_parameters || [],
                 success_count: mcpTool.success_count || 0,

@@ -747,6 +747,77 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
 export class UniversalToolExecutor {
   
   /**
+   * Check if tool requires user input before execution
+   * Integrates with tool_user_input_requests table and session context
+   */
+  static async checkRequiredUserInput(
+    toolName: string, 
+    agentId: string, 
+    userId: string, 
+    parameters: Record<string, any>,
+    supabase: any
+  ): Promise<{requiresInput: boolean, reason?: string, request?: any}> {
+    try {
+      // Get tool metadata to see if it requires user input
+      const { data: toolsResponse, error } = await supabase.functions.invoke('get-agent-tools', {
+        body: { agent_id: agentId, user_id: userId }
+      });
+
+      if (error || !toolsResponse?.success) {
+        logger.error(`Failed to get tool metadata for input check:`, error);
+        return { requiresInput: false };
+      }
+
+      const tool = toolsResponse.tools?.find((t: any) => t.name === toolName);
+      if (!tool || !tool.requires_user_input) {
+        return { requiresInput: false };
+      }
+
+      const requiresUserInput = tool.requires_user_input;
+      
+      // Check if we need to fetch session values (for tools that save values across conversation)
+      if (requiresUserInput.save_for_session) {
+        // Check if values already exist in session context
+        // For QuickBooks, check if realm_id is in parameters or session
+        const sessionValueName = requiresUserInput.fields[0]?.name; // e.g., 'quickbooks_realm_id'
+        
+        if (parameters[sessionValueName]) {
+          // Value provided in this call
+          return { requiresInput: false };
+        }
+        
+        // Try to get from session context
+        // TODO: Implement session context retrieval from conversation metadata
+        // For now, we'll require user input each time
+      }
+
+      // Check if all required fields are present in parameters
+      const missingFields = requiresUserInput.fields.filter((field: any) => 
+        field.required && !parameters[field.name]
+      );
+
+      if (missingFields.length === 0) {
+        return { requiresInput: false };
+      }
+
+      // User input is required
+      return {
+        requiresInput: true,
+        reason: requiresUserInput.reason,
+        request: {
+          tool_name: toolName,
+          required_fields: requiresUserInput.fields,
+          reason: requiresUserInput.reason
+        }
+      };
+
+    } catch (err) {
+      logger.error(`Error checking required user input:`, err);
+      return { requiresInput: false }; // Fail open to avoid blocking execution
+    }
+  }
+
+  /**
    * Check tool status by calling get-agent-tools and finding the specific tool
    */
   static async checkToolStatus(toolName: string, agentId: string, userId: string, supabase: any): Promise<{status: string, error_message?: string}> {
@@ -796,6 +867,20 @@ export class UniversalToolExecutor {
           success: false,
           data: null,
           error: toolStatus.error_message || `Tool is ${toolStatus.status} and cannot be used.`
+        };
+      }
+      
+      // Check if tool requires user input that hasn't been provided yet
+      const userInputCheck = await this.checkRequiredUserInput(toolName, agentId, userId, parameters, supabase);
+      if (userInputCheck.requiresInput) {
+        logger.info(`Tool ${toolName} requires user input: ${userInputCheck.reason}`);
+        return {
+          success: false,
+          data: null,
+          error: userInputCheck.reason || 'This tool requires additional information from you.',
+          requires_user_input: true,
+          user_input_request: userInputCheck.request,
+          metadata: { toolName, requiresUserInput: true }
         };
       }
       
