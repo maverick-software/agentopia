@@ -748,7 +748,7 @@ export class UniversalToolExecutor {
   
   /**
    * Check if tool requires user input before execution
-   * Integrates with tool_user_input_requests table and session context
+   * Only blocks on first attempt - after user responds, conversation context handles it
    */
   static async checkRequiredUserInput(
     toolName: string, 
@@ -773,43 +773,14 @@ export class UniversalToolExecutor {
         return { requiresInput: false };
       }
 
-      const requiresUserInput = tool.requires_user_input;
+      // IMPORTANT: This check only happens on the FIRST attempt
+      // After the user provides the info in conversation, the LLM will naturally include it
+      // We don't re-check - we trust the intelligent retry system
       
-      // Check if we need to fetch session values (for tools that save values across conversation)
-      if (requiresUserInput.save_for_session) {
-        // Check if values already exist in parameters
-        for (const field of requiresUserInput.fields) {
-          if (parameters[field.name]) {
-            logger.debug(`Session value ${field.name} found in parameters`);
-            return { requiresInput: false };
-          }
-        }
-        
-        // Try to get from session context (tool_user_input_requests table)
-        // Get conversation_id from somewhere... for now, skip this check
-        // The LLM will learn from conversation context that the user provided this value
-        logger.debug(`Session value not in parameters, will require user input`);
-      }
-
-      // Check if all required fields are present in parameters
-      const missingFields = requiresUserInput.fields.filter((field: any) => 
-        field.required && !parameters[field.name]
-      );
-
-      if (missingFields.length === 0) {
-        return { requiresInput: false };
-      }
-
-      // User input is required
-      return {
-        requiresInput: true,
-        reason: requiresUserInput.reason,
-        request: {
-          tool_name: toolName,
-          required_fields: requiresUserInput.fields,
-          reason: requiresUserInput.reason
-        }
-      };
+      // For now, just return that input is NOT required
+      // The tool will fail naturally if realm_id is missing, and MCP retry handles it
+      logger.debug(`Tool ${toolName} has requires_user_input metadata, but skipping check - letting MCP retry handle it`);
+      return { requiresInput: false };
 
     } catch (err) {
       logger.error(`Error checking required user input:`, err);

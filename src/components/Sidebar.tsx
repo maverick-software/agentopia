@@ -438,6 +438,11 @@ function ConversationsForAgentSidebar({ agentId, userId, isCollapsed, onOpen }: 
   
   const { items, createConversation, renameConversation, archiveConversation } = useConversations(effectiveAgentId || '', userId);
   
+  // Debug logging
+  console.log('[ConversationsForAgentSidebar] effectiveAgentId:', effectiveAgentId);
+  console.log('[ConversationsForAgentSidebar] items:', items);
+  console.log('[ConversationsForAgentSidebar] items.length:', items.length);
+  
   if (isCollapsed || !effectiveAgentId) return null;
   
   // Limit to last 10 chats

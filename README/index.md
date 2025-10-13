@@ -46,7 +46,8 @@ Production deployment and operations:
 
 ### 🛠️ Integrations & External Services
 - **[Integrations](integrations.md)** - Overview of all integration capabilities and setup processes
-- **[Universal MCP System](universal-mcp-system.md)** - 🆕 Connect to ANY MCP-compliant server (Zapier, Retell AI, Anthropic, OpenAI, custom)
+- **[MCP Architecture Complete](mcp-architecture-complete.md)** - 🆕 **COMPREHENSIVE** MCP system guide: tool discovery, intelligent retry, context-aware execution, and universal server support
+- **[Universal MCP System](universal-mcp-system.md)** - Connect to ANY MCP-compliant server (Zapier, Retell AI, Anthropic, OpenAI, custom)
 - **[Tool Infrastructure](tool-infrastructure.md)** - MCP protocol, function calling, and universal tool execution
 - **[Email Integrations](email-integrations.md)** - Gmail, SMTP, SendGrid, Mailgun, and Microsoft Outlook
 - **[Microsoft 365](microsoft-365.md)** - Outlook, Teams, and OneDrive integration suite
@@ -160,6 +161,6 @@ Production deployment and operations:
 
 This documentation system represents a comprehensive knowledge base for Gofr Agents, designed to support users, developers, and administrators at every level. Each document provides deep, actionable information while maintaining clear organization and cross-references to related topics.
 
-**Last Updated**: September 11, 2025  
-**Documentation Version**: 2.0 (Modular Architecture)  
-**Total Documents**: 20+ topic-specific guides
+**Last Updated**: October 12, 2025  
+**Documentation Version**: 2.1 (MCP Architecture Complete)  
+**Total Documents**: 21+ topic-specific guides

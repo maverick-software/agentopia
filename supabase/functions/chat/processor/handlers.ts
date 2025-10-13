@@ -41,7 +41,7 @@ export class TextMessageHandler implements MessageHandler {
   private normalizeTools(tools: any[]): Array<{ name: string; description?: string; parameters: any }> {
     return MarkdownFormatter.normalizeTools(tools);
   }
-
+  
   private ensureProperMarkdownFormatting(text: string): string {
     return MarkdownFormatter.ensureProperFormatting(text);
   }
@@ -98,7 +98,7 @@ export class TextMessageHandler implements MessageHandler {
     const useRouter =
       typeof (globalThis as any).Deno !== 'undefined'
         ? (globalThis as any).Deno.env.get('USE_LLM_ROUTER')?.toLowerCase() === 'true'
-        : false;
+      : false;
 
     let router: any = null;
     let effectiveModel = 'gpt-4';
@@ -204,11 +204,11 @@ export class TextMessageHandler implements MessageHandler {
       console.log(`[TextMessageHandler] Preparing messages for final synthesis (original: ${msgs.length} messages)`);
       
       // Add reflection guidance to ensure clean, results-focused response
-      msgs.push({
-        role: 'system',
+        msgs.push({
+          role: 'system',
         content: this.promptBuilder.buildReflectionGuidance()
-      } as any);
-      
+        } as any);
+        
       // CRITICAL: Clean messages for synthesis
       // OpenAI requirement: tool messages MUST follow assistant messages with tool_calls
       // Since we're passing tools: [] (no more tool calls allowed), we must convert tool messages to user messages
@@ -275,6 +275,11 @@ export class TextMessageHandler implements MessageHandler {
         execution_time_ms: td.execution_time_ms,
       }));
 
+    // Check if any tool requires user input
+    const toolRequiringInput = toolDetails.find((td: any) => td.requires_user_input);
+    const requiresUserInput = !!toolRequiringInput;
+    const userInputRequest = toolRequiringInput?.user_input_request;
+
     // Build metrics
     const endTime = Date.now();
     const metrics: ProcessingMetrics = {
@@ -303,11 +308,14 @@ export class TextMessageHandler implements MessageHandler {
       timestamp: timestamp,
       created_at: timestamp,
       updated_at: timestamp,
-      metadata: {
+      metadata: { 
         tokens: promptTokens + completionTokens,
         processing_time_ms: endTime - startTime,
         tool_execution_count: toolDetails.length,
         memory_searches: summaryInfo ? 1 : 0,
+        requires_user_input: requiresUserInput,
+        user_input_request: userInputRequest,
+        tool_call_id: toolRequiringInput?.id,
       },
       context: {
         conversation_id: context.conversation_id!,
@@ -320,9 +328,9 @@ export class TextMessageHandler implements MessageHandler {
       tool_details: toolDetails.length > 0 ? toolDetails : undefined,
     } as any;
 
-    return {
+          return {
       message: responseMessage,
-      context,
+            context,
       metrics,
     };
   }

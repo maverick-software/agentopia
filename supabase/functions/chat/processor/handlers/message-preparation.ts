@@ -87,6 +87,23 @@ export class MessagePreparation {
 
     if (conversationId && context.agent_id) {
       try {
+        // Fetch agent's context_history_size setting (defaults to 25 messages)
+        let contextHistorySize = 25;
+        try {
+          const { data: agentSettings } = await this.supabase
+            .from('agents')
+            .select('settings')
+            .eq('id', context.agent_id)
+            .single();
+          
+          if (agentSettings?.settings?.context_history_size) {
+            contextHistorySize = agentSettings.settings.context_history_size;
+            console.log(`[MessagePreparation] 📊 Using agent's context_history_size: ${contextHistorySize} messages`);
+          }
+        } catch (settingsError) {
+          console.warn('[MessagePreparation] Could not fetch agent settings, using default context_history_size=25');
+        }
+
         const workingMemory = new WorkingMemoryManager(this.supabase as any);
         const memoryContext = await workingMemory.getWorkingContext(
           conversationId,
@@ -112,14 +129,14 @@ export class MessagePreparation {
             last_updated: memoryContext.metadata.last_updated,
           };
 
-          // HYBRID APPROACH: Always include last 5 messages for immediate context
+          // HYBRID APPROACH: Include recent messages based on agent's context_history_size setting
           // This ensures the LLM has both the strategic summary AND tactical recent context
           const { data: recentMessagesData } = await this.supabase
-            .from('messages')
+            .from('chat_messages_v2')
             .select('role, content')
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: false })
-            .limit(5);
+            .limit(contextHistorySize);
 
           if (recentMessagesData && recentMessagesData.length > 0) {
             // Reverse to chronological order
@@ -127,9 +144,18 @@ export class MessagePreparation {
 
             // Add to messages array
             for (const msg of recentMessages) {
+              // Extract text from JSONB content field
+              let contentText = '';
+              if (typeof msg.content === 'string') {
+                contentText = msg.content;
+              } else if (msg.content && typeof msg.content === 'object') {
+                // Handle { type: 'text', text: '...' } format from chat_messages_v2
+                contentText = (msg.content as any).text || JSON.stringify(msg.content);
+              }
+
               msgs.push({
                 role: msg.role as 'system' | 'user' | 'assistant' | 'tool',
-                content: msg.content || '',
+                content: contentText,
               });
             }
 
@@ -138,20 +164,46 @@ export class MessagePreparation {
         }
       } catch (wmError: any) {
         console.error('[MessagePreparation] ⚠️ Working Memory error (non-critical):', wmError.message);
+        
+        // Fetch agent's context_history_size for fallback (defaults to 25)
+        let fallbackContextSize = 25;
+        try {
+          const { data: agentSettings } = await this.supabase
+            .from('agents')
+            .select('settings')
+            .eq('id', context.agent_id)
+            .single();
+          
+          if (agentSettings?.settings?.context_history_size) {
+            fallbackContextSize = agentSettings.settings.context_history_size;
+          }
+        } catch (settingsError) {
+          console.warn('[MessagePreparation] Could not fetch agent settings for fallback, using default=25');
+        }
+        
         // Fallback to traditional message loading on error
         const { data: fallbackMessages } = await this.supabase
-          .from('messages')
+          .from('chat_messages_v2')
           .select('role, content')
           .eq('conversation_id', conversationId)
           .order('created_at', { ascending: false })
-          .limit(10);
+          .limit(fallbackContextSize);
 
         if (fallbackMessages && fallbackMessages.length > 0) {
           recentMessages = fallbackMessages.reverse();
           for (const msg of recentMessages) {
+            // Extract text from JSONB content field
+            let contentText = '';
+            if (typeof msg.content === 'string') {
+              contentText = msg.content;
+            } else if (msg.content && typeof msg.content === 'object') {
+              // Handle { type: 'text', text: '...' } format from chat_messages_v2
+              contentText = (msg.content as any).text || JSON.stringify(msg.content);
+            }
+
             msgs.push({
               role: msg.role as 'system' | 'user' | 'assistant' | 'tool',
-              content: msg.content || '',
+              content: contentText,
             });
           }
           console.log(`[MessagePreparation] ✅ Loaded ${fallbackMessages.length} messages (fallback mode)`);

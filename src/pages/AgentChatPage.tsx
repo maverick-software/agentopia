@@ -264,6 +264,41 @@ export function AgentChatPage() {
         conversationHook.markConversationActive();
       }
 
+      // AUTO-SUMMARIZATION: Check if we should trigger automatic summarization (every 5 messages)
+      try {
+        const { count } = await supabase
+          .from('chat_messages_v2')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', convId);
+        
+        if (count && count % 5 === 0 && count >= 5) {
+          console.log(`[AutoSummarization] Triggering summarization at ${count} messages`);
+          
+          // Call edge function asynchronously (don't await - fire and forget)
+          supabase.functions.invoke('conversation-summarizer', {
+            body: {
+              conversation_id: convId,
+              agent_id: agent.id,
+              user_id: user.id,
+              message_count: count,
+              force_full_summary: false,
+              manual_trigger: false
+            }
+          }).then(({ data, error }) => {
+            if (error) {
+              console.error('[AutoSummarization] Failed to trigger:', error);
+            } else {
+              console.log('[AutoSummarization] Successfully triggered, response:', data);
+            }
+          });
+        } else {
+          console.log(`[AutoSummarization] Message count: ${count}, not triggering yet`);
+        }
+      } catch (summaryError) {
+        // Non-fatal - just log the error
+        console.error('[AutoSummarization] Error checking message count:', summaryError);
+      }
+
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('[handleSubmit] Chat request cancelled.');
