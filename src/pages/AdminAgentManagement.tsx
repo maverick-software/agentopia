@@ -133,7 +133,7 @@ export function AdminAgentManagement() {
                                 <tr>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-full">Name</th>
                                     <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border">Owner</th>
-                                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border">Actions</th>
+                                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap border-l border-border">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-card divide-y divide-border">
@@ -159,7 +159,7 @@ export function AdminAgentManagement() {
                                                 <td className="px-6 py-4 text-sm font-medium text-foreground w-full" title={agent.description || agent.name}>{agent.name}</td>
                                                 <td className="px-6 py-4 text-sm text-foreground text-right whitespace-nowrap border-l border-border" title={agent.owner?.email}>{agent.owner?.full_name || agent.owner?.username || agent.owner?.email || 'Unknown'}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border-l border-border">
-                                                    <div className="flex items-center justify-end gap-2">
+                                                    <div className="flex items-center justify-center gap-2">
                                                         <button 
                                                             onClick={() => handleEditAgent(agent)}
                                                             className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-muted transition-colors" 
