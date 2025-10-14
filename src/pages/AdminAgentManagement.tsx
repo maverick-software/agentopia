@@ -221,122 +221,162 @@ export function AdminAgentManagement() {
     // --- End Force Stop Handlers ---
 
     return (
-        <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold flex items-center">
-                    <Bot className="w-8 h-8 mr-3 text-indigo-400" />
-                    Agent Management
-                </h1>
-                <div className="relative">
-                    <input 
-                        type="text"
-                        placeholder="Search agents or owners..."
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        className="pl-10 pr-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                    <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+        <div className="min-h-screen bg-background">
+            <div className="max-w-7xl mx-auto px-6 py-8">
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold flex items-center text-foreground">
+                            <Bot className="w-8 h-8 mr-3 text-primary" />
+                            Agent Management
+                        </h1>
+                        <p className="text-muted-foreground mt-2">
+                            Monitor and manage AI agents, their Discord status, and configurations
+                        </p>
+                    </div>
+                    <div className="relative">
+                        <input 
+                            type="text"
+                            placeholder="Search agents or owners..."
+                            value={searchTerm}
+                            onChange={handleSearchChange}
+                            className="pl-10 pr-4 py-2 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                        />
+                        <Search className="w-5 h-5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    </div>
                 </div>
-            </div>
 
-            {error && (
-                <div className="mb-4 bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2" />
-                    <span>Error loading agents: {error}</span>
-                </div>
-            )}
+                {error && (
+                    <div className="mb-6 bg-destructive/10 border border-destructive/50 text-destructive p-4 rounded-lg flex items-center">
+                        <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                        <span>Error loading agents: {error}</span>
+                    </div>
+                )}
 
-            <div className="bg-gray-800 shadow-md rounded-lg overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                    <thead className="bg-gray-700/50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Owner</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Discord Status</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Enabled Guilds</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Config Active</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-gray-800 divide-y divide-gray-700">
-                        {loading ? (
-                            <tr><td colSpan={7} className="text-center py-10 text-gray-500">Loading agents...</td></tr>
-                        ) : agents.length === 0 ? (
-                             <tr><td colSpan={7} className="text-center py-10 text-gray-500">{searchTerm ? `No agents found matching "${searchTerm}".` : "No agents found."}</td></tr>
-                        ) : (
-                            agents.map((agent) => {
-                                const isToggling = togglingActive[agent.id];
-                                const isStopping = isStoppingWorker[agent.id]; // Check loading state for force stop
-                                return (
-                                    <tr key={agent.id} className="hover:bg-gray-700/50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-100" title={agent.description || agent.name}>{agent.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300" title={agent.owner?.email}>{agent.owner?.full_name || agent.owner?.username || agent.owner?.email || 'Unknown'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(agent.discord_status)} text-white capitalize`}>
-                                                {agent.discord_status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{agent.enabled_guild_count} / {agent.total_guild_count}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${agent.active ? 'bg-green-600 text-green-100' : 'bg-gray-600 text-gray-100'}`}>
-                                                {agent.active ? 'Yes' : 'No'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDate(agent.created_at)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                            <button className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-gray-700 disabled:opacity-50" title="View Details" disabled={isStopping || isToggling}><Eye size={16} /></button>
-                                            <button 
-                                                onClick={() => handleToggleAgentActive(agent.id, agent.active)}
-                                                disabled={isToggling || isStopping} // Disable if either action is pending
-                                                className={`p-1 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed ${agent.active ? 'text-green-400 hover:text-green-300' : 'text-gray-500 hover:text-gray-400'}`}
-                                                title={agent.active ? "Disable Agent Config" : "Enable Agent Config"}
-                                            >
-                                                {isToggling ? <Loader2 size={16} className="animate-spin"/> : (agent.active ? <ToggleRight size={16}/> : <ToggleLeft size={16} />) }
-                                            </button>
-                                            <button 
-                                                onClick={() => handleForceStopClick(agent)} 
-                                                disabled={isStopping || isToggling || agent.discord_status === 'inactive' || agent.discord_status === 'stopping'} // Disable if stopped/stopping or other action pending
-                                                className={`p-1 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-red-500 hover:text-red-400`}
-                                                title={agent.discord_status === 'inactive' ? "Worker already inactive" : "Force Stop Discord Worker"}
-                                            >
-                                                 {isStopping ? <Loader2 size={16} className="animate-spin"/> : <PowerOff size={16} /> }
-                                            </button>
+                <div className="bg-card border border-border shadow-sm rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-border">
+                            <thead className="bg-muted/50">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Owner</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Discord Status</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Enabled Guilds</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Config Active</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-card divide-y divide-border">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                                            <div className="flex flex-col items-center justify-center">
+                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+                                                <span>Loading agents...</span>
+                                            </div>
                                         </td>
                                     </tr>
-                                );
-                            })
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Pagination Controls */}
-            {(!searchTerm || totalAgents > PER_PAGE) && totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between text-sm text-gray-400">
-                     <span>{searchTerm ? `Page ${currentPage} (Total matching approximate: ${totalAgents})` : `Page ${currentPage} of ${totalPages} (Total: ${totalAgents} agents)`}</span>
-                     <div className="flex space-x-2">
-                        <button onClick={handlePrevPage} disabled={currentPage === 1} className="text-gray-400 hover:text-gray-300 p-1 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-wait">Previous</button>
-                        <button onClick={handleNextPage} disabled={currentPage === totalPages} className="text-gray-400 hover:text-gray-300 p-1 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-wait">Next</button>
-                     </div>
+                                ) : agents.length === 0 ? (
+                                     <tr>
+                                        <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                                            {searchTerm ? `No agents found matching "${searchTerm}".` : "No agents found."}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    agents.map((agent) => {
+                                        const isToggling = togglingActive[agent.id];
+                                        const isStopping = isStoppingWorker[agent.id];
+                                        return (
+                                            <tr key={agent.id} className="hover:bg-muted/30 transition-colors">
+                                                <td className="px-6 py-4 text-sm font-medium text-foreground" title={agent.description || agent.name}>{agent.name}</td>
+                                                <td className="px-6 py-4 text-sm text-foreground" title={agent.owner?.email}>{agent.owner?.full_name || agent.owner?.username || agent.owner?.email || 'Unknown'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(agent.discord_status)} text-white capitalize`}>
+                                                        {agent.discord_status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">{agent.enabled_guild_count} / {agent.total_guild_count}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${agent.active ? 'bg-success/10 text-success border border-success/20' : 'bg-muted text-muted-foreground border border-border'}`}>
+                                                        {agent.active ? 'Yes' : 'No'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{formatDate(agent.created_at)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-muted disabled:opacity-50 transition-colors" 
+                                                            title="View Details" 
+                                                            disabled={isStopping || isToggling}
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleToggleAgentActive(agent.id, agent.active)}
+                                                            disabled={isToggling || isStopping}
+                                                            className={`p-1.5 rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${agent.active ? 'text-success hover:text-success/80' : 'text-muted-foreground hover:text-foreground'}`}
+                                                            title={agent.active ? "Disable Agent Config" : "Enable Agent Config"}
+                                                        >
+                                                            {isToggling ? <Loader2 size={16} className="animate-spin"/> : (agent.active ? <ToggleRight size={16}/> : <ToggleLeft size={16} />) }
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleForceStopClick(agent)} 
+                                                            disabled={isStopping || isToggling || agent.discord_status === 'inactive' || agent.discord_status === 'stopping'}
+                                                            className="p-1.5 rounded-md hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed text-destructive hover:text-destructive/80 transition-colors"
+                                                            title={agent.discord_status === 'inactive' ? "Worker already inactive" : "Force Stop Discord Worker"}
+                                                        >
+                                                             {isStopping ? <Loader2 size={16} className="animate-spin"/> : <PowerOff size={16} /> }
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            )}
-            
-            {/* --- Force Stop Confirmation Modal --- */} 
-            <ConfirmationModal
-                isOpen={isStopConfirmModalOpen}
-                onClose={closeStopConfirmModal}
-                onConfirm={confirmForceStop}
-                title="Force Stop Worker?"
-                confirmText="Force Stop"
-                confirmButtonVariant="danger"
-                isLoading={isStoppingWorker[stoppingAgent?.id || '']}
-            >
-                 <p className="text-gray-300">
-                    Are you sure you want to forcefully stop the Discord worker process for agent <span className="font-medium text-white">{stoppingAgent?.name}</span>?
-                    <span className="block mt-2 text-sm text-yellow-400">This may interrupt ongoing interactions. The agent can be reactivated later from its edit page.</span>
-                </p>
-            </ConfirmationModal>
+
+                {/* Pagination Controls */}
+                {(!searchTerm || totalAgents > PER_PAGE) && totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+                         <span>{searchTerm ? `Page ${currentPage} (Total matching approximate: ${totalAgents})` : `Page ${currentPage} of ${totalPages} (Total: ${totalAgents} agents)`}</span>
+                         <div className="flex gap-2">
+                            <button 
+                                onClick={handlePrevPage} 
+                                disabled={currentPage === 1} 
+                                className="px-4 py-2 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors text-foreground"
+                            >
+                                <ChevronLeft className="w-4 h-4" /> Previous
+                            </button>
+                            <button 
+                                onClick={handleNextPage} 
+                                disabled={currentPage === totalPages} 
+                                className="px-4 py-2 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors text-foreground"
+                            >
+                                Next <ChevronRight className="w-4 h-4" />
+                            </button>
+                         </div>
+                    </div>
+                )}
+                
+                {/* --- Force Stop Confirmation Modal --- */} 
+                <ConfirmationModal
+                    isOpen={isStopConfirmModalOpen}
+                    onClose={closeStopConfirmModal}
+                    onConfirm={confirmForceStop}
+                    title="Force Stop Worker?"
+                    confirmText="Force Stop"
+                    confirmButtonVariant="danger"
+                    isLoading={isStoppingWorker[stoppingAgent?.id || '']}
+                >
+                     <p className="text-muted-foreground">
+                        Are you sure you want to forcefully stop the Discord worker process for agent <span className="font-medium text-foreground">{stoppingAgent?.name}</span>?
+                        <span className="block mt-2 text-sm text-warning">This may interrupt ongoing interactions. The agent can be reactivated later from its edit page.</span>
+                    </p>
+                </ConfirmationModal>
+            </div>
         </div>
     );
 } 

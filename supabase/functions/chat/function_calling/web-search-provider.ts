@@ -49,21 +49,31 @@ export class WebSearchProvider implements ToolProvider {
         return [];
       }
 
-      // Check for active web search credentials
+      // Check for active web search credentials from unified integration credentials
       const { data: credentials } = await this.supabase
-        .from('user_web_search_keys')
-        .select('*')
+        .from('user_integration_credentials')
+        .select(`
+          *,
+          service_providers!inner(name, display_name)
+        `)
         .eq('user_id', userId)
-        .eq('is_active', true);
+        .eq('credential_type', 'api_key')
+        .eq('connection_status', 'active');
 
-      if (!credentials || credentials.length === 0) {
+      // Filter for web search providers (Serper, SerpAPI, Brave Search)
+      const webSearchCredentials = credentials?.filter(c => 
+        c.service_providers && 
+        ['serper_api', 'serpapi', 'brave_search'].includes(c.service_providers.name)
+      ) || [];
+
+      if (webSearchCredentials.length === 0) {
         console.log(`[WebSearch] No active web search credentials for user ${userId}`);
         this.toolsCache.set(cacheKey, []);
         this.cacheExpiry.set(cacheKey, now + this.CACHE_DURATION);
         return [];
       }
 
-      console.log(`[WebSearch] Agent ${agentId} has web search enabled and user has ${credentials.length} active web search credentials`);
+      console.log(`[WebSearch] Agent ${agentId} has web search enabled and user has ${webSearchCredentials.length} active web search credentials`);
 
       const tools: OpenAIFunction[] = [
         {

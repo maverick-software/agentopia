@@ -43,6 +43,46 @@ const API_KEY_CONFIGS: APIKeyConfig[] = [
     description: 'Platform-wide Anthropic API key for Claude models. All users will use this key.',
     docsUrl: 'https://docs.anthropic.com',
     getKeyUrl: 'https://console.anthropic.com/settings/keys'
+  },
+  {
+    provider: 'clicksend_sms',
+    displayName: 'ClickSend SMS',
+    keyPrefix: '', // ClickSend uses username:apikey format
+    description: 'Platform-wide ClickSend SMS API key. Format: username:api_key',
+    docsUrl: 'https://developers.clicksend.com/docs/rest/v3/',
+    getKeyUrl: 'https://dashboard.clicksend.com/#/account/subaccounts'
+  },
+  {
+    provider: 'mistral_ai',
+    displayName: 'Mistral AI',
+    keyPrefix: '', // Mistral uses various formats
+    description: 'Platform-wide Mistral AI API key for Mistral models.',
+    docsUrl: 'https://docs.mistral.ai/',
+    getKeyUrl: 'https://console.mistral.ai/api-keys/'
+  },
+  {
+    provider: 'ocr_space',
+    displayName: 'OCR.Space',
+    keyPrefix: '', // OCR.Space doesn't have a specific prefix
+    description: 'Platform-wide OCR.Space API key for optical character recognition.',
+    docsUrl: 'https://ocr.space/ocrapi',
+    getKeyUrl: 'https://ocr.space/ocrapi#free'
+  },
+  {
+    provider: 'serper_api',
+    displayName: 'Serper API',
+    keyPrefix: '', // Serper uses various formats
+    description: 'Platform-wide Serper API key for web search functionality.',
+    docsUrl: 'https://serper.dev/api',
+    getKeyUrl: 'https://serper.dev/api-key'
+  },
+  {
+    provider: 'smtp_com',
+    displayName: 'SMTP.com',
+    keyPrefix: '', // SMTP.com uses API tokens
+    description: 'Platform-wide SMTP.com API token for email delivery.',
+    docsUrl: 'https://www.smtp.com/resources/api/',
+    getKeyUrl: 'https://app.smtp.com/account/api-tokens'
   }
 ];
 
@@ -94,7 +134,8 @@ export function AdminSystemAPIKeysPage() {
       return false;
     }
 
-    if (!key.startsWith(config.keyPrefix)) {
+    // Only validate prefix if one is specified
+    if (config.keyPrefix && !key.startsWith(config.keyPrefix)) {
       toast.error(`Invalid ${config.displayName} API key format. Must start with "${config.keyPrefix}"`);
       return false;
     }
@@ -219,47 +260,36 @@ export function AdminSystemAPIKeysPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Shield className="h-8 w-8" />
-          System API Keys
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Manage platform-wide API keys for LLM providers. These keys are shared across all users.
-        </p>
-      </div>
-
       {/* Info Alerts at Top */}
       <div className="space-y-3">
         {/* Security Notice */}
-        <Alert className="border-0 bg-blue-500/10">
-          <Shield className="h-4 w-4 text-blue-500" />
-          <AlertDescription className="text-sm">
+        <Alert className="border border-primary/20 bg-primary/5">
+          <Shield className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-sm text-foreground">
             <strong>Security:</strong> API keys are encrypted with AES-256 and stored in Supabase Vault. 
             Only admins can view this page. Keys are never exposed to end users.
           </AlertDescription>
         </Alert>
 
         {/* Usage Notice */}
-        <Alert className="border-0 bg-green-500/10">
-          <AlertCircle className="h-4 w-4 text-green-500" />
-          <AlertDescription className="text-sm">
+        <Alert className="border border-success/20 bg-success/5">
+          <AlertCircle className="h-4 w-4 text-success" />
+          <AlertDescription className="text-sm text-foreground">
             <strong>Note:</strong> After saving API keys here, they will be automatically used by all agents 
-            when users select the corresponding provider (OpenAI or Anthropic) in their agent settings.
+            and users across the platform. Individual users will not need to configure their own keys for these services.
           </AlertDescription>
         </Alert>
       </div>
 
       {/* API Keys Table */}
-      <div className="border-0 overflow-hidden bg-muted/30">
+      <div className="border border-border overflow-hidden bg-card rounded-lg shadow-sm">
         <table className="w-full">
           <thead>
-            <tr className="border-b-0 bg-muted/50">
-              <th className="text-left p-4 font-medium">Provider</th>
-              <th className="text-left p-4 font-medium">Status</th>
-              <th className="text-left p-4 font-medium">API Key</th>
-              <th className="text-right p-4 font-medium">Actions</th>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="text-left p-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">Provider</th>
+              <th className="text-left p-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+              <th className="text-left p-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">API Key</th>
+              <th className="text-right p-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -268,12 +298,14 @@ export function AdminSystemAPIKeysPage() {
               const isConfigured = status?.vault_secret_id && status?.is_active;
 
               return (
-                <tr key={config.provider} className={index !== API_KEY_CONFIGS.length - 1 ? 'border-b-0' : ''}>
+                <tr key={config.provider} className={index !== API_KEY_CONFIGS.length - 1 ? 'border-b border-border' : ''}>
                   <td className="p-4">
                     <div className="flex items-center space-x-3">
-                      <Key className="h-5 w-5 text-muted-foreground" />
+                      <div className="p-2 rounded-lg bg-muted/50">
+                        <Key className="h-4 w-4 text-primary" />
+                      </div>
                       <div>
-                        <div className="font-medium">{config.displayName}</div>
+                        <div className="font-medium text-foreground">{config.displayName}</div>
                         <div className="text-xs text-muted-foreground">{config.description}</div>
                       </div>
                     </div>
@@ -283,7 +315,7 @@ export function AdminSystemAPIKeysPage() {
                     <div className="space-y-1">
                       {isConfigured ? (
                         <>
-                          <Badge variant="default" className="bg-green-500/10 text-green-500 border-0">
+                          <Badge variant="default" className="bg-success/10 text-success border border-success/20">
                             <Check className="h-3 w-3 mr-1" />
                             Configured
                           </Badge>
@@ -294,7 +326,7 @@ export function AdminSystemAPIKeysPage() {
                           )}
                         </>
                       ) : (
-                        <Badge variant="secondary" className="border-0">Not Configured</Badge>
+                        <Badge variant="secondary" className="bg-muted text-muted-foreground border border-border">Not Configured</Badge>
                       )}
                     </div>
                   </td>
@@ -307,7 +339,7 @@ export function AdminSystemAPIKeysPage() {
                         onChange={(e) => handleKeyChange(config.provider, e.target.value)}
                         placeholder={isConfigured && !apiKeys[config.provider] ? '••••••••••••••••••••••••••••••••' : config.keyPrefix + '...'}
                         disabled={saving[config.provider] || deleting[config.provider]}
-                        className="bg-background border-0"
+                        className="bg-background border border-border"
                       />
                     </div>
                   </td>
@@ -318,7 +350,7 @@ export function AdminSystemAPIKeysPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => window.open(config.getKeyUrl, '_blank')}
-                        className="border-0"
+                        className="border border-border hover:bg-muted"
                       >
                         <ExternalLink className="h-4 w-4 mr-1" />
                         Get Key
@@ -329,7 +361,7 @@ export function AdminSystemAPIKeysPage() {
                           size="sm"
                           onClick={() => deleteAPIKey(config.provider)}
                           disabled={deleting[config.provider] || saving[config.provider]}
-                          className="border-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                          className="border border-destructive/50 text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
                           {deleting[config.provider] ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -342,7 +374,7 @@ export function AdminSystemAPIKeysPage() {
                         size="sm"
                         onClick={() => saveAPIKey(config.provider)}
                         disabled={saving[config.provider] || deleting[config.provider] || !apiKeys[config.provider]}
-                        className="border-0"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
                       >
                         {saving[config.provider] ? (
                           <>

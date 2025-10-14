@@ -318,6 +318,80 @@ serve(async (req) => {
     // Contact Management tools are now handled through the standard integration system
     // They will be processed automatically with other integrations above
 
+    // ============================================
+    // CHECK FOR SYSTEM-LEVEL API KEY TOOLS
+    // ============================================
+    console.log(`[GetAgentTools] Checking for system-level API key tools...`);
+    
+    try {
+      const { data: systemKeys, error: systemKeysError } = await supabase
+        .from('system_api_keys')
+        .select('provider_name, display_name, is_active')
+        .eq('is_active', true);
+      
+      if (systemKeysError) {
+        console.error('[GetAgentTools] Error fetching system API keys:', systemKeysError);
+      } else if (systemKeys && systemKeys.length > 0) {
+        console.log(`[GetAgentTools] Found ${systemKeys.length} active system API keys`);
+        
+        // Map of provider names to their tool definitions
+        const systemProviderTools: Record<string, Array<{ name: string; description: string; capability: string }>> = {
+          'clicksend_sms': [
+            { name: 'clicksend_send_sms', description: 'Send SMS message via ClickSend', capability: 'send_sms' },
+            { name: 'clicksend_send_mms', description: 'Send MMS message via ClickSend', capability: 'send_mms' },
+            { name: 'clicksend_get_balance', description: 'Get ClickSend account balance', capability: 'get_balance' },
+            { name: 'clicksend_get_sms_history', description: 'Get SMS history from ClickSend', capability: 'get_sms_history' },
+          ],
+          'mistral_ai': [
+            { name: 'mistral_chat_completion', description: 'Chat completion using Mistral AI', capability: 'chat_completion' },
+            { name: 'mistral_text_generation', description: 'Text generation using Mistral AI', capability: 'text_generation' },
+          ],
+          'ocr_space': [
+            { name: 'ocr_space_ocr_url', description: 'Extract text from image URL using OCR.Space', capability: 'ocr_url' },
+            { name: 'ocr_space_ocr_image', description: 'Extract text from base64 image using OCR.Space', capability: 'ocr_image' },
+          ],
+          'serper_api': [
+            { name: 'serper_web_search', description: 'Perform web search using Serper API', capability: 'web_search' },
+            { name: 'serper_news_search', description: 'Search news using Serper API', capability: 'news_search' },
+          ],
+          'smtp_com': [
+            { name: 'smtp_send_email', description: 'Send email via SMTP.com', capability: 'send_email' },
+            { name: 'smtp_test_connection', description: 'Test SMTP.com connection', capability: 'test_connection' },
+          ],
+        };
+        
+        for (const systemKey of systemKeys) {
+          const providerName = systemKey.provider_name;
+          const providerTools = systemProviderTools[providerName];
+          
+          if (providerTools && !providersProcessed.has(providerName)) {
+            console.log(`[GetAgentTools] Adding system-level tools for ${providerName}`);
+            
+            for (const tool of providerTools) {
+              const parameters = generateParametersForCapability(tool.capability);
+              
+              tools.push({
+                name: tool.name,
+                description: tool.description + ' (System)',
+                parameters,
+                status: 'active',
+                provider_name: systemKey.display_name || providerName,
+                connection_name: 'System'
+              });
+            }
+            
+            providersProcessed.add(providerName);
+          }
+        }
+        
+        console.log(`[GetAgentTools] Added system-level API key tools`);
+      } else {
+        console.log(`[GetAgentTools] No system API keys found`);
+      }
+    } catch (systemKeysError) {
+      console.warn(`[GetAgentTools] Error checking for system API keys:`, systemKeysError);
+    }
+
     // Check for Zapier MCP tools
     console.log(`[GetAgentTools] Checking for Zapier MCP tools...`);
     

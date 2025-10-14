@@ -11,6 +11,7 @@ import {
 import type { Database } from '../../types/database.types';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 import { toast } from 'react-hot-toast';
+import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -27,6 +28,7 @@ export function ChatHeader({
   conversationId,
   onShowAgentSettings
 }: ChatHeaderProps) {
+  const supabase = useSupabaseClient();
   const navigate = useNavigate();
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -63,22 +65,30 @@ export function ChatHeader({
   };
 
   const handleDelete = async () => {
-    if (!conversationId) {
-      toast.error('No conversation to delete');
+    if (!agentId) {
+      toast.error('No agent to delete');
       return;
     }
     
-    if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+    if (!confirm(`Are you sure you want to delete ${agent?.name || 'this agent'}? This action cannot be undone and will delete all conversations, messages, and data associated with this agent.`)) {
       return;
     }
 
     setIsProcessing(true);
     try {
-      // TODO: Implement delete functionality
-      toast.success('Conversation deleted');
-      navigate('/chat');
+      const { data, error } = await supabase.rpc('delete_agent_cascade', {
+        agent_uuid: agentId
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast.success('Agent and all related data deleted successfully');
+      navigate('/agents');
     } catch (error) {
-      toast.error('Failed to delete conversation');
+      console.error('Error deleting agent:', error);
+      toast.error('Failed to delete agent');
     } finally {
       setIsProcessing(false);
     }
@@ -165,7 +175,7 @@ export function ChatHeader({
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onClick={handleDelete} 
-              disabled={isProcessing || !conversationId}
+              disabled={isProcessing || !agentId}
               className="text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
             >
               <Trash2 className="mr-2 h-4 w-4" />

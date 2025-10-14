@@ -145,11 +145,14 @@ export function AgentWebSearchPermissions({ agentId, className }: AgentWebSearch
   };
 
   const loadUserKeys = async () => {
-    const { data, error } = await supabase.rpc('get_user_web_search_keys');
-
-    if (error) throw error;
-
-    setUserKeys(data || []);
+    // TODO: Update to use unified user_integration_credentials table
+    // Web search keys are now stored in user_integration_credentials with service_providers
+    // Filter for: service_providers.name IN ('serper_api', 'serpapi', 'brave_search')
+    console.warn('[AgentWebSearchPermissions] This component needs updating to use unified credentials system');
+    setUserKeys([]);
+    // const { data, error } = await supabase.rpc('get_user_web_search_keys');
+    // if (error) throw error;
+    // setUserKeys(data || []);
   };
 
   const handleAddPermission = () => {

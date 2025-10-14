@@ -13,6 +13,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 import type { AIState, ToolExecutionStatus } from './AIThinkingIndicator';
 
 interface ProcessStep {
@@ -95,6 +96,8 @@ export function InlineThinkingIndicator({
   isCompleted = false
 }: InlineThinkingIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  // Resolve media library references to signed URLs
+  const resolvedAvatarUrl = useMediaLibraryUrl(agentAvatarUrl);
 
   if (!isVisible && processSteps.length === 0 && !isCompleted) return null;
 
@@ -106,19 +109,27 @@ export function InlineThinkingIndicator({
     <div className={cn("flex items-start space-x-4 animate-fade-in", className)}>
       {/* Agent Avatar */}
       <div className="flex-shrink-0">
-        {agentAvatarUrl ? (
+        {resolvedAvatarUrl ? (
           <img 
-            src={agentAvatarUrl} 
+            src={resolvedAvatarUrl} 
             alt={agentName}
             className="w-8 h-8 rounded-full object-cover"
+            onError={(e) => {
+              console.warn('Thinking indicator avatar failed to load:', resolvedAvatarUrl);
+              e.currentTarget.style.display = 'none';
+              const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+              if (fallback) fallback.style.display = 'flex';
+            }}
           />
-        ) : (
-          <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium">
-              {agentName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
+        ) : null}
+        <div 
+          className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center"
+          style={{ display: resolvedAvatarUrl ? 'none' : 'flex' }}
+        >
+          <span className="text-white text-sm font-medium">
+            {agentName.charAt(0).toUpperCase()}
+          </span>
+        </div>
       </div>
 
       {/* Thinking Content */}

@@ -139,6 +139,45 @@ export function AgentChatPage() {
         throw new Error('Agent ID is invalid');
       }
 
+      // CRITICAL: Ensure conversation_sessions row exists FIRST (required by foreign key constraint)
+      // This handles both new conversations AND old conversations from before the migration
+      console.log('[AgentChatPage] Ensuring conversation_sessions row exists for:', convId);
+      
+      // Check if conversation_sessions row exists
+      const { data: existingSession } = await supabase
+        .from('conversation_sessions')
+        .select('conversation_id')
+        .eq('conversation_id', convId)
+        .maybeSingle();
+
+      if (!existingSession) {
+        // Create new session
+        console.log('[AgentChatPage] Creating new conversation_sessions row');
+        const { error: sessionError } = await supabase
+          .from('conversation_sessions')
+          .insert({
+            conversation_id: convId,
+            agent_id: agent.id,
+            user_id: user.id,
+            title: messageText.substring(0, 50) + (messageText.length > 50 ? '...' : ''),
+            status: 'active',
+            last_active: new Date().toISOString(),
+            message_count: 0,
+          });
+
+        if (sessionError) {
+          console.error('[AgentChatPage] Failed to create conversation_sessions:', sessionError);
+          throw sessionError;
+        }
+      } else {
+        // Update existing session's last_active
+        console.log('[AgentChatPage] Updating existing conversation_sessions row');
+        await supabase
+          .from('conversation_sessions')
+          .update({ last_active: new Date().toISOString() })
+          .eq('conversation_id', convId);
+      }
+
       // Save user message to database
       const { error: saveError } = await supabase
         .from('chat_messages_v2')
@@ -302,10 +341,10 @@ export function AgentChatPage() {
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('[handleSubmit] Chat request cancelled.');
-        aiHook.completeAIProcessing(false);
+        aiHook.completeAIProcessing(false, messageHook.setMessages);
       } else {
         console.error('Error submitting chat message:', err);
-        aiHook.completeAIProcessing(false);
+        aiHook.completeAIProcessing(false, messageHook.setMessages);
         
         if (aiHook.isMounted.current) {
           // Add an error message from the agent instead of removing the user message

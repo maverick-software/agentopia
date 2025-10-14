@@ -10,7 +10,7 @@ import { MessageProcessor } from './processor/index.ts';
 import { MemoryManager } from './core/memory/memory_manager.ts';
 import { ContextEngine } from './core/context/context_engine.ts';
 import { StateManager } from './core/state/state_manager.ts';
-import { MonitoringSystem } from './core/monitoring/monitoring_system.ts';
+// Removed: MonitoringSystem - feature archived (unused, empty tables)
 import { APIVersionRouter, MessageAdapter, getFeatureFlags, isFeatureEnabled, DualWriteService } from './adapters/index.ts';
 import { FunctionCallingManager } from './function_calling/manager.ts';
 import { SchemaValidator } from './validation/index.ts';
@@ -62,18 +62,19 @@ const contextEngine = new ContextEngine(supabase, {
   monitoring_enabled: true,
 });
 
-const monitoringSystem = new MonitoringSystem(supabase, {
-  metrics_buffer_size: 1000,
-  export_interval: 60000, // 1 minute
-  error_sample_rate: 1.0,
-  health_check_interval: 300000, // 5 minutes
-});
+// Removed: MonitoringSystem initialization - feature archived (unused, empty tables)
+// const monitoringSystem = new MonitoringSystem(supabase, {
+//   metrics_buffer_size: 1000,
+//   export_interval: 60000, // 1 minute
+//   error_sample_rate: 1.0,
+//   health_check_interval: 300000, // 5 minutes
+// });
 
 const messageProcessor = new MessageProcessor(
   memoryManager,
   contextEngine,
   stateManager,
-  monitoringSystem,
+  // monitoringSystem, // Removed: feature archived
   openai,
   supabase,
   {
@@ -487,10 +488,11 @@ async function handleStreamingRequest(body: any, requestId: string): Promise<Res
 
 // Health check endpoint
 async function handleHealthCheck(): Promise<Response> {
-  const health = await monitoringSystem.checkHealth();
+  // Removed: monitoringSystem.checkHealth() - feature archived
+  const health = { status: 'healthy', timestamp: new Date().toISOString() };
   
   return new Response(JSON.stringify(health), {
-    status: health.status === 'healthy' ? 200 : 503,
+    status: 200,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
@@ -501,7 +503,8 @@ async function handleHealthCheck(): Promise<Response> {
 
 // Metrics endpoint
 async function handleMetrics(): Promise<Response> {
-  const allMetrics = await monitoringSystem.exportMetrics();
+  // Removed: monitoringSystem.exportMetrics() - feature archived
+  const allMetrics = { message: 'Monitoring system disabled' };
   
   return new Response(JSON.stringify(allMetrics), {
     status: 200,

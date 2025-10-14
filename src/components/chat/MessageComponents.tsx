@@ -12,6 +12,7 @@ import { useArtifacts } from '@/hooks/useArtifacts';
 import type { Artifact } from '@/types/artifacts';
 import { supabase } from '@/lib/supabase';
 import { ToolUserInputCard } from './ToolUserInputCard';
+import { MessageAudioButton } from '@/components/voice/MessageAudioButton';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -94,19 +95,24 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
     }
   };
   
+  // Filter out completed/stale thinking messages before rendering
+  const displayMessages = messages.filter((message, index) => {
+    if (message.role === 'thinking') {
+      // Only show the thinking message if it's the current active one
+      return index === thinkingMessageIndex && !message.metadata?.isCompleted;
+    }
+    return true; // Show all non-thinking messages
+  });
+
   return (
     <>
     <div className="space-y-4">
-      {messages.map((message, index) => {
+      {displayMessages.map((message, index) => {
         // Handle thinking messages with inline indicator
         if (message.role === 'thinking') {
-          const isCurrentThinking = index === thinkingMessageIndex && !message.metadata?.isCompleted;
-          if (!isCurrentThinking) {
-            return null; // Hide completed thinking messages
-          }
           return (
             <InlineThinkingIndicator
-              key={`thinking-${index}`}
+              key={`thinking-${message.timestamp?.getTime() || index}`}
               isVisible={true}
               currentState={aiState}
               currentTool={currentTool}
@@ -426,8 +432,8 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                       </div>
                     )}
                     
-                    {/* Copy Button for assistant messages */}
-                    <div className="mt-3 flex items-center justify-start">
+                    {/* Copy and Audio Buttons for assistant messages */}
+                    <div className="mt-3 flex items-center justify-start gap-2">
                       <button
                         onClick={(e) => {
                           navigator.clipboard.writeText(message.content);
@@ -460,6 +466,10 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
                       </button>
+                      <MessageAudioButton 
+                        text={message.content} 
+                        className="!opacity-100 hover:bg-muted/50 p-1.5 rounded-md"
+                      />
                     </div>
                   </div>
                 ) : (

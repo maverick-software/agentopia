@@ -38,7 +38,7 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { name, description } = await req.json()
+    const { name, description, avatar_url, personality, metadata } = await req.json()
 
     if (!name || !name.trim()) {
       throw new Error('Agent name is required')
@@ -50,10 +50,11 @@ serve(async (req) => {
       description: description || `AI assistant named ${name.trim()}`,
       user_id: user.id,
       active: true,
-      personality: 'helpful',
+      avatar_url: avatar_url || null,
+      personality: personality || 'helpful',
       system_instructions: `You are ${name.trim()}, a helpful AI assistant. Be friendly, professional, and assist users with their questions and tasks.`,
       assistant_instructions: 'Provide clear, accurate, and helpful responses. Ask clarifying questions when needed.',
-      metadata: {},
+      metadata: metadata || {},
       reasoning_config: {
         enabled: true,
         threshold: 0.3,

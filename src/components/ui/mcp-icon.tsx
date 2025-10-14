@@ -9,8 +9,9 @@ interface MCPIconProps {
 export function MCPIcon({ className, size = 16 }: MCPIconProps) {
   const { theme } = useTheme();
   
-  // Use light icon for dark theme, dark icon for light theme
-  const iconSrc = theme === 'dark' ? '/mcp-light.png' : '/mcp.png';
+  // Use mcp-light.png (light colored icon) for dark backgrounds
+  // Use mcp.png (dark colored icon) for light backgrounds
+  const iconSrc = theme === 'dark' ? '/mcp.png' : '/mcp-light.png';
   
   return (
     <img

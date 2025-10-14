@@ -246,10 +246,15 @@ export function AdminIntegrationManagement() {
   };
 
   const getStatusBadge = (isEnabled: boolean) => {
-    const option = statusOptions.find(opt => opt.value === String(isEnabled));
-    return (
-      <Badge className={`${option?.color}/20 text-white border-${option?.color}/30`}>
-        {option?.label}
+    return isEnabled ? (
+      <Badge className="bg-success/10 text-success border border-success/20">
+        <CheckCircle className="h-3 w-3 mr-1" />
+        Enabled
+      </Badge>
+    ) : (
+      <Badge className="bg-destructive/10 text-destructive border border-destructive/20">
+        <AlertCircle className="h-3 w-3 mr-1" />
+        Disabled
       </Badge>
     );
   };
@@ -272,22 +277,40 @@ export function AdminIntegrationManagement() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading OAuth providers...</div>
+        <div className="flex flex-col items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+          <span className="text-muted-foreground">Loading OAuth providers...</span>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">OAuth Provider Management</h1>
-          <p className="text-gray-400">Manage OAuth provider configurations and endpoints</p>
+      {/* Filters */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search integrations..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 bg-input border-border"
+          />
         </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-48 bg-input border-border">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="enabled">Enabled</SelectItem>
+            <SelectItem value="disabled">Disabled</SelectItem>
+          </SelectContent>
+        </Select>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={resetForm}>
               <Plus className="h-4 w-4 mr-2" />
               Add OAuth Provider
             </Button>
@@ -436,55 +459,32 @@ export function AdminIntegrationManagement() {
         </Dialog>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search integrations..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="enabled">Enabled</SelectItem>
-            <SelectItem value="disabled">Disabled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* OAuth Providers Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>OAuth Providers ({filteredProviders.length})</CardTitle>
+      {/* OAuth Providers Grid */}
+      <Card className="border-border bg-card">
+        <CardHeader className="border-b border-border">
+          <CardTitle className="text-foreground">OAuth Providers ({filteredProviders.length})</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+        <CardContent className="p-6">
+          <div className="space-y-3">
             {filteredProviders.map(provider => (
               <div
                 key={provider.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50/5"
+                className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <div className="p-2 bg-gray-800 rounded">
-                    <Shield className="h-4 w-4" />
+                  <div className="p-2.5 bg-muted/50 rounded-lg">
+                    <Shield className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-white">{provider.display_name}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-foreground">{provider.display_name}</h3>
                       {getStatusBadge(provider.is_enabled)}
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border">
                         {provider.pkce_required ? 'PKCE' : 'No PKCE'}
                       </Badge>
                     </div>
-                    <p className="text-sm text-gray-400">Provider: {provider.name}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm text-muted-foreground">Provider: {provider.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
                       Scopes: {provider.scopes_supported.length} • Credentials: {provider.client_credentials_location}
                     </p>
                   </div>
@@ -494,6 +494,7 @@ export function AdminIntegrationManagement() {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleEdit(provider)}
+                    className="hover:bg-muted text-primary hover:text-primary/80"
                   >
                     <Edit2 className="h-4 w-4" />
                   </Button>
@@ -504,14 +505,15 @@ export function AdminIntegrationManagement() {
                       setSelectedProvider(provider);
                       setIsDeleteDialogOpen(true);
                     }}
+                    className="hover:bg-destructive/10 text-destructive hover:text-destructive/80"
                   >
-                    <Trash2 className="h-4 w-4 text-red-400" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             ))}
             {filteredProviders.length === 0 && (
-              <div className="text-center py-8 text-gray-400">
+              <div className="text-center py-12 text-muted-foreground">
                 No OAuth providers found matching your criteria.
               </div>
             )}

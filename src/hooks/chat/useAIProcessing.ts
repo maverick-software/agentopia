@@ -64,9 +64,19 @@ export function useAIProcessing(agent: any, user: any, input: string) {
     }
   }, [agent?.id, user?.id]);
 
-  const completeAIProcessing = useCallback((success: boolean = true) => {
+  const completeAIProcessing = useCallback((
+    success: boolean = true, 
+    setMessages?: React.Dispatch<React.SetStateAction<Message[]>>
+  ) => {
     setAiState(success ? 'completed' : 'failed');
     setProcessSteps(prev => prev.map(step => ({ ...step, completed: true })));
+    
+    // If failed and setMessages provided, remove the thinking message
+    if (!success && setMessages) {
+      setMessages(prev => prev.filter(msg => 
+        !(msg.role === 'thinking' && !msg.metadata?.isCompleted)
+      ));
+    }
     
     setTimeout(() => {
       setAiState(null);

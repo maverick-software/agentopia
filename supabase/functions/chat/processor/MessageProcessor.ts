@@ -9,7 +9,7 @@ import { ValidationError } from '../api/v2/errors.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
 import { ContextEngine } from '../core/context/context_engine.ts';
 import { StateManager } from '../core/state/state_manager.ts';
-import { MonitoringSystem } from '../core/monitoring/monitoring_system.ts';
+// Removed: MonitoringSystem - feature archived (unused, empty tables)
 import { 
   ProcessingStage, 
   ParsingStage, 

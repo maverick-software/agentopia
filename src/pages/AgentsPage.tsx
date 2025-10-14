@@ -8,6 +8,7 @@ import { CreateAgentWizard } from '../components/CreateAgentWizard';
 import { useTeamsWithAgentCounts } from '../hooks/useTeamsWithAgentCounts';
 import { VisualTeamCanvas } from '../components/teams/canvas/VisualTeamCanvas';
 import { CreateTeamModal } from '../components/modals/CreateTeamModal';
+import { useMediaLibraryUrl } from '../hooks/useMediaLibraryUrl';
 
 // Maximum number of team tabs to show before creating dropdown
 const MAX_VISIBLE_TEAMS = 5;
@@ -241,6 +242,29 @@ export function AgentsPage() {
     return filtered;
   }, [agents, searchQuery, selectedTeam]);
 
+  // Agent avatar component that resolves media library URLs
+  const AgentAvatar = ({ agent }: { agent: Agent }) => {
+    const resolvedAvatarUrl = useMediaLibraryUrl(agent.avatar_url);
+    
+    return (
+      <>
+        {resolvedAvatarUrl ? (
+          <img 
+            src={resolvedAvatarUrl} 
+            alt={`${agent.name} avatar`}
+            className="w-16 h-16 rounded-xl object-cover ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
+            <span className="text-primary text-lg font-semibold">
+              {agent.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        )}
+      </>
+    );
+  };
+
   // Agent card component - sized for 5 across
   const AgentCard = ({ agent }: { agent: Agent }) => (
     <div 
@@ -254,19 +278,7 @@ export function AgentsPage() {
       
       <div className="flex flex-col items-center text-center space-y-3">
         {/* Avatar */}
-        {agent.avatar_url ? (
-          <img 
-            src={agent.avatar_url} 
-            alt={`${agent.name} avatar`}
-            className="w-16 h-16 rounded-xl object-cover ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300"
-          />
-        ) : (
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
-            <span className="text-primary text-lg font-semibold">
-              {agent.name.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
+        <AgentAvatar agent={agent} />
         
         {/* Name */}
         <h3 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors leading-tight">

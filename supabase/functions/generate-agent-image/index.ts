@@ -51,8 +51,34 @@ serve(async (req) => {
       throw new Error('Prompt or theme is required')
     }
 
-    // Use the prompt as provided by the frontend (already includes quality modifiers)
-    const prompt = userPrompt
+    // Generate prompt from theme and attributes if no userPrompt provided
+    let prompt = userPrompt
+    if (!prompt && theme) {
+      // Build prompt from theme and physical attributes
+      const themePrompts = {
+        'professional': 'Professional business portrait, confident and approachable',
+        'business-casual': 'Business casual portrait, smart and friendly',
+        'futuristic': 'Futuristic sci-fi character, high-tech aesthetic',
+        'alien': 'Otherworldly alien character with unique features',
+        'animal': 'Anthropomorphic animal character, friendly and intelligent',
+        'custom': customInstructions || 'Creative character portrait'
+      }
+      
+      let basePrompt = themePrompts[theme] || 'Professional portrait'
+      
+      // Add physical attributes if provided
+      const attributes = []
+      if (gender) attributes.push(`${gender} character`)
+      if (hairColor) attributes.push(`${hairColor.toLowerCase()} hair`)
+      if (eyeColor) attributes.push(`${eyeColor.toLowerCase()} eyes`)
+      
+      if (attributes.length > 0) {
+        basePrompt += `, ${attributes.join(', ')}`
+      }
+      
+      // Add quality modifiers
+      prompt = `${basePrompt}, high quality digital art, professional lighting, detailed, 4K resolution, portrait style`
+    }
 
     console.log('Generated image prompt:', prompt)
 
@@ -70,7 +96,6 @@ serve(async (req) => {
       model: "gpt-image-1",
       prompt: prompt,
       size: "1024x1024",
-      background: "transparent",
       quality: "high"
     })
 
@@ -142,6 +167,8 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        success: true,
+        imageUrl: mediaEntry?.id ? `media-library:${mediaEntry.id}` : publicUrl,
         mediaLibraryId: mediaEntry?.id,
         storagePath: storagePath,
         fileName: fileName
@@ -157,6 +184,7 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({
+        success: false,
         error: error.message
       }),
       {

@@ -233,105 +233,66 @@ serve(async (req) => {
       throw new Error('Invalid authentication token');
     }
 
-    // Check agent permissions for ClickSend
-    console.log(`[ClickSend] Checking permissions for agent ${agent_id}, user ${user.id}`);
-    const { data: agentPermissions, error: permissionError } = await supabase
-      .from('agent_integration_permissions')
-      .select(`
-        allowed_scopes,
-        is_active,
-        user_integration_credentials!agent_integration_permissions_connection_id_fkey!inner(
-          id,
-          vault_access_token_id,
-          vault_refresh_token_id,
-          connection_status,
-          user_id,
-          service_providers!inner(name)
-        )
-      `)
-      .eq('agent_id', agent_id)
-      .eq('user_integration_credentials.user_id', user.id)
-      .eq('user_integration_credentials.service_providers.name', 'clicksend_sms')
-      .eq('user_integration_credentials.connection_status', 'active')
-      .eq('is_active', true);
-
-    console.log(`[ClickSend] Permission query result - Error: ${permissionError?.message}, Records: ${agentPermissions?.length}`);
-    if (permissionError) {
-      console.error(`[ClickSend] Permission query error:`, permissionError);
-    }
-    if (agentPermissions) {
-      console.log(`[ClickSend] Found permissions:`, JSON.stringify(agentPermissions, null, 2));
-    }
-
-    if (permissionError || !agentPermissions || agentPermissions.length === 0) {
-      console.error(`[ClickSend] No permissions found - returning 403`);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Agent does not have ClickSend permissions or no active ClickSend connection found',
-          metadata: { execution_time_ms: Date.now() - startTime }
-        }),
-        { 
-          status: 403, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
-    const permission = agentPermissions[0];
-    const userConnection = permission.user_integration_credentials;
-
-    // Check if agent has required scopes for this action
-    const requiredScopes = getRequiredScopes(action);
-    const allowedScopes = permission.allowed_scopes || [];
-    const hasRequiredScopes = requiredScopes.every(scope => allowedScopes.includes(scope));
-
-    console.log(`[ClickSend] Scope validation - Action: ${action}, Required: [${requiredScopes.join(', ')}], Allowed: [${allowedScopes.join(', ')}], Has Required: ${hasRequiredScopes}`);
-
-    if (!hasRequiredScopes) {
-      console.error(`[ClickSend] Scope validation failed - returning 403`);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Agent missing required scopes for ${action}. Required: ${requiredScopes.join(', ')}, Allowed: ${allowedScopes.join(', ')}`,
-          metadata: { execution_time_ms: Date.now() - startTime }
-        }),
-        { 
-          status: 403, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
-    // Decrypt credentials from Supabase Vault
-    console.log(`[ClickSend] Decrypting credentials - Username vault ID: ${userConnection.vault_access_token_id}, API key vault ID: ${userConnection.vault_refresh_token_id}`);
+    // ============================================
+    // SYSTEM-LEVEL API KEY RETRIEVAL (NO USER KEYS)
+    // ============================================
+    console.log(`[ClickSend] Fetching system-level API key for ClickSend SMS`);
     
-    const { data: usernameData, error: usernameError } = await supabase.rpc(
+    const { data: systemKey, error: systemKeyError } = await supabase
+      .from('system_api_keys')
+      .select('vault_secret_id, is_active')
+      .eq('provider_name', 'clicksend_sms')
+      .eq('is_active', true)
+      .single();
+
+    console.log(`[ClickSend] System key query result - Error: ${systemKeyError?.message}, Key found: ${!!systemKey}`);
+    
+    if (systemKeyError || !systemKey || !systemKey.vault_secret_id) {
+      console.error(`[ClickSend] System API key not configured`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ClickSend SMS system API key is not configured. Please contact your administrator to set up this service in the Admin Settings.',
+          metadata: { execution_time_ms: Date.now() - startTime }
+        }),
+        { 
+          status: 503, // Service Unavailable
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Decrypt system credentials from Supabase Vault
+    console.log(`[ClickSend] Decrypting system credentials - Vault ID: ${systemKey.vault_secret_id}`);
+    
+    const { data: credentialsData, error: credentialsError } = await supabase.rpc(
       'vault_decrypt',
-      { vault_id: userConnection.vault_access_token_id }
+      { vault_id: systemKey.vault_secret_id }
     );
 
-    const { data: apiKeyData, error: apiKeyError } = await supabase.rpc(
-      'vault_decrypt', 
-      { vault_id: userConnection.vault_refresh_token_id }
-    );
-
-    console.log(`[ClickSend] Vault decryption result - Username: ${usernameData ? 'SUCCESS' : 'FAILED'}, API Key: ${apiKeyData ? 'SUCCESS' : 'FAILED'}`);
-    if (usernameError) {
-      console.error(`[ClickSend] Username decryption error:`, usernameError);
-    }
-    if (apiKeyError) {
-      console.error(`[ClickSend] API key decryption error:`, apiKeyError);
+    console.log(`[ClickSend] Vault decryption result - Credentials: ${credentialsData ? 'SUCCESS' : 'FAILED'}`);
+    if (credentialsError) {
+      console.error(`[ClickSend] Credentials decryption error:`, credentialsError);
     }
 
-    if (usernameError || apiKeyError || !usernameData || !apiKeyData) {
-      console.error(`[ClickSend] Credential decryption failed - throwing error`);
-      throw new Error('Failed to decrypt ClickSend credentials');
+    if (credentialsError || !credentialsData) {
+      console.error(`[ClickSend] System credential decryption failed`);
+      throw new Error('Failed to decrypt ClickSend system credentials. Please contact your administrator.');
     }
 
-    // Initialize ClickSend client
-    console.log(`[ClickSend] Initializing ClickSend client with decrypted credentials`);
-    const clicksendClient = new ClickSendClient(usernameData, apiKeyData);
+    // Parse username:apikey format
+    const credentials = credentialsData.split(':');
+    if (credentials.length !== 2) {
+      console.error(`[ClickSend] Invalid credential format - expected username:apikey`);
+      throw new Error('Invalid ClickSend system credentials format. Please contact your administrator.');
+    }
+
+    const [username, apiKey] = credentials;
+    console.log(`[ClickSend] Successfully parsed system credentials - Username: ${username ? 'present' : 'missing'}, API Key: ${apiKey ? 'present' : 'missing'}`);
+
+    // Initialize ClickSend client with system credentials
+    console.log(`[ClickSend] Initializing ClickSend client with system credentials`);
+    const clicksendClient = new ClickSendClient(username, apiKey);
 
     // Execute the requested action
     console.log(`[ClickSend] Executing action: ${action} with parameters:`, JSON.stringify(parameters, null, 2));
@@ -655,17 +616,6 @@ async function handleGetDeliveryReceipts(client: ClickSendClient, params: any): 
   return await client.getDeliveryReceipts(page, limit);
 }
 
-// Helper function to get required scopes for each action
-function getRequiredScopes(action: string): string[] {
-  const scopeMap: Record<string, string[]> = {
-    'send_sms': ['clicksend_send_sms'],
-    'send_mms': ['clicksend_send_mms'],
-    'get_balance': ['clicksend_get_balance'],
-    'get_sms_history': ['clicksend_get_sms_history'],
-    'get_mms_history': ['clicksend_get_sms_history'],
-    'get_delivery_receipts': ['clicksend_get_delivery_receipts']
-  };
-
-  return scopeMap[action] || [];
-}
+// System-level API key approach: No per-user scopes needed
+// All authenticated users can use ClickSend through the system API key
 

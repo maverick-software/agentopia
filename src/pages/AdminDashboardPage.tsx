@@ -7,7 +7,7 @@ interface DashboardStats {
   activeAgents: number;
 }
 
-export function AdminDashboardPage() {
+export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,17 +43,18 @@ export function AdminDashboardPage() {
   }, []); // Empty dependency array ensures this runs once on mount
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <h1 className="text-3xl font-bold mb-8 text-foreground">Admin Dashboard</h1>
 
-      {error && (
-        <div className="mb-4 bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center">
-          <AlertCircle className="w-5 h-5 mr-2" />
-          <span>Error loading dashboard stats: {error}</span>
-        </div>
-      )}
+        {error && (
+          <div className="mb-6 bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" />
+            <span>Error loading dashboard stats: {error}</span>
+          </div>
+        )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* User Stat Card */}
         <div className="bg-dashboard-card border border-dashboard-card-border p-6 rounded-lg shadow-sm">
           <div className="flex items-center space-x-4">
@@ -88,20 +89,21 @@ export function AdminDashboardPage() {
             </div>
         </div>
 
-        {/* System Health Placeholder Card (update later in WBS 3.6) */}
+        {/* System Health Placeholder Card */}
         <div className="bg-dashboard-card border border-dashboard-card-border p-6 rounded-lg shadow-sm">
-             <div className="flex items-center space-x-4">
-                 <div className="bg-yellow-500 p-3 rounded-lg">
-                     <AlertCircle className="w-6 h-6 text-white" /> 
-                 </div>
-                 <div>
-                     <h2 className="text-lg font-semibold text-foreground">System Health</h2>
-                     <p className="text-muted-foreground mt-1 italic">Metrics coming soon...</p>
-                 </div>
-             </div>
+          <div className="flex items-center space-x-4">
+            <div className="bg-yellow-500 p-3 rounded-lg">
+              <AlertCircle className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">System Health</h2>
+              <p className="text-muted-foreground mt-1 italic">Metrics coming soon...</p>
+            </div>
+          </div>
         </div>
       </div>
       {/* Add more dashboard sections later */}
+      </div>
     </div>
   );
 } 

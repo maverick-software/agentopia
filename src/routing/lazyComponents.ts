@@ -19,7 +19,7 @@ export const AgentChatPage = lazy(() => import('../pages/AgentChatPage.tsx').the
 // Archived 2025-10-05: DatastoresPage moved to Agent Settings → Memory tab
 // export const DatastoresPage = lazy(() => import('../pages/DatastoresPage.tsx').then(module => ({ default: module.DatastoresPage })));
 // export const DatastoreEditPage = lazy(() => import('../pages/DatastoreEditPage.tsx'));
-export const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage.tsx').then(module => ({ default: module.AdminDashboardPage })));
+export const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage'));
 export const TeamsPage = lazy(() => import('../pages/TeamsPage.tsx').then(module => ({ default: module.TeamsPage })));
 export const TeamDetailsPage = lazy(() => import('../pages/TeamDetailsPage.tsx').then(module => ({ default: module.TeamDetailsPage })));
 export const EditTeamPage = lazy(() => import('../pages/EditTeamPage.tsx').then(module => ({ default: module.EditTeamPage })));
@@ -29,6 +29,7 @@ export const BillingPage = lazy(() => import('../pages/BillingPage').then(module
 export const MonitoringPage = lazy(() => import('../pages/MonitoringPage.tsx').then(module => ({ default: module.Monitoring })));
 export const AdminUserManagement = lazy(() => import('../pages/AdminUserManagement.tsx').then(module => ({ default: module.AdminUserManagement })));
 export const AdminAgentManagement = lazy(() => import('../pages/AdminAgentManagement.tsx').then(module => ({ default: module.AdminAgentManagement })));
+export const AdminSettingsPage = lazy(() => import('../pages/AdminSettingsPage').then(module => ({ default: module.AdminSettingsPage })));
 export const HomePage = lazy(() => import('../pages/HomePage.tsx').then(module => ({ default: module.HomePage }))); 
 
 // Add WorkspacePage
@@ -51,7 +52,8 @@ export const MCPMarketplacePage = lazy(() => import('../pages/mcp/MCPMarketplace
 export const MCPDeployPage = lazy(() => import('../pages/mcp/MCPDeployPage').then(module => ({ default: module.MCPDeployPage })));
 export const MCPServerConfigPage = lazy(() => import('../pages/mcp/MCPServerConfigPage').then(module => ({ default: module.MCPServerConfigPage }))); 
 
-export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 
+// Archived 2025-10-13: Deprecated admin MCP system
+// export const AdminMCPMarketplaceManagement = lazy(() => import('../pages/AdminMCPMarketplaceManagement')); 
 export const AdminIntegrationManagement = lazy(() => import('../pages/AdminIntegrationManagement').then(module => ({ default: module.AdminIntegrationManagement })));
 export const AdminSystemAPIKeysPage = lazy(() => import('../pages/admin/AdminSystemAPIKeysPage').then(module => ({ default: module.AdminSystemAPIKeysPage })));
 

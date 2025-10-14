@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect } from 'react';
 import { Send, Paperclip, Sliders, X, FileText } from 'lucide-react';
 import type { Database } from '../../types/database.types';
+import { VoiceInputButton } from '@/components/voice/VoiceInputButton';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -153,19 +154,15 @@ export function ChatInput({
               />
               {/* Voice input button inside text area - disappears when typing */}
               {!input.trim() && (
-                <button
-                  type="button"
-                  className="p-1.5 text-muted-foreground/60 hover:text-foreground hover:bg-accent rounded-lg transition-colors flex-shrink-0 mt-0.5"
-                  disabled={!agent}
-                  title="Voice input"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19v4" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 23h8" />
-                  </svg>
-                </button>
+                <div className="flex-shrink-0 mt-0.5">
+                  <VoiceInputButton
+                    onTranscription={(text) => {
+                      setInput(text);
+                      adjustTextareaHeight();
+                    }}
+                    disabled={!agent}
+                  />
+                </div>
               )}
             </div>
             

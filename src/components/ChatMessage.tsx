@@ -6,6 +6,7 @@ import type { Message, ToolCall } from '../types';
 import type { WorkspaceMemberDetail } from '@/hooks/useWorkspaceMembers';
 import ToolCallIndicator from './ToolCallIndicator';
 import { ToolCategorizer } from '@/lib/toolCategorization';
+import { MessageAudioButton } from '@/components/voice/MessageAudioButton';
 
 interface ChatMessageProps {
   message: Message;
@@ -160,17 +161,20 @@ export const ChatMessage = React.memo(function ChatMessage({ message, members = 
             </div>
             
           {message.role === 'assistant' && (
-            <button
-              onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded opacity-50 group-hover:opacity-100 ml-2"
-              title="Copy response"
-            >
-              {isCopied ? (
-                <Check className="w-3 h-3 text-green-500" />
-              ) : (
-                <Clipboard className="w-3 h-3" />
-              )}
-            </button>
+            <div className="flex items-center gap-1 ml-2">
+              <MessageAudioButton text={message.content} />
+              <button
+                onClick={handleCopy}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded opacity-50 group-hover:opacity-100"
+                title="Copy response"
+              >
+                {isCopied ? (
+                  <Check className="w-3 h-3 text-green-500" />
+                ) : (
+                  <Clipboard className="w-3 h-3" />
+                )}
+              </button>
+            </div>
           )}
           </div>
           

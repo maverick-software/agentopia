@@ -35,7 +35,8 @@ import {
     MonitoringPage,
     AdminUserManagement,
     AdminAgentManagement,
-    AdminMCPMarketplaceManagement,
+    AdminSettingsPage,
+    // AdminMCPMarketplaceManagement, // Archived 2025-10-13: Deprecated admin MCP system
     AdminIntegrationManagement,
     AdminSystemAPIKeysPage,
     AdminStripeConfigPage,
@@ -139,14 +140,15 @@ export const appRoutes: RouteConfig[] = [
     layout: false, // AdminRoute now provides AdminLayout, no need for regular Layout
     element: AdminDashboardPage, // Base element for /admin
     children: [
-      { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
-      { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false }, // Children inherit layout/protection
-      { path: '/admin/system-api-keys', element: AdminSystemAPIKeysPage, protection: 'admin', layout: false }, // System API keys management
-      { path: '/admin/marketplace', element: AdminMCPMarketplaceManagement, protection: 'admin', layout: false }, // Add marketplace management
-      { path: '/admin/oauth-providers', element: AdminIntegrationManagement, protection: 'admin', layout: false }, // OAuth providers management
-      { path: '/admin/billing/stripe-config', element: AdminStripeConfigPage, protection: 'admin', layout: false }, // Stripe configuration
-      { path: '/admin/billing/users', element: AdminUserBillingPage, protection: 'admin', layout: false }, // User billing management
-      { path: '/admin/billing/stripe-callback', element: StripeOAuthCallbackPage, protection: 'admin', layout: false }, // Stripe OAuth callback
+      { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false },
+      { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false },
+      { path: '/admin/settings', element: AdminSettingsPage, protection: 'admin', layout: false },
+      // Legacy routes for backward compatibility
+      { path: '/admin/system-api-keys', element: AdminSettingsPage, protection: 'admin', layout: false },
+      { path: '/admin/oauth-providers', element: AdminSettingsPage, protection: 'admin', layout: false },
+      { path: '/admin/billing/stripe-config', element: AdminSettingsPage, protection: 'admin', layout: false },
+      { path: '/admin/billing/users', element: AdminUserBillingPage, protection: 'admin', layout: false },
+      { path: '/admin/billing/stripe-callback', element: StripeOAuthCallbackPage, protection: 'admin', layout: false },
     ]
   },
 

@@ -199,7 +199,21 @@ export function IntegrationsPage() {
     }
   };
 
+  // System-managed integrations that should not appear in user integrations page
+  const systemManagedIntegrations = [
+    'ClickSend SMS',
+    'Mistral AI',
+    'OCR.Space',
+    'Serper API',
+    'SMTP.com'
+  ];
+
   const filteredIntegrations = integrations.filter(integration => {
+    // Hide system-managed integrations from user setup
+    if (systemManagedIntegrations.includes(integration.name)) {
+      return false;
+    }
+    
     const matchesSearch = integration.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       integration.description?.toLowerCase().includes(searchTerm.toLowerCase());
     

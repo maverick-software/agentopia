@@ -190,146 +190,162 @@ export function AdminUserManagement() {
     console.log('[AdminUserManagement] Rendering - isEditModalOpen:', isEditModalOpen, 'editingUser:', editingUser);
 
     return (
-        <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold flex items-center">
-                    <Users className="w-8 h-8 mr-3 text-indigo-400" />
-                    User Management
-                </h1>
-                <div className="relative">
-                    <input 
-                        type="text"
-                        placeholder="Search users (email, name...)"
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        className="pl-10 pr-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                    <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                </div>
-            </div>
-
-            {error && (
-                <div className="mb-4 bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-md flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2" />
-                    <span>Error loading users: {error}</span>
-                </div>
-            )}
-
-            <div className="bg-gray-800 shadow-md rounded-lg overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                    <thead className="bg-gray-700/50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Email</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Roles</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Joined</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Sign In</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-gray-800 divide-y divide-gray-700">
-                        {loading ? (
-                            <tr>
-                                <td colSpan={6} className="text-center py-10 text-gray-500">
-                                    Loading users...
-                                </td>
-                            </tr>
-                        ) : users.length === 0 ? (
-                             <tr>
-                                <td colSpan={6} className="text-center py-10 text-gray-500">
-                                    {searchTerm ? `No users found matching "${searchTerm}".` : "No users found."}
-                                </td>
-                            </tr>
-                        ) : (
-                            users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-700/50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-100" title={user.email}>{user.email}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{user.full_name || user.username || '---'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        {user.roles.map(role => (
-                                            <span key={role.id} className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${role.name === 'admin' ? 'bg-indigo-600 text-indigo-100' : 'bg-gray-600 text-gray-100'}`}>
-                                                {role.name}
-                                            </span>
-                                        ))}
-                                        {user.roles.length === 0 && <span className="text-gray-500 italic">No roles</span>}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDate(user.created_at)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDate(user.last_sign_in_at)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                        <button 
-                                            onClick={() => handleEditClick(user)} 
-                                            className="text-indigo-400 hover:text-indigo-300 p-1 rounded hover:bg-gray-700"
-                                            title="Edit Roles"
-                                        >
-                                            <Edit size={16} />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleStatusActionClick(user, 'suspend')} 
-                                            className="text-red-500 hover:text-red-400 p-1 rounded hover:bg-gray-700"
-                                            title="Suspend User"
-                                        >
-                                            <Ban size={16} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {(!searchTerm || totalUsers > PER_PAGE) && totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between text-sm text-gray-400">
-                    <span>
-                        {searchTerm 
-                            ? `Page ${currentPage} (Total matching approximate: ${totalUsers})` 
-                            : `Page ${currentPage} of ${totalPages} (Total: ${totalUsers} users)`
-                        }
-                    </span>
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={handlePrevPage}
-                            disabled={currentPage === 1 || loading}
-                            className="px-3 py-1 rounded border border-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                        >
-                            <ChevronLeft className="w-4 h-4 mr-1" /> Prev
-                        </button>
-                        <button
-                            onClick={handleNextPage}
-                            disabled={currentPage === totalPages || loading}
-                             className="px-3 py-1 rounded border border-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                        >
-                            Next <ChevronRight className="w-4 h-4 ml-1" />
-                        </button>
+        <div className="min-h-screen bg-background">
+            <div className="max-w-7xl mx-auto px-6 py-8">
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold flex items-center text-foreground">
+                            <Users className="w-8 h-8 mr-3 text-primary" />
+                            User Management
+                        </h1>
+                        <p className="text-muted-foreground mt-2">
+                            Manage user accounts, roles, and permissions across the platform
+                        </p>
+                    </div>
+                    <div className="relative">
+                        <input 
+                            type="text"
+                            placeholder="Search users (email, name...)"
+                            value={searchTerm}
+                            onChange={handleSearchChange}
+                            className="pl-10 pr-4 py-2 rounded-lg bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                        />
+                        <Search className="w-5 h-5 text-muted-foreground absolute left-3 top-1/2 transform -translate-y-1/2" />
                     </div>
                 </div>
-            )}
 
-            <EditUserRolesModal 
-                user={editingUser}
-                isOpen={isEditModalOpen}
-                onClose={handleCloseModal}
-                onRolesUpdated={handleRolesUpdated}
-            />
-            <ConfirmationModal 
-                isOpen={isConfirmModalOpen}
-                onClose={closeConfirmModal}
-                onConfirm={confirmStatusChange}
-                title={`${confirmAction === 'suspend' ? 'Suspend' : 'Reactivate'} User?`}
-                confirmText={`${confirmAction === 'suspend' ? 'Suspend' : 'Reactivate'}`}
-                confirmButtonVariant={confirmAction === 'suspend' ? 'danger' : 'primary'}
-                isLoading={isPerformingAction}
-            >
-                <p className="text-gray-300">
-                    Are you sure you want to {confirmAction} the user <span className="font-medium text-white">{userToAction?.email}</span>?
-                    {confirmAction === 'suspend' && 
-                        <span className="block mt-2 text-sm text-yellow-400">This will prevent the user from logging in.</span>
-                    }
-                     {confirmAction === 'reactivate' && 
-                        <span className="block mt-2 text-sm text-green-400">This will allow the user to log in again.</span>
-                    }
-                </p>
-            </ConfirmationModal>
+                {error && (
+                    <div className="mb-6 bg-destructive/10 border border-destructive/50 text-destructive p-4 rounded-lg flex items-center">
+                        <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                        <span>Error loading users: {error}</span>
+                    </div>
+                )}
+
+                <div className="bg-card border border-border shadow-sm rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-border">
+                            <thead className="bg-muted/50">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Roles</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Joined</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Last Sign In</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-card divide-y divide-border">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={6} className="text-center py-12 text-muted-foreground">
+                                            <div className="flex flex-col items-center justify-center">
+                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+                                                <span>Loading users...</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : users.length === 0 ? (
+                                     <tr>
+                                        <td colSpan={6} className="text-center py-12 text-muted-foreground">
+                                            {searchTerm ? `No users found matching "${searchTerm}".` : "No users found."}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    users.map((user) => (
+                                        <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                                            <td className="px-6 py-4 text-sm font-medium text-foreground" title={user.email}>{user.email}</td>
+                                            <td className="px-6 py-4 text-sm text-foreground">{user.full_name || user.username || '---'}</td>
+                                            <td className="px-6 py-4 text-sm">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {user.roles.map(role => (
+                                                        <span key={role.id} className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${role.name === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
+                                                            {role.name}
+                                                        </span>
+                                                    ))}
+                                                    {user.roles.length === 0 && <span className="text-muted-foreground italic">No roles</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{formatDate(user.created_at)}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{formatDate(user.last_sign_in_at)}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    <button 
+                                                        onClick={() => handleEditClick(user)} 
+                                                        className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-muted transition-colors"
+                                                        title="Edit Roles"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleStatusActionClick(user, 'suspend')} 
+                                                        className="text-destructive hover:text-destructive/80 p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
+                                                        title="Suspend User"
+                                                    >
+                                                        <Ban size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {(!searchTerm || totalUsers > PER_PAGE) && totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+                        <span>
+                            {searchTerm 
+                                ? `Page ${currentPage} (Total matching approximate: ${totalUsers})` 
+                                : `Page ${currentPage} of ${totalPages} (Total: ${totalUsers} users)`
+                            }
+                        </span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handlePrevPage}
+                                disabled={currentPage === 1 || loading}
+                                className="px-4 py-2 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors text-foreground"
+                            >
+                                <ChevronLeft className="w-4 h-4" /> Prev
+                            </button>
+                            <button
+                                onClick={handleNextPage}
+                                disabled={currentPage === totalPages || loading}
+                                className="px-4 py-2 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors text-foreground"
+                            >
+                                Next <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <EditUserRolesModal 
+                    user={editingUser}
+                    isOpen={isEditModalOpen}
+                    onClose={handleCloseModal}
+                    onRolesUpdated={handleRolesUpdated}
+                />
+                <ConfirmationModal 
+                    isOpen={isConfirmModalOpen}
+                    onClose={closeConfirmModal}
+                    onConfirm={confirmStatusChange}
+                    title={`${confirmAction === 'suspend' ? 'Suspend' : 'Reactivate'} User?`}
+                    confirmText={`${confirmAction === 'suspend' ? 'Suspend' : 'Reactivate'}`}
+                    confirmButtonVariant={confirmAction === 'suspend' ? 'danger' : 'primary'}
+                    isLoading={isPerformingAction}
+                >
+                    <p className="text-muted-foreground">
+                        Are you sure you want to {confirmAction} the user <span className="font-medium text-foreground">{userToAction?.email}</span>?
+                        {confirmAction === 'suspend' && 
+                            <span className="block mt-2 text-sm text-warning">This will prevent the user from logging in.</span>
+                        }
+                         {confirmAction === 'reactivate' && 
+                            <span className="block mt-2 text-sm text-success">This will allow the user to log in again.</span>
+                        }
+                    </p>
+                </ConfirmationModal>
+            </div>
         </div>
     );
 } 

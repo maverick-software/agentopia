@@ -326,7 +326,26 @@ serve(async (req) => {
 
     console.log(`[web-search-api] Web search is enabled for agent ${agent_id}`);
 
-    // Get available API keys (filtering by credential_type)
+    // ============================================
+    // HYBRID APPROACH: System keys for Serper, User keys for others
+    // ============================================
+    
+    // Check for system-level Serper API key first
+    const { data: systemSerperKey, error: systemSerperError } = await supabase
+      .from('system_api_keys')
+      .select('vault_secret_id, is_active')
+      .eq('provider_name', 'serper_api')
+      .eq('is_active', true)
+      .maybeSingle();
+    
+    if (systemSerperError) {
+      console.error('[web-search-api] Error fetching system Serper key:', systemSerperError);
+    }
+    
+    const hasSystemSerper = !!(systemSerperKey && systemSerperKey.vault_secret_id);
+    console.log(`[web-search-api] System Serper API key available: ${hasSystemSerper}`);
+
+    // Get user-level API keys (for SerpAPI and Brave Search fallback)
     const { data: connections, error: connectionsError } = await supabase
       .from('user_integration_credentials')
       .select(`
@@ -341,76 +360,95 @@ serve(async (req) => {
       throw new Error(`Failed to fetch API keys: ${connectionsError.message}`);
     }
 
-    // Filter for web search providers
+    // Filter for web search providers (user-level)
     const webSearchConnections = (connections || []).filter(c => 
       c.service_providers && 
       ['serper_api', 'serpapi', 'brave_search'].includes(c.service_providers.name) &&
       c.connection_status === 'active'
     );
 
-    console.log(`[web-search-api] Found ${connections?.length || 0} total connections, ${webSearchConnections.length} web search connections for user ${user.id}`);
+    console.log(`[web-search-api] Found ${connections?.length || 0} total connections, ${webSearchConnections.length} user-level web search connections for user ${user.id}`);
 
-    if (!webSearchConnections || webSearchConnections.length === 0) {
-      throw new Error('No web search API keys configured');
+    // Check if we have any search capabilities at all
+    if (!hasSystemSerper && (!webSearchConnections || webSearchConnections.length === 0)) {
+      throw new Error('No web search API keys configured. Please contact your administrator to enable web search services.');
     }
 
     const startTime = Date.now();
     let result: WebSearchResult;
 
-    // Try providers in order of preference
+    // Try providers in order of preference (system Serper first, then user-level fallbacks)
     const preferredProviders = ['serper_api', 'brave_search', 'serpapi'];
     let lastError: Error | null = null;
 
     for (const providerName of preferredProviders) {
-      const connection = webSearchConnections.find(c => c.service_providers.name === providerName);
-      if (!connection) continue;
-
       const provider = searchProviders[providerName];
       if (!provider) continue;
 
       try {
         console.log(`[web-search-api] Trying provider: ${providerName}`);
 
-        // Get API key - try to decrypt from vault first, then fallback to plain text
+        // Get API key - system-level for Serper, user-level for others
         let apiKey: string | null = null;
         
-        // Check if we have any form of API key storage
-        const storedValue = connection.vault_access_token_id || connection.encrypted_access_token;
-        
-        if (storedValue) {
-          // Check if it looks like a UUID (vault ID)
-          const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
+        // Check for system Serper key first
+        if (providerName === 'serper_api' && hasSystemSerper) {
+          console.log(`[web-search-api] Using system-level Serper API key`);
+          const { data: decryptedKey, error: decryptError } = await supabase.rpc(
+            'vault_decrypt',
+            { vault_id: systemSerperKey.vault_secret_id }
+          );
           
-          if (looksLikeUuid) {
-            // Try to decrypt from vault
-            try {
-              const { data, error } = await supabase.rpc('vault_decrypt', { vault_id: storedValue });
-              if (!error && data) {
-                apiKey = data as string;
-                console.log(`[web-search-api] Successfully decrypted API key from vault`);
-              } else {
-                console.log(`[web-search-api] Vault decryption returned null for UUID ${storedValue}, API key may need to be re-added`);
-                // For UUIDs that fail vault decryption, don't use them as API keys
+          if (decryptError || !decryptedKey) {
+            console.error(`[web-search-api] Failed to decrypt system Serper key:`, decryptError);
+            throw new Error('System Serper API key is configured but could not be decrypted. Please contact your administrator.');
+          }
+          
+          apiKey = decryptedKey as string;
+        } else {
+          // Use user-level key for non-Serper providers
+          const connection = webSearchConnections.find(c => c.service_providers.name === providerName);
+          if (!connection) {
+            console.log(`[web-search-api] No user-level connection found for ${providerName}`);
+            continue;
+          }
+          
+          // Check if we have any form of API key storage
+          const storedValue = connection.vault_access_token_id || connection.encrypted_access_token;
+          
+          if (storedValue) {
+            // Check if it looks like a UUID (vault ID)
+            const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
+            
+            if (looksLikeUuid) {
+              // Try to decrypt from vault
+              try {
+                const { data, error } = await supabase.rpc('vault_decrypt', { vault_id: storedValue });
+                if (!error && data) {
+                  apiKey = data as string;
+                  console.log(`[web-search-api] Successfully decrypted user-level API key from vault`);
+                } else {
+                  console.log(`[web-search-api] Vault decryption returned null for UUID ${storedValue}, API key may need to be re-added`);
+                  apiKey = null;
+                }
+              } catch (vaultError) {
+                console.log(`[web-search-api] Vault decryption error:`, vaultError);
                 apiKey = null;
               }
-            } catch (vaultError) {
-              console.log(`[web-search-api] Vault decryption error:`, vaultError);
-              // For UUIDs that fail vault decryption, don't use them as API keys
-              apiKey = null;
+            } else {
+              // Doesn't look like UUID, assume it's a plain text API key
+              apiKey = storedValue;
+              console.log(`[web-search-api] Using plain text API key`);
             }
-          } else {
-            // Doesn't look like UUID, assume it's a plain text API key
-            apiKey = storedValue;
-            console.log(`[web-search-api] Using plain text API key`);
           }
-        }
 
-        if (!apiKey) {
-          const wasUuid = storedValue && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
-          if (wasUuid) {
-            throw new Error(`Question: Your ${providerName} API key appears to be corrupted. Please delete and re-add your ${providerName} credentials in the integration settings.`);
-          } else {
-            throw new Error(`Question: No API key found for ${providerName}. Please add your ${providerName} API key in the integration settings before I can perform web searches.`);
+          if (!apiKey) {
+            const wasUuid = storedValue && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedValue);
+            if (wasUuid) {
+              throw new Error(`Question: Your ${providerName} API key appears to be corrupted. Please delete and re-add your ${providerName} credentials in the integration settings.`);
+            } else {
+              throw new Error(`Question: No API key found for ${providerName}. Please add your ${providerName} API key in the integration settings before I can perform web searches.`);
+            }
           }
         }
 
