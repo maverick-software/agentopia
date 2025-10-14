@@ -97,13 +97,16 @@ serve(async (req) => {
     const agentIds = agentsData.map(a => a.id);
     const userIds = agentsData.map(a => a.user_id).filter(id => id); // Filter out potential null/undefined user_ids
 
-    // --- Step 3 & 4: Fetch Profiles and Connections in parallel ---
-    const [profilesResult, connectionsResult] = await Promise.all([
-        // Fetch profiles based on userIds from agents
+    // --- Step 3 & 4: Fetch Auth Users and Connections in parallel ---
+    const [authUsersResult, profilesResult, connectionsResult] = await Promise.all([
+        // Fetch auth.users for email (primary source)
+        userIds.length > 0 ? supabaseAdmin.auth.admin.listUsers() : Promise.resolve({ data: { users: [] }, error: null }),
+        
+        // Fetch profiles based on userIds from agents for additional info
         userIds.length > 0 ? supabaseAdmin
             .from('user_profiles')
-            .select(`id, email, username, full_name`)
-            .in('id', userIds) : Promise.resolve({ data: [], error: null }), // Avoid query if no userIds
+            .select(`id, username, full_name`)
+            .in('id', userIds) : Promise.resolve({ data: [], error: null }),
         
         // Fetch connections based on agentIds
         supabaseAdmin
@@ -112,20 +115,19 @@ serve(async (req) => {
             .in('agent_id', agentIds)
     ]);
 
+    if (authUsersResult.error) {
+        console.error("Error fetching auth users:", authUsersResult.error);
+    }
     if (profilesResult.error) {
         console.error("Error fetching user profiles:", profilesResult.error);
-        // Continue but owner info might be missing
     }
-     if (connectionsResult.error) {
+    if (connectionsResult.error) {
         console.error("Error fetching agent connections:", connectionsResult.error);
-        // Continue but connection info might be missing
     }
 
-    // --- Add Explicit Type to Map --- 
-    // Define Profile type inline or import from shared types if available
-    type UserProfile = { id: string; email: string | null; username: string | null; full_name: string | null; };
-    const userProfilesMap = new Map<string, UserProfile>(profilesResult.data?.map(p => [p.id, p as UserProfile]) || []);
-    // -----
+    // Create maps for user data
+    const authUsersMap = new Map(authUsersResult.data?.users?.map(u => [u.id, u.email]) || []);
+    const userProfilesMap = new Map(profilesResult.data?.map(p => [p.id, p]) || []);
 
     const agentConnectionsMap = new Map<string, any[]>();
     connectionsResult.data?.forEach(c => {
@@ -137,8 +139,8 @@ serve(async (req) => {
 
     // --- Step 5: Combine data manually ---
     const processedAgents = agentsData.map(agent => {
-        // Now TS knows the type of ownerProfile from the typed map
-        const ownerProfile = agent.user_id ? userProfilesMap.get(agent.user_id) : null;
+        const userProfile = agent.user_id ? userProfilesMap.get(agent.user_id) : null;
+        const userEmail = agent.user_id ? authUsersMap.get(agent.user_id) : null;
         const connections = agentConnectionsMap.get(agent.id) || [];
 
         // Determine representative discord status (same logic as before)
@@ -152,11 +154,11 @@ serve(async (req) => {
             description: agent.description,
             created_at: agent.created_at,
             active: agent.active,
-            owner: ownerProfile ? { 
-                id: ownerProfile.id,
-                email: ownerProfile.email,
-                username: ownerProfile.username,
-                full_name: ownerProfile.full_name
+            owner: agent.user_id ? { 
+                id: agent.user_id,
+                email: userEmail || null,
+                username: userProfile?.username || null,
+                full_name: userProfile?.full_name || null
              } : null,
             discord_status: discord_status,
             enabled_guild_count: enabled_guild_count,

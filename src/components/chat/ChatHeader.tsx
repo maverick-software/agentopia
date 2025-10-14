@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MoreVertical, FolderPlus, Archive, Flag, Trash2, Share } from 'lucide-react';
+import { ArrowLeft, MoreVertical, FolderPlus, Archive, Flag, Trash2, Share, MessageSquare, Mic, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -8,10 +8,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { Button } from '../ui/button';
 import type { Database } from '../../types/database.types';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 import { toast } from 'react-hot-toast';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
+import { cn } from '@/lib/utils';
+
+export type ChatMode = 'text' | 'voice' | 'realtime';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -19,6 +23,8 @@ interface ChatHeaderProps {
   agent: Agent | null;
   agentId: string;
   conversationId?: string;
+  chatMode?: ChatMode;
+  onChatModeChange?: (mode: ChatMode) => void;
   onShowAgentSettings: () => void;
 }
 
@@ -26,6 +32,8 @@ export function ChatHeader({
   agent,
   agentId,
   conversationId,
+  chatMode = 'text',
+  onChatModeChange,
   onShowAgentSettings
 }: ChatHeaderProps) {
   const supabase = useSupabaseClient();
@@ -95,8 +103,9 @@ export function ChatHeader({
   };
 
   return (
-    <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
-      <div className="flex items-center space-x-3">
+    <div className="flex-shrink-0 bg-card">
+      <div className="flex items-center justify-between px-4 pt-2.5 pb-0.5">
+        <div className="flex items-center space-x-3">
         <button
           onClick={() => navigate('/agents')}
           className="p-1.5 hover:bg-accent rounded-lg transition-colors"
@@ -185,5 +194,50 @@ export function ChatHeader({
         </DropdownMenu>
       </div>
     </div>
+
+    {/* Chat Mode Switcher */}
+    {onChatModeChange && (
+      <div className="px-4 pb-2 border-b border-border">
+        <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChatModeChange('text')}
+            className={cn(
+              'flex-1 h-8 text-xs',
+              chatMode === 'text' && 'bg-background shadow-sm'
+            )}
+          >
+            <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+            Text
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChatModeChange('voice')}
+            className={cn(
+              'flex-1 h-8 text-xs',
+              chatMode === 'voice' && 'bg-background shadow-sm'
+            )}
+          >
+            <Mic className="w-3.5 h-3.5 mr-1.5" />
+            Voice
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChatModeChange('realtime')}
+            className={cn(
+              'flex-1 h-8 text-xs',
+              chatMode === 'realtime' && 'bg-background shadow-sm'
+            )}
+          >
+            <Radio className="w-3.5 h-3.5 mr-1.5" />
+            Real-time
+          </Button>
+        </div>
+      </div>
+    )}
+  </div>
   );
 }

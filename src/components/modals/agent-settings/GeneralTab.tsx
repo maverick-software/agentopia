@@ -140,14 +140,31 @@ export const GeneralTab = forwardRef<TabRef, GeneralTabProps>(({ agentId, agentD
     setSaveState('saving');
     
     try {
+      // Check if user is admin - admins can edit any agent
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role_id, roles(name)')
+        .eq('user_id', user?.id);
+      
+      const isAdmin = roles?.some((r: any) => r.roles?.name === 'admin');
+      
       // Update basic agent info (only description, name moved to Identity tab)
-      const { data: agentData, error: agentError } = await supabase
+      // Admin users can update any agent, regular users only their own
+      let agentQuery = supabase
         .from('agents')
         .update({
           description: description.trim(),
           updated_at: new Date().toISOString()
         })
-        .eq('id', agentId)
+        .eq('id', agentId);
+      
+      // Only filter by user_id if not admin
+      if (!isAdmin) {
+        agentQuery = agentQuery.eq('user_id', user?.id);
+      }
+      
+      const { data: agentData, error: agentError } = await agentQuery
         .select()
         .single();
 

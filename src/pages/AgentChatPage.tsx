@@ -10,8 +10,9 @@ import type { Database } from '../types/database.types';
 // Import extracted components
 import { MessageList, ChatStarterScreen } from '../components/chat/MessageComponents';
 import { ChatInput } from '../components/chat/ChatInput';
-import { ChatHeader } from '../components/chat/ChatHeader';
+import { ChatHeader, type ChatMode } from '../components/chat/ChatHeader';
 import { ChatModals } from '../components/chat/ChatModals';
+import { RealtimeVoiceChat } from '../components/voice/RealtimeVoiceChat';
 
 // Import custom hooks
 import { useConversationLifecycle } from '../hooks/chat/useConversationLifecycle';
@@ -34,6 +35,7 @@ export function AgentChatPage() {
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>('text');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -440,6 +442,8 @@ export function AgentChatPage() {
           agent={agent}
           agentId={agentId || ''}
           conversationId={conversationHook.conversationLifecycle.status === 'active' ? conversationHook.conversationLifecycle.id : undefined}
+          chatMode={chatMode}
+          onChatModeChange={setChatMode}
           onShowAgentSettings={() => setShowAgentSettingsModal(true)}
         />
 
@@ -482,22 +486,31 @@ export function AgentChatPage() {
           )}
         </div>
 
-        {/* Chat Input */}
-        <ChatInput
-          input={input}
-          setInput={setInput}
-          agent={agent}
-          sending={sending}
-          uploading={uploadHook.uploading}
-          uploadProgress={uploadHook.uploadProgress}
-          attachedDocuments={uploadHook.attachedDocuments}
-          onSubmit={handleSubmit}
-          onKeyDown={handleKeyDown}
-          onFileUpload={uploadHook.handleFileUpload}
-          onRemoveAttachment={uploadHook.handleRemoveAttachment}
-          adjustTextareaHeight={adjustTextareaHeight}
-          onShowAgentSettings={() => setShowAgentSettingsModal(true)}
-        />
+        {/* Chat Input - Mode-dependent rendering */}
+        {chatMode === 'realtime' ? (
+          <RealtimeVoiceChat
+            conversationId={conversationHook.conversationLifecycle.id || ''}
+            agentId={agentId || ''}
+            voice="alloy"
+            onClose={() => setChatMode('text')}
+          />
+        ) : (
+          <ChatInput
+            input={input}
+            setInput={setInput}
+            agent={agent}
+            sending={sending}
+            uploading={uploadHook.uploading}
+            uploadProgress={uploadHook.uploadProgress}
+            attachedDocuments={uploadHook.attachedDocuments}
+            onSubmit={handleSubmit}
+            onKeyDown={handleKeyDown}
+            onFileUpload={uploadHook.handleFileUpload}
+            onRemoveAttachment={uploadHook.handleRemoveAttachment}
+            adjustTextareaHeight={adjustTextareaHeight}
+            onShowAgentSettings={() => setShowAgentSettingsModal(true)}
+          />
+        )}
       </div>
 
       {/* Chat Modals */}
