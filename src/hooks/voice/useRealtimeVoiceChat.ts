@@ -1,5 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useVoiceActivityDetection } from './useVoiceActivityDetection';
+import { usePushToTalk, type PTTKey } from './usePushToTalk';
+
+export type RecordingMode = 'manual' | 'conversational' | 'push-to-talk';
 
 interface TranscriptMessage {
   role: 'user' | 'assistant' | 'system';
@@ -18,6 +22,8 @@ interface UseRealtimeVoiceChatOptions {
   conversationId: string;
   agentId: string;
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+  recordingMode?: RecordingMode;
+  pttKey?: PTTKey;
   onError?: (error: Error) => void;
   onTranscriptUpdate?: (transcript: TranscriptMessage[]) => void;
   onToolExecution?: (tool: ToolExecution) => void;
@@ -38,6 +44,8 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
     conversationId,
     agentId,
     voice = 'alloy',
+    recordingMode = 'manual',
+    pttKey = 'Space',
     onError,
     onTranscriptUpdate,
     onToolExecution
@@ -62,6 +70,40 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
   const audioQueueRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingAudioRef = useRef(false);
+  const vadInitializedRef = useRef(false);
+
+  // Forward declarations for hooks integration
+  const startRecordingInternal = useRef<() => Promise<void>>(async () => {});
+  const stopRecordingInternal = useRef<() => void>(() => {});
+
+  // Voice Activity Detection (for conversational mode)
+  const vad = useVoiceActivityDetection({
+    enabled: recordingMode === 'conversational' && state.isRecording,
+    silenceThreshold: 0.01,
+    silenceDuration: 1500,
+    minRecordingDuration: 1000,
+    onSilenceDetected: () => {
+      console.log('[RealtimeVoiceChat] VAD triggered auto-stop');
+      stopRecordingInternal.current();
+    },
+    onVolumeChange: (volume) => {
+      setState(prev => ({ ...prev, audioLevel: volume }));
+    }
+  });
+
+  // Push-to-Talk (for PTT mode)
+  const ptt = usePushToTalk({
+    enabled: recordingMode === 'push-to-talk',
+    key: pttKey,
+    onPressStart: () => {
+      console.log('[RealtimeVoiceChat] PTT activated');
+      startRecordingInternal.current();
+    },
+    onPressEnd: () => {
+      console.log('[RealtimeVoiceChat] PTT deactivated');
+      stopRecordingInternal.current();
+    }
+  });
 
   /**
    * Play audio queue
@@ -158,12 +200,20 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       
       streamRef.current = stream;
 
-      // Set up audio visualization
-      audioContextRef.current = new AudioContext();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 256;
-      source.connect(analyserRef.current);
+      // Set up audio visualization (for manual mode only, VAD handles its own)
+      if (recordingMode !== 'conversational') {
+        audioContextRef.current = new AudioContext();
+        const source = audioContextRef.current.createMediaStreamSource(stream);
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 256;
+        source.connect(analyserRef.current);
+      }
+
+      // Initialize VAD for conversational mode
+      if (recordingMode === 'conversational' && !vadInitializedRef.current) {
+        vad.initializeVAD(stream);
+        vadInitializedRef.current = true;
+      }
 
       // Set up MediaRecorder
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
@@ -181,7 +231,13 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       };
 
       mediaRecorder.onstop = async () => {
-        // Stop audio visualization
+        // Clean up VAD
+        if (recordingMode === 'conversational') {
+          vad.cleanup();
+          vadInitializedRef.current = false;
+        }
+
+        // Stop audio visualization (manual mode)
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
           animationFrameRef.current = null;
@@ -206,7 +262,11 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       // Start recording
       mediaRecorder.start();
       setState(prev => ({ ...prev, isRecording: true, audioLevel: 0 }));
-      updateAudioLevel();
+      
+      // Start audio level monitoring (manual mode only)
+      if (recordingMode !== 'conversational') {
+        updateAudioLevel();
+      }
 
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to access microphone');
@@ -214,7 +274,7 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       onError?.(error);
       console.error('[RealtimeVoiceChat] Error starting recording:', error);
     }
-  }, [onError, updateAudioLevel]);
+  }, [onError, updateAudioLevel, recordingMode, vad]);
 
   /**
    * Stop recording
@@ -305,6 +365,13 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
             const event = JSON.parse(jsonStr);
 
             switch (event.event) {
+              case 'conversation_created':
+                // Update conversation ID if it was created on backend
+                console.log('[RealtimeVoiceChat] Conversation created:', event.conversation_id);
+                // Note: We don't store this in state since it's passed as prop
+                // The parent component should handle conversation lifecycle
+                break;
+
               case 'text':
                 // Accumulate text transcript
                 currentAssistantMessage += event.data;
@@ -418,6 +485,12 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
     );
   }, []);
 
+  // Wire up internal refs for VAD and PTT hooks
+  useEffect(() => {
+    startRecordingInternal.current = startRecording;
+    stopRecordingInternal.current = stopRecording;
+  }, [startRecording, stopRecording]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -433,8 +506,12 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
       }
+      // Clean up VAD
+      if (vadInitializedRef.current) {
+        vad.cleanup();
+      }
     };
-  }, []);
+  }, [vad]);
 
   return {
     ...state,
@@ -442,7 +519,10 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
     stopRecording,
     stopPlayback,
     clearTranscript,
-    isSupported: isSupported()
+    isSupported: isSupported(),
+    recordingMode,
+    pttKey,
+    isPTTPressed: ptt.isPressed
   };
 }
 

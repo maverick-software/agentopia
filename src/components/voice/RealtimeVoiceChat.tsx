@@ -1,7 +1,7 @@
-import React from 'react';
-import { Mic, Square, Volume2, Loader2, Wrench } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, X, ChevronLeft, ChevronRight, Loader2, Wrench, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useRealtimeVoiceChat } from '@/hooks/voice/useRealtimeVoiceChat';
+import { useRealtimeVoiceChat, type RecordingMode, type PTTKey } from '@/hooks/voice/useRealtimeVoiceChat';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 
@@ -13,13 +13,44 @@ interface RealtimeVoiceChatProps {
   onClose?: () => void;
 }
 
+const VOICE_OPTIONS = [
+  { value: 'echo', label: 'Echo', description: 'Confident and optimistic' },
+  { value: 'alloy', label: 'Alloy', description: 'Balanced and neutral' },
+  { value: 'shimmer', label: 'Shimmer', description: 'Bright and inquisitive' },
+  { value: 'nova', label: 'Nova', description: 'Warm and friendly' },
+  { value: 'fable', label: 'Fable', description: 'Expressive and dynamic' },
+  { value: 'onyx', label: 'Onyx', description: 'Deep and authoritative' },
+] as const;
+
+const RECORDING_MODES: { value: RecordingMode; label: string; description: string }[] = [
+  { value: 'manual', label: 'Manual', description: 'Click to start/stop recording' },
+  { value: 'conversational', label: 'Conversational', description: 'Auto-stops after silence' },
+  { value: 'push-to-talk', label: 'Push-to-Talk', description: 'Hold key to record' },
+];
+
+const PTT_KEYS: { value: PTTKey; label: string }[] = [
+  { value: 'Space', label: 'Space' },
+  { value: 'Tab', label: 'Tab' },
+  { value: 'Control', label: 'Ctrl' },
+  { value: 'Alt', label: 'Alt' },
+  { value: 'Shift', label: 'Shift' },
+];
+
 export function RealtimeVoiceChat({ 
   conversationId, 
   agentId, 
-  voice = 'alloy',
+  voice: initialVoice = 'alloy',
   className,
   onClose
 }: RealtimeVoiceChatProps) {
+  const [selectedVoice, setSelectedVoice] = useState<typeof initialVoice>(initialVoice);
+  const [showVoiceSelector, setShowVoiceSelector] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>('manual');
+  const [pttKey, setPttKey] = useState<PTTKey>('Space');
+  
+  const selectedVoiceIndex = VOICE_OPTIONS.findIndex(v => v.value === selectedVoice);
+
   const {
     isRecording,
     isProcessing,
@@ -32,11 +63,14 @@ export function RealtimeVoiceChat({
     stopRecording,
     stopPlayback,
     clearTranscript,
-    isSupported
+    isSupported,
+    isPTTPressed
   } = useRealtimeVoiceChat({
     conversationId,
     agentId,
-    voice,
+    voice: selectedVoice,
+    recordingMode,
+    pttKey,
     onError: (err) => {
       toast.error(err.message || 'Voice chat error');
     }
@@ -48,6 +82,14 @@ export function RealtimeVoiceChat({
       toast.error(error);
     }
   }, [error]);
+
+  const handleVoiceChange = (direction: 'prev' | 'next') => {
+    const currentIndex = selectedVoiceIndex;
+    const newIndex = direction === 'next' 
+      ? (currentIndex + 1) % VOICE_OPTIONS.length
+      : (currentIndex - 1 + VOICE_OPTIONS.length) % VOICE_OPTIONS.length;
+    setSelectedVoice(VOICE_OPTIONS[newIndex].value);
+  };
 
   if (!isSupported) {
     return (
@@ -68,183 +110,283 @@ export function RealtimeVoiceChat({
     }
   };
 
+  // Calculate orb animation scale based on audio level or state
+  const orbScale = isRecording 
+    ? 1 + (audioLevel * 0.3) 
+    : isProcessing || isPlaying 
+    ? 1.1 
+    : 1;
+
+  const currentVoiceOption = VOICE_OPTIONS[selectedVoiceIndex];
+
   return (
-    <div className={cn('flex flex-col h-full bg-background', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Volume2 className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold">Real-time Voice Chat</h2>
-          {isPlaying && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
-              Playing
-            </span>
+    <div className={cn('relative flex flex-col items-center justify-center h-full bg-gradient-to-b from-background to-background/95', className)}>
+      {/* Close Button - Top Right */}
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors z-50"
+          title="Close voice chat"
+        >
+          <X className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+        </button>
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex flex-col items-center justify-center flex-1 w-full max-w-2xl px-8">
+        {/* Animated Orb */}
+        <div className="relative mb-12">
+          <div 
+            className={cn(
+              'w-48 h-48 rounded-full transition-all duration-300',
+              'bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600',
+              'shadow-2xl shadow-blue-500/50',
+              isRecording && 'shadow-blue-500/80 animate-pulse',
+              isProcessing && 'animate-spin',
+              isPlaying && 'shadow-blue-400/60'
+            )}
+            style={{
+              transform: `scale(${orbScale})`,
+              transition: 'transform 100ms ease-out'
+            }}
+          >
+            {/* Inner glow effect */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-t from-white/20 to-transparent" />
+            
+            {/* Tool execution overlay */}
+            {currentToolExecution && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-background/90 backdrop-blur-sm rounded-full p-4">
+                  {currentToolExecution.status === 'executing' ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                  ) : currentToolExecution.status === 'completed' ? (
+                    <Wrench className="w-8 h-8 text-green-500" />
+                  ) : (
+                    <Wrench className="w-8 h-8 text-red-500" />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Pulse rings when active */}
+          {(isRecording || isPlaying) && (
+            <>
+              <div className="absolute inset-0 rounded-full border-2 border-blue-400/30 animate-ping" 
+                   style={{ animationDuration: '2s' }} />
+              <div className="absolute inset-0 rounded-full border-2 border-blue-400/20 animate-ping" 
+                   style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
+            </>
           )}
         </div>
-        {onClose && (
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
-          </Button>
-        )}
-      </div>
 
-      {/* Transcript Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {transcript.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-center text-muted-foreground">
-            <div>
-              <Mic className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium">Click the microphone to start talking</p>
-              <p className="text-sm mt-2">Your conversation will appear here in real-time</p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {transcript.map((msg, idx) => (
+        {/* Transcript Display (when active) */}
+        {transcript.length > 0 && (
+          <div className="w-full max-h-48 overflow-y-auto mb-8 space-y-3 px-4">
+            {transcript.slice(-3).map((msg, idx) => (
               <div
                 key={idx}
                 className={cn(
-                  'flex',
-                  msg.role === 'user' ? 'justify-end' : 'justify-start'
+                  'text-center',
+                  msg.role === 'user' ? 'text-foreground' : 'text-muted-foreground'
                 )}
               >
-                <div
-                  className={cn(
-                    'max-w-[80%] rounded-lg px-4 py-2',
-                    msg.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  )}
-                >
-                  <p className="text-sm leading-relaxed">{msg.content}</p>
-                  <span className="text-xs opacity-60 mt-1 block">
-                    {msg.timestamp.toLocaleTimeString()}
-                  </span>
-                </div>
+                <p className={cn(
+                  'text-sm',
+                  msg.role === 'user' ? 'font-medium' : 'font-normal'
+                )}>
+                  {msg.role === 'user' ? 'You: ' : 'AI: '}
+                  {msg.content}
+                </p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Tool Execution Status */}
+        {currentToolExecution && (
+          <div className="mb-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              {currentToolExecution.status === 'executing' && `Executing ${currentToolExecution.name}...`}
+              {currentToolExecution.status === 'completed' && `Completed ${currentToolExecution.name}`}
+              {currentToolExecution.status === 'failed' && `Failed: ${currentToolExecution.name}`}
+            </p>
+          </div>
+        )}
+
+        {/* Settings Modal */}
+        {showSettings ? (
+          <div className="mb-8 text-center animate-in fade-in duration-200">
+            <h3 className="text-lg font-medium mb-6">Recording Settings</h3>
             
-            {/* Tool Execution Indicator */}
-            {currentToolExecution && (
-              <div className="flex justify-start">
-                <div className="max-w-[80%] rounded-lg px-4 py-2 bg-blue-500/10 border border-blue-500/20">
-                  <div className="flex items-center gap-2 text-sm">
-                    {currentToolExecution.status === 'executing' ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                    ) : currentToolExecution.status === 'completed' ? (
-                      <Wrench className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <Wrench className="w-4 h-4 text-red-500" />
+            {/* Recording Mode Selector */}
+            <div className="mb-6">
+              <label className="block text-sm text-muted-foreground mb-3">Recording Mode</label>
+              <div className="flex flex-col gap-2">
+                {RECORDING_MODES.map(mode => (
+                  <button
+                    key={mode.value}
+                    onClick={() => setRecordingMode(mode.value)}
+                    className={cn(
+                      'px-4 py-3 rounded-lg text-left transition-colors',
+                      recordingMode === mode.value
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 hover:bg-muted'
                     )}
-                    <span className="font-medium">
-                      {currentToolExecution.status === 'executing' && `Executing ${currentToolExecution.name}...`}
-                      {currentToolExecution.status === 'completed' && `Completed ${currentToolExecution.name}`}
-                      {currentToolExecution.status === 'failed' && `Failed: ${currentToolExecution.name}`}
-                    </span>
-                  </div>
-                  {currentToolExecution.error && (
-                    <p className="text-xs text-red-500 mt-1">{currentToolExecution.error}</p>
-                  )}
+                    disabled={isRecording}
+                  >
+                    <div className="font-medium">{mode.label}</div>
+                    <div className="text-xs opacity-80">{mode.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* PTT Key Selector (only show if push-to-talk mode) */}
+            {recordingMode === 'push-to-talk' && (
+              <div className="mb-6">
+                <label className="block text-sm text-muted-foreground mb-3">Push-to-Talk Key</label>
+                <div className="flex gap-2 justify-center">
+                  {PTT_KEYS.map(key => (
+                    <button
+                      key={key.value}
+                      onClick={() => setPttKey(key.value)}
+                      className={cn(
+                        'px-4 py-2 rounded-lg transition-colors',
+                        pttKey === key.value
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted/50 hover:bg-muted'
+                      )}
+                      disabled={isRecording}
+                    >
+                      {key.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
-          </>
+
+            <Button
+              onClick={() => setShowSettings(false)}
+              variant="outline"
+              className="mt-4"
+            >
+              Done
+            </Button>
+          </div>
+        ) : showVoiceSelector ? (
+          <div className="mb-8 text-center animate-in fade-in duration-200">
+            <h3 className="text-lg font-medium mb-6">Choose a voice</h3>
+            <div className="flex items-center justify-center gap-6">
+              <button
+                onClick={() => handleVoiceChange('prev')}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="min-w-[200px] text-center">
+                <h4 className="text-xl font-semibold mb-1">{currentVoiceOption.label}</h4>
+                <p className="text-sm text-muted-foreground">{currentVoiceOption.description}</p>
+              </div>
+
+              <button
+                onClick={() => handleVoiceChange('next')}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            <Button
+              onClick={() => setShowVoiceSelector(false)}
+              variant="outline"
+              className="mt-6"
+            >
+              Done
+            </Button>
+          </div>
+        ) : (
+          <div className="mb-8 flex items-center justify-center gap-4">
+            <button
+              onClick={() => setShowVoiceSelector(true)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              disabled={isRecording || isProcessing}
+            >
+              Voice: {currentVoiceOption.label}
+            </button>
+            <span className="text-muted-foreground">|</span>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              disabled={isRecording || isProcessing}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              {recordingMode === 'push-to-talk' ? `PTT: ${pttKey}` : RECORDING_MODES.find(m => m.value === recordingMode)?.label}
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Controls */}
-      <div className="border-t border-border p-4">
-        {/* Audio Level Indicator */}
-        {isRecording && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
-              <span className="text-sm font-medium text-red-500">Recording...</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-              <div 
-                className="h-full bg-red-500 transition-all duration-100"
-                style={{ width: `${audioLevel * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
+      {/* Bottom Controls */}
+      <div className="w-full flex items-center justify-center gap-4 pb-8">
+        {/* Microphone Button */}
+        <button
+          onClick={handleToggleRecording}
+          disabled={isProcessing}
+          className={cn(
+            'w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg',
+            'hover:scale-110 active:scale-95',
+            isRecording 
+              ? 'bg-red-500 hover:bg-red-600 text-white'
+              : isProcessing
+              ? 'bg-muted cursor-not-allowed'
+              : 'bg-white hover:bg-white/90 text-black'
+          )}
+          title={isRecording ? 'Stop recording' : 'Start recording'}
+        >
+          {isProcessing ? (
+            <Loader2 className="w-6 h-6 animate-spin" />
+          ) : (
+            <Mic className="w-6 h-6" />
+          )}
+        </button>
 
-        {/* Main Button */}
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleToggleRecording}
-            disabled={isProcessing}
-            className={cn(
-              'flex-1 h-16 text-lg',
-              isRecording && 'bg-red-500 hover:bg-red-600'
-            )}
-            variant={isRecording ? 'destructive' : 'default'}
+        {/* Close Button (alternative position) */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="w-12 h-12 rounded-full flex items-center justify-center hover:bg-white/10 transition-all"
+            title="Close"
           >
-            {isProcessing ? (
-              <>
-                <Loader2 className="w-6 h-6 mr-2 animate-spin" />
-                Processing...
-              </>
-            ) : isRecording ? (
-              <>
-                <Square className="w-6 h-6 mr-2" />
-                Stop Recording
-              </>
-            ) : (
-              <>
-                <Mic className="w-6 h-6 mr-2" />
-                Start Talking
-              </>
-            )}
-          </Button>
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
-          {/* Additional Controls */}
-          {transcript.length > 0 && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={clearTranscript}
-              disabled={isRecording || isProcessing}
-              title="Clear transcript"
-              className="h-16 w-16"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </Button>
-          )}
-
-          {isPlaying && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={stopPlayback}
-              title="Stop playback"
-              className="h-16 w-16"
-            >
-              <Square className="w-6 h-6" />
-            </Button>
-          )}
-        </div>
-
-        {/* Instructions */}
-        {!isRecording && !isProcessing && transcript.length === 0 && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              Click "Start Talking" and speak naturally. The AI will respond with voice and text.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              MCP tools will be executed automatically when needed.
-            </p>
-          </div>
+      {/* Status Text */}
+      <div className="absolute bottom-24 left-0 right-0 text-center">
+        {isRecording && (
+          <p className="text-sm text-muted-foreground animate-pulse">
+            {recordingMode === 'conversational' ? 'Listening... (will auto-stop)' :
+             recordingMode === 'push-to-talk' ? `Holding ${pttKey}...` :
+             'Listening...'}
+          </p>
+        )}
+        {isProcessing && (
+          <p className="text-sm text-muted-foreground">
+            Processing...
+          </p>
+        )}
+        {isPlaying && (
+          <p className="text-sm text-muted-foreground">
+            Speaking...
+          </p>
+        )}
+        {!isRecording && !isProcessing && !isPlaying && recordingMode === 'push-to-talk' && (
+          <p className="text-xs text-muted-foreground/60">
+            Hold {pttKey} to talk
+          </p>
         )}
       </div>
     </div>

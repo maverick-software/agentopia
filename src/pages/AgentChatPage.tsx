@@ -438,55 +438,7 @@ export function AgentChatPage() {
     <div className="flex h-full bg-background overflow-hidden">
       {/* Main Column */}
       <div className="flex flex-col flex-1 min-w-0">
-        <ChatHeader
-          agent={agent}
-          agentId={agentId || ''}
-          conversationId={conversationHook.conversationLifecycle.status === 'active' ? conversationHook.conversationLifecycle.id : undefined}
-          chatMode={chatMode}
-          onChatModeChange={setChatMode}
-          onShowAgentSettings={() => setShowAgentSettingsModal(true)}
-        />
-
-        {/* Messages Container */}
-        <div className="flex-1 min-h-0 relative flex justify-center">
-          <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10 opacity-0 transition-opacity duration-300" 
-               style={{ opacity: messageHook.messages.length > 0 ? 1 : 0 }} />
-          
-          {/* Show Chat Starter only when no conversation exists */}
-          {conversationHook.conversationLifecycle.status === 'none' ? (
-            <div className="w-full">
-              <ChatStarterScreen agent={agent} user={user} />
-            </div>
-          ) : messageHook.isHistoryLoading ? (
-            // Show loading spinner only when actually loading history from database
-            <div className="flex items-center justify-center h-full w-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            // Show messages (even if empty - will show thinking indicator)
-            <div className="max-w-3xl w-full overflow-y-auto chat-scrollbar px-4 py-6 pb-8">
-              <MessageList 
-                messages={messageHook.messages}
-                agent={agent}
-                user={user}
-                aiState={aiHook.aiState}
-                currentTool={aiHook.currentTool}
-                processSteps={aiHook.processSteps}
-                thinkingMessageIndex={aiHook.thinkingMessageIndex}
-                formatMarkdown={(text: string) => text}
-                currentProcessingDetails={currentProcessingDetails}
-                onShowProcessModal={(details) => {
-                  console.log('[AgentChatPage] Process modal opened with details:', details);
-                  setCurrentProcessingDetails(details);
-                  setShowProcessModal(true);
-                }}
-              />
-              <div ref={messageHook.messagesEndRef} />
-            </div>
-          )}
-        </div>
-
-        {/* Chat Input - Mode-dependent rendering */}
+        {/* Real-time Mode - Full Screen Takeover */}
         {chatMode === 'realtime' ? (
           <RealtimeVoiceChat
             conversationId={conversationHook.conversationLifecycle.id || ''}
@@ -495,21 +447,72 @@ export function AgentChatPage() {
             onClose={() => setChatMode('text')}
           />
         ) : (
-          <ChatInput
-            input={input}
-            setInput={setInput}
-            agent={agent}
-            sending={sending}
-            uploading={uploadHook.uploading}
-            uploadProgress={uploadHook.uploadProgress}
-            attachedDocuments={uploadHook.attachedDocuments}
-            onSubmit={handleSubmit}
-            onKeyDown={handleKeyDown}
-            onFileUpload={uploadHook.handleFileUpload}
-            onRemoveAttachment={uploadHook.handleRemoveAttachment}
-            adjustTextareaHeight={adjustTextareaHeight}
-            onShowAgentSettings={() => setShowAgentSettingsModal(true)}
-          />
+          <>
+            <ChatHeader
+              agent={agent}
+              agentId={agentId || ''}
+              conversationId={conversationHook.conversationLifecycle.status === 'active' ? conversationHook.conversationLifecycle.id : undefined}
+              chatMode={chatMode}
+              onChatModeChange={setChatMode}
+              onShowAgentSettings={() => setShowAgentSettingsModal(true)}
+            />
+
+            {/* Messages Container */}
+            <div className="flex-1 min-h-0 relative flex justify-center">
+              <div className="absolute top-0 left-0 right-0 h-20 chat-gradient-fade-top pointer-events-none z-10 opacity-0 transition-opacity duration-300" 
+                   style={{ opacity: messageHook.messages.length > 0 ? 1 : 0 }} />
+              
+              {/* Show Chat Starter only when no conversation exists */}
+              {conversationHook.conversationLifecycle.status === 'none' ? (
+                <div className="w-full">
+                  <ChatStarterScreen agent={agent} user={user} />
+                </div>
+              ) : messageHook.isHistoryLoading ? (
+                // Show loading spinner only when actually loading history from database
+                <div className="flex items-center justify-center h-full w-full">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                // Show messages (even if empty - will show thinking indicator)
+                <div className="max-w-3xl w-full overflow-y-auto chat-scrollbar px-4 py-6 pb-8">
+                  <MessageList 
+                    messages={messageHook.messages}
+                    agent={agent}
+                    user={user}
+                    aiState={aiHook.aiState}
+                    currentTool={aiHook.currentTool}
+                    processSteps={aiHook.processSteps}
+                    thinkingMessageIndex={aiHook.thinkingMessageIndex}
+                    formatMarkdown={(text: string) => text}
+                    currentProcessingDetails={currentProcessingDetails}
+                    onShowProcessModal={(details) => {
+                      console.log('[AgentChatPage] Process modal opened with details:', details);
+                      setCurrentProcessingDetails(details);
+                      setShowProcessModal(true);
+                    }}
+                  />
+                  <div ref={messageHook.messagesEndRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Chat Input */}
+            <ChatInput
+              input={input}
+              setInput={setInput}
+              agent={agent}
+              sending={sending}
+              uploading={uploadHook.uploading}
+              uploadProgress={uploadHook.uploadProgress}
+              attachedDocuments={uploadHook.attachedDocuments}
+              onSubmit={handleSubmit}
+              onKeyDown={handleKeyDown}
+              onFileUpload={uploadHook.handleFileUpload}
+              onRemoveAttachment={uploadHook.handleRemoveAttachment}
+              adjustTextareaHeight={adjustTextareaHeight}
+              onShowAgentSettings={() => setShowAgentSettingsModal(true)}
+            />
+          </>
         )}
       </div>
 

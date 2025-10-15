@@ -13,7 +13,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 interface VoiceChatRequest {
   audio_input: string;              // Base64 encoded audio
-  conversation_id: string;          // Existing conversation
+  conversation_id?: string;         // Existing conversation (optional - will create if not provided)
   agent_id: string;                 // Agent configuration
   format?: 'wav' | 'mp3' | 'pcm16'; // Audio format (default: wav)
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'; // Voice selection
@@ -252,13 +252,39 @@ Deno.serve(async (req) => {
 
     // Parse request
     const body: VoiceChatRequest = await req.json();
-    const { audio_input, conversation_id, agent_id, format = 'wav', voice = 'alloy' } = body;
+    let { audio_input, conversation_id, agent_id, format = 'wav', voice = 'alloy' } = body;
 
-    if (!audio_input || !conversation_id || !agent_id) {
+    if (!audio_input || !agent_id) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: audio_input, conversation_id, agent_id' }),
+        JSON.stringify({ error: 'Missing required fields: audio_input, agent_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Create conversation if it doesn't exist
+    if (!conversation_id || conversation_id.trim() === '') {
+      console.log('[VoiceChatStream] Creating new conversation');
+      const { data: newConv, error: convError } = await supabaseServiceClient
+        .from('conversations')
+        .insert({
+          agent_id,
+          user_id: user.id,
+          title: 'Voice Conversation',
+          metadata: { started_via: 'realtime_voice' }
+        })
+        .select('id')
+        .single();
+
+      if (convError || !newConv) {
+        console.error('[VoiceChatStream] Error creating conversation:', convError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to create conversation' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      conversation_id = newConv.id;
+      console.log(`[VoiceChatStream] Created new conversation: ${conversation_id}`);
     }
 
     console.log(`[VoiceChatStream] Starting voice chat for user ${user.id}, agent ${agent_id}`);
@@ -351,6 +377,12 @@ Deno.serve(async (req) => {
         let fullTextTranscript = '';
         let audioChunks: string[] = [];
         let toolCalls: any[] = [];
+
+        // Send conversation_id immediately
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          event: 'conversation_created',
+          conversation_id: conversation_id
+        })}\n\n`));
 
         try {
           // Parse streaming response from OpenAI
