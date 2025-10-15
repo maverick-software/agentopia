@@ -1,7 +1,10 @@
 import React, { useRef, useCallback, useEffect } from 'react';
-import { Send, Paperclip, Sliders, X, FileText } from 'lucide-react';
+import { Send, Paperclip, Sliders, X, FileText, Mic, AudioLines } from 'lucide-react';
 import type { Database } from '../../types/database.types';
 import { VoiceInputButton } from '@/components/voice/VoiceInputButton';
+import { cn } from '@/lib/utils';
+
+export type ChatMode = 'text' | 'voice' | 'realtime';
 
 type Agent = Database['public']['Tables']['agents']['Row'];
 
@@ -22,6 +25,8 @@ interface ChatInputProps {
   uploading: boolean;
   uploadProgress: {[key: string]: number};
   attachedDocuments?: AttachedDocument[];
+  chatMode?: ChatMode;
+  onChatModeChange?: (mode: ChatMode) => void;
   onSubmit: (e: React.FormEvent) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFileUpload: (files: FileList, type: 'document' | 'image') => void;
@@ -38,6 +43,8 @@ export function ChatInput({
   uploading, 
   uploadProgress, 
   attachedDocuments = [],
+  chatMode = 'text',
+  onChatModeChange,
   onSubmit, 
   onKeyDown, 
   onFileUpload,
@@ -47,6 +54,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const voiceButtonRef = useRef<HTMLButtonElement>(null);
 
   // Auto-resize textarea when input changes
   const resizeTextarea = useCallback(() => {
@@ -152,18 +160,17 @@ export function ChatInput({
                   overflowY: 'hidden'
                 }}
               />
-              {/* Voice input button inside text area - disappears when typing */}
-              {!input.trim() && (
-                <div className="flex-shrink-0 mt-0.5">
-                  <VoiceInputButton
-                    onTranscription={(text) => {
-                      setInput(text);
-                      adjustTextareaHeight();
-                    }}
-                    disabled={!agent}
-                  />
-                </div>
-              )}
+              {/* Hidden voice input button that bottom mic icon will trigger */}
+              <div className="hidden">
+                <VoiceInputButton
+                  ref={voiceButtonRef}
+                  onTranscription={(text) => {
+                    setInput(text);
+                    adjustTextareaHeight();
+                  }}
+                  disabled={!agent}
+                />
+              </div>
             </div>
             
             {/* Tools row - Inside container with visual separation */}
@@ -182,7 +189,7 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                className="p-2 text-foreground/70 hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                 disabled={!agent || uploading}
                 title="Attach file"
               >
@@ -194,7 +201,7 @@ export function ChatInput({
                 <button
                   type="button"
                   onClick={onShowAgentSettings}
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                  className="p-2 text-foreground/70 hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                   disabled={!agent}
                   title="Agent Settings"
                 >
@@ -210,15 +217,46 @@ export function ChatInput({
               )}
             </div>
 
-              {/* Right side - Send button */}
-              <button
-                type="submit"
-                disabled={!input.trim() || !agent || sending}
-                className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
-                title="Send message"
-              >
-                <Send className="w-4 h-4" />
-              </button>
+              {/* Right side - Voice modes and Send button */}
+              <div className="flex items-center space-x-1">
+                {/* Voice input button - triggers recording */}
+                <VoiceInputButton
+                  onTranscription={(text) => {
+                    setInput(text);
+                    adjustTextareaHeight();
+                  }}
+                  disabled={!agent}
+                  className="p-2 rounded-lg transition-colors text-foreground/70 hover:text-foreground hover:bg-accent"
+                />
+
+                {/* Real-time voice mode button */}
+                {onChatModeChange && (
+                  <button
+                    type="button"
+                    onClick={() => onChatModeChange('realtime')}
+                    className={cn(
+                      "p-2 rounded-lg transition-colors",
+                      chatMode === 'realtime'
+                        ? 'text-foreground bg-accent'
+                        : 'text-foreground/70 hover:text-foreground hover:bg-accent'
+                    )}
+                    disabled={!agent}
+                    title="Real-time voice mode"
+                  >
+                    <AudioLines className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Send button */}
+                <button
+                  type="submit"
+                  disabled={!input.trim() || !agent || sending}
+                  className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
+                  title="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </form>

@@ -452,8 +452,6 @@ export function AgentChatPage() {
               agent={agent}
               agentId={agentId || ''}
               conversationId={conversationHook.conversationLifecycle.status === 'active' ? conversationHook.conversationLifecycle.id : undefined}
-              chatMode={chatMode}
-              onChatModeChange={setChatMode}
               onShowAgentSettings={() => setShowAgentSettingsModal(true)}
             />
 
@@ -505,6 +503,8 @@ export function AgentChatPage() {
               uploading={uploadHook.uploading}
               uploadProgress={uploadHook.uploadProgress}
               attachedDocuments={uploadHook.attachedDocuments}
+              chatMode={chatMode}
+              onChatModeChange={setChatMode}
               onSubmit={handleSubmit}
               onKeyDown={handleKeyDown}
               onFileUpload={uploadHook.handleFileUpload}
