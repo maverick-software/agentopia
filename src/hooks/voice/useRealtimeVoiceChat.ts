@@ -96,11 +96,19 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
     enabled: recordingMode === 'push-to-talk',
     key: pttKey,
     onPressStart: () => {
-      console.log('[RealtimeVoiceChat] PTT activated');
+      console.log('[RealtimeVoiceChat] PTT activated, starting recording');
+      if (state.isRecording) {
+        console.warn('[RealtimeVoiceChat] Already recording, ignoring PTT start');
+        return;
+      }
       startRecordingInternal.current();
     },
     onPressEnd: () => {
-      console.log('[RealtimeVoiceChat] PTT deactivated');
+      console.log('[RealtimeVoiceChat] PTT deactivated, stopping recording');
+      if (!state.isRecording) {
+        console.warn('[RealtimeVoiceChat] Not recording, ignoring PTT end');
+        return;
+      }
       stopRecordingInternal.current();
     }
   });
@@ -186,6 +194,17 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
    */
   const startRecording = useCallback(async () => {
     try {
+      // Clean up any existing recording first
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        console.log('[RealtimeVoiceChat] Stopping existing MediaRecorder');
+        mediaRecorderRef.current.stop();
+      }
+      if (streamRef.current) {
+        console.log('[RealtimeVoiceChat] Stopping existing stream');
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+
       setState(prev => ({ ...prev, error: null, transcript: [] }));
 
       // Request microphone access
@@ -193,8 +212,8 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 24000  // GPT-4o audio works best with 24kHz
+          autoGainControl: true
+          // Let browser choose best sample rate
         } 
       });
       
@@ -225,12 +244,20 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
+        console.log('[RealtimeVoiceChat] Data available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
+      mediaRecorder.onerror = (event: any) => {
+        console.error('[RealtimeVoiceChat] MediaRecorder error:', event.error);
+        setState(prev => ({ ...prev, error: 'Recording failed: ' + event.error?.message }));
+      };
+
       mediaRecorder.onstop = async () => {
+        console.log('[RealtimeVoiceChat] MediaRecorder onstop fired, total chunks:', audioChunksRef.current.length);
+        console.trace('[RealtimeVoiceChat] onstop call stack');
         // Clean up VAD
         if (recordingMode === 'conversational') {
           vad.cleanup();
@@ -259,8 +286,11 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
         await processAudioStream();
       };
 
-      // Start recording
-      mediaRecorder.start();
+      // Start recording (without timeslice - data will be available when stopped)
+      console.log('[RealtimeVoiceChat] Starting MediaRecorder with mimeType:', mimeType);
+      console.log('[RealtimeVoiceChat] Stream active:', stream.active, 'tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+      mediaRecorder.start(); // No timeslice - collect all data when stopped
+      console.log('[RealtimeVoiceChat] MediaRecorder state after start:', mediaRecorder.state);
       setState(prev => ({ ...prev, isRecording: true, audioLevel: 0 }));
       
       // Start audio level monitoring (manual mode only)
@@ -280,7 +310,10 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
    * Stop recording
    */
   const stopRecording = useCallback(() => {
+    console.log('[RealtimeVoiceChat] stopRecording called, isRecording:', state.isRecording, 'MediaRecorder state:', mediaRecorderRef.current?.state);
+    console.trace('[RealtimeVoiceChat] stopRecording call stack');
     if (mediaRecorderRef.current && state.isRecording) {
+      console.log('[RealtimeVoiceChat] Actually stopping MediaRecorder');
       mediaRecorderRef.current.stop();
       setState(prev => ({ ...prev, isRecording: false, audioLevel: 0 }));
     }
@@ -298,8 +331,8 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
         type: mediaRecorderRef.current?.mimeType || 'audio/webm' 
       });
 
-      if (audioBlob.size < 100) {
-        throw new Error('Recording is too short. Please try again.');
+      if (audioBlob.size < 1000) {
+        throw new Error('Recording is too short. Hold the space bar for at least 1-2 seconds to record your message.');
       }
 
       // Convert to base64

@@ -58,7 +58,10 @@ async function getAgentTools(supabase: any, agentId: string, userId: string): Pr
   try {
     // Call existing get-agent-tools edge function
     const { data, error } = await supabase.functions.invoke('get-agent-tools', {
-      body: { agent_id: agentId }
+      body: { 
+        agent_id: agentId,
+        user_id: userId  // Required parameter
+      }
     });
 
     if (error) {
@@ -177,6 +180,7 @@ async function executeToolCall(
 async function saveMessage(
   supabase: any,
   conversationId: string,
+  sessionId: string,
   agentId: string,
   userId: string,
   role: 'user' | 'assistant',
@@ -188,14 +192,17 @@ async function saveMessage(
       .from('chat_messages_v2')
       .insert({
         conversation_id: conversationId,
-        agent_id: agentId,
-        user_id: userId,
+        session_id: sessionId,
+        sender_agent_id: role === 'assistant' ? agentId : null,
+        sender_user_id: role === 'user' ? userId : null,
         role,
-        content,
+        content: typeof content === 'string' 
+          ? { type: 'text', text: content } // V2 format requires type field
+          : content,
         metadata: {
           ...metadata,
           input_method: 'realtime_voice',
-          model: 'gpt-4o-audio-preview',
+          model: 'gpt-4o',
           audio_stored: false  // Explicitly mark that we don't store audio
         }
       })
@@ -251,10 +258,21 @@ Deno.serve(async (req) => {
     }
 
     // Parse request
+    console.log('[VoiceChatStream] Parsing request body...');
     const body: VoiceChatRequest = await req.json();
     let { audio_input, conversation_id, agent_id, format = 'wav', voice = 'alloy' } = body;
 
+    console.log('[VoiceChatStream] Request params:', {
+      has_audio: !!audio_input,
+      audio_length: audio_input?.length,
+      conversation_id,
+      agent_id,
+      format,
+      voice
+    });
+
     if (!audio_input || !agent_id) {
+      console.error('[VoiceChatStream] Missing required fields');
       return new Response(
         JSON.stringify({ error: 'Missing required fields: audio_input, agent_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -289,6 +307,9 @@ Deno.serve(async (req) => {
 
     console.log(`[VoiceChatStream] Starting voice chat for user ${user.id}, agent ${agent_id}`);
 
+    // Get or create session_id (for V2 messages, we use conversation_id as session_id for simplicity)
+    const session_id = conversation_id;
+
     // Get OpenAI API key
     const OPENAI_API_KEY = await getOpenAIAPIKey(supabaseServiceClient);
     if (!OPENAI_API_KEY) {
@@ -306,37 +327,81 @@ Deno.serve(async (req) => {
 
     console.log(`[VoiceChatStream] Loaded ${tools.length} tools and ${history.length} history messages`);
 
-    // Build messages array for GPT-4o
-    // Note: For audio input, we keep it simple with just system + audio
-    // History context is maintained in the database but not sent to OpenAI for audio calls
+    // Step 1: Transcribe audio using Whisper API directly
+    console.log('[VoiceChatStream] Transcribing audio with Whisper...');
+    console.log(`[VoiceChatStream] Audio format: ${format}`);
+    
+    // Convert base64 to buffer for Whisper
+    const audioBuffer = Uint8Array.from(atob(audio_input), c => c.charCodeAt(0));
+    console.log(`[VoiceChatStream] Audio buffer size: ${audioBuffer.length} bytes`);
+    
+    // Create multipart form data for Whisper API
+    // Whisper accepts: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
+    const formData = new FormData();
+    const mimeType = format === 'webm' ? 'audio/webm' : `audio/${format}`;
+    formData.append('file', new Blob([audioBuffer], { type: mimeType }), `audio.${format}`);
+    formData.append('model', 'whisper-1');
+    
+    const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: formData
+    });
+
+    if (!transcriptionResponse.ok) {
+      const errorData = await transcriptionResponse.json().catch(() => ({}));
+      console.error('[VoiceChatStream] Whisper error:', errorData);
+      return new Response(
+        JSON.stringify({ 
+          error: errorData.error?.message || `Transcription failed: ${transcriptionResponse.status}` 
+        }),
+        { status: transcriptionResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const transcription = await transcriptionResponse.json();
+    const userText = transcription.text || '';
+    console.log(`[VoiceChatStream] Transcribed text: ${userText}`);
+
+    // Build messages array for GPT-4o with text (not audio)
     const messages: any[] = [
-      // System message (if agent has instructions)
-      // TODO: Fetch from agent.instructions field
+      // System message
       {
         role: 'system',
-        content: 'You are a helpful AI assistant with real-time voice capabilities.'
+        content: 'You are a helpful AI assistant with voice capabilities. Keep responses concise and natural for voice interaction.'
       },
-      // Current audio input
-      // Note: We don't specify format and let OpenAI auto-detect it
+      // Conversation history - extract text content from V2 format
+      ...history.map(msg => {
+        let textContent = '';
+        
+        if (typeof msg.content === 'string') {
+          textContent = msg.content;
+        } else if (msg.content?.type === 'text' && msg.content?.text) {
+          textContent = msg.content.text;
+        } else if (msg.content?.text) {
+          textContent = msg.content.text;
+        } else {
+          textContent = JSON.stringify(msg.content);
+        }
+        
+        return {
+          role: msg.role,
+          content: textContent
+        };
+      }),
+      // Current user input (transcribed text)
       {
         role: 'user',
-        content: [
-          {
-            type: 'input_audio',
-            input_audio: {
-              data: audio_input
-              // Format omitted - let OpenAI auto-detect
-            }
-          }
-        ]
+        content: userText
       }
     ];
 
     // Format tools for OpenAI
     const formattedTools = formatToolsForOpenAI(tools);
 
-    // Call GPT-4o Audio Preview API with streaming
-    // Note: Input format (in messages) can be wav/mp3, but output format must be pcm16 for streaming
+    // Call GPT-4o with streaming (text only, we'll synthesize audio after)
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -344,12 +409,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-audio-preview',
-        modalities: ['text', 'audio'],
-        audio: { 
-          voice: voice, 
-          format: 'pcm16'  // Output format must be pcm16 for streaming
-        },
+        model: 'gpt-4o',
         messages: messages,
         tools: formattedTools.length > 0 ? formattedTools : undefined,
         stream: true,
@@ -484,10 +544,11 @@ Deno.serve(async (req) => {
           await saveMessage(
             supabaseServiceClient,
             conversation_id,
+            session_id,
             agent_id,
             user.id,
             'user',
-            '[Voice input - transcript not available]', // We don't have user transcription from GPT-4o
+            userText, // Use the actual transcribed text
             { voice_duration_ms: 0 }
           );
 
@@ -495,6 +556,7 @@ Deno.serve(async (req) => {
           const assistantMessageId = await saveMessage(
             supabaseServiceClient,
             conversation_id,
+            session_id,
             agent_id,
             user.id,
             'assistant',
@@ -504,6 +566,46 @@ Deno.serve(async (req) => {
               tool_calls: toolCalls.length > 0 ? toolCalls : undefined
             }
           );
+
+          // Synthesize audio response using OpenAI TTS API directly
+          console.log('[VoiceChatStream] Synthesizing audio with voice:', voice, 'text length:', fullTextTranscript.length);
+          try {
+            const ttsResponse = await fetch('https://api.openai.com/v1/audio/speech', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: 'tts-1',
+                input: fullTextTranscript,
+                voice: voice,
+                response_format: 'mp3'
+              })
+            });
+
+            if (ttsResponse.ok) {
+              // Convert audio to base64
+              const audioBuffer = await ttsResponse.arrayBuffer();
+              const base64Audio = btoa(
+                new Uint8Array(audioBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+              );
+
+              // Send audio event with base64 audio
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                event: 'audio',
+                audio: base64Audio,
+                format: 'mp3',
+                message_id: assistantMessageId
+              })}\n\n`));
+              console.log('[VoiceChatStream] Audio synthesized and sent, length:', base64Audio.length);
+            } else {
+              const ttsError = await ttsResponse.json().catch(() => ({}));
+              console.error('[VoiceChatStream] TTS API error:', ttsError);
+            }
+          } catch (ttsErr) {
+            console.error('[VoiceChatStream] TTS synthesis failed:', ttsErr);
+          }
 
           // Send completion event
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({

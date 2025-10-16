@@ -24,6 +24,14 @@ export function usePushToTalk({
 }: PTTOptions) {
   const isPressingRef = useRef<boolean>(false);
   const isRecordingRef = useRef<boolean>(false);
+  const onPressStartRef = useRef(onPressStart);
+  const onPressEndRef = useRef(onPressEnd);
+
+  // Keep refs up to date
+  useEffect(() => {
+    onPressStartRef.current = onPressStart;
+    onPressEndRef.current = onPressEnd;
+  }, [onPressStart, onPressEnd]);
 
   /**
    * Map PTT key to keyboard event key
@@ -75,8 +83,11 @@ export function usePushToTalk({
       event.preventDefault();
     }
 
-    // Don't trigger if already pressing or recording
-    if (isPressingRef.current || isRecordingRef.current) return;
+    // Don't trigger if already pressing or recording (important for key repeat)
+    if (isPressingRef.current || isRecordingRef.current) {
+      // Key is being held down (repeat event), just prevent default and return
+      return;
+    }
 
     // Ignore if user is typing in an input field
     const target = event.target as HTMLElement;
@@ -91,8 +102,8 @@ export function usePushToTalk({
     console.log('[PTT] Key pressed, starting recording');
     isPressingRef.current = true;
     isRecordingRef.current = true;
-    onPressStart();
-  }, [enabled, key, isTargetKey, onPressStart]);
+    onPressStartRef.current();
+  }, [enabled, key, isTargetKey]);
 
   /**
    * Handle key up event
@@ -106,24 +117,26 @@ export function usePushToTalk({
     console.log('[PTT] Key released, stopping recording');
     isPressingRef.current = false;
     isRecordingRef.current = false;
-    onPressEnd();
-  }, [enabled, isTargetKey, onPressEnd]);
+    onPressEndRef.current();
+  }, [enabled, isTargetKey]);
 
   /**
    * Register keyboard event listeners
    */
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      console.log('[PTT] Not enabled, skipping');
+      return;
+    }
 
+    console.log(`[PTT] Mounting event listeners with key: ${key}`);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    console.log(`[PTT] Enabled with key: ${key}`);
-
     return () => {
+      console.log('[PTT] Unmounting event listeners');
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      console.log('[PTT] Disabled');
     };
   }, [enabled, handleKeyDown, handleKeyUp, key]);
 
