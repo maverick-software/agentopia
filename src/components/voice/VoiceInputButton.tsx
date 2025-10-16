@@ -68,33 +68,22 @@ export function VoiceInputButton({ onTranscription, disabled, className }: Voice
     <div className={cn('relative', className)}>
       <Button
         type="button"
-        variant={isRecording ? 'destructive' : 'ghost'}
+        variant="ghost"
         size="icon"
         onClick={handleClick}
         disabled={disabled || isProcessing}
         className={cn(
-          'relative transition-all duration-200',
-          isRecording && 'animate-pulse'
+          'relative transition-all duration-200 rounded-full',
+          isRecording && 'bg-red-600 hover:bg-red-700 text-white'
         )}
         title={isRecording ? 'Stop recording' : 'Start voice input'}
       >
         {isProcessing ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : isRecording ? (
-          <Square className="h-4 w-4" />
+          <Square className="h-4 w-4 fill-white" />
         ) : (
           <Mic className="h-4 w-4" />
-        )}
-
-        {/* Audio level indicator */}
-        {isRecording && (
-          <div 
-            className="absolute inset-0 rounded-md border-2 border-red-500 transition-opacity duration-100"
-            style={{ 
-              opacity: audioLevel * 0.8 + 0.2,
-              transform: `scale(${1 + audioLevel * 0.2})`
-            }}
-          />
         )}
       </Button>
 

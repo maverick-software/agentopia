@@ -244,8 +244,8 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
         }
 
         // Clean up audio context
-        if (audioContextRef.current) {
-          audioContextRef.current.close();
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+          await audioContextRef.current.close();
           audioContextRef.current = null;
         }
 
@@ -298,7 +298,7 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
         type: mediaRecorderRef.current?.mimeType || 'audio/webm' 
       });
 
-      if (audioBlob.size < 1000) {
+      if (audioBlob.size < 100) {
         throw new Error('Recording is too short. Please try again.');
       }
 
@@ -307,9 +307,6 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       const base64Audio = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
       );
-
-      // Add user message to transcript
-      addTranscriptMessage('user', '[Speaking...]');
 
       // Get authentication token
       const { data: { session } } = await supabase.auth.getSession();
@@ -330,7 +327,7 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
           conversation_id: conversationId,
           agent_id: agentId,
           voice: voice,
-          format: 'wav'
+          format: 'webm'  // Browser MediaRecorder outputs audio/webm
         })
       });
 
@@ -497,8 +494,8 @@ export function useRealtimeVoiceChat(options: UseRealtimeVoiceChatOptions) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(console.error);
       }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);

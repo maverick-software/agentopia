@@ -54,7 +54,6 @@ export function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const voiceButtonRef = useRef<HTMLButtonElement>(null);
 
   // Auto-resize textarea when input changes
   const resizeTextarea = useCallback(() => {
@@ -160,17 +159,6 @@ export function ChatInput({
                   overflowY: 'hidden'
                 }}
               />
-              {/* Hidden voice input button that bottom mic icon will trigger */}
-              <div className="hidden">
-                <VoiceInputButton
-                  ref={voiceButtonRef}
-                  onTranscription={(text) => {
-                    setInput(text);
-                    adjustTextareaHeight();
-                  }}
-                  disabled={!agent}
-                />
-              </div>
             </div>
             
             {/* Tools row - Inside container with visual separation */}

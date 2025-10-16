@@ -84,7 +84,7 @@ async function getConversationHistory(
   try {
     const { data, error } = await supabase
       .from('chat_messages_v2')
-      .select('role, content, tool_calls')
+      .select('role, content')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -307,6 +307,8 @@ Deno.serve(async (req) => {
     console.log(`[VoiceChatStream] Loaded ${tools.length} tools and ${history.length} history messages`);
 
     // Build messages array for GPT-4o
+    // Note: For audio input, we keep it simple with just system + audio
+    // History context is maintained in the database but not sent to OpenAI for audio calls
     const messages: any[] = [
       // System message (if agent has instructions)
       // TODO: Fetch from agent.instructions field
@@ -314,20 +316,16 @@ Deno.serve(async (req) => {
         role: 'system',
         content: 'You are a helpful AI assistant with real-time voice capabilities.'
       },
-      // Conversation history
-      ...history.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      })),
       // Current audio input
+      // Note: We don't specify format and let OpenAI auto-detect it
       {
         role: 'user',
         content: [
           {
             type: 'input_audio',
             input_audio: {
-              data: audio_input,
-              format: format
+              data: audio_input
+              // Format omitted - let OpenAI auto-detect
             }
           }
         ]
@@ -338,6 +336,7 @@ Deno.serve(async (req) => {
     const formattedTools = formatToolsForOpenAI(tools);
 
     // Call GPT-4o Audio Preview API with streaming
+    // Note: Input format (in messages) can be wav/mp3, but output format must be pcm16 for streaming
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -349,7 +348,7 @@ Deno.serve(async (req) => {
         modalities: ['text', 'audio'],
         audio: { 
           voice: voice, 
-          format: format 
+          format: 'pcm16'  // Output format must be pcm16 for streaming
         },
         messages: messages,
         tools: formattedTools.length > 0 ? formattedTools : undefined,

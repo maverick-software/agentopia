@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Mic, X, ChevronLeft, ChevronRight, Loader2, Wrench, Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Mic, X, Loader2, Wrench, Settings } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRealtimeVoiceChat, type RecordingMode, type PTTKey } from '@/hooks/voice/useRealtimeVoiceChat';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/lib/utils';
@@ -29,7 +29,7 @@ const RECORDING_MODES: { value: RecordingMode; label: string; description: strin
 ];
 
 const PTT_KEYS: { value: PTTKey; label: string }[] = [
-  { value: 'Space', label: 'Space' },
+  { value: 'Space', label: 'Space Bar' },
   { value: 'Tab', label: 'Tab' },
   { value: 'Control', label: 'Ctrl' },
   { value: 'Alt', label: 'Alt' },
@@ -44,12 +44,10 @@ export function RealtimeVoiceChat({
   onClose
 }: RealtimeVoiceChatProps) {
   const [selectedVoice, setSelectedVoice] = useState<typeof initialVoice>(initialVoice);
-  const [showVoiceSelector, setShowVoiceSelector] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('manual');
   const [pttKey, setPttKey] = useState<PTTKey>('Space');
   
-  const selectedVoiceIndex = VOICE_OPTIONS.findIndex(v => v.value === selectedVoice);
+  const currentVoiceOption = VOICE_OPTIONS.find(v => v.value === selectedVoice) || VOICE_OPTIONS[0];
 
   const {
     isRecording,
@@ -83,14 +81,6 @@ export function RealtimeVoiceChat({
     }
   }, [error]);
 
-  const handleVoiceChange = (direction: 'prev' | 'next') => {
-    const currentIndex = selectedVoiceIndex;
-    const newIndex = direction === 'next' 
-      ? (currentIndex + 1) % VOICE_OPTIONS.length
-      : (currentIndex - 1 + VOICE_OPTIONS.length) % VOICE_OPTIONS.length;
-    setSelectedVoice(VOICE_OPTIONS[newIndex].value);
-  };
-
   if (!isSupported) {
     return (
       <div className="flex items-center justify-center p-8 text-center">
@@ -116,8 +106,6 @@ export function RealtimeVoiceChat({
     : isProcessing || isPlaying 
     ? 1.1 
     : 1;
-
-  const currentVoiceOption = VOICE_OPTIONS[selectedVoiceIndex];
 
   return (
     <div className={cn('relative flex flex-col items-center justify-center h-full bg-gradient-to-b from-background to-background/95', className)}>
@@ -214,118 +202,74 @@ export function RealtimeVoiceChat({
           </div>
         )}
 
-        {/* Settings Modal */}
-        {showSettings ? (
-          <div className="mb-8 text-center animate-in fade-in duration-200">
-            <h3 className="text-lg font-medium mb-6">Recording Settings</h3>
-            
-            {/* Recording Mode Selector */}
-            <div className="mb-6">
-              <label className="block text-sm text-muted-foreground mb-3">Recording Mode</label>
-              <div className="flex flex-col gap-2">
-                {RECORDING_MODES.map(mode => (
-                  <button
-                    key={mode.value}
-                    onClick={() => setRecordingMode(mode.value)}
-                    className={cn(
-                      'px-4 py-3 rounded-lg text-left transition-colors',
-                      recordingMode === mode.value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/50 hover:bg-muted'
-                    )}
-                    disabled={isRecording}
-                  >
-                    <div className="font-medium">{mode.label}</div>
-                    <div className="text-xs opacity-80">{mode.description}</div>
-                  </button>
+        <div className="mb-8 flex items-center justify-center gap-4">
+            {/* Voice Selector Dropdown */}
+            <Select
+              value={selectedVoice}
+              onValueChange={(value: typeof initialVoice) => setSelectedVoice(value)}
+              disabled={isRecording || isProcessing}
+            >
+              <SelectTrigger className="w-[120px] h-8 text-sm bg-transparent border-0 focus:ring-0">
+                <SelectValue>{currentVoiceOption.label}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {VOICE_OPTIONS.map(voice => (
+                  <SelectItem key={voice.value} value={voice.value}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{voice.label}</span>
+                      <span className="text-xs text-muted-foreground">{voice.description}</span>
+                    </div>
+                  </SelectItem>
                 ))}
-              </div>
-            </div>
+              </SelectContent>
+            </Select>
+            
+            {/* Recording Mode Dropdown */}
+            <Select
+              value={recordingMode}
+              onValueChange={(value: RecordingMode) => setRecordingMode(value)}
+              disabled={isRecording || isProcessing}
+            >
+              <SelectTrigger className="w-[180px] h-8 text-sm bg-transparent border-0 focus:ring-0">
+                <SelectValue>
+                  <span className="flex items-center gap-1.5">
+                    <Settings className="w-3.5 h-3.5" />
+                    {RECORDING_MODES.find(m => m.value === recordingMode)?.label}
+                  </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {RECORDING_MODES.map(mode => (
+                  <SelectItem key={mode.value} value={mode.value}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{mode.label}</span>
+                      <span className="text-xs text-muted-foreground">{mode.description}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* PTT Key Selector (only show if push-to-talk mode) */}
             {recordingMode === 'push-to-talk' && (
-              <div className="mb-6">
-                <label className="block text-sm text-muted-foreground mb-3">Push-to-Talk Key</label>
-                <div className="flex gap-2 justify-center">
+              <Select
+                value={pttKey}
+                onValueChange={(value: PTTKey) => setPttKey(value)}
+                disabled={isRecording || isProcessing}
+              >
+                <SelectTrigger className="w-[100px] h-8 text-sm bg-transparent border-0 focus:ring-0">
+                  <SelectValue>{pttKey}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
                   {PTT_KEYS.map(key => (
-                    <button
-                      key={key.value}
-                      onClick={() => setPttKey(key.value)}
-                      className={cn(
-                        'px-4 py-2 rounded-lg transition-colors',
-                        pttKey === key.value
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted/50 hover:bg-muted'
-                      )}
-                      disabled={isRecording}
-                    >
+                    <SelectItem key={key.value} value={key.value}>
                       {key.label}
-                    </button>
+                    </SelectItem>
                   ))}
-                </div>
-              </div>
+                </SelectContent>
+              </Select>
             )}
-
-            <Button
-              onClick={() => setShowSettings(false)}
-              variant="outline"
-              className="mt-4"
-            >
-              Done
-            </Button>
           </div>
-        ) : showVoiceSelector ? (
-          <div className="mb-8 text-center animate-in fade-in duration-200">
-            <h3 className="text-lg font-medium mb-6">Choose a voice</h3>
-            <div className="flex items-center justify-center gap-6">
-              <button
-                onClick={() => handleVoiceChange('prev')}
-                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              
-              <div className="min-w-[200px] text-center">
-                <h4 className="text-xl font-semibold mb-1">{currentVoiceOption.label}</h4>
-                <p className="text-sm text-muted-foreground">{currentVoiceOption.description}</p>
-              </div>
-
-              <button
-                onClick={() => handleVoiceChange('next')}
-                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-
-            <Button
-              onClick={() => setShowVoiceSelector(false)}
-              variant="outline"
-              className="mt-6"
-            >
-              Done
-            </Button>
-          </div>
-        ) : (
-          <div className="mb-8 flex items-center justify-center gap-4">
-            <button
-              onClick={() => setShowVoiceSelector(true)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              disabled={isRecording || isProcessing}
-            >
-              Voice: {currentVoiceOption.label}
-            </button>
-            <span className="text-muted-foreground">|</span>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-              disabled={isRecording || isProcessing}
-            >
-              <Settings className="w-3.5 h-3.5" />
-              {recordingMode === 'push-to-talk' ? `PTT: ${pttKey}` : RECORDING_MODES.find(m => m.value === recordingMode)?.label}
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Bottom Controls */}
@@ -351,43 +295,34 @@ export function RealtimeVoiceChat({
             <Mic className="w-6 h-6" />
           )}
         </button>
-
-        {/* Close Button (alternative position) */}
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="w-12 h-12 rounded-full flex items-center justify-center hover:bg-white/10 transition-all"
-            title="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
       </div>
 
       {/* Status Text */}
-      <div className="absolute bottom-24 left-0 right-0 text-center">
-        {isRecording && (
-          <p className="text-sm text-muted-foreground animate-pulse">
-            {recordingMode === 'conversational' ? 'Listening... (will auto-stop)' :
-             recordingMode === 'push-to-talk' ? `Holding ${pttKey}...` :
-             'Listening...'}
-          </p>
-        )}
-        {isProcessing && (
-          <p className="text-sm text-muted-foreground">
-            Processing...
-          </p>
-        )}
-        {isPlaying && (
-          <p className="text-sm text-muted-foreground">
-            Speaking...
-          </p>
-        )}
-        {!isRecording && !isProcessing && !isPlaying && recordingMode === 'push-to-talk' && (
-          <p className="text-xs text-muted-foreground/60">
-            Hold {pttKey} to talk
-          </p>
-        )}
+      <div className="absolute bottom-32 left-0 right-0 flex justify-center">
+        <div className="text-center">
+          {isRecording && (
+            <p className="text-sm text-muted-foreground animate-pulse">
+              {recordingMode === 'conversational' ? 'Listening... (will auto-stop)' :
+               recordingMode === 'push-to-talk' ? `Holding ${PTT_KEYS.find(k => k.value === pttKey)?.label}...` :
+               'Listening...'}
+            </p>
+          )}
+          {isProcessing && (
+            <p className="text-sm text-muted-foreground">
+              Processing...
+            </p>
+          )}
+          {isPlaying && (
+            <p className="text-sm text-muted-foreground">
+              Speaking...
+            </p>
+          )}
+          {!isRecording && !isProcessing && !isPlaying && recordingMode === 'push-to-talk' && (
+            <p className="text-xs text-muted-foreground/60">
+              Hold {PTT_KEYS.find(k => k.value === pttKey)?.label} to talk
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
