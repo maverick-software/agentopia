@@ -19,7 +19,6 @@ export async function getRelevantChatHistory(
     conversationId?: string | null
 ): Promise<ChatMessage[]> {
   if (limit <= 0) return [];
-  console.log(`[getRelevantChatHistory] Attempting fetch - channelId: ${channelId}, userId: ${userId}, targetAgentId: ${targetAgentId}, limit: ${limit}`);
 
   try {
     // Prefer v2 storage
@@ -31,51 +30,31 @@ export async function getRelevantChatHistory(
 
     if (channelId) {
         // Workspace Channel History
-        console.log(`[getRelevantChatHistory] Mode: Workspace Channel`);
         v2Query = v2Query.eq('channel_id', channelId);
     } else if (conversationId) {
         // Direct Chat History scoped to a specific conversation
-        console.log(`[getRelevantChatHistory] Mode: Direct Chat (conversation-scoped)`);
         v2Query = v2Query.eq('conversation_id', conversationId);
     } else if (userId && targetAgentId) {
         // Direct Chat History (User <-> Agent)
-        console.log(`[getRelevantChatHistory] Mode: Direct Chat`);
         v2Query = v2Query.is('channel_id', null)
                      .or(
                         `sender_user_id.eq.${userId},` +
                         `sender_agent_id.eq.${targetAgentId}`
                      );
-                     
-        // Let's log the constructed filter parts for clarity (DEBUGGING)
-        console.log(`[getRelevantChatHistory] Direct Chat Filters: channel_id IS NULL, OR (` +
-            `sender_user_id.eq.${userId},` +
-            `sender_agent_id.eq.${targetAgentId}` +
-        `)`);
-                     
     } else {
         // Invalid state or scenario not supported
         console.warn('[getRelevantChatHistory] Cannot fetch: No channelId AND no valid userId/targetAgentId pair.');
         return [];
     }
 
-    // Log the final query structure before execution (optional, might be complex)
-    // console.log("[getRelevantChatHistory] Executing query:", query); // Be cautious logging full queries
-
     const { data: v2Data, error: v2Error } = await v2Query;
 
-    // Log the results (only log error if it exists)
     if (v2Error) {
-      console.error(`[getRelevantChatHistory] V2 Error:`, v2Error); 
-    }
-    console.log(`[getRelevantChatHistory] V2 Retrieved ${v2Data?.length ?? 0} messages`);
-    // console.log(`[getRelevantChatHistory] Query Result - Raw Data:`, data); // Avoid logging potentially sensitive message content unless necessary
-
-    if (v2Error) {
+      console.error(`[getRelevantChatHistory] Error:`, v2Error); 
       throw v2Error;
     }
 
     if (!v2Data) {
-      console.log(`[getRelevantChatHistory] No messages found`);
       return [];
     }
 
@@ -85,7 +64,6 @@ export async function getRelevantChatHistory(
         timestamp: msg.created_at,
         agentName: msg.agents?.name ?? null
     } as ChatMessage)).reverse();
-    console.log(`[getRelevantChatHistory] Processed ${historyV2.length} messages for history (v2).`);
     return historyV2;
 
   } catch (err) {

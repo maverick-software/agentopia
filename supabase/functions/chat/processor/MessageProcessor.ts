@@ -8,8 +8,7 @@ import type { MessageResponse } from '../api/v2/schemas/responses.ts';
 import { ValidationError } from '../api/v2/errors.ts';
 import { MemoryManager } from '../core/memory/memory_manager.ts';
 import { ContextEngine } from '../core/context/context_engine.ts';
-import { StateManager } from '../core/state/state_manager.ts';
-// Removed: MonitoringSystem - feature archived (unused, empty tables)
+// Removed: StateManager, MonitoringSystem - features archived (unused)
 import { 
   ProcessingStage, 
   ParsingStage, 
@@ -52,15 +51,8 @@ export class MessageProcessor {
   constructor(
     private _memoryManager: MemoryManager,
     private contextEngine: ContextEngine,
-    private _stateManager: StateManager,
-    private monitoring: MonitoringSystem,
     private openai: any,
-    private supabase: SupabaseClient,
-    private _config: {
-      max_tokens?: number;
-      timeout?: number;
-      enable_streaming?: boolean;
-    }
+    private supabase: SupabaseClient
   ) {
     // Initialize validator
     this.validator = new SchemaValidator();
@@ -91,7 +83,6 @@ export class MessageProcessor {
     request: ChatRequestV2,
     options: ProcessingOptions = {}
   ): Promise<MessageResponse> {
-    const timer = this.monitoring.startTimer('message_processing');
     const requestId = request.request_id ?? crypto.randomUUID();
     
     try {
@@ -106,10 +97,10 @@ export class MessageProcessor {
       // Create processing context
       const context: ProcessingContext = {
         request_id: requestId,
-        agent_id: request.context?.agent_id || request.message?.context?.agent_id || request.agent_id || undefined,
-        user_id: request.context?.user_id || request.message?.context?.user_id || request.user_id || undefined,
-        conversation_id: request.context?.conversation_id || request.message?.context?.conversation_id || request.conversation_id || undefined,
-        session_id: request.context?.session_id || request.message?.context?.session_id || request.session_id || undefined,
+        agent_id: request.context?.agent_id || request.message?.context?.agent_id || (request as any).agent_id || undefined,
+        user_id: request.context?.user_id || request.message?.context?.user_id || (request as any).user_id || undefined,
+        conversation_id: request.context?.conversation_id || request.message?.context?.conversation_id || (request as any).conversation_id || undefined,
+        session_id: request.context?.session_id || request.message?.context?.session_id || (request as any).session_id || undefined,
         workspace_id: request.context?.workspace_id || request.message?.context?.workspace_id || undefined,
         channel_id: request.context?.channel_id || request.message?.context?.channel_id || undefined,
         request_options: request.options,
@@ -127,38 +118,8 @@ export class MessageProcessor {
       // Create initial message
       let message = createMessage(request, context);
       
-      // Attach recent conversation history as working memory for context building
-      try {
-        const workingLimit = Math.max(0, Math.min(100, (request.options as any)?.context?.max_messages ?? 20));
-
-        // Prefer explicit history provided in request (if any)
-        const explicitHistory = (request as any)?.message?.metadata?.history || (request as any)?.context?.history;
-        let recent: any[] | null = Array.isArray(explicitHistory) ? explicitHistory : null;
-
-        if (!recent) {
-          recent = await getRelevantChatHistory(
-            context.channel_id ?? null,
-            context.user_id ?? null,
-            context.agent_id || null,
-            workingLimit,
-            this.supabase as any,
-            context.conversation_id ?? null
-          );
-        }
-
-        message.context = {
-          ...message.context,
-          recent_messages: (recent || []).slice(-workingLimit).map((m: any, idx: number) => ({
-            id: m.id || String(idx),
-            role: m.role,
-            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-            timestamp: m.timestamp || m.created_at || new Date().toISOString(),
-          })),
-          working_memory_limit: workingLimit,
-        } as any;
-      } catch (_) {
-        // best-effort; continue without history if it fails
-      }
+      // Context loading is now handled by MessagePreparation stage
+      // All history, working memory, and context is loaded there in a single pass
       
       // Run through pipeline
       for (const stage of this.pipeline) {
@@ -168,43 +129,21 @@ export class MessageProcessor {
           message = await stage.process(message, context, metrics);
           metrics.stages[stage.name] = Date.now() - stageStart;
         } catch (error) {
-          this.monitoring.captureError(error as Error, {
-            operation: `pipeline_stage_${stage.name}`,
-          });
+          // Log error but don't use monitoring system
+          console.error(`[MessageProcessor] Error in stage ${stage.name}:`, error);
           throw error;
         }
       }
       
       // Complete metrics
       metrics.end_time = Date.now();
-      timer.stop();
-      
-      // Track metrics
-      this.monitoring.record({
-        name: 'messages_processed',
-        value: 1,
-        type: 'counter',
-        labels: { status: 'success' },
-      });
       
       // Build response
       return buildSuccessResponse(message, context, metrics);
       
     } catch (error) {
-      timer.stop();
-      
-      // Track error
-      this.monitoring.captureError(error as Error, {
-        operation: 'message_processing',
-      });
-      
-      this.monitoring.record({
-        name: 'messages_processed',
-        value: 1,
-        type: 'counter',
-        labels: { status: 'error' },
-      });
-      
+      // Log error but don't use monitoring system
+      console.error('[MessageProcessor] Error processing message:', error);
       throw error;
     }
   }
@@ -280,7 +219,4 @@ export class MessageProcessor {
   private getProcessingHandlers(): MessageHandler[] {
     return Array.from(this.handlers.values());
   }
-
-  // Temporarily reference unused injected services to avoid linter warnings
-  private _touchUnused(): void { /* no-op */ }
 }

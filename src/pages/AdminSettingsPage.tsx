@@ -27,7 +27,7 @@ export function AdminSettingsPage() {
           <TabsList className="mb-6 bg-muted border border-border">
             <TabsTrigger value="api-keys" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground">
               <Key className="w-4 h-4" />
-              <span>System API Keys</span>
+              <span>API Keys</span>
             </TabsTrigger>
             <TabsTrigger value="integrations" className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground">
               <SettingsIcon className="w-4 h-4" />

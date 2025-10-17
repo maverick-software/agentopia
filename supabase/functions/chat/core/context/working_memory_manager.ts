@@ -55,8 +55,6 @@ export class WorkingMemoryManager {
     includeChunks: boolean = false
   ): Promise<WorkingMemoryContext | null> {
     try {
-      console.log(`[WorkingMemory] Fetching context for conversation ${conversationId}`);
-
       // Get summary board
       const { data: summaryBoard, error: boardError } = await this.supabase
         .from('conversation_summary_boards')
@@ -70,7 +68,7 @@ export class WorkingMemoryManager {
       }
 
       if (!summaryBoard) {
-        console.log('[WorkingMemory] No summary board found for conversation');
+        // Silently return null - this is normal for new conversations
         return null;
       }
 
@@ -103,7 +101,6 @@ export class WorkingMemoryManager {
         }
       }
 
-      console.log(`[WorkingMemory] ✅ Retrieved context: ${context.facts.length} facts, ${context.action_items.length} action items`);
       return context;
 
     } catch (error) {

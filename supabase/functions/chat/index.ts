@@ -62,25 +62,12 @@ const contextEngine = new ContextEngine(supabase, {
 });
 
 // Removed: MonitoringSystem initialization - feature archived (unused, empty tables)
-// const monitoringSystem = new MonitoringSystem(supabase, {
-//   metrics_buffer_size: 1000,
-//   export_interval: 60000, // 1 minute
-//   error_sample_rate: 1.0,
-//   health_check_interval: 300000, // 5 minutes
-// });
 
 const messageProcessor = new MessageProcessor(
   memoryManager,
   contextEngine,
-  stateManager,
-  // monitoringSystem, // Removed: feature archived
   openai,
-  supabase,
-  {
-    max_tokens: 8192,
-    timeout: 30000,
-    enable_streaming: true,
-  }
+  supabase
 );
 
 // Initialize API components
@@ -312,7 +299,7 @@ async function handler(req: Request): Promise<Response> {
     const wantsStream = acceptHeader?.includes('text/event-stream');
     const requestType = wantsStream && body.options?.response?.stream ? 'streaming' : 'standard';
     
-    log.info('Processing chat request', { type: requestType, method: req.method });
+    // Request processing happens silently - context load will log
     
     // Validate chat request
     const validation = validator.validateChatRequest(body);
@@ -569,16 +556,7 @@ async function routeHandler(req: Request): Promise<Response> {
   });
 }
 
-// Start server
-serve(withErrorHandling(routeHandler));
-
-// Log startup
-logger.info('Advanced JSON Chat System started', {
-  version: '2.0.0',
-  features: {
-    memory: true,
-    state: isFeatureEnabled('enable_state_management'),
-    advanced_json: isFeatureEnabled('use_advanced_messages'),
-  },
-  environment: { supabase_url: SUPABASE_URL },
+// Start server (suppress default logging)
+serve(withErrorHandling(routeHandler), { 
+  onListen: () => console.log('[Chat] Ready') 
 });

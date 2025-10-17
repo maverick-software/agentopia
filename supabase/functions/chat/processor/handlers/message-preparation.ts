@@ -136,12 +136,15 @@ export class MessagePreparation {
           };
         });
 
-        console.log(`[MessagePreparation] ✅ Unified context loaded in ${unifiedContext.metadata.load_time_ms}ms`);
-        console.log(`[MessagePreparation] 📊 Token savings: ~${unifiedContext.metadata.working_memory_message_count * 100} tokens saved`);
+        // Log successful context load
+        const hasSummary = unifiedContext.workingMemory ? 'with summary' : 'no summary';
+        console.log(`[Context] ✅ Loaded ${unifiedContext.metadata.history_messages_loaded} messages ${hasSummary} (${unifiedContext.metadata.load_time_ms}ms)`);
       } catch (error: any) {
-        console.error('[MessagePreparation] ⚠️ Unified context error (non-critical):', error.message);
+        console.error('[Context] ❌ Failed to load:', error.message);
         // Gracefully continue without context if loading fails
       }
+    } else {
+      console.log('[Context] ⏭️ Skipped (new conversation)');
     }
 
     // Add current user message

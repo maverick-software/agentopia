@@ -57,7 +57,6 @@ export class TextMessageHandler implements MessageHandler {
 
     // STEP 1: Prepare messages (system prompt, context, working memory, history)
     const { messages: msgs, recentMessages, summaryInfo } = await this.messagePrep.prepare(message, context);
-    console.log(`[TextMessageHandler] ✅ Prepared ${msgs.length} messages`);
 
     // STEP 2: Intent classification (determine if tools are needed)
     const userText = (message as any).content?.text || (message as any).content || '';

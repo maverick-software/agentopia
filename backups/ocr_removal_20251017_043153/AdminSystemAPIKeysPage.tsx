@@ -45,6 +45,14 @@ const API_KEY_CONFIGS: APIKeyConfig[] = [
     getKeyUrl: 'https://console.anthropic.com/settings/keys'
   },
   {
+    provider: 'clicksend_sms',
+    displayName: 'ClickSend SMS',
+    keyPrefix: '', // ClickSend uses username:apikey format
+    description: 'Platform-wide ClickSend SMS API key. Format: username:api_key',
+    docsUrl: 'https://developers.clicksend.com/docs/rest/v3/',
+    getKeyUrl: 'https://dashboard.clicksend.com/#/account/subaccounts'
+  },
+  {
     provider: 'mistral_ai',
     displayName: 'Mistral AI',
     keyPrefix: '', // Mistral uses various formats
@@ -53,12 +61,28 @@ const API_KEY_CONFIGS: APIKeyConfig[] = [
     getKeyUrl: 'https://console.mistral.ai/api-keys/'
   },
   {
+    provider: 'ocr_space',
+    displayName: 'OCR.Space',
+    keyPrefix: '', // OCR.Space doesn't have a specific prefix
+    description: 'Platform-wide OCR.Space API key for optical character recognition.',
+    docsUrl: 'https://ocr.space/ocrapi',
+    getKeyUrl: 'https://ocr.space/ocrapi#free'
+  },
+  {
     provider: 'serper_api',
     displayName: 'Serper API',
     keyPrefix: '', // Serper uses various formats
     description: 'Platform-wide Serper API key for web search functionality.',
     docsUrl: 'https://serper.dev/api',
     getKeyUrl: 'https://serper.dev/api-key'
+  },
+  {
+    provider: 'smtp_com',
+    displayName: 'SMTP.com',
+    keyPrefix: '', // SMTP.com uses API tokens
+    description: 'Platform-wide SMTP.com API token for email delivery.',
+    docsUrl: 'https://www.smtp.com/resources/api/',
+    getKeyUrl: 'https://app.smtp.com/account/api-tokens'
   }
 ];
 
@@ -242,14 +266,8 @@ export function AdminSystemAPIKeysPage() {
         <Alert className="border border-primary/20 bg-primary/5">
           <Shield className="h-4 w-4 text-primary" />
           <AlertDescription className="text-sm text-foreground">
-            <div className="space-y-1">
-              <strong className="text-white">Security:</strong>
-              <ul className="list-disc list-inside space-y-1 ml-2 text-white">
-                <li>All API keys are encrypted with AES-256</li>
-                <li>Keys are stored in Supabase Vault (zero plain-text storage)</li>
-                <li>Only admins can view or modify these keys</li>
-              </ul>
-            </div>
+            <strong>Security:</strong> API keys are encrypted with AES-256 and stored in Supabase Vault. 
+            Only admins can view this page. Keys are never exposed to end users.
           </AlertDescription>
         </Alert>
 
@@ -257,27 +275,8 @@ export function AdminSystemAPIKeysPage() {
         <Alert className="border border-success/20 bg-success/5">
           <AlertCircle className="h-4 w-4 text-success" />
           <AlertDescription className="text-sm text-foreground">
-            <div className="space-y-1">
-              <strong className="text-white">Platform-Wide Keys:</strong>
-              <ul className="list-disc list-inside space-y-1 ml-2 text-white">
-                <li>Keys saved here are automatically used by all agents and users</li>
-                <li>Individual users do not configure their own keys for these services</li>
-                <li>Changes take effect immediately across the entire platform</li>
-              </ul>
-            </div>
-          </AlertDescription>
-        </Alert>
-
-        {/* Integration Note */}
-        <Alert className="border border-blue-500/20 bg-blue-500/5">
-          <AlertCircle className="h-4 w-4 text-blue-500" />
-          <AlertDescription className="text-sm text-foreground">
-            <div className="space-y-1">
-              <strong className="text-white">Note:</strong>
-              <p className="text-white ml-2">
-                Services requiring additional configuration (SMTP, ClickSend SMS, OAuth providers) should be configured in the <strong>Integrations</strong> tab, not here. This page is for simple API key-only services.
-              </p>
-            </div>
+            <strong>Note:</strong> After saving API keys here, they will be automatically used by all agents 
+            and users across the platform. Individual users will not need to configure their own keys for these services.
           </AlertDescription>
         </Alert>
       </div>

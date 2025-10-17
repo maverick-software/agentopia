@@ -5,7 +5,11 @@ Adding Voice, Creating Admin Agent Repository, A Simple AI description to create
 
 ## Gofr Agent A2A ##
 
-The Gofr Agent should be able to speak to the other agents as if they were MCP tools, essentially. The Google A2A protocol.
+The Gofr Agent should be able to speak to the other agents as if they were MCP tools, essentially. The Google A2A protocol. Should be able to achieve this with OpenAI Agent SDK too.
+
+## Message Functions - Docs ##
+
+Would be interesting to add a doc icon to the bottom of message and allow users to generate a document from that specific message.
 
 ## Quizzes or Exams ##
 

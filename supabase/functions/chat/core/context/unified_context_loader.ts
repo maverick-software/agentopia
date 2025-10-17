@@ -46,7 +46,6 @@ export class UnifiedContextLoader {
     }
   ): Promise<UnifiedContext> {
     const startTime = Date.now();
-    console.log(`[UnifiedContext] 🚀 Loading context for conversation ${conversationId}`);
 
     try {
       // Fetch agent's context_history_size setting in parallel with other operations
@@ -55,15 +54,8 @@ export class UnifiedContextLoader {
         .select('settings')
         .eq('id', agentId)
         .single()
-        .then(({ data }: any) => {
-          const size = data?.settings?.context_history_size || 25;
-          console.log(`[UnifiedContext] 📊 Agent context_history_size: ${size} messages`);
-          return size;
-        })
-        .catch(() => {
-          console.log('[UnifiedContext] Using default context_history_size: 25');
-          return 25;
-        });
+        .then(({ data }: any) => data?.settings?.context_history_size || 25)
+        .catch(() => 25);
 
       // Load WorkingMemory and RecentHistory IN PARALLEL
       const [workingMemory, contextHistorySize, totalMessageCount] = await Promise.all([
@@ -113,11 +105,10 @@ export class UnifiedContextLoader {
         },
       };
 
-      console.log(`[UnifiedContext] ✅ Context loaded in ${loadTime}ms`);
-      console.log(`[UnifiedContext] 📊 Summary:`);
-      console.log(`  - Working Memory: ${workingMemory ? 'YES' : 'NO'} (${context.metadata.working_memory_message_count} messages summarized)`);
-      console.log(`  - Recent History: ${recentHistory.length} messages`);
-      console.log(`  - Total Messages: ${totalMessageCount}`);
+      // Only log in development or if there are errors
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Context] Loaded in ${loadTime}ms: ${recentHistory.length} messages, ${workingMemory ? 'summary available' : 'no summary'}`);
+      }
 
       return context;
     } catch (error) {

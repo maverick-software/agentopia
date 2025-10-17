@@ -68,6 +68,7 @@ import { MediaLibraryPage } from '../pages/MediaLibraryPage';
 import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
+import SystemPromptsPage from '../pages/admin/SystemPromptsPage';
 import { GmailCallbackPage } from '@/integrations/gmail';
 import { SMTPIntegrationsPage } from '@/integrations/smtp';
 import { MicrosoftTeamsCallbackPage } from '../pages/integrations/MicrosoftTeamsCallbackPage';
@@ -142,6 +143,7 @@ export const appRoutes: RouteConfig[] = [
     children: [
       { path: '/admin/users', element: AdminUserManagement, protection: 'admin', layout: false },
       { path: '/admin/agents', element: AdminAgentManagement, protection: 'admin', layout: false },
+      { path: '/admin/prompts', element: SystemPromptsPage, protection: 'admin', layout: false },
       { path: '/admin/settings', element: AdminSettingsPage, protection: 'admin', layout: false },
       // Legacy routes for backward compatibility
       { path: '/admin/system-api-keys', element: AdminSettingsPage, protection: 'admin', layout: false },

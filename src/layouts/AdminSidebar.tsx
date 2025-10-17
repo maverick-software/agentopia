@@ -6,6 +6,7 @@ import {
   Users, 
   Bot,
   Settings,
+  FileText,
   PanelLeftClose, 
   PanelRightClose 
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Users', href: '/admin/users', icon: Users },
     { name: 'Agents', href: '/admin/agents', icon: Bot }, 
+    { name: 'System Prompts', href: '/admin/prompts', icon: FileText },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
