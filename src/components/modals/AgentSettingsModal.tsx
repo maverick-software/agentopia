@@ -45,7 +45,7 @@ import { GeneralTab } from './agent-settings/GeneralTab';
 import { ScheduleTab } from './agent-settings/ScheduleTab';
 import { IdentityTab, IdentityTabRef } from './agent-settings/IdentityTab';
 import { BehaviorTab } from './agent-settings/BehaviorTab';
-import { ReasoningTab } from './agent-settings/ReasoningTab';
+// Removed: ReasoningTab - archived 2025-10-17
 import { MemoryTab } from './agent-settings/MemoryTab';
 import { MediaTab } from './agent-settings/MediaTab';
 import { ToolsTab } from './agent-settings/ToolsTab';
@@ -68,10 +68,10 @@ interface AgentSettingsModalProps {
     agent_datastores?: { datastore_id: string }[];
   };
   onAgentUpdated?: (updatedData: any) => void;
-  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'reasoning' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+  initialTab?: 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 }
 
-type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'reasoning' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
+type TabId = 'general' | 'schedule' | 'identity' | 'behavior' | 'memory' | 'media' | 'tools' | 'channels' | 'sources' | 'team' | 'contacts' | 'workflows' | 'automations' | 'zapier-mcp';
 
 interface TabConfig {
   id: TabId;
@@ -84,7 +84,7 @@ interface TabConfig {
 }
 
 // Tabs that should be disabled for system agents
-const SYSTEM_AGENT_DISABLED_TABS = ['general', 'identity', 'behavior', 'reasoning', 'team', 'schedule', 'workflows', 'automations'];
+const SYSTEM_AGENT_DISABLED_TABS = ['general', 'identity', 'behavior', 'team', 'schedule', 'workflows', 'automations'];
 
 const TABS: TabConfig[] = [
   {
@@ -111,12 +111,7 @@ const TABS: TabConfig[] = [
     icon: Wrench,
     description: 'Voice, web search, and creation'
   },
-  {
-    id: 'reasoning',
-    label: 'Reasoning',
-    icon: Brain,
-    description: 'Advanced reasoning capabilities'
-  },
+  // Removed: Reasoning tab - archived 2025-10-17
   {
     id: 'memory',
     label: 'Memory',
@@ -283,8 +278,7 @@ export function AgentSettingsModal({
         return <IdentityTab ref={tabRefs.current.identity} {...commonProps} />;
       case 'behavior':
         return <BehaviorTab ref={tabRefs.current.behavior} {...commonProps} />;
-      case 'reasoning':
-        return <ReasoningTab ref={tabRefs.current.reasoning} {...commonProps} />;
+      // Removed: Reasoning case - archived 2025-10-17
       case 'memory':
         return <MemoryTab {...commonProps} />;
       case 'media':
@@ -321,7 +315,7 @@ export function AgentSettingsModal({
             </DialogTitle>
             <div className="flex items-center gap-2">
               {/* Save icon - always visible, subdued when no changes */}
-              {(activeTab === 'general' || activeTab === 'identity' || activeTab === 'behavior' || activeTab === 'reasoning' || activeTab === 'tools' || activeTab === 'contacts') && (
+              {(activeTab === 'general' || activeTab === 'identity' || activeTab === 'behavior' || activeTab === 'tools' || activeTab === 'contacts') && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

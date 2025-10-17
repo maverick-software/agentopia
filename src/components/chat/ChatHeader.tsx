@@ -126,7 +126,7 @@ export function ChatHeader({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64 border-0 shadow-lg rounded-xl">
-            <DropdownMenuItem onClick={() => navigate(`/agents/${agentId}/chat`)}>
+            <DropdownMenuItem onClick={() => navigate(`/agents/${agentId}/chat`, { replace: true })}>
               <MessageSquare className="mr-2 h-4 w-4" />
               New chat
             </DropdownMenuItem>

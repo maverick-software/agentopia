@@ -64,14 +64,13 @@ This document provides an up-to-date overview of Agentopia's development status,
 
 **Problem**: Agent tools were appearing regardless of UI toggle settings. Users could disable tools in the UI, but agents would still have access to all tools.
 
-**Root Cause**: The `get-agent-tools` edge function was only checking `reasoning_enabled` and `temporary_chat_links_enabled`, completely ignoring other toggle settings like `web_search_enabled`, `voice_enabled`, etc.
+**Root Cause**: The `get-agent-tools` edge function was not properly checking tool toggle settings, allowing agents access to tools regardless of UI toggle states.
 
 **Solution Implemented**:
 1. **Created `getToolSettings()` function** - Centralized function to fetch all tool toggle states from agent metadata
 2. **Provider-to-Setting Mapping** - Systematic mapping of service providers to their required settings
 3. **Provider-Level Filtering** - Skip entire providers if their required setting is disabled
 4. **Default-to-Disabled Logic** - All tool settings default to `false` for security
-5. **Simplified Reasoning Check** - Removed complex fallback logic, now simply checks `metadata.settings.reasoning_enabled`
 
 **Files Modified**:
 - `supabase/functions/get-agent-tools/database-service.ts` - Added `getToolSettings()` function
@@ -88,7 +87,6 @@ This document provides an up-to-date overview of Agentopia's development status,
 **Tool Categories Affected**:
 - Voice Synthesis (elevenlabs) → `voice_enabled`
 - Web Search (serper_api) → `web_search_enabled`
-- Advanced Reasoning (internal_system) → `reasoning_enabled`
 - Document Creation → `document_creation_enabled`
 - OCR Processing → `ocr_processing_enabled`
 - Temporary Chat Links → `temporary_chat_links_enabled`
@@ -127,7 +125,7 @@ This document provides an up-to-date overview of Agentopia's development status,
 - **Dynamic Tool Discovery**: Automatic detection and integration of available tools from any MCP server
 - **Function Calling**: Sophisticated tool execution with intelligent retry logic
 - **Permission System**: Granular agent-specific tool access control
-- **Tool Toggle System**: UI-based enable/disable controls for tool categories (Voice, Web Search, Reasoning, etc.)
+- **Tool Toggle System**: UI-based enable/disable controls for tool categories (Voice, Web Search, etc.)
 - **Settings Enforcement**: All tools default to disabled; explicit opt-in required
 
 ### 📚 Advanced Content Management
@@ -161,21 +159,12 @@ This document provides an up-to-date overview of Agentopia's development status,
 
 ### 🧠 Advanced Chat & AI Transparency
 **Status**: **COMPLETE & PRODUCTION-READY**
-- **AI Process Visibility**: Expandable "Thoughts" sections showing reasoning
+- **AI Process Visibility**: Expandable "Thoughts" sections showing AI processing steps
 - **Real-Time Indicators**: Step-by-step AI processing visualization
 - **Professional Interface**: Claude-style design with gradient effects
 - **Debug Capabilities**: Complete tool call and response visibility
 
 ## 🔄 Active Development Areas
-
-### 🧠 Advanced Reasoning System
-**Status**: **COMPLETE & PRODUCTION-READY**
-- ✅ Database schema and core architecture implemented
-- ✅ MCP-style reasoning tools with confidence tracking (8 reasoning tools)
-- ✅ Adversarial critic system with reconsideration cycles
-- ✅ Integration with chat system via tool toggle
-- ✅ UI toggle in Behavior tab (defaults to disabled)
-- ✅ Dynamic tool filtering based on agent settings
 
 ### 🔧 MCP Management Interface
 **Status**: **60% Complete - Major Components Ready**
@@ -227,16 +216,12 @@ This document provides an up-to-date overview of Agentopia's development status,
    - Estimated effort: 6-8 hours
 
 ### Medium Impact (2-4 sessions)
-4. **Complete Advanced Reasoning Integration**
-   - MCP framework ready, chat integration needed
-   - Estimated effort: 8-12 hours
-
-5. **File Refactoring Initiative**
+4. **File Refactoring Initiative**
    - Philosophy #1 compliance (≤500 lines per file)
    - Several large files identified for refactoring
    - Estimated effort: 10-15 hours
 
-6. **Enhanced Team-Based Workspace Access**
+5. **Enhanced Team-Based Workspace Access**
    - Improve team membership workspace access control
    - Estimated effort: 4-6 hours
 
@@ -290,7 +275,7 @@ This document provides an up-to-date overview of Agentopia's development status,
 - [ ] Documentation maintained and current
 
 ### Feature Completeness
-- [ ] Advanced reasoning system fully integrated
+- [x] Advanced reasoning system removed (deprecated 2025-10-17)
 - [ ] MCP management interface completed
 - [ ] File architecture fully compliant with Philosophy #1
 - [ ] Enhanced team collaboration features deployed

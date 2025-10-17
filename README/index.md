@@ -61,7 +61,6 @@ Production deployment and operations:
 
 ### 📁 Content & Knowledge Management
 - **[Media Library](media-library.md)** - Document management, agent training, and MCP tool framework
-- **[Advanced Reasoning](advanced-reasoning.md)** - MCP-style reasoning capabilities with confidence tracking
 
 ### 🚀 Operations & Deployment
 - **[Deployment](deployment.md)** - Production deployment, environment configuration, and scaling

@@ -312,12 +312,6 @@ The following tool categories can be toggled in the Agent Settings → Tools tab
    - Enables anonymous public chat link creation
    - Default: `false` (disabled)
 
-6. **Advanced Reasoning** (`reasoning_enabled`)
-   - Provider: Internal (Built-in)
-   - Enables sophisticated reasoning patterns (inductive, deductive, abductive)
-   - Configured in: Agent Settings → Behavior tab
-   - Default: `false` (disabled)
-
 ### Tool Settings Storage
 
 Tool settings are stored in the agent's metadata:
@@ -330,8 +324,7 @@ Tool settings are stored in the agent's metadata:
       "web_search_enabled": false,
       "document_creation_enabled": false,
       "ocr_processing_enabled": false,
-      "temporary_chat_links_enabled": false,
-      "reasoning_enabled": false
+      "temporary_chat_links_enabled": false
     }
   }
 }
@@ -347,7 +340,6 @@ The `get-agent-tools` edge function enforces these settings by:
    const providerToSettingMap: Record<string, string> = {
      'serper_api': 'web_search_enabled',
      'elevenlabs': 'voice_enabled',
-     'internal_system': 'reasoning_enabled',
    };
    ```
 3. **Filtering Providers**: Skips providers if their required setting is `false`

@@ -281,7 +281,7 @@ export function AgentChatPage() {
       const processingDetails = responseData?.processing_details;
       if (processingDetails) {
         // Add conversation_id for context
-        processingDetails.conversation_id = conversationHook.conversationId;
+        processingDetails.conversation_id = convId;
         console.log('[AgentChatPage] Captured processing details:', processingDetails);
         console.log('[AgentChatPage] Discovered tools count:', processingDetails?.discovered_tools?.length || 0);
       } else {

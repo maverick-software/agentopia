@@ -46,6 +46,7 @@ export function useChatMessages(
       const conversationId = conversationLifecycle.id;
       
       // Skip history fetch for fresh conversations (just created in this session)
+      console.log('[fetchHistory] Checking if conversation is fresh:', conversationId, 'Fresh set:', Array.from(freshConversationsRef.current));
       if (freshConversationsRef.current.has(conversationId)) {
         console.log('[fetchHistory] Skipping - fresh conversation, UI already has messages');
         setIsHistoryLoading(false);
@@ -126,6 +127,14 @@ export function useChatMessages(
     // This preserves the user message and thinking indicator
     if (prev.status === 'creating' && current.status === 'active' && prev.id === current.id) {
       console.log('[useChatMessages] Transitioning creating -> active, preserving messages');
+      prevLifecycleRef.current = current;
+      return;
+    }
+    
+    // Clear messages when going to 'none' (New chat clicked)
+    if (current.status === 'none' && prev.status !== 'none') {
+      console.log('[useChatMessages] Transitioning to none, clearing messages');
+      setMessages([]);
       prevLifecycleRef.current = current;
       return;
     }
