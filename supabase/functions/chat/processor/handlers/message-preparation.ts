@@ -1,11 +1,12 @@
 /**
  * Message Preparation - Prepares messages array with system prompts, context, and history
+ * Uses UnifiedContextLoader for efficient async loading of WorkingMemory + RelevantHistory
  */
 
 import type { AdvancedChatMessage } from '../../types/message.types.ts';
 import type { ProcessingContext } from '../types.ts';
 import { PromptBuilder } from '../utils/prompt-builder.ts';
-import { WorkingMemoryManager } from '../../core/context/working_memory_manager.ts';
+import { UnifiedContextLoader, UnifiedContext } from '../../core/context/unified_context_loader.ts';
 
 export interface PreparedMessages {
   messages: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string; tool_calls?: any[] }>;
@@ -15,9 +16,11 @@ export interface PreparedMessages {
 
 export class MessagePreparation {
   private promptBuilder: PromptBuilder;
+  private contextLoader: UnifiedContextLoader;
 
   constructor(private supabase: any) {
     this.promptBuilder = new PromptBuilder(supabase);
+    this.contextLoader = new UnifiedContextLoader(supabase);
   }
 
   /**
@@ -82,132 +85,62 @@ export class MessagePreparation {
       if (agent?.assistant_instructions) msgs.push({ role: 'assistant', content: agent.assistant_instructions });
     }
 
-    // WORKING MEMORY INTEGRATION: Use summaries instead of raw message history
+    // UNIFIED CONTEXT LOADER: WorkingMemory + RelevantHistory as ONE system
     const conversationId = context.conversation_id || (message as any).conversation_id;
+    const userId = context.user_id || (message as any).context?.user_id;
 
-    if (conversationId && context.agent_id) {
+    if (conversationId && context.agent_id && userId) {
       try {
-        // Fetch agent's context_history_size setting (defaults to 25 messages)
-        let contextHistorySize = 25;
-        try {
-          const { data: agentSettings } = await this.supabase
-            .from('agents')
-            .select('settings')
-            .eq('id', context.agent_id)
-            .single();
-          
-          if (agentSettings?.settings?.context_history_size) {
-            contextHistorySize = agentSettings.settings.context_history_size;
-            console.log(`[MessagePreparation] 📊 Using agent's context_history_size: ${contextHistorySize} messages`);
-          }
-        } catch (settingsError) {
-          console.warn('[MessagePreparation] Could not fetch agent settings, using default context_history_size=25');
-        }
-
-        const workingMemory = new WorkingMemoryManager(this.supabase as any);
-        const memoryContext = await workingMemory.getWorkingContext(
+        // Load unified context (WorkingMemory + RelevantHistory in parallel)
+        const unifiedContext = await this.contextLoader.loadContext(
           conversationId,
           context.agent_id,
-          false // Don't include chunks yet - just summary board
+          userId,
+          {
+            includeChunks: false, // Just summaries for now
+          }
         );
 
-        if (memoryContext && memoryContext.summary) {
-          // Format working memory as assistant message for better LLM comprehension
-          const workingMemoryBlock = workingMemory.formatContextForLLM(memoryContext);
-          msgs.push({ role: 'assistant', content: workingMemoryBlock });
+        // Inject unified context EARLY in messages array for better direction
+        const contextMessage = this.contextLoader.getContextMessage(unifiedContext);
+        msgs.push(contextMessage);
 
-          console.log(`[MessagePreparation] ✅ Added working memory context (${memoryContext.facts.length} facts, ${memoryContext.metadata.message_count} messages summarized)`);
-          console.log(`[MessagePreparation] 📊 Token savings: ~${memoryContext.metadata.message_count * 100} tokens saved vs raw history`);
-
-          // Store summary info for metrics
+        // Store summary info for metrics
+        if (unifiedContext.workingMemory) {
           summaryInfo = {
-            summary: memoryContext.summary,
-            facts_count: memoryContext.facts.length,
-            action_items_count: memoryContext.action_items.length,
-            pending_questions_count: memoryContext.pending_questions.length,
-            message_count: memoryContext.metadata.message_count,
-            last_updated: memoryContext.metadata.last_updated,
+            summary: unifiedContext.workingMemory.summary,
+            facts_count: unifiedContext.workingMemory.facts.length,
+            action_items_count: unifiedContext.workingMemory.action_items.length,
+            pending_questions_count: unifiedContext.workingMemory.pending_questions.length,
+            message_count: unifiedContext.workingMemory.metadata.message_count,
+            last_updated: unifiedContext.workingMemory.metadata.last_updated,
           };
-
-          // HYBRID APPROACH: Include recent messages based on agent's context_history_size setting
-          // This ensures the LLM has both the strategic summary AND tactical recent context
-          const { data: recentMessagesData } = await this.supabase
-            .from('chat_messages_v2')
-            .select('role, content')
-            .eq('conversation_id', conversationId)
-            .order('created_at', { ascending: false })
-            .limit(contextHistorySize);
-
-          if (recentMessagesData && recentMessagesData.length > 0) {
-            // Reverse to chronological order
-            recentMessages = recentMessagesData.reverse();
-
-            // Add to messages array
-            for (const msg of recentMessages) {
-              // Extract text from JSONB content field
-              let contentText = '';
-              if (typeof msg.content === 'string') {
-                contentText = msg.content;
-              } else if (msg.content && typeof msg.content === 'object') {
-                // Handle { type: 'text', text: '...' } format from chat_messages_v2
-                contentText = (msg.content as any).text || JSON.stringify(msg.content);
-              }
-
-              msgs.push({
-                role: msg.role as 'system' | 'user' | 'assistant' | 'tool',
-                content: contentText,
-              });
-            }
-
-            console.log(`[MessagePreparation] ✅ Added ${recentMessages.length} recent messages for immediate context`);
-          }
         }
-      } catch (wmError: any) {
-        console.error('[MessagePreparation] ⚠️ Working Memory error (non-critical):', wmError.message);
-        
-        // Fetch agent's context_history_size for fallback (defaults to 25)
-        let fallbackContextSize = 25;
-        try {
-          const { data: agentSettings } = await this.supabase
-            .from('agents')
-            .select('settings')
-            .eq('id', context.agent_id)
-            .single();
-          
-          if (agentSettings?.settings?.context_history_size) {
-            fallbackContextSize = agentSettings.settings.context_history_size;
-          }
-        } catch (settingsError) {
-          console.warn('[MessagePreparation] Could not fetch agent settings for fallback, using default=25');
-        }
-        
-        // Fallback to traditional message loading on error
-        const { data: fallbackMessages } = await this.supabase
-          .from('chat_messages_v2')
-          .select('role, content')
-          .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: false })
-          .limit(fallbackContextSize);
 
-        if (fallbackMessages && fallbackMessages.length > 0) {
-          recentMessages = fallbackMessages.reverse();
-          for (const msg of recentMessages) {
-            // Extract text from JSONB content field
-            let contentText = '';
-            if (typeof msg.content === 'string') {
-              contentText = msg.content;
-            } else if (msg.content && typeof msg.content === 'object') {
-              // Handle { type: 'text', text: '...' } format from chat_messages_v2
-              contentText = (msg.content as any).text || JSON.stringify(msg.content);
-            }
-
-            msgs.push({
-              role: msg.role as 'system' | 'user' | 'assistant' | 'tool',
-              content: contentText,
-            });
+        // Store recent messages for return value
+        recentMessages = unifiedContext.recentHistory.map((msg: any) => {
+          let contentText = '';
+          if (typeof msg.content === 'string') {
+            contentText = msg.content;
+          } else if (msg.content?.type === 'text') {
+            contentText = msg.content.text;
+          } else if (msg.content?.text) {
+            contentText = msg.content.text;
+          } else {
+            contentText = JSON.stringify(msg.content);
           }
-          console.log(`[MessagePreparation] ✅ Loaded ${fallbackMessages.length} messages (fallback mode)`);
-        }
+
+          return {
+            role: msg.role,
+            content: contentText,
+          };
+        });
+
+        console.log(`[MessagePreparation] ✅ Unified context loaded in ${unifiedContext.metadata.load_time_ms}ms`);
+        console.log(`[MessagePreparation] 📊 Token savings: ~${unifiedContext.metadata.working_memory_message_count * 100} tokens saved`);
+      } catch (error: any) {
+        console.error('[MessagePreparation] ⚠️ Unified context error (non-critical):', error.message);
+        // Gracefully continue without context if loading fails
       }
     }
 
