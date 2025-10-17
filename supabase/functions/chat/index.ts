@@ -11,7 +11,7 @@ import { MemoryManager } from './core/memory/memory_manager.ts';
 import { ContextEngine } from './core/context/context_engine.ts';
 import { StateManager } from './core/state/state_manager.ts';
 // Removed: MonitoringSystem - feature archived (unused, empty tables)
-import { APIVersionRouter, MessageAdapter, getFeatureFlags, isFeatureEnabled, DualWriteService } from './adapters/index.ts';
+import { MessageAdapter, getFeatureFlags, isFeatureEnabled, DualWriteService } from './adapters/index.ts';
 import { FunctionCallingManager } from './function_calling/manager.ts';
 import { SchemaValidator } from './validation/index.ts';
 
@@ -21,7 +21,6 @@ import {
   withErrorHandling,
   CORS_HEADERS,
   handleCORS,
-  getAPIVersion,
   createResponseHeaders,
   StreamResponse,
 } from './api/v2/index.ts';
@@ -308,14 +307,14 @@ async function handler(req: Request): Promise<Response> {
       }
     }
     
-    // Only support v2 requests - no backward compatibility
+    // V2 Chat System (V1 deprecated and removed)
     const acceptHeader = req.headers.get('Accept');
     const wantsStream = acceptHeader?.includes('text/event-stream');
     const requestType = wantsStream && body.options?.response?.stream ? 'streaming' : 'standard';
     
-    log.info('Processing v2 request', { type: requestType, method: req.method });
+    log.info('Processing chat request', { type: requestType, method: req.method });
     
-    // Validate as v2 request
+    // Validate chat request
     const validation = validator.validateChatRequest(body);
     if (!validation.valid) {
       return new Response(

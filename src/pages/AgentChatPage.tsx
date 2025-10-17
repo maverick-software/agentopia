@@ -443,8 +443,16 @@ export function AgentChatPage() {
           <RealtimeVoiceChat
             conversationId={conversationHook.conversationLifecycle.id || ''}
             agentId={agentId || ''}
+            agentName={agent?.name}
+            agentAvatar={agent?.avatar_url || undefined}
             voice="alloy"
             onClose={() => setChatMode('text')}
+            onConversationCreated={(newConversationId) => {
+              // Update conversation lifecycle when voice chat creates a new conversation
+              console.log('[AgentChatPage] Voice chat created conversation:', newConversationId);
+              conversationHook.startNewConversation(newConversationId);
+              messageHook.markConversationAsFresh(newConversationId);
+            }}
           />
         ) : (
           <>

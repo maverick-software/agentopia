@@ -1,8 +1,7 @@
 // Adapters Index - Central export point for integration adapters
-// Provides backward compatibility and migration support
+// V2 Chat System Only - V1 deprecated and removed
 
 export { MessageFormatAdapter, MessageAdapter } from './message_adapter.ts';
-export { APIVersionRouter } from './api_version_router.ts';
 export type { FeatureFlags } from './feature_flags.ts';
 export { 
   getFeatureFlags, 

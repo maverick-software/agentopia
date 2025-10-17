@@ -279,30 +279,35 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create conversation if it doesn't exist
+    // Create conversation if it doesn't exist (only for fresh voice chats with no existing conversation)
     if (!conversation_id || conversation_id.trim() === '') {
-      console.log('[VoiceChatStream] Creating new conversation');
-      const { data: newConv, error: convError } = await supabaseServiceClient
-        .from('conversations')
+      console.log('[VoiceChatStream] No conversation_id provided, creating new conversation session');
+      conversation_id = crypto.randomUUID();
+      
+      const { error: convError } = await supabaseServiceClient
+        .from('conversation_sessions')
         .insert({
+          conversation_id: conversation_id,
           agent_id,
           user_id: user.id,
           title: 'Voice Conversation',
-          metadata: { started_via: 'realtime_voice' }
-        })
-        .select('id')
-        .single();
+          status: 'active',
+          session_state: { started_via: 'realtime_voice' },
+          started_at: new Date().toISOString(),
+          last_active: new Date().toISOString()
+        });
 
-      if (convError || !newConv) {
-        console.error('[VoiceChatStream] Error creating conversation:', convError);
+      if (convError) {
+        console.error('[VoiceChatStream] Error creating conversation session:', convError);
         return new Response(
-          JSON.stringify({ error: 'Failed to create conversation' }),
+          JSON.stringify({ error: 'Failed to create conversation session' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      conversation_id = newConv.id;
-      console.log(`[VoiceChatStream] Created new conversation: ${conversation_id}`);
+      console.log(`[VoiceChatStream] Created new conversation session: ${conversation_id}`);
+    } else {
+      console.log(`[VoiceChatStream] Using existing conversation: ${conversation_id}`);
     }
 
     console.log(`[VoiceChatStream] Starting voice chat for user ${user.id}, agent ${agent_id}`);

@@ -24,6 +24,7 @@ interface VoiceChatState {
   isProcessing: boolean;
   error: string | null;
   audioLevel: number;
+  transcript: string;
 }
 
 export function useSimpleVoiceChat(options: UseSimpleVoiceChatOptions) {
@@ -41,7 +42,8 @@ export function useSimpleVoiceChat(options: UseSimpleVoiceChatOptions) {
     isRecording: false,
     isProcessing: false,
     error: null,
-    audioLevel: 0
+    audioLevel: 0,
+    transcript: ''
   });
   const [isPTTPressed, setIsPTTPressed] = useState(false);
 
@@ -152,7 +154,10 @@ export function useSimpleVoiceChat(options: UseSimpleVoiceChatOptions) {
   }, [state.isRecording]);
 
   /**
-   * Process audio and send to backend
+   * Process audio and send through proper pipeline:
+   * 1. STT (Whisper) → transcribe to text
+   * 2. Chat (/functions/v1/chat) → process through full chat pipeline
+   * 3. TTS (OpenAI) → synthesize response to audio
    */
   const processAudio = useCallback(async () => {
     setState(prev => ({ ...prev, isProcessing: true }));
@@ -163,8 +168,10 @@ export function useSimpleVoiceChat(options: UseSimpleVoiceChatOptions) {
         type: mediaRecorderRef.current?.mimeType || 'audio/webm' 
       });
 
+      console.log('[SimpleVoiceChat] Audio blob size:', audioBlob.size, 'bytes, chunks:', audioChunksRef.current.length);
+
       if (audioBlob.size < 1000) {
-        throw new Error('Recording is too short. Please record for at least 1-2 seconds.');
+        throw new Error('Recording is too short. Please hold the key for at least 1-2 seconds to record your message.');
       }
 
       // Get authentication token
@@ -173,110 +180,153 @@ export function useSimpleVoiceChat(options: UseSimpleVoiceChatOptions) {
         throw new Error('Not authenticated');
       }
 
-      // Convert to base64
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const base64Audio = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      );
-
-      // Send to voice-chat-stream
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/voice-chat-stream`, {
+
+      // ========== STEP 1: STT - Transcribe audio to text ==========
+      console.log('[SimpleVoiceChat] Step 1: Transcribing audio...');
+      
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+
+      const transcribeResponse = await fetch(`${supabaseUrl}/functions/v1/voice-transcribe`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
+        },
+        body: formData
+      });
+
+      if (!transcribeResponse.ok) {
+        const errorData = await transcribeResponse.json();
+        throw new Error(errorData.error || 'Failed to transcribe audio');
+      }
+
+      const transcribeData = await transcribeResponse.json();
+      const transcript = transcribeData.text; // voice-transcribe returns { text, language, duration, confidence }
+      console.log('[SimpleVoiceChat] Transcription:', transcript);
+
+      if (!transcript) {
+        throw new Error('No transcription received from audio');
+      }
+
+      setState(prev => ({ ...prev, transcript }));
+
+      // ========== STEP 2: Chat - Send through full chat pipeline ==========
+      console.log('[SimpleVoiceChat] Step 2: Processing through chat pipeline...');
+      
+      // Get session_id from localStorage (same pattern as text chat)
+      const session_id = localStorage.getItem(`agent_${agentId}_session_id`) || crypto.randomUUID();
+      
+      const chatResponse = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          audio_input: base64Audio,
-          conversation_id: conversationId,
-          agent_id: agentId,
-          voice: voice,
-          format: 'webm'
+          version: '2.0.0',
+          message: {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: transcript
+            },
+            context: {
+              input_method: 'realtime_voice', // Tag it as voice input
+              audio_stored: false
+            }
+          },
+          context: {
+            agent_id: agentId,
+            conversation_id: conversationId,
+            session_id: session_id
+          },
+          options: {
+            context: {
+              max_messages: 25
+            }
+          }
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Voice chat failed: ${response.status}`);
-      }
-
-      // Handle SSE streaming response
-      console.log('[SimpleVoiceChat] Processing voice chat response...');
-      
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullResponse = '';
-      let audioBase64 = '';
-      let completedMessageId = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim() || !line.startsWith('data: ')) continue;
-            
-            try {
-              const jsonStr = line.slice(6); // Remove 'data: ' prefix
-              const data = JSON.parse(jsonStr);
-              
-              console.log('[SimpleVoiceChat] SSE event:', data.event, data);
-              
-              if (data.event === 'text' || data.event === 'text_delta') {
-                fullResponse += (data.data || data.text || '');
-              } else if (data.event === 'audio') {
-                // Store audio for playback
-                audioBase64 = data.audio;
-                console.log('[SimpleVoiceChat] Received audio, length:', data.audio?.length);
-              } else if (data.event === 'complete') {
-                console.log('[SimpleVoiceChat] Voice chat completed:', data);
-                completedMessageId = data.message_id;
-              } else if (data.event === 'error') {
-                throw new Error(data.error);
-              }
-            } catch (e) {
-              console.warn('[SimpleVoiceChat] Failed to parse SSE event:', line, e);
-            }
-          }
-        }
-      }
-
-      console.log('[SimpleVoiceChat] Full response:', fullResponse);
-
-      // Auto-play the audio response
-      if (audioBase64) {
-        console.log('[SimpleVoiceChat] Auto-playing audio response...');
+      if (!chatResponse.ok) {
+        const errorText = await chatResponse.text();
+        console.error('[SimpleVoiceChat] Chat error response:', chatResponse.status, errorText);
+        let errorData: any = {};
         try {
-          const audioBlob = new Blob(
-            [Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0))],
-            { type: 'audio/mpeg' }
-          );
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          
-          audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            console.log('[SimpleVoiceChat] Audio playback finished');
-          };
-          
-          await audio.play();
-        } catch (playError) {
-          console.error('[SimpleVoiceChat] Audio playback failed:', playError);
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+        throw new Error(errorData.error || `Chat request failed: ${chatResponse.status}`);
+      }
+
+      const chatData = await chatResponse.json();
+      console.log('[SimpleVoiceChat] Chat response data:', chatData);
+      const assistantReply = chatData?.data?.message?.content?.text || chatData?.message;
+      
+      console.log('[SimpleVoiceChat] Chat response:', assistantReply);
+
+      if (typeof assistantReply !== 'string') {
+        throw new Error('Received invalid response from chat service');
+      }
+
+      setState(prev => ({ ...prev, transcript: assistantReply }));
+
+      // ========== STEP 3: TTS - Synthesize response to audio ==========
+      console.log('[SimpleVoiceChat] Step 3: Synthesizing audio response...');
+      
+      const ttsResponse = await fetch(`${supabaseUrl}/functions/v1/voice-synthesize`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: assistantReply,
+          voice: voice,
+          agent_id: agentId
+        })
+      });
+
+      if (!ttsResponse.ok) {
+        const ttsErrorText = await ttsResponse.text();
+        console.warn('[SimpleVoiceChat] TTS failed:', ttsResponse.status, ttsErrorText);
+      } else {
+        // voice-synthesize returns raw audio data, not JSON
+        const audioBlob = await ttsResponse.blob();
+        console.log('[SimpleVoiceChat] TTS audio received:', audioBlob.size, 'bytes');
+        
+        if (audioBlob.size > 0) {
+          console.log('[SimpleVoiceChat] Auto-playing audio response...');
+          try {
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            audio.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              console.log('[SimpleVoiceChat] Audio playback finished');
+            };
+            
+            audio.onerror = (e) => {
+              console.error('[SimpleVoiceChat] Audio error event:', e);
+            };
+            
+            await audio.play();
+            console.log('[SimpleVoiceChat] Audio playback started successfully');
+          } catch (playError) {
+            console.error('[SimpleVoiceChat] Audio playback failed:', playError);
+          }
+        } else {
+          console.warn('[SimpleVoiceChat] No audio data in TTS response');
         }
       }
 
       setState(prev => ({ ...prev, isProcessing: false }));
 
-      // Notify parent that voice chat is complete
-      if (completedMessageId && onComplete) {
-        onComplete(completedMessageId);
+      // Notify parent - use conversation_id since messages are saved in chat pipeline
+      if (onComplete) {
+        onComplete(conversationId);
       }
 
     } catch (error) {
@@ -284,7 +334,7 @@ export function useSimpleVoiceChat(options: UseSimpleVoiceChatOptions) {
       setState(prev => ({ ...prev, error: err.message, isProcessing: false }));
       onError?.(err);
     }
-  }, [conversationId, agentId, voice, onError]);
+  }, [conversationId, agentId, voice, onError, onComplete]);
 
   // PTT keyboard event handlers
   useEffect(() => {

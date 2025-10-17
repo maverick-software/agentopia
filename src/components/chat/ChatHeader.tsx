@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MoreVertical, FolderPlus, Archive, Flag, Trash2, Share } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Flag, Trash2, Share, ChevronDown, MessageSquare, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -38,27 +38,6 @@ export function ChatHeader({
   const handleShare = () => {
     // TODO: Implement share functionality
     toast.success('Share functionality coming soon!');
-  };
-
-  const handleAddToProject = () => {
-    // TODO: Implement add to project functionality
-    toast.success('Add to project functionality coming soon!');
-  };
-
-  const handleArchive = async () => {
-    if (!conversationId) {
-      toast.error('No conversation to archive');
-      return;
-    }
-    setIsProcessing(true);
-    try {
-      // TODO: Implement archive functionality
-      toast.success('Conversation archived');
-    } catch (error) {
-      toast.error('Failed to archive conversation');
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const handleReport = () => {
@@ -105,48 +84,58 @@ export function ChatHeader({
         >
           <ArrowLeft className="h-4 w-4 text-muted-foreground" />
         </button>
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-3">
-            {/* Avatar with hover edit functionality */}
-            <div 
-              className="relative group cursor-pointer"
-              onClick={onShowAgentSettings}
-            >
-              {resolvedAvatarUrl ? (
-                <img 
-                  src={resolvedAvatarUrl} 
-                  alt={agent?.name || 'Agent'}
-                  className="w-6 h-6 rounded-full object-cover transition-all duration-200 group-hover:brightness-75"
-                  onError={(e) => {
-                    console.warn('Header avatar failed to load:', resolvedAvatarUrl);
-                    e.currentTarget.style.display = 'none';
-                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                    if (fallback) fallback.style.display = 'flex';
-                  }}
-                />
-              ) : null}
-              <div 
-                className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center transition-all duration-200 group-hover:brightness-75"
-                style={{ display: resolvedAvatarUrl ? 'none' : 'flex' }}
-              >
-                <span className="text-white text-xs font-medium">
-                  {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
-                </span>
+        
+        {/* Agent Card with Dropdown Menu - ChatGPT Style */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center space-x-3 px-2 py-1.5 -mx-2 hover:bg-accent rounded-lg transition-colors group">
+              <div className="flex items-center space-x-3">
+                {/* Avatar */}
+                <div className="relative">
+                  {resolvedAvatarUrl ? (
+                    <img 
+                      src={resolvedAvatarUrl} 
+                      alt={agent?.name || 'Agent'}
+                      className="w-6 h-6 rounded-full object-cover"
+                      onError={(e) => {
+                        console.warn('Header avatar failed to load:', resolvedAvatarUrl);
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div 
+                    className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
+                    style={{ display: resolvedAvatarUrl ? 'none' : 'flex' }}
+                  >
+                    <span className="text-white text-xs font-medium">
+                      {agent?.name?.charAt(0)?.toUpperCase() || 'A'}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Agent Name */}
+                <div className="flex items-center space-x-1.5">
+                  <h1 className="text-sm font-semibold text-foreground text-left">
+                    {agent?.name || 'Loading...'}
+                  </h1>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
-              {/* Hover overlay */}
-              <div className="absolute inset-0 bg-black/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-                <span className="text-white text-[10px] font-medium">Edit</span>
-              </div>
-            </div>
-            
-            <div className="flex flex-col">
-              <h1 className="text-lg font-semibold text-foreground">
-                {agent?.name || 'Loading...'}
-              </h1>
-              <p className="text-xs text-muted-foreground">AI Assistant</p>
-            </div>
-          </div>
-        </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64 border-0 shadow-lg rounded-xl">
+            <DropdownMenuItem onClick={() => navigate(`/agents/${agentId}/chat`)}>
+              <MessageSquare className="mr-2 h-4 w-4" />
+              New chat
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShowAgentSettings}>
+              <Info className="mr-2 h-4 w-4" />
+              About
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -157,18 +146,10 @@ export function ChatHeader({
               <MoreVertical className="h-4 w-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-56 border-0 shadow-lg rounded-xl">
             <DropdownMenuItem onClick={handleShare} disabled={isProcessing}>
               <Share className="mr-2 h-4 w-4" />
               Share
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleAddToProject} disabled={isProcessing}>
-              <FolderPlus className="mr-2 h-4 w-4" />
-              Add to project
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleArchive} disabled={isProcessing || !conversationId}>
-              <Archive className="mr-2 h-4 w-4" />
-              Archive
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleReport} disabled={isProcessing}>
               <Flag className="mr-2 h-4 w-4" />

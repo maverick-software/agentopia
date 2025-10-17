@@ -11,7 +11,7 @@ The Gofr Agent should be able to speak to the other agents as if they were MCP t
 
 ## Investigate mcp_tool_cache ##
 
-Let's make sure that, when we get a successful tool call, we are saving that in our mcp_tool_cache. We should check against what is currently in the database, and if it is the same, then no update, but if it is different, then save the schema. Also, there should only be one record per tool. Let's make sure that constraint is already there. Then, we need to make sure we are providing this tool cache to the agent during mcp calls, 'here are the required parameters that have worked for this tool call: [parameters]" in the initial and every retry, along with the mcp server's feedback.
+Let's make sure that, when we get a successful tool call, we are saving that in our mcp_tool_cache. We should check against what is currently in the database, and if it is the same, then no update, but if it is different, then save the schema. Also, there should only be one record per tool. Let's make sure that constraint is already there. Then, we need to make sure we are providing this tool cache to the agent during mcp calls, 'here are the required parameters that have worked for this tool call: [parameters] in the initial and every retry, along with the mcp server's feedback.
 
 ## Update 'Tools' inside agent Behavior Tab ##
 
