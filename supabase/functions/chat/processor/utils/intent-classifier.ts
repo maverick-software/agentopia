@@ -119,9 +119,50 @@ export class IntentClassifier {
   // Metrics tracking
   private cacheHits = 0;
   private cacheMisses = 0;
+  private systemPrompt: string | null = null;
+  private promptLastFetched: number = 0;
+  private readonly PROMPT_CACHE_TTL = 300000; // 5 minutes
   
-  constructor(private openai: OpenAI) {
+  constructor(private openai: OpenAI, private supabase?: any) {
     // Initialization is silent for cleaner logs
+  }
+  
+  /**
+   * Fetch the intent classifier prompt from database with caching
+   */
+  private async getSystemPrompt(): Promise<string> {
+    const now = Date.now();
+    
+    // Return cached prompt if still valid
+    if (this.systemPrompt && (now - this.promptLastFetched) < this.PROMPT_CACHE_TTL) {
+      return this.systemPrompt;
+    }
+    
+    // Try to fetch from database if supabase client is available
+    if (this.supabase) {
+      try {
+        const { data, error} = await this.supabase
+          .from('system_prompts')
+          .select('content')
+          .eq('key', 'intent_classifier')
+          .eq('is_active', true)
+          .single();
+        
+        if (!error && data?.content) {
+          this.systemPrompt = data.content;
+          this.promptLastFetched = now;
+          console.log('[IntentClassifier] Loaded prompt from database');
+          return this.systemPrompt;
+        }
+      } catch (error) {
+        console.warn('[IntentClassifier] Error fetching prompt from database, using hardcoded fallback:', error);
+      }
+    }
+    
+    // Fallback to hardcoded prompt
+    this.systemPrompt = CLASSIFICATION_SYSTEM_PROMPT;
+    this.promptLastFetched = now;
+    return this.systemPrompt;
   }
   
   /**
@@ -197,10 +238,13 @@ export class IntentClassifier {
   ): Promise<IntentClassification> {
     try {
       // Build context-aware prompt
+      // Get system prompt from database (with caching)
+      const systemPromptContent = await this.getSystemPrompt();
+      
       const messages: any[] = [
         {
           role: 'system',
-          content: CLASSIFICATION_SYSTEM_PROMPT
+          content: systemPromptContent
         }
       ];
       

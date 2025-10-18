@@ -10,7 +10,60 @@ export interface AgentData {
 }
 
 export class PromptBuilder {
+  private promptCache: Map<string, string> = new Map();
+  private cacheExpiry: number = 5 * 60 * 1000; // 5 minutes
+  private lastFetch: number = 0;
+
   constructor(private supabase: SupabaseClient) {}
+
+  /**
+   * Fetch system prompts from database with caching
+   */
+  private async fetchSystemPrompts(): Promise<Map<string, string>> {
+    const now = Date.now();
+    
+    // Return cached prompts if still valid
+    if (this.promptCache.size > 0 && (now - this.lastFetch) < this.cacheExpiry) {
+      return this.promptCache;
+    }
+
+    try {
+      const { data: prompts, error } = await this.supabase
+        .from('system_prompts')
+        .select('key, content')
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('[PromptBuilder] Error fetching system prompts:', error);
+        // Return cached prompts as fallback
+        if (this.promptCache.size > 0) return this.promptCache;
+        // Return empty map if no cache
+        return new Map();
+      }
+
+      // Update cache
+      this.promptCache.clear();
+      prompts?.forEach((p: any) => {
+        this.promptCache.set(p.key, p.content);
+      });
+      this.lastFetch = now;
+
+      console.log(`[PromptBuilder] Loaded ${this.promptCache.size} system prompts from database`);
+      return this.promptCache;
+    } catch (error) {
+      console.error('[PromptBuilder] Exception fetching system prompts:', error);
+      // Return existing cache as fallback
+      return this.promptCache;
+    }
+  }
+
+  /**
+   * Get a specific prompt by key, with fallback to hardcoded default
+   */
+  private async getPrompt(key: string, fallback: string): Promise<string> {
+    const prompts = await this.fetchSystemPrompts();
+    return prompts.get(key) || fallback;
+  }
 
   /**
    * Fetch agent data from database
@@ -28,24 +81,27 @@ export class PromptBuilder {
   /**
    * Build agent identity section
    */
-  buildAgentIdentity(agent: AgentData | null): string[] {
+  async buildAgentIdentity(agent: AgentData | null): Promise<string[]> {
     const sections: string[] = [];
     
-    sections.push(`=== AGENT IDENTITY ===`);
-    sections.push(`Your name is "${agent?.name || 'Assistant'}".`);
-    sections.push(`You MUST always identify yourself by this name when asked.`);
+    // Fetch template from database
+    const template = await this.getPrompt('agent_identity_template', 
+      `=== AGENT IDENTITY ===
+Your name is "{agent_name}".
+You MUST always identify yourself by this name when asked.
+{role}
+{personality}
+When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is {agent_name}"
+=== END AGENT IDENTITY ===`);
     
-    if (agent?.description) {
-      sections.push(`Your description/role: ${agent.description}`);
-    }
+    // Replace placeholders
+    let identityPrompt = template
+      .replace(/{agent_name}/g, agent?.name || 'Assistant')
+      .replace(/{role}/g, agent?.description ? `Your description/role: ${agent.description}` : '')
+      .replace(/{personality}/g, agent?.personality ? `Your personality traits: ${agent.personality}\nYou MUST maintain these personality characteristics consistently in all interactions.` : '');
     
-    if (agent?.personality) {
-      sections.push(`Your personality traits: ${agent.personality}`);
-      sections.push(`You MUST maintain these personality characteristics consistently in all interactions.`);
-    }
-    
-    sections.push(`When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is ${agent?.name || 'Assistant'}"`);
-    sections.push(`=== END AGENT IDENTITY ===\n`);
+    sections.push(identityPrompt);
+    sections.push(''); // Blank line
     
     return sections;
   }
@@ -68,80 +124,83 @@ export class PromptBuilder {
   /**
    * Build document access instructions
    */
-  buildDocumentInstructions(): string[] {
-    return [
-      `=== DOCUMENT ACCESS INSTRUCTIONS ===`,
-      `IMPORTANT: When users ask about uploaded documents, files, or content they've shared:`,
-      `1. FIRST use 'search_documents' to find relevant documents`,
-      `2. THEN use 'get_document_content' to retrieve the actual content`,
-      `3. Reference the document content directly in your response`,
-      `4. Always mention the document name/source when referencing content`,
-      `Examples of when to use document tools:`,
-      `- "What does the document say about..."`,
-      `- "Summarize the uploaded file"`,
-      `- "What are the key points in..."`,
-      `- "Tell me about the document I uploaded"`,
-      `=== END DOCUMENT ACCESS INSTRUCTIONS ===\n`
-    ];
+  async buildDocumentInstructions(): Promise<string[]> {
+    const prompt = await this.getPrompt('document_access',
+      `=== DOCUMENT ACCESS INSTRUCTIONS ===
+IMPORTANT: When users ask about uploaded documents, files, or content they've shared:
+1. FIRST use 'search_documents' to find relevant documents
+2. THEN use 'get_document_content' to retrieve the actual content
+3. Reference the document content directly in your response
+4. Always mention the document name/source when referencing content
+Examples of when to use document tools:
+- "What does the document say about..."
+- "Summarize the uploaded file"
+- "What are the key points in..."
+- "Tell me about the document I uploaded"
+=== END DOCUMENT ACCESS INSTRUCTIONS ===`);
+    
+    return [prompt, ''];
   }
 
   /**
    * Build artifact creation instructions
    */
-  buildArtifactInstructions(): string[] {
-    return [
-      `=== ARTIFACT CREATION INSTRUCTIONS ===`,
-      `CRITICAL: When creating artifacts with 'create_artifact', you MUST ALWAYS provide the 'content' parameter with the COMPLETE file content.`,
-      ``,
-      `Rules for artifact creation:`,
-      `1. ALWAYS generate the full content first, then call create_artifact`,
-      `2. The 'content' parameter is REQUIRED and must contain the complete text/code`,
-      `3. Never call create_artifact with just a title and file_type - always include content`,
-      `4. Think of content as "what the user will see when they open the file"`,
-      ``,
-      `Examples of CORRECT usage:`,
-      `- create_artifact(title="California Article", file_type="txt", content="California is a state located on the West Coast...")`,
-      `- create_artifact(title="API Client", file_type="javascript", content="function fetchData() { return fetch('/api/data'); }")`,
-      `- create_artifact(title="README", file_type="md", content="# Project Title\\n\\nThis project does...")`,
-      ``,
-      `Examples of INCORRECT usage (missing content):`,
-      `- create_artifact(title="Article", file_type="txt") ❌ WRONG`,
-      `- create_artifact(title="Script", file_type="python") ❌ WRONG`,
-      ``,
-      `When users ask you to "create a document", "write a file", or "save this as", immediately generate the full content and call create_artifact with all three parameters.`,
-      `=== END ARTIFACT CREATION INSTRUCTIONS ===\n`
-    ];
+  async buildArtifactInstructions(): Promise<string[]> {
+    const prompt = await this.getPrompt('artifact_creation',
+      `=== ARTIFACT CREATION INSTRUCTIONS ===
+CRITICAL: When creating artifacts with 'create_artifact', you MUST ALWAYS provide the 'content' parameter with the COMPLETE file content.
+
+Rules for artifact creation:
+1. ALWAYS generate the full content first, then call create_artifact
+2. The 'content' parameter is REQUIRED and must contain the complete text/code
+3. Never call create_artifact with just a title and file_type - always include content
+4. Think of content as "what the user will see when they open the file"
+
+Examples of CORRECT usage:
+- create_artifact(title="California Article", file_type="txt", content="California is a state located on the West Coast...")
+- create_artifact(title="API Client", file_type="javascript", content="function fetchData() { return fetch('/api/data'); }")
+
+Examples of INCORRECT usage (missing content):
+- create_artifact(title="Article", file_type="txt") ❌ WRONG
+- create_artifact(title="Script", file_type="python") ❌ WRONG
+
+When users ask you to "create a document", "write a file", or "save this as", immediately generate the full content and call create_artifact with all three parameters.
+=== END ARTIFACT CREATION INSTRUCTIONS ===`);
+    
+    return [prompt, ''];
   }
 
   /**
    * Build memory handling instructions
    */
-  buildMemoryInstructions(): string[] {
-    return [
-      `=== MEMORY HANDLING INSTRUCTIONS ===\n` +
-      `You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.\n\n` +
-      `Use these rules to apply memory to the current user request:\n` +
-      `1) EPISODIC MEMORY (events/examples):\n` +
-      `   - Purpose: continuity, personalization, and recent task alignment.\n` +
-      `   - Prioritize recency and direct relevance to the current query.\n` +
-      `   - Do NOT restate full content; summarize only what is minimally necessary.\n` +
-      `2) SEMANTIC MEMORY (facts/entities/conclusions/concepts):\n` +
-      `   - Purpose: factual grounding and domain knowledge.\n` +
-      `   - Prefer higher-confidence, multi-source items; prefer well-supported conclusions/concepts derived from 3–6 connected nodes/edges.\n` +
-      `   - If conflicts exist, resolve by (a) higher confidence, (b) greater evidence, (c) more recent; if unresolved, note uncertainty briefly.\n` +
-      `3) SAFETY & PRIVACY:\n` +
-      `   - Never leak raw sensitive content. Summarize and reference sources (e.g., [source: message 2025-08-12]).\n` +
-      `4) BREVITY & RELEVANCE:\n` +
-      `   - Extract only memory that materially improves the answer. Be concise and avoid repetition.\n` +
-      `=== END MEMORY HANDLING INSTRUCTIONS ===\n`
-    ];
+  async buildMemoryInstructions(): Promise<string[]> {
+    const prompt = await this.getPrompt('memory_handling',
+      `=== MEMORY HANDLING INSTRUCTIONS ===
+You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.
+
+Use these rules to apply memory to the current user request:
+1) EPISODIC MEMORY (events/examples):
+   - Purpose: continuity, personalization, and recent task alignment.
+   - Prioritize recency and direct relevance to the current query.
+   - Do NOT restate full content; summarize only what is minimally necessary.
+2) SEMANTIC MEMORY (facts/entities/conclusions/concepts):
+   - Purpose: factual grounding and domain knowledge.
+   - Prefer higher-confidence, multi-source items; prefer well-supported conclusions/concepts derived from 3–6 connected nodes/edges.
+   - If conflicts exist, resolve by (a) higher confidence, (b) greater evidence, (c) more recent; if unresolved, note uncertainty briefly.
+3) SAFETY & PRIVACY:
+   - Never leak raw sensitive content. Summarize and reference sources (e.g., [source: message 2025-08-12]).
+4) BREVITY & RELEVANCE:
+   - Extract only memory that materially improves the answer. Be concise and avoid repetition.
+=== END MEMORY HANDLING INSTRUCTIONS ===`);
+    
+    return [prompt, ''];
   }
 
   /**
    * Build markdown formatting instructions
    */
-  buildFormattingInstructions(): string[] {
-    return [
+  async buildFormattingInstructions(): Promise<string[]> {
+    const prompt = await this.getPrompt('markdown_formatting',
       `CRITICAL FORMATTING INSTRUCTIONS - You MUST format your responses using proper Markdown:
 
 1. **Paragraphs**: Add a blank line between EVERY paragraph for proper spacing.
@@ -197,8 +256,9 @@ Here's a list of items:
 
 Another paragraph after the list, properly spaced.
 
-Remember: ALWAYS use blank lines between elements for readability!`
-    ];
+Remember: ALWAYS use blank lines between elements for readability!`);
+    
+    return [prompt, ''];
   }
 
   /**
@@ -332,11 +392,11 @@ RESPOND AS IF THE TASK IS COMPLETE. Report what happened and what was found (or 
 
     // Build preamble
     const preamble: string[] = [];
-    preamble.push(...this.buildAgentIdentity(agent));
+    preamble.push(...await this.buildAgentIdentity(agent));
     preamble.push(...this.buildSystemInstructions(agent));
-    preamble.push(...this.buildDocumentInstructions());
-    preamble.push(...this.buildMemoryInstructions());
-    preamble.push(...this.buildFormattingInstructions());
+    preamble.push(...await this.buildDocumentInstructions());
+    preamble.push(...await this.buildMemoryInstructions());
+    preamble.push(...await this.buildFormattingInstructions());
 
     if (preamble.length) {
       msgs.push({ role: 'system', content: preamble.join('\n') });
@@ -360,19 +420,27 @@ RESPOND AS IF THE TASK IS COMPLETE. Report what happened and what was found (or 
   /**
    * Build comprehensive system prompt string with agent identity, instructions, and guidance
    */
-  buildSystemPromptString(agent: any): string {
+  async buildSystemPromptString(agent: any): Promise<string> {
     const sections: string[] = [];
     const behavior = agent?.metadata?.behavior || {};
     
-    // CRITICAL: Agent Identity - Must be first and explicit
-    const identityRole = behavior.role || agent?.description || '';
-    sections.push(`=== AGENT IDENTITY ===
-Your name is "${agent?.name || 'Assistant'}".
+    // CRITICAL: Agent Identity - Fetch from database
+    const identityTemplate = await this.getPrompt('agent_identity_template',
+      `=== AGENT IDENTITY ===
+Your name is "{agent_name}".
 You MUST always identify yourself by this name when asked.
-${identityRole ? `Your role: ${identityRole}` : ''}
-${agent?.personality ? `Your personality traits: ${agent.personality}\nYou MUST maintain these personality characteristics consistently in all interactions.` : ''}
-When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is ${agent?.name || 'Assistant'}"
+{role}
+{personality}
+When asked "What is your name?" or "Who are you?", you MUST respond with: "My name is {agent_name}"
 === END AGENT IDENTITY ===`);
+    
+    const identityRole = behavior.role || agent?.description || '';
+    const identityPrompt = identityTemplate
+      .replace(/{agent_name}/g, agent?.name || 'Assistant')
+      .replace(/{role}/g, identityRole ? `Your role: ${identityRole}` : '')
+      .replace(/{personality}/g, agent?.personality ? `Your personality traits: ${agent.personality}\nYou MUST maintain these personality characteristics consistently in all interactions.` : '');
+    
+    sections.push(identityPrompt);
     
     // Behavior Instructions (from metadata)
     if (behavior.instructions) {
@@ -425,8 +493,9 @@ ${rulesContent}
       }
     }
     
-    // Document tools guidance
-    sections.push(`=== DOCUMENT ACCESS INSTRUCTIONS ===
+    // Document tools guidance - fetch from database
+    const documentPrompt = await this.getPrompt('document_access',
+      `=== DOCUMENT ACCESS INSTRUCTIONS ===
 IMPORTANT: When users ask about uploaded documents, files, or content they've shared:
 1. FIRST use 'search_documents' to find relevant documents
 2. THEN use 'get_document_content' to retrieve the actual content
@@ -438,9 +507,11 @@ Examples of when to use document tools:
 - "What are the key points in..."
 - "Tell me about the document I uploaded"
 === END DOCUMENT ACCESS INSTRUCTIONS ===`);
+    sections.push(documentPrompt);
     
-    // Artifact creation guidance
-    sections.push(`=== ARTIFACT CREATION INSTRUCTIONS ===
+    // Artifact creation guidance - fetch from database
+    const artifactPrompt = await this.getPrompt('artifact_creation',
+      `=== ARTIFACT CREATION INSTRUCTIONS ===
 CRITICAL: When creating artifacts with 'create_artifact', you MUST ALWAYS provide the 'content' parameter with the COMPLETE file content.
 
 Rules for artifact creation:
@@ -452,7 +523,6 @@ Rules for artifact creation:
 Examples of CORRECT usage:
 - create_artifact(title="California Article", file_type="txt", content="California is a state located on the West Coast...")
 - create_artifact(title="API Client", file_type="javascript", content="function fetchData() { return fetch('/api/data'); }")
-- create_artifact(title="README", file_type="md", content="# Project Title\\n\\nThis project does...")
 
 Examples of INCORRECT usage (missing content):
 - create_artifact(title="Article", file_type="txt") ❌ WRONG
@@ -460,9 +530,11 @@ Examples of INCORRECT usage (missing content):
 
 When users ask you to "create a document", "write a file", or "save this as", immediately generate the full content and call create_artifact with all three parameters.
 === END ARTIFACT CREATION INSTRUCTIONS ===`);
+    sections.push(artifactPrompt);
     
-    // Memory handling guidance
-    sections.push(`=== MEMORY HANDLING INSTRUCTIONS ===
+    // Memory handling guidance - fetch from database
+    const memoryPrompt = await this.getPrompt('memory_handling',
+      `=== MEMORY HANDLING INSTRUCTIONS ===
 You have access to a CONTEXT WINDOW with EPISODIC and SEMANTIC MEMORY sections injected as assistant messages.
 
 Use these rules to apply memory to the current user request:
@@ -479,9 +551,11 @@ Use these rules to apply memory to the current user request:
 4) BREVITY & RELEVANCE:
    - Extract only memory that materially improves the answer. Be concise and avoid repetition.
 === END MEMORY HANDLING INSTRUCTIONS ===`);
+    sections.push(memoryPrompt);
     
-    // Output formatting guidance
-    sections.push(this.buildFormattingInstructions().join('\n'));
+    // Output formatting guidance - fetch from database
+    const formattingPrompts = await this.buildFormattingInstructions();
+    sections.push(formattingPrompts.join('\n'));
     
     return sections.join('\n\n');
   }

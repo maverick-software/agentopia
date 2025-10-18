@@ -16,74 +16,104 @@ CREATE TABLE IF NOT EXISTS system_prompts (
 );
 
 -- Add index for fast lookups
-CREATE INDEX idx_system_prompts_key ON system_prompts(key);
-CREATE INDEX idx_system_prompts_category ON system_prompts(category);
-CREATE INDEX idx_system_prompts_active ON system_prompts(is_active);
+CREATE INDEX IF NOT EXISTS idx_system_prompts_key ON system_prompts(key);
+CREATE INDEX IF NOT EXISTS idx_system_prompts_category ON system_prompts(category);
+CREATE INDEX IF NOT EXISTS idx_system_prompts_active ON system_prompts(is_active);
 
 -- Enable RLS
 ALTER TABLE system_prompts ENABLE ROW LEVEL SECURITY;
 
 -- Policies
-CREATE POLICY "Admins can view all system prompts"
-  ON system_prompts FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_roles ur
-      JOIN roles r ON ur.role_id = r.id
-      WHERE ur.user_id = auth.uid()
-      AND r.name = 'admin'
-    )
-  );
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'system_prompts' AND policyname = 'Admins can view all system prompts'
+  ) THEN
+    CREATE POLICY "Admins can view all system prompts"
+      ON system_prompts FOR SELECT
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON ur.role_id = r.id
+          WHERE ur.user_id = auth.uid()
+          AND r.name = 'admin'
+        )
+      );
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can insert system prompts"
-  ON system_prompts FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_roles ur
-      JOIN roles r ON ur.role_id = r.id
-      WHERE ur.user_id = auth.uid()
-      AND r.name = 'admin'
-    )
-  );
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'system_prompts' AND policyname = 'Admins can insert system prompts'
+  ) THEN
+    CREATE POLICY "Admins can insert system prompts"
+      ON system_prompts FOR INSERT
+      TO authenticated
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON ur.role_id = r.id
+          WHERE ur.user_id = auth.uid()
+          AND r.name = 'admin'
+        )
+      );
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update system prompts"
-  ON system_prompts FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_roles ur
-      JOIN roles r ON ur.role_id = r.id
-      WHERE ur.user_id = auth.uid()
-      AND r.name = 'admin'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_roles ur
-      JOIN roles r ON ur.role_id = r.id
-      WHERE ur.user_id = auth.uid()
-      AND r.name = 'admin'
-    )
-  );
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'system_prompts' AND policyname = 'Admins can update system prompts'
+  ) THEN
+    CREATE POLICY "Admins can update system prompts"
+      ON system_prompts FOR UPDATE
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON ur.role_id = r.id
+          WHERE ur.user_id = auth.uid()
+          AND r.name = 'admin'
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON ur.role_id = r.id
+          WHERE ur.user_id = auth.uid()
+          AND r.name = 'admin'
+        )
+      );
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can delete system prompts"
-  ON system_prompts FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_roles ur
-      JOIN roles r ON ur.role_id = r.id
-      WHERE ur.user_id = auth.uid()
-      AND r.name = 'admin'
-    )
-  );
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'system_prompts' AND policyname = 'Admins can delete system prompts'
+  ) THEN
+    CREATE POLICY "Admins can delete system prompts"
+      ON system_prompts FOR DELETE
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON ur.role_id = r.id
+          WHERE ur.user_id = auth.uid()
+          AND r.name = 'admin'
+        )
+      );
+  END IF;
+END $$;
 
 -- Function calls can read active prompts
-CREATE POLICY "Edge functions can read active prompts"
-  ON system_prompts FOR SELECT
-  USING (is_active = true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'system_prompts' AND policyname = 'Edge functions can read active prompts'
+  ) THEN
+    CREATE POLICY "Edge functions can read active prompts"
+      ON system_prompts FOR SELECT
+      USING (is_active = true);
+  END IF;
+END $$;
 
 -- Seed initial prompts from current codebase
 INSERT INTO system_prompts (key, name, description, category, content, is_active) VALUES
@@ -286,6 +316,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS system_prompts_updated_at ON system_prompts;
 CREATE TRIGGER system_prompts_updated_at
   BEFORE UPDATE ON system_prompts
   FOR EACH ROW

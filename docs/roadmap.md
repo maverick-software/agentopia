@@ -3,37 +3,23 @@
 
 Adding Voice, Creating Admin Agent Repository, A Simple AI description to create an agent
 
+## Powerpoint ##
+
+## Spreadsheets ##
+
+## OpenAI and Claude SDK ##
+
+## Automated Agent Builder ##
+
 ## Gofr Agent A2A ##
+
+## Quizzes or Exams ##
 
 The Gofr Agent should be able to speak to the other agents as if they were MCP tools, essentially. The Google A2A protocol. Should be able to achieve this with OpenAI Agent SDK too.
 
 ## Message Functions - Docs ##
 
 Would be interesting to add a doc icon to the bottom of message and allow users to generate a document from that specific message.
-
-## Quizzes or Exams ##
-
-## Investigate mcp_tool_cache ##
-
-Let's make sure that, when we get a successful tool call, we are saving that in our mcp_tool_cache. We should check against what is currently in the database, and if it is the same, then no update, but if it is different, then save the schema. Also, there should only be one record per tool. Let's make sure that constraint is already there. Then, we need to make sure we are providing this tool cache to the agent during mcp calls, 'here are the required parameters that have worked for this tool call: [parameters] in the initial and every retry, along with the mcp server's feedback.
-
-## Update 'Tools' inside agent Behavior Tab ##
-
-I want to create a button on the Agent Chat Page > Settings Moda > Behavior Tab > Tools that queries the MCP tools for an agent, and then uses an LLM responds to format them like the following:
-
-You have the following set of MCP tools:
-
-## Contact Management System ##
-
-search_contacts - searches our internal database for contact information.
-
-## QuickBooks Online ##
-
-quickbooks_online_update_estimate - updates estimates in QuickBook Online
-
-..
-
-and then stores that information in the 'Tools' section o f the Behavior Tab.
 
 ## Deep Research Capabilities ##
 
@@ -42,12 +28,6 @@ I want users to be able to select 'Deep Research'  from the input area of the ag
 https://platform.openai.com/docs/models/o4-mini-deep-research
 https://platform.openai.com/docs/guides/deep-research
 Background Mode: https://platform.openai.com/docs/guides/background
-
-## Image Generation ##
-
-We want to add an image generation MCP tool for the agent to use. For now, because we are using responses API, we will we use OpenAI's GPT-image-1 models. The user should be able to turn on/off image generation capabilities in the Settings modal > Tools tab.
-
-https://platform.openai.com/docs/guides/image-generation?image-generation-model=gpt-image-1ro,
 
 ## Vision ##
 
@@ -125,7 +105,13 @@ We can have spreadsheet project, text project, code project (any other kinds of 
 
 We need to incorporate in-chat image generation for agents. These images will be stored in the artifact system of the media library. We need to include the editing feature, where the agent uses the edit feature from OpenAI GPT-Image-1 and maybe even other image editing APis if available. The image generation tool needs to be enabled/disabled via the settings modal > tools tab. Not every agent needs to be able to generate images.
 
-## AI generated Dashboards via Canvas ##
+We want to add an image generation MCP tool for the agent to use. For now, because we are using responses API, we will we use OpenAI's GPT-image-1 models. The user should be able to turn on/off image generation capabilities in the Settings modal > Tools tab.
+
+https://platform.openai.com/docs/guides/image-generation?image-generation-model=gpt-image-1
+
+## AI generated Dashboards ##
+
+Graphs, Charts, Tables, etc
 
 We need to create a system of predefined UI elements and enable reports via Canvas. The user needs to be able to save these reports as custom dashboards inside our system, so they can be reviewed, refreshed and reported on at any time. We can added a temporary viewing capability similar to our existing temporary chat links. This will allow agents to become more useful, because they will be able to send links to users with temporary viewing privileges. Or we can have them generate PDF reports and send those links. The reports would be part of the artifact system in the existing media library system.
 
@@ -133,7 +119,7 @@ We need to create a system of predefined UI elements and enable reports via Canv
 
 Create a project management system similar to Asana and Clickup that empowers users to assign  agents to complete tasks. This should be a hybrid system where users and agents can be assigned to tasks. The user should be in control of when the project starts, and when agents actually perform the tasks assigned to them. Agents should be aware of what projects they are assigned to and what tasks they are assigned to, even in the chat interface.This means we should implement the project mechanism as an MCP tool, so that the agent can discover it as a tool during chat and determine if it should use the Project MCP tools to find assigned projects, tasks, etc. The user can assign context to the task, including in-task text descriptions, or upload documents. They can also assign the results of other completed tasks from other agents, users or the same agent to the current task in case there are project dependencies. Sidebar link, page where users can see projects in a list or grid. Project details page, live editing. Slide-in panel from right side for task details like asana. file uploads for each task.
 
-## Delegated ##
+## Delegated Access ##
 
 Create a system where one user can invite other users, whether existing or not, to view and use their agents. This should work similar to GoDaddy's delegated access. If a user invites another user, and the user does not exist, then our system will send the new person an email with an invite link to sign up for an account. Once they sign up for an account, they will have to accept delegated permissions based on what they have been given by the prime account holder. If they already have an account, then they will receive an invitation via email they can follow to login and accept. When they accept, the prime account holder's (inviter) agents will show up in their 'agents' tab. 
 
@@ -223,6 +209,24 @@ https://platform.openai.com/docs/guides/realtime
 ---
 
 ## Completed: ##
+
+## Investigate mcp_tool_cache ## (Completed)
+
+Let's make sure that, when we get a successful tool call, we are saving that in our mcp_tool_cache. We should check against what is currently in the database, and if it is the same, then no update, but if it is different, then save the schema. Also, there should only be one record per tool. Let's make sure that constraint is already there. Then, we need to make sure we are providing this tool cache to the agent during mcp calls, 'here are the required parameters that have worked for this tool call: [parameters] in the initial and every retry, along with the mcp server's feedback.
+
+## Update 'Tools' inside agent Behavior Tab ## (Completed)
+
+I want to create a button on the Agent Chat Page > Settings Moda > Behavior Tab > Tools that queries the MCP tools for an agent, and then uses an LLM responds to format them like the following:
+
+You have the following set of MCP tools:
+
+## Contact Management System ## (Completed)
+
+search_contacts - searches our internal database for contact information.
+
+## QuickBooks Online ## (Complete)
+
+quickbooks_online_update_estimate - updates estimates in QuickBook Online
 
 4. Public Accessibility - I would like to create an API interface where agents can be accessed by outside systems like an app using authentication, etc.
 

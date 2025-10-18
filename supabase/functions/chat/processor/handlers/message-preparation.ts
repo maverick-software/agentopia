@@ -40,7 +40,7 @@ export class MessagePreparation {
         .single();
 
       // Build comprehensive system prompt using PromptBuilder
-      let systemPrompt = this.promptBuilder.buildSystemPromptString(agent);
+      let systemPrompt = await this.promptBuilder.buildSystemPromptString(agent);
 
       // Append system_prompt_override from sessionContext (for temporary chats)
       const sessionContext = (message as any)?.context?.sessionContext || (context as any)?.sessionContext;

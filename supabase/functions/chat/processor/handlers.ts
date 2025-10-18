@@ -60,7 +60,7 @@ export class TextMessageHandler implements MessageHandler {
 
     // STEP 2: Intent classification (determine if tools are needed)
     const userText = (message as any).content?.text || (message as any).content || '';
-    const classifier = new IntentClassifier(this.openai);
+    const classifier = new IntentClassifier(this.openai, this.supabase);
     const classification = await classifier.classifyIntent(userText, context.agent_id || 'default', recentMessages);
     console.log(`[IntentClassifier] Classification result:`, classification);
 
