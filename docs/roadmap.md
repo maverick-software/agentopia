@@ -3,6 +3,23 @@
 
 Adding Voice, Creating Admin Agent Repository, A Simple AI description to create an agent
 
+## ✅ Contextual Awareness ## (COMPLETE - Oct 20, 2025)
+
+**IMPLEMENTED!** Added a contextual awareness layer that runs before intent classification to understand what the user is ACTUALLY asking for in the context of chat history and summary.
+
+**What was built:**
+- `contextual-awareness.ts` - Analyzes user message in full conversation context
+- Resolves implicit references ("it", "them", "him" → actual entities)
+- Fetches conversation summary and agent personality
+- Provides interpreted meaning + user intent + confidence
+- ~200-500ms analysis using `gpt-4o-mini` with 5-min caching
+- Integrated into `handlers.ts` as Step 1.5 (before intent classification)
+- Contextual guidance injected into LLM prompt for accurate responses
+
+**Documentation:** `docs/features/contextual_awareness/`
+
+**Example:** User says "Send him an email" after discussing John Doe → Agent understands "Send email to John Doe"
+
 ## Powerpoint ##
 
 ## Spreadsheets ##

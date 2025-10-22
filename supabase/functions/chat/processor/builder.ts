@@ -57,6 +57,13 @@ export function buildSuccessResponse(
   context: ProcessingContext,
   metrics: ProcessingMetrics
 ): MessageResponse {
+  // DEBUG: Log llm_calls before building response
+  console.log('[buildSuccessResponse] 🔍 metrics.llm_calls:', {
+    exists: !!metrics.llm_calls,
+    count: metrics.llm_calls?.length || 0,
+    stages: metrics.llm_calls?.map(c => c.stage) || [],
+  });
+  
   return {
     version: '2.0.0',
     status: 'success',
@@ -113,6 +120,7 @@ export function buildSuccessResponse(
       discovered_tools: (metrics as any).discovered_tools || [],
       tool_requested: (metrics as any).tool_requested || false,
       reasoning_chain: metrics.reasoning_steps || [],
+      llm_calls: metrics.llm_calls || [], // ✨ Add LLM call tracking for Debug Modal
       // Reasoning summary for modal header
       reasoning: metrics.reasoning
         ? {

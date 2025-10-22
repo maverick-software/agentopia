@@ -12,6 +12,7 @@ import { MessageList, ChatStarterScreen } from '../components/chat/MessageCompon
 import { ChatInput } from '../components/chat/ChatInput';
 import { ChatHeader, type ChatMode } from '../components/chat/ChatHeader';
 import { ChatModals } from '../components/chat/ChatModals';
+import { LLMDebugModal } from '../components/modals/LLMDebugModal';
 import { RealtimeVoiceChat } from '../components/voice/RealtimeVoiceChat';
 
 // Import custom hooks
@@ -34,7 +35,9 @@ export function AgentChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false);
   const [showProcessModal, setShowProcessModal] = useState(false);
+  const [showDebugModal, setShowDebugModal] = useState(false);
   const [currentProcessingDetails, setCurrentProcessingDetails] = useState<any>(null);
+  const [debugProcessingDetails, setDebugProcessingDetails] = useState<any>(null);
   const [chatMode, setChatMode] = useState<ChatMode>('text');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -496,6 +499,11 @@ export function AgentChatPage() {
                       setCurrentProcessingDetails(details);
                       setShowProcessModal(true);
                     }}
+                    onShowDebugModal={(details) => {
+                      console.log('[AgentChatPage] Debug modal opened with details:', details);
+                      setDebugProcessingDetails(details);
+                      setShowDebugModal(true);
+                    }}
                   />
                   <div ref={messageHook.messagesEndRef} />
                 </div>
@@ -537,6 +545,13 @@ export function AgentChatPage() {
         updateAgent={async (id: string, data: any) => {
           await updateAgent(id, data);
         }}
+      />
+      
+      {/* LLM Debug Modal */}
+      <LLMDebugModal
+        isOpen={showDebugModal}
+        onClose={() => setShowDebugModal(false)}
+        processingDetails={debugProcessingDetails}
       />
     </div>
   );

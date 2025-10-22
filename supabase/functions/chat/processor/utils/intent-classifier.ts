@@ -78,8 +78,6 @@ REQUIRES TOOLS if the message asks to:
 - Use integrations (Gmail, Outlook, calendar, etc.)
 - Access or manipulate files/documents
 - Execute any operation requiring external systems
-- Ask about available tools/integrations ("what tools", "which integrations", "what access")
-- Ask about capabilities ("what can you do", "how can you help")
 
 DOES NOT REQUIRE TOOLS if the message is:
 - A greeting (hi, hello, how are you)
@@ -89,14 +87,26 @@ DOES NOT REQUIRE TOOLS if the message is:
 - Questions that can be answered from general knowledge
 - Philosophical or abstract discussions
 - Clarification requests
+- CAPABILITY QUESTIONS: "Are you able to...", "Can you...", "Do you have access to..."
+- INFORMATION ABOUT TOOLS: "What tools do you have?", "What can you do?", "What integrations?"
 
-SPECIAL CASES - REQUIRES TOOLS:
-- Explicitly asking about tools/integrations/access ("what tools", "which integrations", "what can you access")
-- Asking about the agent's general capabilities ("what can you do") - requires tools to give accurate answer
+CRITICAL DISTINCTION - CAPABILITY vs ACTION:
+❌ DOES NOT REQUIRE TOOLS (Capability Question):
+  - "Are you able to get backlink information?" → User asking WHAT you CAN do
+  - "Can you send emails?" → User asking about YOUR capabilities
+  - "Do you have access to Gmail?" → User asking about available tools
+  - "What can you do with contacts?" → User asking about features
+
+✅ REQUIRES TOOLS (Action Request):
+  - "Get backlink information for example.com" → User wants you to DO something
+  - "Send an email to john@example.com" → User requesting an action
+  - "Search my Gmail for invoices" → User requesting data retrieval
+  - "Find contacts named John" → User requesting a search
 
 IMPORTANT GUIDELINES:
-- When in doubt about capability questions, err on the side of requiresTools: true
-- Questions about "what tools" or "what integrations" ALWAYS need tools loaded
+- If the message is a QUESTION about capabilities (Are you able, Can you, Do you have), respond with requiresTools: false
+- If the message is a COMMAND or REQUEST for action (Get, Send, Search, Find), respond with requiresTools: true
+- Questions starting with "What tools", "What can you", "What integrations" are informational, NOT action requests
 - Set confidence based on clarity of intent
 - Provide brief reasoning for debugging
 
@@ -171,12 +181,14 @@ export class IntentClassifier {
    * @param message - User message text
    * @param agentId - Agent ID for cache key generation
    * @param recentMessages - Optional recent conversation context for better classification
+   * @param contextualInterpretation - Optional contextual awareness analysis result
    * @returns Classification result with confidence and timing
    */
   async classifyIntent(
     message: string, 
     agentId: string,
-    recentMessages?: Array<{ role: string; content: string }>
+    recentMessages?: Array<{ role: string; content: string }>,
+    contextualInterpretation?: { interpretedMeaning: string; userIntent: string; resolvedReferences?: Record<string, string> }
   ): Promise<IntentClassification> {
     const startTime = Date.now();
     
@@ -206,7 +218,7 @@ export class IntentClassifier {
     
     // Perform classification
     try {
-      const classification = await this.performClassification(message, recentMessages);
+      const classification = await this.performClassification(message, recentMessages, contextualInterpretation);
       classification.classificationTimeMs = Date.now() - startTime;
       classification.fromCache = false;
       
@@ -234,7 +246,8 @@ export class IntentClassifier {
    */
   private async performClassification(
     message: string,
-    recentMessages?: Array<{ role: string; content: string }>
+    recentMessages?: Array<{ role: string; content: string }>,
+    contextualInterpretation?: { interpretedMeaning: string; userIntent: string; resolvedReferences?: Record<string, string> }
   ): Promise<IntentClassification> {
     try {
       // Build context-aware prompt
@@ -247,6 +260,21 @@ export class IntentClassifier {
           content: systemPromptContent
         }
       ];
+      
+      // Add contextual awareness analysis if provided (PRIORITY - most important context!)
+      if (contextualInterpretation) {
+        messages.push({
+          role: 'system',
+          content: `CONTEXTUAL AWARENESS ANALYSIS:
+Interpreted Meaning: ${contextualInterpretation.interpretedMeaning}
+User's Actual Intent: ${contextualInterpretation.userIntent}
+${contextualInterpretation.resolvedReferences && Object.keys(contextualInterpretation.resolvedReferences).length > 0 
+  ? `Resolved References: ${JSON.stringify(contextualInterpretation.resolvedReferences)}` 
+  : ''}
+
+Use this contextual understanding to classify intent more accurately.`
+        });
+      }
       
       // Add recent conversation context if provided (for better contextual understanding)
       if (recentMessages && recentMessages.length > 0) {

@@ -55,13 +55,98 @@ export class TextMessageHandler implements MessageHandler {
       context.agent_id = undefined as any;
     }
 
+    // LLM Call Tracker - stores all LLM requests/responses for debug modal
+    const llmCalls: Array<{
+      stage: string;
+      description: string;
+      request: any;
+      response: any;
+      timestamp: string;
+      duration_ms: number;
+    }> = [];
+
     // STEP 1: Prepare messages (system prompt, context, working memory, history)
     const { messages: msgs, recentMessages, summaryInfo } = await this.messagePrep.prepare(message, context);
 
-    // STEP 2: Intent classification (determine if tools are needed)
+    // STEP 1.5: CONTEXTUAL AWARENESS - Understand what the user is ACTUALLY asking for
     const userText = (message as any).content?.text || (message as any).content || '';
+    const conversationId = context.conversation_id || (message as any).conversation_id;
+    
+    console.log('[TextMessageHandler] 🧠 Running Contextual Awareness Analysis...');
+    const { ContextualAwarenessAnalyzer } = await import('./utils/contextual-awareness.ts');
+    const contextAnalyzer = new ContextualAwarenessAnalyzer(this.openai, this.supabase);
+    
+    const contextStartTime = Date.now();
+    const contextualInterpretation = await contextAnalyzer.analyzeContext(
+      userText,
+      conversationId,
+      context.agent_id,
+      recentMessages
+    );
+    const contextDuration = Date.now() - contextStartTime;
+    
+    // Capture contextual awareness LLM call for debug modal
+    console.log('[TextMessageHandler] 📊 Capturing contextual awareness LLM call');
+    llmCalls.push({
+      stage: 'contextual_awareness',
+      description: '🧠 Contextual Awareness Analysis',
+      request: {
+        model: 'gpt-4o-mini',
+        user_message: userText,
+        conversation_id: conversationId,
+        recent_messages: recentMessages?.length || 0,
+      },
+      response: {
+        interpreted_meaning: contextualInterpretation.interpretedMeaning,
+        user_intent: contextualInterpretation.userIntent,
+        confidence: contextualInterpretation.confidence,
+        resolved_references: contextualInterpretation.resolvedReferences,
+        contextual_factors: contextualInterpretation.contextualFactors,
+      },
+      timestamp: new Date().toISOString(),
+      duration_ms: contextDuration,
+    });
+    
+    console.log('[TextMessageHandler] ✅ Contextual Awareness:', {
+      originalMessage: userText.substring(0, 50) + '...',
+      interpretedMeaning: contextualInterpretation.interpretedMeaning.substring(0, 80) + '...',
+      userIntent: contextualInterpretation.userIntent,
+      confidence: contextualInterpretation.confidence,
+      resolvedReferences: Object.keys(contextualInterpretation.resolvedReferences || {}).length,
+      analysisTimeMs: contextualInterpretation.analysisTimeMs
+    });
+
+    // STEP 2: Intent classification (determine if tools are needed) - NOW WITH CONTEXTUAL AWARENESS
     const classifier = new IntentClassifier(this.openai, this.supabase);
-    const classification = await classifier.classifyIntent(userText, context.agent_id || 'default', recentMessages);
+    const classificationStartTime = Date.now();
+    const classification = await classifier.classifyIntent(
+      userText, 
+      context.agent_id || 'default', 
+      recentMessages,
+      contextualInterpretation // ✨ Pass contextual understanding to classifier!
+    );
+    const classificationDuration = Date.now() - classificationStartTime;
+    
+    // Capture intent classification LLM call for debug modal
+    llmCalls.push({
+      stage: 'intent_classification',
+      description: '🎯 Intent Classification',
+      request: {
+        model: 'gpt-4o-mini',
+        user_message: userText,
+        contextual_interpretation: contextualInterpretation,
+        recent_messages: recentMessages?.length || 0,
+      },
+      response: {
+        requires_tools: classification.requiresTools,
+        confidence: classification.confidence,
+        detected_intent: classification.detectedIntent,
+        reasoning: classification.reasoning,
+      },
+      timestamp: new Date().toISOString(),
+      duration_ms: classificationDuration,
+    });
+    
     console.log(`[IntentClassifier] Classification result:`, classification);
 
     // STEP 3: Conditionally load tools only if needed (OPTIMIZATION)
@@ -79,6 +164,58 @@ export class TextMessageHandler implements MessageHandler {
     } else {
       console.log(`[IntentClassifier] ⚡ Skipped tool loading (~750ms saved)`);
     }
+
+    // STEP 3.5: ALWAYS Inject contextual awareness into conversation
+    // Build contextual guidance message
+    let guidanceParts: string[] = [];
+    
+    // Always include the user's message and interpreted meaning
+    guidanceParts.push(`🧠 CONTEXTUAL UNDERSTANDING:`);
+    guidanceParts.push(`User said: "${userText}"`);
+    
+    if (contextualInterpretation.interpretedMeaning !== userText) {
+      guidanceParts.push(`Interpreted meaning: "${contextualInterpretation.interpretedMeaning}"`);
+    }
+    
+    // Add resolved references if any
+    if (Object.keys(contextualInterpretation.resolvedReferences || {}).length > 0) {
+      guidanceParts.push(`\nResolved references:`);
+      Object.entries(contextualInterpretation.resolvedReferences || {}).forEach(([ref, meaning]) => {
+        guidanceParts.push(`  - "${ref}" refers to: ${meaning}`);
+      });
+    }
+    
+    // Always include user intent
+    guidanceParts.push(`\nUser's actual intent: ${contextualInterpretation.userIntent}`);
+    guidanceParts.push(`Confidence: ${contextualInterpretation.confidence}`);
+    
+    // Add contextual factors
+    if (contextualInterpretation.contextualFactors && contextualInterpretation.contextualFactors.length > 0) {
+      guidanceParts.push(`\nContextual factors:`);
+      contextualInterpretation.contextualFactors.forEach(factor => {
+        guidanceParts.push(`  - ${factor}`);
+      });
+    }
+    
+    // Add clarifications if any
+    if (contextualInterpretation.suggestedClarifications && contextualInterpretation.suggestedClarifications.length > 0) {
+      guidanceParts.push(`\n⚠️ Ambiguous request - consider asking:`);
+      contextualInterpretation.suggestedClarifications.forEach(clarification => {
+        guidanceParts.push(`  - ${clarification}`);
+      });
+    }
+    
+    guidanceParts.push(`\nRespond to their ACTUAL INTENT (${contextualInterpretation.userIntent}), not just the literal message text.`);
+    
+    const contextualGuidance = guidanceParts.join('\n');
+    msgs.push({ role: 'system', content: contextualGuidance });
+    
+    console.log('[TextMessageHandler] 💡 Injected contextual guidance:', {
+      userIntent: contextualInterpretation.userIntent,
+      confidence: contextualInterpretation.confidence,
+      resolvedRefsCount: Object.keys(contextualInterpretation.resolvedReferences || {}).length,
+      contextualFactorsCount: contextualInterpretation.contextualFactors?.length || 0
+    });
 
     // STEP 4: Add tool guidance if tools are available
     if (availableTools.length > 0) {
@@ -126,6 +263,8 @@ export class TextMessageHandler implements MessageHandler {
       description: t.description || '',
       parameters: t.parameters
     }));
+    
+    const mainLLMStartTime = Date.now();
     const llmResult = await llmCaller.call({
       messages: msgs,
       tools: normalizedTools,
@@ -133,9 +272,34 @@ export class TextMessageHandler implements MessageHandler {
       maxTokens: 1200,
       userMessage: userText,
     });
+    const mainLLMDuration = Date.now() - mainLLMStartTime;
 
     let promptTokens = llmResult.usage?.prompt || 0;
     let completionTokens = llmResult.usage?.completion || 0;
+    
+    // Capture main LLM call for debug modal
+    llmCalls.push({
+      stage: 'main_llm_call',
+      description: '💬 Main LLM Call',
+      request: {
+        model: effectiveModel,
+        messages: msgs,
+        tools: normalizedTools.map(t => ({ name: t.name, description: t.description })),
+        temperature: 0.7,
+        max_tokens: 1200,
+      },
+      response: {
+        text: llmResult.text,
+        tool_calls: llmResult.toolCalls?.map(tc => ({
+          id: tc.id,
+          name: tc.function?.name,
+          arguments: tc.function?.arguments,
+        })) || [],
+        usage: llmResult.usage,
+      },
+      timestamp: new Date().toISOString(),
+      duration_ms: mainLLMDuration,
+    });
 
     // STEP 7: Handle tool calls + MCP retry loop
     let toolCalls = llmResult.toolCalls || [];
@@ -281,6 +445,10 @@ export class TextMessageHandler implements MessageHandler {
 
     // Build metrics
     const endTime = Date.now();
+    console.log('[TextMessageHandler] 📊 Building metrics with llmCalls:', {
+      llmCallsCount: llmCalls.length,
+      stages: llmCalls.map(c => c.stage),
+    });
     const metrics: ProcessingMetrics = {
       start_time: startTime,
       end_time: endTime,
@@ -289,16 +457,45 @@ export class TextMessageHandler implements MessageHandler {
       tool_executions: toolDetails.length,
       stages: {
         message_prep: 100, // Estimate
+        contextual_awareness: contextualInterpretation.analysisTimeMs || 0,
         intent_classification: classification.classificationTimeMs || 0,
         tool_loading: availableTools.length > 0 ? 750 : 0,
         llm_calls: endTime - startTime,
       },
       discovered_tools: availableTools.map((t) => ({ name: t.name, description: t.description })), // Tools that were available
       tool_details: toolDetails, // Tools that were actually executed
+      // Contextual awareness results for debugging
+      contextual_awareness: {
+        original_message: userText,
+        interpreted_meaning: contextualInterpretation.interpretedMeaning,
+        user_intent: contextualInterpretation.userIntent,
+        confidence: contextualInterpretation.confidence,
+        resolved_references: contextualInterpretation.resolvedReferences || {},
+        contextual_factors: contextualInterpretation.contextualFactors || [],
+        suggested_clarifications: contextualInterpretation.suggestedClarifications || [],
+        analysis_time_ms: contextualInterpretation.analysisTimeMs,
+        from_cache: contextualInterpretation.fromCache || false,
+      } as any,
+      // Intent classification results for debugging
+      intent_classification: {
+        requires_tools: classification.requiresTools,
+        confidence: classification.confidence,
+        detected_intent: classification.detectedIntent || 'unknown',
+        reasoning: classification.reasoning || '',
+        classification_time_ms: classification.classificationTimeMs || 0,
+        from_cache: classification.fromCache || false,
+      } as any,
+      // LLM call tracking for debug modal (temporary, in-memory only)
+      llm_calls: llmCalls,
     };
 
     // Return final response - CRITICAL: Create proper V2 message with all required fields
     const timestamp = generateTimestamp();
+    console.log('[TextMessageHandler] 📊 Final metrics object:', {
+      hasLlmCalls: !!metrics.llm_calls,
+      llmCallsCount: metrics.llm_calls?.length || 0,
+      metricsKeys: Object.keys(metrics),
+    });
     const responseMessage: AdvancedChatMessage = {
       id: generateMessageId(),
       version: '2.0.0',
@@ -315,6 +512,7 @@ export class TextMessageHandler implements MessageHandler {
         requires_user_input: requiresUserInput,
         user_input_request: userInputRequest,
         tool_call_id: toolRequiringInput?.id,
+        processingDetails: metrics, // ✨ Add full metrics including llm_calls for Debug Modal
       },
       context: {
         conversation_id: context.conversation_id!,

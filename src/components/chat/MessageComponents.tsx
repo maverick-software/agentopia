@@ -24,6 +24,7 @@ interface MessageListProps {
   formatMarkdown: (content: string) => string;
   currentProcessingDetails?: any;
   onShowProcessModal?: (messageDetails?: any) => void;
+  onShowDebugModal?: (processingDetails: any) => void;
   aiState?: any;
   currentTool?: any;
   processSteps?: any[];
@@ -31,7 +32,7 @@ interface MessageListProps {
   onRetryToolWithInput?: (message: Message, userInputs: Record<string, any>) => Promise<void>;
 }
 
-export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, aiState, currentTool, processSteps, onCanvasSendMessage }: MessageListProps) {
+export function MessageList({ messages, agent, user, thinkingMessageIndex, formatMarkdown, currentProcessingDetails, onShowProcessModal, onShowDebugModal, aiState, currentTool, processSteps, onCanvasSendMessage }: MessageListProps) {
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   const [canvasArtifact, setCanvasArtifact] = useState<Artifact | null>(null);
   const { updateArtifact, downloadArtifact, getArtifact } = useArtifacts();
@@ -212,6 +213,23 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                   </button>
                 )}
                 
+                {/* Debug button for assistant messages - Show LLM calls */}
+                {message.role === 'assistant' && message.metadata?.processingDetails && onShowDebugModal && (
+                  <button
+                    onClick={() => {
+                      console.log('[MessageList] Debug button clicked for message:', message);
+                      onShowDebugModal(message.metadata?.processingDetails);
+                    }}
+                    className="flex items-center space-x-1 px-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 rounded-md transition-colors"
+                    title="View LLM requests and responses"
+                  >
+                    <svg className="h-3.5 w-3.5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    </svg>
+                    <span className="text-xs font-medium text-purple-500">Debug</span>
+                  </button>
+                )}
+                
                 {/* Thoughts and Process buttons for assistant messages - ALWAYS show Process button */}
                 {message.role === 'assistant' && false && (
                   <div className="flex items-center space-x-2">
@@ -251,6 +269,23 @@ export function MessageList({ messages, agent, user, thinkingMessageIndex, forma
                       >
                         <BarChart3 className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">Process</span>
+                      </button>
+                    )}
+                    
+                    {/* Debug Button - Show LLM calls and responses */}
+                    {message.metadata?.processingDetails && onShowDebugModal && (
+                      <button
+                        onClick={() => {
+                          console.log('[MessageList] Debug button clicked for message:', message);
+                          onShowDebugModal(message.metadata?.processingDetails);
+                        }}
+                        className="flex items-center space-x-1 cursor-pointer hover:bg-purple-500/20 rounded-md px-1.5 py-0.5 transition-colors"
+                        title="View LLM requests and responses"
+                      >
+                        <svg className="h-3 w-3 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                        <span className="text-xs text-purple-500">Debug</span>
                       </button>
                     )}
                   </div>

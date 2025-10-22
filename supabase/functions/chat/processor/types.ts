@@ -123,6 +123,16 @@ export interface ProcessingMetrics {
     style?: string;
     reason?: string;
   };
+  
+  // LLM call tracking for debug modal (temporary, in-memory only)
+  llm_calls?: Array<{
+    stage: string;
+    description: string;
+    request: any;
+    response: any;
+    timestamp?: string;
+    duration_ms?: number;
+  }>;
 }
 
 export interface ProcessingOptions {
