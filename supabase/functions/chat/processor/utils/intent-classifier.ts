@@ -39,6 +39,13 @@ export interface IntentClassification {
   
   /** Whether result came from cache */
   fromCache?: boolean;
+  
+  /** Token usage for this LLM call */
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 /**
@@ -304,6 +311,13 @@ Use this contextual understanding to classify intent more accurately.`
       
       const parsed = JSON.parse(content);
       
+      // Extract token usage for tracking
+      const usage = response.usage ? {
+        prompt_tokens: response.usage.prompt_tokens || 0,
+        completion_tokens: response.usage.completion_tokens || 0,
+        total_tokens: response.usage.total_tokens || 0,
+      } : undefined;
+      
       // Validate response structure
       if (typeof parsed.requiresTools !== 'boolean') {
         console.warn('[IntentClassifier] Invalid response structure, defaulting to safe fallback');
@@ -321,7 +335,8 @@ Use this contextual understanding to classify intent more accurately.`
         detectedIntent: parsed.reasoning || 'Unknown',
         suggestedTools: parsed.suggestedTools,
         reasoning: parsed.reasoning,
-        classificationTimeMs: 0 // Will be set by caller
+        classificationTimeMs: 0, // Will be set by caller
+        usage, // ✨ Add token usage
       };
       
     } catch (error: any) {

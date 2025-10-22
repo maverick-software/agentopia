@@ -220,10 +220,17 @@ export const LLMDebugModal: React.FC<LLMDebugModalProps> = ({
     }
   };
 
-  const totalTokens = displayCalls.reduce(
-    (sum, call) => sum + (call.response?.usage?.total_tokens || 0),
+  const totalInputTokens = displayCalls.reduce(
+    (sum, call) => sum + (call.response?.usage?.prompt_tokens || 0),
     0
   );
+
+  const totalOutputTokens = displayCalls.reduce(
+    (sum, call) => sum + (call.response?.usage?.completion_tokens || 0),
+    0
+  );
+
+  const totalTokens = totalInputTokens + totalOutputTokens;
 
   const totalDuration = displayCalls.reduce(
     (sum, call) => sum + (call.duration_ms || 0),
@@ -263,6 +270,9 @@ export const LLMDebugModal: React.FC<LLMDebugModalProps> = ({
             <Zap className="h-4 w-4 text-blue-500" />
             <span className="text-muted-foreground">Total Tokens:</span>
             <span className="font-semibold text-foreground">{totalTokens.toLocaleString()}</span>
+            <span className="text-xs text-muted-foreground">
+              (<span className="text-blue-400">↓{totalInputTokens}</span> / <span className="text-green-400">↑{totalOutputTokens}</span>)
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <Brain className="h-4 w-4 text-green-500" />
@@ -310,10 +320,15 @@ export const LLMDebugModal: React.FC<LLMDebugModalProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-4 text-sm">
-                      {call.response?.usage?.total_tokens && (
-                        <span className="text-muted-foreground">
-                          {call.response.usage.total_tokens} tokens
-                        </span>
+                      {call.response?.usage && (
+                        <>
+                          <span className="text-muted-foreground">
+                            <span className="text-blue-400">↓</span> {call.response.usage.prompt_tokens || 0}
+                          </span>
+                          <span className="text-muted-foreground">
+                            <span className="text-green-400">↑</span> {call.response.usage.completion_tokens || 0}
+                          </span>
+                        </>
                       )}
                       {call.duration_ms && (
                         <span className="text-muted-foreground">
@@ -387,16 +402,22 @@ export const LLMDebugModal: React.FC<LLMDebugModalProps> = ({
                       {/* Usage Stats */}
                       {call.response?.usage && (
                         <div className="px-4 pb-4">
-                          <div className="flex gap-4 text-xs text-muted-foreground bg-muted/30 rounded-md p-2">
-                            <span>
-                              Prompt: {call.response.usage.prompt_tokens || 0} tokens
-                            </span>
-                            <span>
-                              Completion: {call.response.usage.completion_tokens || 0} tokens
-                            </span>
-                            <span>
-                              Total: {call.response.usage.total_tokens || 0} tokens
-                            </span>
+                          <div className="flex gap-4 text-xs bg-muted/30 rounded-md p-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-blue-400 font-semibold">↓ Input:</span>
+                              <span className="text-foreground font-mono">{call.response.usage.prompt_tokens || 0}</span>
+                              <span className="text-muted-foreground">tokens</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-green-400 font-semibold">↑ Output:</span>
+                              <span className="text-foreground font-mono">{call.response.usage.completion_tokens || 0}</span>
+                              <span className="text-muted-foreground">tokens</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-purple-400 font-semibold">Σ Total:</span>
+                              <span className="text-foreground font-mono">{call.response.usage.total_tokens || 0}</span>
+                              <span className="text-muted-foreground">tokens</span>
+                            </div>
                           </div>
                         </div>
                       )}

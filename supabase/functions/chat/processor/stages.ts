@@ -381,6 +381,19 @@ export class MainProcessingStage extends ProcessingStage {
       metrics.reasoning = result.metrics.reasoning;
     }
     
+    // ✨ Propagate LLM calls for Debug Modal
+    if (result.metrics.llm_calls) {
+      metrics.llm_calls = result.metrics.llm_calls;
+    }
+    
+    // ✨ Propagate contextual awareness and intent classification for Debug Modal
+    if ((result.metrics as any).contextual_awareness) {
+      (metrics as any).contextual_awareness = (result.metrics as any).contextual_awareness;
+    }
+    if ((result.metrics as any).intent_classification) {
+      (metrics as any).intent_classification = (result.metrics as any).intent_classification;
+    }
+    
     return result.message;
   }
 }

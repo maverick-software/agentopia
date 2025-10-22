@@ -37,6 +37,13 @@ export interface ContextualInterpretation {
   
   /** Whether this was cached */
   fromCache: boolean;
+  
+  /** Token usage for this LLM call */
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 interface ConversationSummary {
@@ -164,7 +171,7 @@ export class ContextualAwarenessAnalyzer {
         this.systemPrompt = data.content;
         this.promptLastFetched = now;
         console.log('[ContextualAwareness] ✅ Loaded prompt from database');
-        return this.systemPrompt;
+        return data.content; // Return the content directly to satisfy TypeScript
       }
     } catch (error) {
       console.warn('[ContextualAwareness] ⚠️ Error fetching prompt from database, using hardcoded fallback:', error);
@@ -362,8 +369,16 @@ export class ContextualAwarenessAnalyzer {
     const content = response.choices[0]?.message?.content || '{}';
     const parsed = JSON.parse(content);
     
+    // Extract token usage for tracking
+    const usage = response.usage ? {
+      prompt_tokens: response.usage.prompt_tokens || 0,
+      completion_tokens: response.usage.completion_tokens || 0,
+      total_tokens: response.usage.total_tokens || 0,
+    } : undefined;
+    
     return {
       originalMessage: userMessage,
+      usage, // Add usage stats
       interpretedMeaning: parsed.interpretedMeaning || userMessage,
       userIntent: parsed.userIntent || 'unknown',
       contextualFactors: parsed.contextualFactors || [],

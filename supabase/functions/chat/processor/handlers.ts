@@ -95,6 +95,8 @@ export class TextMessageHandler implements MessageHandler {
         user_message: userText,
         conversation_id: conversationId,
         recent_messages: recentMessages?.length || 0,
+        temperature: 0.3,
+        max_tokens: 500,
       },
       response: {
         interpreted_meaning: contextualInterpretation.interpretedMeaning,
@@ -102,6 +104,7 @@ export class TextMessageHandler implements MessageHandler {
         confidence: contextualInterpretation.confidence,
         resolved_references: contextualInterpretation.resolvedReferences,
         contextual_factors: contextualInterpretation.contextualFactors,
+        usage: contextualInterpretation.usage, // ✨ Add token usage
       },
       timestamp: new Date().toISOString(),
       duration_ms: contextDuration,
@@ -136,12 +139,15 @@ export class TextMessageHandler implements MessageHandler {
         user_message: userText,
         contextual_interpretation: contextualInterpretation,
         recent_messages: recentMessages?.length || 0,
+        temperature: 0.3,
+        max_tokens: 150,
       },
       response: {
         requires_tools: classification.requiresTools,
         confidence: classification.confidence,
         detected_intent: classification.detectedIntent,
         reasoning: classification.reasoning,
+        usage: classification.usage, // ✨ Add token usage
       },
       timestamp: new Date().toISOString(),
       duration_ms: classificationDuration,
