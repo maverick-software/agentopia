@@ -10,19 +10,24 @@ The `site_url` in `supabase/config.toml` was hardcoded to `http://localhost:3000
 
 ## Solution
 
-### 1. Local `config.toml` (Development)
+### 1. Local `config.toml` (Development ONLY)
 
 **File:** `supabase/config.toml`
+
+⚠️ **IMPORTANT**: This file is ONLY used for local Supabase CLI. It does NOT affect your hosted Supabase instance.
 
 ```toml
 [auth]
 enabled = true
-# Development environment
+# Local development only - does NOT affect production
 site_url = "http://localhost:5173"
+# Add production URL here so it shows in dropdown when using local CLI
 additional_redirect_urls = ["https://app.gofragents.com"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 ```
+
+**For hosted Supabase (production)**, you MUST configure these in the Dashboard (see Step 2).
 
 ### 2. Supabase Dashboard (Production)
 

@@ -113,12 +113,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
         setUserRoles([]);
         
-        // Force immediate redirect to login page
-        // Use setTimeout to ensure state updates complete first
-        setTimeout(() => {
-          console.log('[AuthContext] Redirecting to login page...');
-          window.location.href = '/login';
-        }, 100);
+        // Use Supabase's signOut to properly clear session
+        // This ensures the session is cleared even if triggered from another tab
+        supabase.auth.signOut().then(() => {
+          console.log('[AuthContext] Session cleared in this tab');
+          // Let the auth state change handler redirect to login
+        }).catch((err) => {
+          console.warn('[AuthContext] Error clearing session:', err);
+        });
       } else if (event === 'LOGIN') {
         console.log('[AuthContext] LOGIN detected from another tab - refreshing session');
         // Refresh session to sync login across tabs
@@ -309,17 +311,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     try {
       const userId = user?.id;
+      
+      // Try to sign out from Supabase
       const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) throw signOutError;
+      
+      // If error is "Auth session missing", that's okay - session is already cleared
+      // Just continue with local cleanup
+      if (signOutError && !signOutError.message?.includes('Auth session missing')) {
+        console.warn('[AuthContext] Sign out error (non-critical):', signOutError.message);
+        // Don't throw - we still want to clear local state
+      }
       
       // Broadcast logout event to all other tabs
       console.log('[AuthContext] Broadcasting LOGOUT event to other tabs');
       authSync.broadcast('LOGOUT', userId);
       
+      // Clear local state
       setUser(null);
+      setUserRoles([]);
+      
+      // Clear any lingering auth data from localStorage
+      try {
+        const authKeys = Object.keys(localStorage).filter(key => 
+          key.includes('sb-') && key.includes('auth-token')
+        );
+        authKeys.forEach(key => localStorage.removeItem(key));
+        console.log('[AuthContext] Cleared auth tokens from localStorage');
+      } catch (e) {
+        console.warn('[AuthContext] Error clearing localStorage:', e);
+      }
+      
     } catch (err: any) {
-      console.error('Sign out error:', err);
-      setError(err.message || 'Failed to sign out.');
+      console.error('[AuthContext] Sign out error:', err);
+      // Even if there's an error, clear local state
+      setUser(null);
+      setUserRoles([]);
+      // Don't set error state - logout should always succeed locally
     } finally {
       setLoading(false);
     }
