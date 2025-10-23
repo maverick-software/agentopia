@@ -346,10 +346,6 @@ serve(async (req) => {
             { name: 'mistral_chat_completion', description: 'Chat completion using Mistral AI', capability: 'chat_completion' },
             { name: 'mistral_text_generation', description: 'Text generation using Mistral AI', capability: 'text_generation' },
           ],
-          'ocr_space': [
-            { name: 'ocr_space_ocr_url', description: 'Extract text from image URL using OCR.Space', capability: 'ocr_url' },
-            { name: 'ocr_space_ocr_image', description: 'Extract text from base64 image using OCR.Space', capability: 'ocr_image' },
-          ],
           'serper_api': [
             { name: 'serper_web_search', description: 'Perform web search using Serper API', capability: 'web_search' },
             { name: 'serper_news_search', description: 'Search news using Serper API', capability: 'news_search' },

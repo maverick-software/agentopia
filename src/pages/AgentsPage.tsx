@@ -9,6 +9,8 @@ import { useTeamsWithAgentCounts } from '../hooks/useTeamsWithAgentCounts';
 import { VisualTeamCanvas } from '../components/teams/canvas/VisualTeamCanvas';
 import { CreateTeamModal } from '../components/modals/CreateTeamModal';
 import { useMediaLibraryUrl } from '../hooks/useMediaLibraryUrl';
+import { MobileHeader } from '../components/mobile/MobileHeader';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 // Maximum number of team tabs to show before creating dropdown
 const MAX_VISIBLE_TEAMS = 5;
@@ -30,6 +32,7 @@ export function AgentsPage() {
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const totalFetchAttempts = useRef(0);
   const MAX_TOTAL_FETCH_ATTEMPTS = 5;
+  const isMobile = useIsMobile();
 
   // Fetch teams with agent counts
   const { teams, loading: teamsLoading, refetch: refetchTeams } = useTeamsWithAgentCounts();
@@ -308,32 +311,55 @@ export function AgentsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header Section */}
-      <div className="border-b border-border/50 bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          {/* Title and Action Buttons */}
-            <div className="flex items-start justify-between mb-4">
-            <div className="flex-1 pr-8">
-              <h1 className="text-2xl font-bold text-foreground mb-2">Meet Your AI Team</h1>
-              <p className="text-muted-foreground">Manage and organize your AI agents by teams</p>
+      {/* Mobile Header */}
+      {isMobile && (
+        <MobileHeader
+          agentName="My Agents"
+          agentCount={filteredAgents.length}
+          showMenu={true}
+          onAgentClick={() => {
+            // Could open agent selector modal here
+            console.log('Agent selector clicked');
+          }}
+          actions={
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="touch-target p-2 rounded-lg hover:bg-accent transition-colors"
+              aria-label="Create agent"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          }
+        />
+      )}
+
+      {/* Desktop Header Section */}
+      {!isMobile && (
+        <div className="border-b border-border/50 bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            {/* Title and Action Buttons */}
+              <div className="flex items-start justify-between mb-4">
+              <div className="flex-1 pr-8">
+                <h1 className="text-2xl font-bold text-foreground mb-2">Meet Your AI Team</h1>
+                <p className="text-muted-foreground">Manage and organize your AI agents by teams</p>
+              </div>
+              <div className="flex items-center space-x-3 flex-shrink-0">
+                <button
+                  onClick={() => setShowTeamsCanvas(true)}
+                  className="flex items-center px-5 py-2.5 bg-card/50 text-foreground border border-border/50 hover:bg-card hover:border-border transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                >
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Teams
+                </button>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Agent
+                </button>
+              </div>
             </div>
-            <div className="flex items-center space-x-3 flex-shrink-0">
-              <button
-                onClick={() => setShowTeamsCanvas(true)}
-                className="flex items-center px-5 py-2.5 bg-card/50 text-foreground border border-border/50 hover:bg-card hover:border-border transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-              >
-                <Building2 className="w-4 h-4 mr-2" />
-                Teams
-              </button>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Agent
-              </button>
-            </div>
-          </div>
 
           {/* Team Tabs */}
           <div className="flex items-center space-x-2">
@@ -444,10 +470,11 @@ export function AgentsPage() {
             )}
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className={`max-w-7xl mx-auto ${isMobile ? 'px-4 py-4' : 'px-6 py-6'}`}>
         
         {/* Error State */}
         {error && (
@@ -467,7 +494,7 @@ export function AgentsPage() {
 
         {/* All Agents Grid */}
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
             {[...Array(10)].map((_, i) => (
               <div 
                 key={i} 
@@ -482,22 +509,22 @@ export function AgentsPage() {
           </div>
         ) : (
           <div>
-            {/* Search Bar - smaller and more discreet */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold text-foreground">
+            {/* Search Bar - responsive */}
+            <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} mb-6`}>
+              <h2 className={`${isMobile ? 'text-xl mb-3' : 'text-2xl'} font-semibold text-foreground`}>
                 {selectedTeam === 'all' ? 'All Agents' : teams.find(t => t.id === selectedTeam)?.name || 'Team Agents'}
                 <span className="text-muted-foreground font-normal ml-3 text-lg">({filteredAgents.length})</span>
               </h2>
               
               {/* Smaller search bar */}
-              <div className="relative">
+              <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Search agents..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all duration-200"
+                  className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all duration-200"
                 />
               </div>
             </div>
@@ -525,7 +552,7 @@ export function AgentsPage() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
                 {renderedAgents}
               </div>
             )}

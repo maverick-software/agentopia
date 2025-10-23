@@ -56,6 +56,8 @@ Gofr Agents is a comprehensive platform for creating, managing, and deploying AI
 
 ### 🎨 Modern User Experience
 - **Professional UI**: Claude-style chat interface with gradient effects and seamless design
+- **Intelligent Chat System**: Multi-stage processing with contextual awareness and intent classification
+- **LLM Debug Modal**: Complete visibility into AI processing with token tracking and performance metrics
 - **AI Process Transparency**: Expandable "Thoughts" sections showing AI processing and tool execution
 - **Theme System**: Advanced CSS variable-based theming with light/dark mode support
 - **Responsive Design**: Full mobile and desktop optimization with accessibility compliance
@@ -79,6 +81,9 @@ Gofr Agents is a comprehensive platform for creating, managing, and deploying AI
 
 ### AI & ML Integration
 - **OpenAI** for chat completions and embeddings
+  - GPT-4 for main agent responses
+  - GPT-4o-mini for contextual awareness and intent classification
+- **Intelligent Chat Pipeline**: Multi-stage processing with caching and optimization
 - **Pinecone** for vector database and semantic search
 - **GetZep** for knowledge graph and memory management
 - **Custom LLM Router** for provider flexibility

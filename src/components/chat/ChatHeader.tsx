@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MoreVertical, Flag, Trash2, Share, ChevronDown, MessageSquare, Info } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Flag, Trash2, Share, ChevronDown, MessageSquare, Info, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -12,6 +12,8 @@ import type { Database } from '../../types/database.types';
 import { useMediaLibraryUrl } from '@/hooks/useMediaLibraryUrl';
 import { toast } from 'react-hot-toast';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
+import { useIsMobile } from '@/hooks/useMediaQuery';
+import { useMobileDrawer } from '../Layout';
 
 export type ChatMode = 'text' | 'voice' | 'realtime';
 
@@ -34,6 +36,8 @@ export function ChatHeader({
   const navigate = useNavigate();
   const resolvedAvatarUrl = useMediaLibraryUrl(agent?.avatar_url);
   const [isProcessing, setIsProcessing] = useState(false);
+  const isMobile = useIsMobile();
+  const drawer = useMobileDrawer();
 
   const handleShare = () => {
     // TODO: Implement share functionality
@@ -76,8 +80,18 @@ export function ChatHeader({
   };
 
   return (
-    <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card">
-      <div className="flex items-center space-x-3">
+    <div className="flex-shrink-0 flex items-center justify-between px-4 pt-2.5 pb-0.5 bg-card safe-area-top">
+      <div className="flex items-center space-x-2">
+        {/* Mobile: Show hamburger menu */}
+        {isMobile && (
+          <button
+            onClick={drawer.open}
+            className="touch-target p-2 rounded-lg hover:bg-accent transition-colors -ml-2"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
         <button
           onClick={() => navigate('/agents')}
           className="p-1.5 hover:bg-accent rounded-lg transition-colors"

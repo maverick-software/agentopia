@@ -38,6 +38,7 @@ Production deployment and operations:
 ### 🎨 User Interface & Design
 - **[Design System](design-system.md)** - Theme management, CSS variables, color systems, and accessibility
 - **[Chat Experience](chat-experience.md)** - Enhanced chat UI, AI process transparency, and debugging features
+- **[Intelligent Chat System](intelligent-chat-system.md)** - 🆕 Contextual awareness, intent classification, LLM debugging, and multi-stage processing pipeline
 
 ### 🏗️ Core Architecture
 - **[Database Schema](database-schema.md)** - PostgreSQL schema, tables, relationships, and RLS policies
@@ -69,9 +70,10 @@ Production deployment and operations:
 - **[Handoff Documentation](handoff.md)** - Knowledge transfer protocols and project continuity
 
 ### 📊 Status & Planning
-- **[Current Status](current-status.md)** - Project status, completed features, and next steps (Updated Oct 2025)
+- **[Current Status](current-status.md)** - Project status, completed features, and next steps (Updated Oct 22, 2025)
 - **[August 2025 Updates](august-2025-updates.md)** - Recent stabilization efforts and new feature rollouts
-- **[October 2025 Updates](../docs/UNIVERSAL_MCP_PHASE1_COMPLETE.md)** - 🆕 Universal MCP System implementation
+- **[October 2025 Updates](../docs/UNIVERSAL_MCP_PHASE1_COMPLETE.md)** - Universal MCP System implementation
+- **[Intelligent Chat System](intelligent-chat-system.md)** - 🆕 Multi-stage processing with contextual awareness (Oct 22, 2025)
 
 ## 🎯 Quick Reference by Use Case
 
@@ -160,6 +162,6 @@ Production deployment and operations:
 
 This documentation system represents a comprehensive knowledge base for Gofr Agents, designed to support users, developers, and administrators at every level. Each document provides deep, actionable information while maintaining clear organization and cross-references to related topics.
 
-**Last Updated**: October 12, 2025  
-**Documentation Version**: 2.1 (MCP Architecture Complete)  
-**Total Documents**: 21+ topic-specific guides
+**Last Updated**: October 22, 2025  
+**Documentation Version**: 2.3 (Intelligent Chat System)  
+**Total Documents**: 22+ topic-specific guides

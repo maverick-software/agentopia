@@ -228,13 +228,6 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
   const providerConfigs: Record<string, ProviderConfig[]> = {
     ocr_processing: [
       {
-        id: 'ocr_space',
-        name: 'OCR.Space API',
-        description: 'Extract text from PDFs and images with high accuracy OCR',
-        requiresApiKey: true,
-        requiresOAuth: false
-      },
-      {
         id: 'azure-document-intelligence',
         name: 'Azure Document Intelligence',
         description: 'Microsoft\'s enterprise-grade document analysis and text extraction service',
@@ -597,7 +590,7 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       'web_search': ['serper_api', 'serpapi', 'brave_search'],
       'voice': ['elevenlabs'],
       'document_creation': ['google_docs', 'microsoft_office', 'notion'],
-      'ocr_processing': ['ocr_space', 'mistral_ai'],
+      'ocr_processing': ['mistral_ai', 'azure-document-intelligence'],
       'temporary_chat_links': ['temporary_chat_internal']
     };
     

@@ -12,7 +12,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/useMediaQuery';
 
 import { 
   User, 
@@ -21,6 +29,7 @@ import {
   Settings,
   X,
   ChevronRight,
+  ChevronDown,
   Calendar,
   Image,
   MessageSquare,
@@ -189,6 +198,7 @@ export function AgentSettingsModal({
   initialTab = 'general'
 }: AgentSettingsModalProps) {
   const { isAdmin } = useAuth();
+  const isMobile = useIsMobile();
   // Check if this is a system agent (like Gofr)
   const isSystemAgent = agentData?.metadata?.is_system_agent === true;
   
@@ -305,12 +315,25 @@ export function AgentSettingsModal({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content 
-          className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-[900px] translate-x-[-50%] translate-y-[-50%] gap-0 border bg-background p-0 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] rounded-xl border-border dark:border-border max-h-[90vh]"
+          className={cn(
+            "fixed z-50 grid w-full gap-0 border bg-background p-0 shadow-lg duration-200",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            isMobile
+              ? "inset-0 h-screen-mobile" // Full screen on mobile
+              : "left-[50%] top-[50%] max-w-[900px] translate-x-[-50%] translate-y-[-50%] rounded-xl border-border dark:border-border max-h-[90vh] data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]"
+          )}
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-        <DialogHeader className="px-6 py-4 bg-background dark:bg-background rounded-t-xl">
+        <DialogHeader className={cn(
+          "bg-background dark:bg-background safe-area-top",
+          isMobile ? "px-4 py-3 sticky top-0 z-10 border-b border-border" : "px-6 py-4 rounded-t-xl"
+        )}>
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold text-foreground dark:text-foreground">
+            <DialogTitle className={cn(
+              "font-semibold text-foreground dark:text-foreground",
+              isMobile ? "text-base" : "text-lg"
+            )}>
               Agent Settings
             </DialogTitle>
             <div className="flex items-center gap-2">
@@ -323,13 +346,15 @@ export function AgentSettingsModal({
                         onClick={handleSave}
                         disabled={isSaving || saveSuccess || !canSave}
                         size="icon"
-                        className={`h-8 w-8 transition-all duration-300 ${
+                        className={cn(
+                          "transition-all duration-300 touch-target",
+                          isMobile ? "h-9 w-9" : "h-8 w-8",
                           saveSuccess 
                             ? 'bg-green-600/50 hover:bg-green-600/50 cursor-default' 
                             : canSave 
                               ? 'bg-blue-600 hover:bg-blue-700' 
                               : 'bg-blue-600/30 hover:bg-blue-600/40 cursor-not-allowed'
-                        }`}
+                        )}
                       >
                         {isSaving ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -346,19 +371,69 @@ export function AgentSettingsModal({
                   </Tooltip>
                 </TooltipProvider>
               )}
-              <DialogPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-                <X className="h-4 w-4" />
+              <DialogPrimitive.Close className={cn(
+                "rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100",
+                "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none",
+                isMobile && "touch-target p-2"
+              )}>
+                <X className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
                 <span className="sr-only">Close</span>
               </DialogPrimitive.Close>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="flex min-h-[500px] max-h-[calc(90vh-80px)] rounded-b-xl overflow-hidden">
-          {/* Sidebar Navigation */}
-          <div className="w-56 border-r border-border dark:border-border bg-muted/30 dark:bg-muted/30">
-            <div className="h-full overflow-y-auto">
-              <div className="p-3 space-y-0.5">
+        <div className={cn(
+          "flex overflow-hidden",
+          isMobile 
+            ? "flex-col flex-1" 
+            : "min-h-[500px] max-h-[calc(90vh-80px)] rounded-b-xl"
+        )}>
+          {/* Mobile: Dropdown Tab Selector */}
+          {isMobile ? (
+            <div className="flex-shrink-0 px-4 py-3 border-b border-border bg-background">
+              <Select value={activeTab} onValueChange={(value) => handleTabChange(value as TabId)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(() => {
+                      const currentTab = TABS.find(t => t.id === activeTab);
+                      const Icon = currentTab?.icon || Settings;
+                      return (
+                        <div className="flex items-center space-x-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{currentTab?.label || 'Select Tab'}</span>
+                        </div>
+                      );
+                    })()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {TABS.map((tab) => {
+                    const isSystemAgentRestricted = isSystemAgent && !isAdmin && SYSTEM_AGENT_DISABLED_TABS.includes(tab.id);
+                    if (isSystemAgentRestricted || tab.disabled) {
+                      return null;
+                    }
+                    const Icon = tab.icon;
+                    return (
+                      <SelectItem key={tab.id} value={tab.id}>
+                        <div className="flex items-center space-x-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{tab.label}</span>
+                          {tab.comingSoon && (
+                            <span className="text-xs text-muted-foreground">(Soon)</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            /* Desktop: Sidebar Navigation */
+            <div className="w-56 border-r border-border dark:border-border bg-muted/30 dark:bg-muted/30">
+              <div className="h-full overflow-y-auto">
+                <div className="p-3 space-y-0.5">
                 {TABS.map((tab) => {
                   // Hide tabs that are restricted for system agents (unless user is admin)
                   const isSystemAgentRestricted = isSystemAgent && !isAdmin && SYSTEM_AGENT_DISABLED_TABS.includes(tab.id);
@@ -391,7 +466,7 @@ export function AgentSettingsModal({
                     >
                       <div className="flex items-center space-x-2.5">
                         <Icon className={cn(
-                          "h-4 w-4",
+                          "h-4 w-4 flex-shrink-0",
                           isStandOut && !isActive && "text-blue-600 dark:text-blue-400"
                         )} />
                         <div className={cn(
@@ -429,14 +504,20 @@ export function AgentSettingsModal({
 
                   return tabButton;
                 })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col bg-background dark:bg-background overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-6">
+          <div className={cn(
+            "flex-1 flex flex-col bg-background dark:bg-background overflow-hidden"
+          )}>
+            <div className={cn(
+              "flex-1 overflow-y-auto momentum-scroll",
+              isMobile && "pb-safe"
+            )}>
+              <div className={isMobile ? "p-4 pb-8" : "p-6"}>
                 {renderTabContent()}
               </div>
             </div>

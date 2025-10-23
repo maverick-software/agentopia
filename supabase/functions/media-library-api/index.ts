@@ -10,55 +10,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { corsHeaders } from '../_shared/cors.ts';
 
 /**
- * Get OCR.Space API key from vault-stored credentials
+ * OCR functionality removed - use alternative OCR providers (Azure, Mistral, etc.) if needed
  */
-async function getOCRApiKey(userId?: string): Promise<string | null> {
-  if (!userId) return null;
-  
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Get OCR.Space connection for user
-    const { data: connection, error: connectionError } = await supabase
-      .from('user_integration_credentials')
-      .select(`
-        vault_access_token_id,
-        service_providers!inner(name)
-      `)
-      .eq('user_id', userId)
-      .eq('credential_type', 'api_key')
-      .eq('connection_status', 'active')
-      .eq('service_providers.name', 'ocr_space')
-      .single();
-    
-    if (connectionError || !connection) {
-      console.log('[MediaLibrary] No active OCR.Space connection found for user');
-      return null;
-    }
-    
-    if (!connection.vault_access_token_id) {
-      console.log('[MediaLibrary] OCR.Space connection has no vault token');
-      return null;
-    }
-    
-    // Decrypt API key from vault
-    const { data: apiKey, error: vaultError } = await supabase
-      .rpc('vault_decrypt', { vault_id: connection.vault_access_token_id });
-    
-    if (vaultError || !apiKey) {
-      console.error('[MediaLibrary] Failed to decrypt OCR API key:', vaultError);
-      return null;
-    }
-    
-    return apiKey;
-    
-  } catch (error) {
-    console.error('[MediaLibrary] Error retrieving OCR API key:', error);
-    return null;
-  }
-}
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -420,57 +373,9 @@ async function extractTextFromImage(imageData: Uint8Array, fileType: string, use
  * Use web OCR service for image files
  */
 async function performWebOCROnImage(imageData: Uint8Array, fileType: string, userId?: string): Promise<string | null> {
-  try {
-    const ocrApiKey = await getOCRApiKey(userId);
-    if (!ocrApiKey) {
-      console.log('[MediaLibrary] OCR.Space API key not configured, skipping image OCR');
-      return null;
-    }
-    
-    // Convert image to base64
-    const base64Data = btoa(String.fromCharCode(...imageData));
-    const mimeType = fileType || 'image/jpeg';
-    
-    const formData = new FormData();
-    formData.append('base64Image', `data:${mimeType};base64,${base64Data}`);
-    formData.append('language', 'eng');
-    formData.append('detectOrientation', 'true');
-    formData.append('scale', 'true');
-    formData.append('OCREngine', '2');
-    
-    const response = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: {
-        'apikey': ocrApiKey
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OCR API error: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    
-    if (result.IsErroredOnProcessing) {
-      throw new Error(`OCR processing error: ${result.ErrorMessage}`);
-    }
-    
-    let extractedText = '';
-    if (result.ParsedResults && result.ParsedResults.length > 0) {
-      for (const page of result.ParsedResults) {
-        if (page.ParsedText) {
-          extractedText += page.ParsedText + '\n';
-        }
-      }
-    }
-    
-    return extractedText.trim() || null;
-    
-  } catch (error: any) {
-    console.error('[MediaLibrary] Image OCR failed:', error);
-    return null;
-  }
+  // OCR.Space integration removed - use alternative OCR providers (Azure Document Intelligence, Mistral OCR, etc.)
+  console.log('[MediaLibrary] OCR disabled - configure alternative OCR provider if needed');
+  return null;
 }
 
 /**
@@ -508,60 +413,11 @@ async function performOCRExtraction(pdfData: Uint8Array, userId?: string): Promi
 
 /**
  * Use a web-based OCR service to extract text from PDF
+ * OCR.Space integration removed - use alternative OCR providers
  */
 async function performWebOCR(pdfData: Uint8Array, userId?: string): Promise<string | null> {
-  try {
-    // Get OCR.Space API key from vault-stored credentials
-    const ocrApiKey = await getOCRApiKey(userId);
-    if (!ocrApiKey) {
-      console.log('[MediaLibrary] OCR.Space API key not configured, skipping web OCR');
-      return null;
-    }
-    
-    // Convert PDF to base64 for API
-    const base64Data = btoa(String.fromCharCode(...pdfData));
-    
-    const formData = new FormData();
-    formData.append('base64Image', `data:application/pdf;base64,${base64Data}`);
-    formData.append('language', 'eng');
-    formData.append('detectOrientation', 'true');
-    formData.append('scale', 'true');
-    formData.append('OCREngine', '2');
-    formData.append('filetype', 'PDF');
-    
-    const response = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: {
-        'apikey': ocrApiKey
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OCR API error: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    
-    if (result.IsErroredOnProcessing) {
-      throw new Error(`OCR processing error: ${result.ErrorMessage}`);
-    }
-    
-    let extractedText = '';
-    if (result.ParsedResults && result.ParsedResults.length > 0) {
-      for (const page of result.ParsedResults) {
-        if (page.ParsedText) {
-          extractedText += page.ParsedText + '\n\n';
-        }
-      }
-    }
-    
-    return extractedText.trim() || null;
-    
-  } catch (error: any) {
-    console.error('[MediaLibrary] Web OCR failed:', error);
-    return null;
-  }
+  console.log('[MediaLibrary] OCR disabled - configure alternative OCR provider (Azure Document Intelligence, Mistral OCR, etc.)');
+  return null;
 }
 
 /**

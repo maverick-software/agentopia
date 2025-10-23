@@ -79,6 +79,7 @@ import { ChatsPage } from '../pages/ChatsPage';
 import ContactsPage from '../pages/ContactsPage';
 import { TempChatPage } from '../pages/TempChatPage';
 import { ChatPage } from '../pages/ChatPage';
+import { MorePage } from '../pages/MorePage';
 
 import AgentEditPage from '../pages/agents/[agentId]/edit'; // Use the fixed version
 
@@ -123,6 +124,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workflows', element: WorkflowsPage, protection: 'protected', layout: true },
   { path: '/workflows/automations', element: AutomationsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
+  { path: '/more', element: MorePage, protection: 'protected', layout: true },
   { path: '/integrations/gmail/callback', element: GmailCallbackPage, protection: 'public', layout: false },
   { path: '/integrations/microsoft-teams/callback', element: MicrosoftTeamsCallbackPage, protection: 'public', layout: false },
   { path: '/integrations/microsoft-onedrive/callback', element: MicrosoftOneDriveCallbackPage, protection: 'public', layout: false },

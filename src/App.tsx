@@ -4,6 +4,7 @@ import { DatabaseProvider } from './contexts/DatabaseContext';
 import { AppRouter } from './routing';
 import { useRoutePrefetch } from './hooks/useRoutePrefetch';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { InstallPrompt } from './components/pwa/InstallPrompt';
 // import { BrowserRouter } from 'react-router-dom';
 
 // Rename to App and make default export
@@ -32,6 +33,7 @@ function App() {
       <AuthProvider>
         <DatabaseProvider>
           <AppRouter />
+          <InstallPrompt />
         </DatabaseProvider>
       </AuthProvider>
     </ThemeProvider>

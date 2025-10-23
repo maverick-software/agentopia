@@ -684,72 +684,9 @@ async function extractTextWithOCR(
   fileName: string,
   apiKey?: string
 ): Promise<string> {
-  if (!apiKey) {
-    throw new Error('OCR.space API key not configured');
-  }
-
-  try {
-    console.log(`[MediaLibrary MCP] Attempting OCR extraction for ${fileName}`);
-    
-    // Convert file data to base64 - handle large files properly
-    let base64Data: string;
-    try {
-      // For large files, process in smaller chunks to avoid call stack overflow
-      const chunkSize = 8192; // 8KB chunks to avoid call stack issues
-      const chunks: string[] = [];
-      
-      for (let i = 0; i < fileData.length; i += chunkSize) {
-        const chunk = fileData.slice(i, i + chunkSize);
-        // Convert chunk to string without spread operator to avoid stack overflow
-        let binaryString = '';
-        for (let j = 0; j < chunk.length; j++) {
-          binaryString += String.fromCharCode(chunk[j]);
-        }
-        chunks.push(btoa(binaryString));
-      }
-      base64Data = chunks.join('');
-    } catch (encodingError) {
-      console.error('[MediaLibrary MCP] Base64 encoding failed:', encodingError);
-      throw new Error('Failed to encode file for OCR processing');
-    }
-    
-    // Determine the correct MIME type for the base64 data
-    const mimeType = fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/png';
-    
-    // Prepare form data for OCR.space API
-    const formData = new FormData();
-    formData.append('base64Image', `data:${mimeType};base64,${base64Data}`);
-    formData.append('apikey', apiKey);
-    formData.append('language', 'eng');
-    formData.append('isOverlayRequired', 'false');
-    formData.append('OCREngine', '2'); // Use engine 2 for better accuracy
-    formData.append('detectOrientation', 'true'); // Auto-detect orientation
-    formData.append('scale', 'true'); // Auto-scale for better accuracy
-    
-    const response = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OCR API request failed: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    
-    if (result.IsErroredOnProcessing) {
-      throw new Error(`OCR processing error: ${result.ErrorMessage}`);
-    }
-    
-    const extractedText = result.ParsedResults?.[0]?.ParsedText || '';
-    console.log(`[MediaLibrary MCP] OCR extracted ${extractedText.length} characters`);
-    
-    return extractedText.trim();
-    
-  } catch (error: any) {
-    console.error('[MediaLibrary MCP] OCR extraction failed:', error);
-    throw error;
-  }
+  // OCR.Space integration removed - use alternative OCR providers (Azure Document Intelligence, Mistral OCR, etc.)
+  console.log('[MediaLibrary MCP] OCR disabled - configure alternative OCR provider if needed');
+  throw new Error('OCR.Space integration has been removed. Please configure an alternative OCR provider (Azure Document Intelligence, Mistral OCR, etc.)');
 }
 
 async function extractTextFromDocument(

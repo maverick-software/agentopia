@@ -5,8 +5,8 @@ This document provides an up-to-date overview of Agentopia's development status,
 ## 🎯 Overall Project Status
 
 **Status**: Production-Ready with Active Development  
-**Last Updated**: October 4, 2025  
-**Version**: 2.2 (Universal MCP System)
+**Last Updated**: October 22, 2025  
+**Version**: 2.3 (Intelligent Chat System with Contextual Awareness)
 
 ### Production Readiness Assessment
 - ✅ **Core Functionality**: Complete agent management and workspace collaboration
@@ -16,6 +16,101 @@ This document provides an up-to-date overview of Agentopia's development status,
 - ✅ **Documentation**: Comprehensive, modular documentation system
 
 ## 🔧 Recent Major Updates (October 2025)
+
+### Intelligent Chat System with Contextual Awareness
+**Completed**: October 22, 2025
+
+**Enhancement**: Implemented a sophisticated multi-stage chat processing pipeline with contextual awareness, intent classification, and comprehensive LLM debugging capabilities.
+
+**What Changed**:
+1. **Contextual Awareness Layer**: Analyzes user messages in full conversation context to understand actual intent
+2. **Intent Classification**: Determines if tools are needed before loading them, saving ~750ms per message
+3. **Unified Context Loading**: Combines working memory and relevant history into a single async operation
+4. **LLM Debug Modal**: Real-time tracking and display of all LLM calls with token usage and timing
+5. **V2-Only Architecture**: Removed V1 chat system, streamlined to V2 exclusively
+
+**Chat Processing Pipeline**:
+```
+User Message
+  ↓
+[Stage 1] Contextual Awareness Analysis (gpt-4o-mini, ~2-3s)
+  → Interprets message in conversation context
+  → Resolves implicit references ("it", "that contact", etc.)
+  → Determines actual user intent
+  ↓
+[Stage 2] Intent Classification (gpt-4o-mini, ~1-2s)
+  → Decides if tools are needed
+  → Identifies capability questions vs action requests
+  → Skips tool loading if not needed (750ms saved)
+  ↓
+[Stage 3] Unified Context Loading (async, ~95ms)
+  → Loads agent settings, conversation summary, recent messages in parallel
+  → Injects context early in message array
+  ↓
+[Stage 4] Tool Loading (conditional, ~750ms)
+  → Only loads if Stage 2 determines tools needed
+  ↓
+[Stage 5] Main LLM Call (agent's model, variable)
+  → Processes with full context and guidance
+  → May execute tools if needed
+  ↓
+[Stage 6] Response Synthesis
+  → Ensures proper formatting
+  → Handles tool results
+```
+
+**Implementation Details**:
+- **Contextual Awareness**: `supabase/functions/chat/processor/utils/contextual-awareness.ts`
+  - Fetches conversation summary and recent messages
+  - Analyzes user intent with agent personality context
+  - Resolves ambiguous references
+  - Caches interpretations (5-min TTL, max 500 entries)
+  - System prompt stored in database (`system_prompts` table)
+  
+- **Intent Classifier**: `supabase/functions/chat/processor/utils/intent-classifier.ts`
+  - Distinguishes capability questions from action requests
+  - Returns tool requirements with confidence scores
+  - Caches classifications (5-min TTL, max 1000 entries)
+  - System prompt stored in database
+  
+- **Unified Context Loader**: `supabase/functions/chat/core/context/unified_context_loader.ts`
+  - Parallel loading of agent settings, summary, and history
+  - Single formatted context message
+  - Token usage tracking
+  
+- **LLM Debug Modal**: `src/components/modals/LLMDebugModal.tsx`
+  - Displays all LLM calls with full request/response data
+  - Shows input/output tokens separately
+  - Includes timing and model information
+  - Expandable stages with copy-to-clipboard
+
+**Database Changes**:
+- Added `llm_calls` field to `ProcessingMetrics` interface
+- System prompts stored in `system_prompts` table for easy updates
+- Migration: `supabase/migrations/20251020000001_add_contextual_awareness_prompt.sql`
+- Migration: `supabase/migrations/20251020000002_update_intent_classifier_capability_questions.sql`
+
+**Performance Improvements**:
+- ✅ **750ms saved** per non-tool message by skipping tool loading
+- ✅ **Parallel context loading** reduces latency
+- ✅ **Caching** for interpretations and classifications
+- ✅ **Database-stored prompts** eliminate hardcoded strings
+
+**Token Usage Tracking**:
+- ✅ Input tokens (prompt) tracked separately
+- ✅ Output tokens (completion) tracked separately
+- ✅ Total tokens calculated across all stages
+- ✅ Per-stage breakdown in Debug Modal
+
+**Impact**:
+- ✅ Agents understand context and implicit references
+- ✅ Fewer unnecessary tool calls
+- ✅ Faster responses for informational queries
+- ✅ Complete visibility into LLM processing
+- ✅ Better cost tracking with token breakdown
+- ✅ Database-managed system prompts for easy tuning
+
+---
 
 ### Universal MCP System Implementation
 **Completed**: October 4, 2025

@@ -31,17 +31,6 @@ export const SEARCH_PROVIDERS: SearchProvider[] = [
   }
 ];
 
-// OCR providers configuration
-export const OCR_PROVIDERS: SearchProvider[] = [
-  { 
-    id: 'ocr_space', 
-    name: 'OCR.Space API', 
-    setupUrl: 'https://ocr.space/ocrapi', 
-    rateLimit: '500 requests/month free',
-    description: 'Extract text from PDFs and images with high accuracy OCR'
-  }
-];
-
 // Default scopes for different providers
 export const getDefaultScopesForProvider = (provider: string): string[] => {
   // For Gmail OAuth provider
@@ -61,10 +50,6 @@ export const getDefaultScopesForProvider = (provider: string): string[] => {
   }
   if (provider === 'mailgun') {
     return ['mailgun_send_email','mailgun_email_templates','mailgun_email_stats','mailgun_email_validation','mailgun_suppression_management'];
-  }
-  // For OCR providers
-  if (provider === 'ocr_space') {
-    return ['ocr_text_extraction','pdf_ocr_processing','image_text_recognition'];
   }
   return [];
 };

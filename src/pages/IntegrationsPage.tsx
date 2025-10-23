@@ -32,6 +32,10 @@ import { useGmailConnection } from '@/integrations/gmail';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { MobileHeader } from '@/components/mobile/MobileHeader';
+import { ResponsiveGrid } from '@/components/mobile/ResponsiveGrid';
+import { useIsMobile } from '@/hooks/useMediaQuery';
+import { getPagePadding } from '@/lib/pwaTheme';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -86,6 +90,7 @@ export function IntegrationsPage() {
   const modalClosedByUserRef = React.useRef(false); // Track if modal was closed by user action
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   
   // Component lifecycle tracking (can be removed in production)
   // React.useEffect(() => {
@@ -203,7 +208,6 @@ export function IntegrationsPage() {
   const systemManagedIntegrations = [
     'ClickSend SMS',
     'Mistral AI',
-    'OCR.Space',
     'Serper API',
     'SMTP.com'
   ];
@@ -327,30 +331,51 @@ export function IntegrationsPage() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-4 pt-6">
-      {/* Header */}
-      <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground">
-              {unifiedConnections.length} connected
-            </span>
+    <div className="min-h-screen bg-background">
+      {/* Mobile Header */}
+      {isMobile && (
+        <MobileHeader
+          title="Integrations"
+          showMenu={true}
+          actions={
             <button
               onClick={handleClearCache}
               disabled={clearingCache}
-              className="p-1.5 hover:bg-accent rounded-lg transition-colors disabled:opacity-50"
-              title="Clear tool cache (refreshes integration tools and schemas)"
+              className="touch-target p-2 rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+              title="Clear cache"
             >
-              <RefreshCw className={`h-4 w-4 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
             </button>
+          }
+        />
+      )}
+
+      <div className={`flex-1 space-y-6 ${getPagePadding(isMobile)}`}>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">Integrations</h2>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-muted-foreground">
+                  {unifiedConnections.length} connected
+                </span>
+                <button
+                  onClick={handleClearCache}
+                  disabled={clearingCache}
+                  className="p-1.5 hover:bg-accent rounded-lg transition-colors disabled:opacity-50"
+                  title="Clear tool cache (refreshes integration tools and schemas)"
+                >
+                  <RefreshCw className={`h-4 w-4 text-muted-foreground ${clearingCache ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+            
+            <p className="text-muted-foreground text-sm">
+              Connect your favorite tools and services to power your AI agents with external capabilities.
+            </p>
           </div>
-        </div>
-        
-        <p className="text-muted-foreground text-sm">
-          Connect your favorite tools and services to power your AI agents with external capabilities.
-        </p>
-      </div>
+        )}
 
       {/* Search and Filter */}
       <div className="flex flex-col space-y-4">
@@ -382,7 +407,7 @@ export function IntegrationsPage() {
 
           <TabsContent value={selectedCategory} className="space-y-4">
             {/* Integration Cards Grid - Responsive: 1 col mobile, 2 cols tablet, 3 cols desktop */}
-            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+            <ResponsiveGrid type="tools" gap="md">
               {filteredIntegrations.map((integration) => {
                 const IconComponent = getIconComponent(integration.icon_name || 'Settings');
                 const isConnected = isIntegrationConnected(integration.name);
@@ -510,7 +535,7 @@ export function IntegrationsPage() {
                   </Card>
                 );
               })}
-            </div>
+            </ResponsiveGrid>
             
             {filteredIntegrations.length === 0 && (
               <div className="text-center py-8">
@@ -520,6 +545,7 @@ export function IntegrationsPage() {
             )}
           </TabsContent>
         </Tabs>
+      </div>
       </div>
 
       {/* Integration Setup Modal - Always render to preserve state */}

@@ -36,8 +36,11 @@ entrypoint = "./functions/debug-temp-chat/index.ts"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = []
+# IMPORTANT: Update site_url to your production domain in production
+# Development: http://localhost:5173
+# Production: https://app.gofragents.com
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["https://app.gofragents.com"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 
