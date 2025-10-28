@@ -133,7 +133,8 @@ export async function saveAgentResponse(
   agentId: string,
   supabaseClient: SupabaseClient,
   conversationId?: string,
-  sessionId?: string
+  sessionId?: string,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const agentResponsePayload = {
@@ -142,7 +143,7 @@ export async function saveAgentResponse(
       channel_id: channelId,
       content: typeof content === 'string' ? { type: 'text', text: content } : content,
       role: 'assistant',
-      sender_user_id: null,
+      sender_user_id: userId || null,  // Store user_id for token tracking
       sender_agent_id: agentId
     };
 

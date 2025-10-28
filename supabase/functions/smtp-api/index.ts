@@ -501,109 +501,54 @@ async function handleSendEmail(
     let credError;
     
     // ============================================
-    // CHECK FOR SYSTEM-LEVEL SMTP.COM API KEY FIRST
+    // ACCOUNT-LEVEL SMTP CONFIGURATION
     // ============================================
-    console.log('[SMTP-API] Checking for system-level SMTP.com API key');
-    const { data: systemSMTPKey, error: systemSMTPError } = await supabase
-      .from('system_api_keys')
-      .select('vault_secret_id, is_active')
-      .eq('provider_name', 'smtp_com')
-      .eq('is_active', true)
-      .maybeSingle();
-    
-    if (systemSMTPError) {
-      console.error('[SMTP-API] Error fetching system SMTP.com key:', systemSMTPError);
-    }
-    
-    const hasSystemSMTP = !!(systemSMTPKey && systemSMTPKey.vault_secret_id);
-    console.log('[SMTP-API] System SMTP.com API key available:', hasSystemSMTP);
-    
-    // If system SMTP.com key exists and no specific config requested, use it
-    if (hasSystemSMTP && !params.smtp_config_id) {
-      console.log('[SMTP-API] Using system-level SMTP.com configuration');
+    if (params.smtp_config_id) {
+      console.log('[SMTP-API] Using provided smtp_config_id:', params.smtp_config_id);
+      // Use specific config ID if provided
+      const result = await supabase
+        .rpc('get_smtp_credentials', {
+          p_config_id: params.smtp_config_id,
+          p_user_id: userId
+        });
+      credentials = result.data;
+      credError = result.error;
+    } else {
+      console.log('[SMTP-API] Auto-discovering account-level SMTP configuration for user:', userId);
       
-      // Decrypt system SMTP.com credentials from Vault
-      const { data: smtpCredsData, error: smtpCredsError } = await supabaseAdmin
-        .rpc('vault_decrypt', { vault_id: systemSMTPKey.vault_secret_id });
+      // Get account_id from user
+      const { data: accountData, error: accountError } = await supabase
+        .from('user_accounts')
+        .select('account_id')
+        .eq('user_id', userId)
+        .single();
       
-      if (smtpCredsError || !smtpCredsData) {
-        console.error('[SMTP-API] Failed to decrypt system SMTP.com credentials:', smtpCredsError);
-        credError = new Error('System SMTP.com API key is configured but could not be decrypted. Please contact your administrator.');
+      if (accountError || !accountData) {
+        console.error('[SMTP-API] Failed to get account for user:', accountError);
+        credError = new Error('Failed to retrieve user account information');
         credentials = null;
       } else {
-        console.log('[SMTP-API] Successfully decrypted system SMTP.com credentials');
+        const accountId = accountData.account_id;
         
-        // Parse credentials format: could be "username:apitoken" or just "apitoken"
-        let username: string;
-        let apiToken: string;
-        
-        if (smtpCredsData.includes(':')) {
-          const parts = smtpCredsData.split(':');
-          username = parts[0];
-          apiToken = parts[1];
-        } else {
-          // If only token provided, use a default system username
-          username = 'system@smtp.com';
-          apiToken = smtpCredsData;
-        }
-        
-        console.log('[SMTP-API] Parsed system SMTP.com credentials - Username:', username);
-        
-        credentials = [{
-          connection_name: 'System SMTP.com',
-          host: 'mail.smtp.com',
-          port: 587,
-          secure: false,
-          username: username,
-          password: apiToken,
-          from_email: params.from_email || username,
-          from_name: params.from_name || 'System Email',
-          reply_to_email: params.reply_to || undefined,
-          connection_timeout: 30000,
-          socket_timeout: 30000,
-          greeting_timeout: 10000,
-          max_emails_per_day: 10000,
-          max_recipients_per_email: 100
-        }];
-        credError = null;
-      }
-    }
-    
-    // ============================================
-    // FALL BACK TO USER-LEVEL SMTP OR SPECIFIC CONFIG
-    // ============================================
-    if (!credentials && !credError) {
-      if (params.smtp_config_id) {
-        console.log('[SMTP-API] Using provided smtp_config_id:', params.smtp_config_id);
-        // Use specific config ID if provided
+        // Auto-discover SMTP configuration for this account
         const result = await supabase
-          .rpc('get_smtp_credentials', {
-            p_config_id: params.smtp_config_id,
-            p_user_id: userId
-          });
-        credentials = result.data;
-        credError = result.error;
-      } else {
-        console.log('[SMTP-API] Auto-discovering user-level SMTP configuration for user:', userId);
-      // Auto-discover SMTP configuration for this agent
-      const result = await supabase
-        .from('user_integration_credentials')
-        .select(`
-          id,
-          connection_name,
-          vault_access_token_id,
-          encrypted_access_token,
-          external_username,
-          connection_metadata,
-          service_providers!inner(name)
-        `)
-        .eq('user_id', userId)
-        .eq('service_providers.name', 'smtp')
-        .eq('connection_status', 'active')
-        .limit(1)
-        .single();
-        
-      console.log('[SMTP-API] Auto-discovery result:', { data: result.data, error: result.error });
+          .from('user_integration_credentials')
+          .select(`
+            id,
+            connection_name,
+            vault_access_token_id,
+            encrypted_access_token,
+            external_username,
+            connection_metadata,
+            service_providers!inner(name)
+          `)
+          .eq('account_id', accountId)
+          .eq('service_providers.name', 'smtp')
+          .eq('connection_status', 'active')
+          .limit(1)
+          .single();
+          
+        console.log('[SMTP-API] Auto-discovery result:', { data: result.data, error: result.error });
         
       if (result.error) {
         credError = result.error;
@@ -722,9 +667,9 @@ async function handleSendEmail(
              has_password: !!credentials[0].password
            });
          }
+        }
       }
-    }
-    } // End of user-level SMTP fallback block
+    } // End of account-level SMTP configuration
 
     if (credError || !credentials || credentials.length === 0) {
       console.error('[SMTP-API] Failed to get valid credentials:', { credError, credentialsLength: credentials?.length });

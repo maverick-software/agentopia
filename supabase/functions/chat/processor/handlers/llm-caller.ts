@@ -4,6 +4,8 @@
 
 import type OpenAI from 'npm:openai@6.1.0';
 import type { IRouter, LLMTool } from '../../../shared/llm/interfaces.ts';
+import { ModelResolver } from '../utils/model-resolver.ts';
+import { adaptLLMParams, supportsTools } from '../utils/model-api-adapter.ts';
 
 export interface LLMCallOptions {
   messages: any[];
@@ -21,11 +23,18 @@ export interface LLMCallResult {
 }
 
 export class LLMCaller {
+  private modelResolver: ModelResolver | null = null;
+  
   constructor(
     private openai: OpenAI,
     private router?: IRouter,
-    private agentId?: string
-  ) {}
+    private agentId?: string,
+    private supabase?: any
+  ) {
+    if (supabase) {
+      this.modelResolver = new ModelResolver(supabase);
+    }
+  }
 
   /**
    * Detect if user message implies a tool should be called
@@ -110,6 +119,7 @@ export class LLMCaller {
 
     // Use router if available
     if (this.router && this.agentId) {
+      console.log('[LLMCaller] ✅ Using LLMRouter (Responses API)');
       const resp = await this.router.chat(this.agentId, options.messages, {
         tools: options.tools,
         tool_choice: toolChoice,
@@ -136,6 +146,7 @@ export class LLMCaller {
     }
 
     // Fallback to direct OpenAI Chat Completions API
+    console.log('[LLMCaller] ⚠️ Router not available, using direct OpenAI call (Chat Completions API - DEPRECATED)');
     // Convert messages from Responses API format to Chat Completions format if needed
     const chatMessages = options.messages.map((msg: any) => {
       // If message has 'type' field, it's Responses API format - convert it
@@ -150,8 +161,14 @@ export class LLMCaller {
       return msg;
     });
 
-    const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    // Resolve model - use agent's model or fallback
+    const model = this.modelResolver 
+      ? (await this.modelResolver.getAgentModel(this.agentId, 'main')).model
+      : 'gpt-4';
+
+    // Adapt API params for the specific model's requirements
+    const adaptedParams = adaptLLMParams({
+      model,
       messages: chatMessages,
       tools: options.tools.map((tool) => ({
         type: 'function',
@@ -163,8 +180,10 @@ export class LLMCaller {
       })),
       tool_choice: toolChoice,
       temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens ?? 1200,
+      maxTokens: options.maxTokens ?? 1200
     });
+
+    const completion = await this.openai.chat.completions.create(adaptedParams);
 
     console.log(`[LLMCaller] OpenAI response:`, {
       hasText: !!completion.choices?.[0]?.message?.content,

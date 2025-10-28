@@ -622,3 +622,4 @@ export function TokenUsageModal({ isOpen, onClose, userId, userEmail }: TokenUsa
 **Recommended Icon**: `<BarChart3>` or `<Activity>` from lucide-react  
 **Recommended Color**: `text-blue-500` for token metrics
 
+

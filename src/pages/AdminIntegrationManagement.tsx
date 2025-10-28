@@ -264,7 +264,31 @@ export function AdminIntegrationManagement() {
     return <IconComponent className="h-4 w-4" />;
   };
 
+  // Hide internal tools and system-level integrations from admin OAuth management
+  const hiddenProviders = [
+    'brave_search',
+    'brave_search_api',
+    'contact_management',
+    'conversation_memory',
+    'internal_system', // Advanced Reasoning
+    'temporary_chat_internal', // Temporary Chat Links
+    'google',
+    'microsoft',
+    'ocr_space',
+    'ocrspace',
+    'openai',
+    'serpapi',
+    'serp_api',
+    'mistral_ai', // System-level API key
+    'serper_api' // System-level API key
+  ];
+
   const filteredProviders = providers.filter(provider => {
+    // Hide internal tools and deprecated integrations
+    if (hiddenProviders.includes(provider.name.toLowerCase())) {
+      return false;
+    }
+    
     const matchesSearch = provider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          provider.display_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || 

@@ -84,6 +84,8 @@ const edgeTypes: EdgeTypes = {
 
 // Canvas content component (requires ReactFlow context)
 const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
+  isOpen,
+  onClose,
   teams,
   teamMembers,
   workspaceId,
@@ -163,6 +165,13 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
   // State to track if we've loaded the initial data
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
 
+  // Reset the loaded flag when modal closes so it can reload on next open
+  useEffect(() => {
+    if (!isOpen) {
+      setHasLoadedInitialData(false);
+    }
+  }, [isOpen]);
+
   // CRITICAL: Load database state on mount - ONCE and properly
   useEffect(() => {
     if (readonly || !userId || hasLoadedInitialData) return;
@@ -194,8 +203,17 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
             const currentConnections = [...canvasState.canvasState.connections];
             currentConnections.forEach(conn => canvasState.removeConnection(conn.id));
             
-            // Add loaded connections
-            savedLayout.connections.forEach((conn) => {
+            // Filter and add loaded connections (filter out invalid ones)
+            const validConnections = savedLayout.connections.filter(conn => {
+              // Validate handles - source handles should not end with '-target'
+              const isValid = !conn.sourceHandle?.endsWith('-target');
+              if (!isValid) {
+                console.warn(`Skipping invalid connection from ${conn.fromTeamId} to ${conn.toTeamId} with sourceHandle: ${conn.sourceHandle}`);
+              }
+              return isValid;
+            });
+            
+            validConnections.forEach((conn) => {
               canvasState.addConnection({
                 fromTeamId: conn.fromTeamId,
                 toTeamId: conn.toTeamId,
@@ -234,7 +252,8 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     };
     
     loadData();
-  }, [readonly, userId, hasLoadedInitialData, teams, persistence, canvasState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readonly, userId, hasLoadedInitialData, persistence]);
   
   // Handle connection start (must be defined before nodes useMemo)
   const handleConnectionStart = useCallback((teamId: string, handle: string) => {
@@ -345,9 +364,15 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     );
     
     if (positionChanges.length > 0) {
+      console.log('📍 Position changes detected:', positionChanges);
+      
+      // Update positions from the current React Flow nodes state, not from change.position
       positionChanges.forEach(change => {
-        if (change.position) {
-          canvasState.updateTeamPosition(change.id, change.position);
+        // Get the current node from React Flow to ensure we have the latest position
+        const node = flowNodes.find(n => n.id === change.id);
+        if (node && node.position) {
+          console.log(`📍 Updating position for ${change.id}:`, node.position);
+          canvasState.updateTeamPosition(change.id, node.position);
         }
       });
       
@@ -357,10 +382,12 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
           try {
             setIsSaving(true);
             const viewport = reactFlowInstance.getViewport();
+            const positions = Array.from(canvasState.canvasState.teamPositions.values());
+            console.log('💾 Saving positions:', positions.length, 'positions');
             const layout = {
               userId,
               workspaceId,
-              positions: Array.from(canvasState.canvasState.teamPositions.values()),
+              positions,
               connections: canvasState.canvasState.connections,
               viewSettings: {
                 zoom: viewport.zoom,
@@ -379,7 +406,7 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
         }, 1500); // Wait 1.5 seconds after drag ends
       }
     }
-  }, [onNodesChange, canvasState, readonly, reactFlowInstance, userId, workspaceId, persistence]);
+  }, [onNodesChange, canvasState, readonly, reactFlowInstance, userId, workspaceId, persistence, flowNodes]);
 
   // Handle edge changes 
   const handleEdgesChange = useCallback((changes: any[]) => {
@@ -393,12 +420,20 @@ const CanvasContent: React.FC<VisualTeamCanvasProps> = ({
     console.log('🔗 Connection attempted:', connection);
     console.log('🔗 Current connections BEFORE adding:', canvasState.canvasState.connections.length);
     
+    // Fix sourceHandle if it's invalid (ReactFlow sometimes gives us target handles as source)
+    let cleanSourceHandle = connection.sourceHandle || 'right';
+    if (cleanSourceHandle.endsWith('-target') && cleanSourceHandle !== 'left-target' && cleanSourceHandle !== 'right-target') {
+      // Remove the '-target' suffix to get the correct source handle
+      cleanSourceHandle = cleanSourceHandle.replace('-target', '');
+      console.warn(`⚠️ Fixed invalid sourceHandle from ReactFlow: ${connection.sourceHandle} -> ${cleanSourceHandle}`);
+    }
+    
     // Create a simple connection directly (id and createdAt will be generated by addConnection)
     const newConnectionData = {
       fromTeamId: connection.source!,
       toTeamId: connection.target!,
       type: 'collaborates_with' as ConnectionType,
-      sourceHandle: connection.sourceHandle,
+      sourceHandle: cleanSourceHandle,
       targetHandle: connection.targetHandle
     };
     

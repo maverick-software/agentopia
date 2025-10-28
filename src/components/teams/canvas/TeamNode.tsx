@@ -1,5 +1,6 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
+import { createPortal } from 'react-dom';
 import { 
   Users, 
   MoreVertical, 
@@ -38,12 +39,32 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
   
   // Custom dropdown state
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const [isDark, setIsDark] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  
+  // Check theme on mount and when menu opens
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark') || document.documentElement.classList.contains('chatgpt'));
+  }, [showMenu]);
+  
+  // Calculate menu position when opened
+  useEffect(() => {
+    if (showMenu && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.right - 140 // Align right edge of menu with button
+      });
+    }
+  }, [showMenu]);
   
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
     };
@@ -207,8 +228,9 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
       </div>
       
       {/* Context Menu - Custom implementation to avoid Radix UI infinite loop */}
-      <div ref={menuRef} className="absolute top-1 right-1">
+      <div className="absolute top-1 right-1">
         <Button
+          ref={buttonRef}
           variant="ghost"
           size="icon"
           className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -220,13 +242,31 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
           <MoreVertical className="h-3 w-3" />
         </Button>
         
-        {showMenu && (
+        {showMenu && createPortal(
           <div 
-            className="absolute top-8 right-0 bg-popover text-popover-foreground rounded-md border shadow-md py-1 min-w-[140px] z-50"
+            ref={menuRef}
+            className="fixed rounded-md shadow-lg py-1 min-w-[140px]"
+            style={{
+              top: `${menuPosition.top}px`,
+              left: `${menuPosition.left}px`,
+              zIndex: 9999,
+              backgroundColor: isDark ? 'hsl(217 25% 12%)' : 'hsl(0 0% 100%)',
+              color: isDark ? 'hsl(210 20% 98%)' : 'hsl(240 10% 3.9%)',
+              border: `1px solid ${isDark ? 'hsl(217 19% 20%)' : 'hsl(214.3 31.8% 91.4%)'}`
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="flex items-center w-full px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="flex items-center w-full px-3 py-2 text-sm transition-colors text-left"
+              style={{
+                color: 'inherit'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = isDark ? 'hsl(217 19% 20%)' : 'hsl(210 40% 96%)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
               onClick={(e) => {
                 handleClick(e);
                 setShowMenu(false);
@@ -235,7 +275,8 @@ export const TeamNode = memo<NodeProps<TeamNodeData>>(({ data, selected }) => {
               <ExternalLink className="h-4 w-4 mr-2" />
               View Team
             </button>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
       

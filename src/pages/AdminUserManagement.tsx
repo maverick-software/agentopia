@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { AlertCircle, Users, ChevronLeft, ChevronRight, Search, Edit, PlayCircle, PauseCircle, Ban } from 'lucide-react';
+import { AlertCircle, Users, ChevronLeft, ChevronRight, Search, Edit, PlayCircle, PauseCircle, Ban, Zap } from 'lucide-react';
 import { EditUserRolesModal } from '../components/modals/EditUserRolesModal';
 import { ConfirmationModal } from '../components/modals/ConfirmationModal';
+import { TokenUsageModal } from '../components/modals/TokenUsageModal';
 
 // Define the shape of the combined user data we expect from the function
 interface AdminUser {
@@ -44,6 +45,11 @@ export function AdminUserManagement() {
     const [userToAction, setUserToAction] = useState<AdminUser | null>(null);
     const [isPerformingAction, setIsPerformingAction] = useState(false); // Loading state for the action itself
     // --- End Status Change State ---
+
+    // --- State for Token Usage Modal ---
+    const [isTokenUsageModalOpen, setIsTokenUsageModalOpen] = useState(false);
+    const [selectedUserForUsage, setSelectedUserForUsage] = useState<AdminUser | null>(null);
+    // --- End Token Usage Modal State ---
 
     const fetchUsers = useCallback(async (page: number, search: string) => {
         setLoading(true);
@@ -177,6 +183,18 @@ export function AdminUserManagement() {
     };
     // --- End Status Action Handlers ---
 
+    // --- Token Usage Modal Handlers ---
+    const handleViewUsage = (user: AdminUser) => {
+        setSelectedUserForUsage(user);
+        setIsTokenUsageModalOpen(true);
+    };
+
+    const handleCloseTokenUsageModal = () => {
+        setIsTokenUsageModalOpen(false);
+        setSelectedUserForUsage(null);
+    };
+    // --- End Token Usage Modal Handlers ---
+
     const formatDate = (dateString?: string) => {
         if (!dateString) return 'N/A';
         try {
@@ -267,24 +285,31 @@ export function AdminUserManagement() {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{formatDate(user.created_at)}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{formatDate(user.last_sign_in_at)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <div className="flex items-center gap-2">
-                                                    <button 
-                                                        onClick={() => handleEditClick(user)} 
-                                                        className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-muted transition-colors"
-                                                        title="Edit Roles"
-                                                    >
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleStatusActionClick(user, 'suspend')} 
-                                                        className="text-destructive hover:text-destructive/80 p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
-                                                        title="Suspend User"
-                                                    >
-                                                        <Ban size={16} />
-                                                    </button>
-                                                </div>
-                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                                <div className="flex items-center gap-2">
+                                                                    <button 
+                                                                        onClick={() => handleViewUsage(user)} 
+                                                                        className="text-blue-500 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-500/10 transition-colors"
+                                                                        title="View Token Usage"
+                                                                    >
+                                                                        <Zap size={16} />
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleEditClick(user)} 
+                                                                        className="text-primary hover:text-primary/80 p-1.5 rounded-md hover:bg-muted transition-colors"
+                                                                        title="Edit Roles"
+                                                                    >
+                                                                        <Edit size={16} />
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleStatusActionClick(user, 'suspend')} 
+                                                                        className="text-destructive hover:text-destructive/80 p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
+                                                                        title="Suspend User"
+                                                                    >
+                                                                        <Ban size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
                                         </tr>
                                     ))
                                 )}
@@ -345,6 +370,15 @@ export function AdminUserManagement() {
                         }
                     </p>
                 </ConfirmationModal>
+                {selectedUserForUsage && (
+                    <TokenUsageModal
+                        isOpen={isTokenUsageModalOpen}
+                        onClose={handleCloseTokenUsageModal}
+                        userId={selectedUserForUsage.id}
+                        userEmail={selectedUserForUsage.email}
+                        userName={selectedUserForUsage.full_name}
+                    />
+                )}
             </div>
         </div>
     );

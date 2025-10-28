@@ -110,31 +110,17 @@ export function useLayoutPersistence(
               connections: remoteLayout.connections?.length || 0,
               viewSettings: remoteLayout.viewSettings
             });
-
-            // ALSO load individual connections from team_connections table
-            const { data: connectionsData, error: connectionsError } = await supabase
-              .from('team_connections')
-              .select('*')
-              .eq('created_by_user_id', userId);
             
-            if (connectionsError) {
-              console.warn('Failed to load connections:', connectionsError);
-            } else if (connectionsData && connectionsData.length > 0) {
-              console.log(`📥 Loaded ${connectionsData.length} connections from team_connections table`);
-              
-              // Convert database connections to canvas format
-              const canvasConnections = connectionsData.map(dbConn => ({
-                id: `conn_${dbConn.id}`,
-                fromTeamId: dbConn.from_team_id,
-                toTeamId: dbConn.to_team_id,
-                type: dbConn.connection_type,
-                createdAt: dbConn.created_at,
-                sourceHandle: 'right', // Default, could be stored in future
-                targetHandle: 'left-target' // Default, could be stored in future
-              }));
-              
-              // Replace JSON connections with database connections
-              remoteLayout.connections = canvasConnections;
+            // Filter out any invalid connections from JSONB
+            if (remoteLayout.connections && remoteLayout.connections.length > 0) {
+              remoteLayout.connections = remoteLayout.connections.filter(conn => {
+                // Validate handles - source handles should not end with '-target'
+                const isValid = !conn.sourceHandle?.endsWith('-target');
+                if (!isValid) {
+                  console.warn(`Filtered invalid connection ${conn.id} from layout with sourceHandle: ${conn.sourceHandle}`);
+                }
+                return isValid;
+              });
             }
           }
         } catch (error) {
@@ -238,43 +224,9 @@ export function useLayoutPersistence(
           throw new Error(response.error || 'Failed to save layout');
         }
 
-        // ALSO save individual connections to team_connections table
-        console.log('💾 Saving individual connections to team_connections table...');
-        
-        // First, delete all existing connections for this user
-        const { error: deleteError } = await supabase
-          .from('team_connections')
-          .delete()
-          .eq('created_by_user_id', userId);
-        
-        if (deleteError) {
-          console.error('Failed to delete existing connections:', deleteError);
-        }
-        
-        // Insert new connections (if any)
-        if (layout.connections && layout.connections.length > 0) {
-          const connectionsToInsert = layout.connections.map(conn => ({
-            from_team_id: conn.fromTeamId,
-            to_team_id: conn.toTeamId,
-            connection_type: conn.type,
-            created_by_user_id: userId,
-            created_at: conn.createdAt,
-            updated_at: new Date().toISOString()
-          }));
-          
-          const { error: insertError } = await supabase
-            .from('team_connections')
-            .insert(connectionsToInsert);
-          
-          if (insertError) {
-            console.error('Failed to save connections:', insertError);
-            throw new Error(`Failed to save connections: ${insertError.message}`);
-          }
-          
-          console.log(`✅ Saved ${connectionsToInsert.length} connections to database`);
-        } else {
-          console.log('✅ No connections to save - existing connections cleared');
-        }
+        // Note: Connections are now only stored in the team_canvas_layouts JSONB
+        // The team_connections table is not actively used for canvas persistence
+        console.log('✅ Layout saved (connections stored in JSONB)');
       }
       
       setLastSavedLayout(layoutToSave);

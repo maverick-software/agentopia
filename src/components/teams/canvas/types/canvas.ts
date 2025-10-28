@@ -2,7 +2,7 @@
 // Generated from comprehensive design research and specifications
 
 import type { Node, Edge, Viewport } from 'reactflow';
-import type { Team, TeamMember } from '@/types'; // Import existing types
+import type { Team, TeamMember, Agent } from '@/types'; // Import existing types
 
 // Canvas Layout Data Structures
 export interface TeamPosition {
@@ -15,10 +15,22 @@ export interface TeamPosition {
   createdAt?: string;
 }
 
+export interface AgentPosition {
+  agentId: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
 export interface TeamConnection {
   id?: string;
-  fromTeamId: string;
-  toTeamId: string;
+  fromTeamId?: string;
+  toTeamId?: string;
+  fromAgentId?: string;
+  toAgentId?: string;
   type: ConnectionType;
   label?: string;
   color?: string;
@@ -39,6 +51,7 @@ export interface CanvasLayout {
   userId: string;
   workspaceId?: string | null;
   positions: TeamPosition[];
+  agentPositions?: AgentPosition[];
   connections: TeamConnection[];
   viewSettings: ViewSettings;
   createdAt?: string;
@@ -93,15 +106,20 @@ export interface CanvasState {
   // Team positions
   teamPositions: Map<string, TeamPosition>;
   
+  // Agent positions
+  agentPositions: Map<string, AgentPosition>;
+  
   // Connections
   connections: TeamConnection[];
   
   // Selection state
   selectedTeams: Set<string>;
+  selectedAgents: Set<string>;
   selectedConnections: Set<string>;
   
   // Interaction state
   draggedTeam: string | null;
+  draggedAgent: string | null;
   
   // Layout state
   hasUnsavedChanges: boolean;
@@ -126,6 +144,9 @@ export interface VisualTeamCanvasProps {
   teams: Team[];
   teamMembers: Map<string, TeamMember[]>;
   
+  // Agent data
+  agents?: Agent[];
+  
   // Workspace/user context
   workspaceId?: string;
   userId: string;
@@ -137,6 +158,9 @@ export interface VisualTeamCanvasProps {
   onTeamCreate?: () => void;
   onTeamUpdate?: (teamId: string, updates: Partial<Team>) => void;
   onTeamDelete?: (teamId: string) => void;
+  onAgentCreate?: () => void;
+  onAgentUpdate?: (agentId: string, updates: Partial<Agent>) => void;
+  onAgentDelete?: (agentId: string) => void;
   onLayoutSave?: (layout: CanvasLayout) => Promise<void>;
   onConnectionCreate?: (connection: Omit<TeamConnection, 'id'>) => void;
   onConnectionDelete?: (connectionId: string) => void;
@@ -183,6 +207,7 @@ export interface CanvasToolbarProps {
   
   onShowSettings: () => void;
   onCreateTeam?: () => void;
+  onCreateAgent?: () => void;
   
   // Options
   showMinimap?: boolean;

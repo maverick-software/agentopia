@@ -14,6 +14,8 @@
  */
 
 import OpenAI from 'npm:openai@6.1.0';
+import { ModelResolver } from './model-resolver.ts';
+import { callOpenAIResponsesAPI } from './openai-responses-caller.ts';
 
 /**
  * Classification result with confidence scoring
@@ -140,8 +142,14 @@ export class IntentClassifier {
   private promptLastFetched: number = 0;
   private readonly PROMPT_CACHE_TTL = 300000; // 5 minutes
   
+  // Model resolver
+  private modelResolver: ModelResolver | null = null;
+  
   constructor(private openai: OpenAI, private supabase?: any) {
     // Initialization is silent for cleaner logs
+    if (supabase) {
+      this.modelResolver = new ModelResolver(supabase);
+    }
   }
   
   /**
@@ -225,7 +233,7 @@ export class IntentClassifier {
     
     // Perform classification
     try {
-      const classification = await this.performClassification(message, recentMessages, contextualInterpretation);
+      const classification = await this.performClassification(message, agentId, recentMessages, contextualInterpretation);
       classification.classificationTimeMs = Date.now() - startTime;
       classification.fromCache = false;
       
@@ -253,6 +261,7 @@ export class IntentClassifier {
    */
   private async performClassification(
     message: string,
+    agentId: string,
     recentMessages?: Array<{ role: string; content: string }>,
     contextualInterpretation?: { interpretedMeaning: string; userIntent: string; resolvedReferences?: Record<string, string> }
   ): Promise<IntentClassification> {
@@ -296,27 +305,31 @@ Use this contextual understanding to classify intent more accurately.`
         content: `Classify this message: "${message.substring(0, 500)}"` // Limit to 500 chars for speed
       });
       
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      // Resolve model - use agent's model or fast fallback
+      const model = this.modelResolver 
+        ? (await this.modelResolver.getAgentModel(agentId, 'fast')).model
+        : 'gpt-4o-mini';
+      
+      // Get API key from OpenAI instance
+      const apiKey = (this.openai as any).apiKey || '';
+      
+      // Call OpenAI using Responses API
+      const response = await callOpenAIResponsesAPI(apiKey, {
+        model,
         messages,
         temperature: 0.3, // Low temperature for consistent classification
-        max_tokens: 150,
-        response_format: { type: 'json_object' }
+        maxTokens: 150,
+        responseFormat: { type: 'json_object' }
       });
       
-      const content = response.choices[0].message.content;
-      if (!content) {
+      if (!response.content) {
         throw new Error('Empty response from OpenAI');
       }
       
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(response.content);
       
-      // Extract token usage for tracking
-      const usage = response.usage ? {
-        prompt_tokens: response.usage.prompt_tokens || 0,
-        completion_tokens: response.usage.completion_tokens || 0,
-        total_tokens: response.usage.total_tokens || 0,
-      } : undefined;
+      // Use token usage from response
+      const usage = response.usage;
       
       // Validate response structure
       if (typeof parsed.requiresTools !== 'boolean') {

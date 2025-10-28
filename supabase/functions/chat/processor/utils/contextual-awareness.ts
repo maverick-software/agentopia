@@ -10,6 +10,9 @@
 // Import type from shared location
 type SupabaseClient = any;
 
+import { ModelResolver } from './model-resolver.ts';
+import { callOpenAIResponsesAPI } from './openai-responses-caller.ts';
+
 export interface ContextualInterpretation {
   /** The user's original message */
   originalMessage: string;
@@ -142,10 +145,15 @@ export class ContextualAwarenessAnalyzer {
   private promptLastFetched: number = 0;
   private readonly PROMPT_CACHE_TTL = 300000; // 5 minutes
   
+  // Model resolver
+  private modelResolver: ModelResolver;
+  
   constructor(
     private openai: any,
     private supabase: SupabaseClient
-  ) {}
+  ) {
+    this.modelResolver = new ModelResolver(supabase);
+  }
   
   /**
    * Fetch the contextual awareness prompt from database with caching
@@ -243,7 +251,8 @@ export class ContextualAwarenessAnalyzer {
       // Call LLM for contextual interpretation
       const interpretation = await this.performContextualAnalysis(
         userMessage,
-        contextPrompt
+        contextPrompt,
+        agentId
       );
       
       interpretation.analysisTimeMs = Date.now() - startTime;
@@ -350,31 +359,34 @@ export class ContextualAwarenessAnalyzer {
    */
   private async performContextualAnalysis(
     userMessage: string,
-    contextPrompt: string
+    contextPrompt: string,
+    agentId: string | undefined
   ): Promise<ContextualInterpretation> {
     // Fetch system prompt from database (with caching)
     const systemPromptContent = await this.getSystemPrompt();
     
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini', // Fast model for quick analysis
+    // Resolve model - use agent's model or fast fallback
+    const { model } = await this.modelResolver.getAgentModel(agentId, 'fast');
+    
+    // Get API key from OpenAI instance
+    const apiKey = (this.openai as any).apiKey || '';
+    
+    // Call OpenAI using Responses API
+    const response = await callOpenAIResponsesAPI(apiKey, {
+      model,
       messages: [
         { role: 'system', content: systemPromptContent },
         { role: 'user', content: contextPrompt }
       ],
       temperature: 0.3, // Lower temperature for consistent analysis
-      max_tokens: 500,
-      response_format: { type: 'json_object' }
+      maxTokens: 500,
+      responseFormat: { type: 'json_object' }
     });
     
-    const content = response.choices[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(response.content || '{}');
     
-    // Extract token usage for tracking
-    const usage = response.usage ? {
-      prompt_tokens: response.usage.prompt_tokens || 0,
-      completion_tokens: response.usage.completion_tokens || 0,
-      total_tokens: response.usage.total_tokens || 0,
-    } : undefined;
+    // Use token usage from response
+    const usage = response.usage;
     
     return {
       originalMessage: userMessage,

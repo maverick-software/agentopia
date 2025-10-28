@@ -204,17 +204,31 @@ export function IntegrationsPage() {
     }
   };
 
-  // System-managed integrations that should not appear in user integrations page
-  const systemManagedIntegrations = [
-    'ClickSend SMS',
+  // Integrations that should NOT appear in user integrations page
+  const hiddenIntegrations = [
+    // System-level API keys (managed in Admin Settings → API Keys)
+    'OpenAI',
     'Mistral AI',
     'Serper API',
-    'SMTP.com'
+    
+    // Internal tools (not external integrations)
+    'Contact Management',
+    'Conversation Memory',
+    'Advanced Reasoning',
+    'Temporary Chat Links',
+    
+    // Not used / deprecated
+    'Brave Search API',
+    'SerpAPI',
+    'OCR.Space',
+    'OCR Space',
+    'Google',
+    'Microsoft'
   ];
 
   const filteredIntegrations = integrations.filter(integration => {
-    // Hide system-managed integrations from user setup
-    if (systemManagedIntegrations.includes(integration.name)) {
+    // Hide internal tools, system-level, and unused integrations
+    if (hiddenIntegrations.includes(integration.name)) {
       return false;
     }
     

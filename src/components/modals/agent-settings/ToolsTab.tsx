@@ -60,6 +60,8 @@ interface ProviderConfig {
 }
 
 export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData, onAgentUpdated }, ref) => {
+  console.log('[ToolsTab] Mounted with agentId:', agentId, 'agentData:', agentData);
+  
   const [settings, setSettings] = useState<ToolSettings>({
     voice_enabled: false,
     web_search_enabled: false,
@@ -156,7 +158,7 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
               
               // Notify parent
               if (onAgentUpdated) {
-                onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+                onAgentUpdated({ ...agentData, id: agentId, metadata: updatedMetadata });
               }
             }
           }
@@ -216,7 +218,7 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
               setAgentSettings(updatedSettings);
               setAgentMetadata(updatedMetadata);
               if (onAgentUpdated) {
-                onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+                onAgentUpdated({ ...agentData, id: agentId, metadata: updatedMetadata });
               }
             }
           });
@@ -263,6 +265,14 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
   };
 
   const handleToggle = async (tool: keyof ToolSettings, enabled: boolean) => {
+    console.log('[ToolsTab] handleToggle called - tool:', tool, 'enabled:', enabled, 'agentId:', agentId);
+    
+    if (!agentId) {
+      console.error('[ToolsTab] agentId is undefined, cannot toggle tool');
+      toast.error('Agent ID is missing. Please close and reopen the settings.');
+      return;
+    }
+    
     // Prevent disabling Read Documents if agent has assigned documents
     if (tool === 'ocr_processing_enabled' && !enabled && hasAssignedDocuments) {
       toast.error(`Cannot disable Read Documents while ${assignedDocumentsCount} document${assignedDocumentsCount !== 1 ? 's are' : ' is'} assigned. Remove documents from the Media tab first.`, {
@@ -325,7 +335,7 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
 
       // Notify parent component
       if (onAgentUpdated) {
-        onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+        onAgentUpdated({ ...agentData, id: agentId, metadata: updatedMetadata });
       }
     } catch (error: any) {
       console.error('Error updating tool setting:', error);
@@ -609,7 +619,8 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       enabled: settings.voice_enabled,
       requiresApi: 'ElevenLabs API',
       availableCredentials: getAvailableCredentials('voice'),
-      toolType: 'voice' as const
+      toolType: 'voice' as const,
+      usesSystemKey: false
     },
     {
       id: 'web_search_enabled' as keyof ToolSettings,
@@ -617,9 +628,10 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       description: 'Allow agent to search the web for current information',
       icon: Search,
       enabled: settings.web_search_enabled,
-      requiresApi: 'Search API (Serper, SerpAPI, or Brave)',
-      availableCredentials: getAvailableCredentials('web_search'),
-      toolType: 'web_search' as const
+      requiresApi: 'System API Key (Serper API)',
+      availableCredentials: [],
+      toolType: 'web_search' as const,
+      usesSystemKey: true
     },
     {
       id: 'document_creation_enabled' as keyof ToolSettings,
@@ -628,8 +640,9 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       icon: FileText,
       enabled: settings.document_creation_enabled,
       requiresApi: 'Built-in Artifacts System (No API required)',
-      availableCredentials: getAvailableCredentials('document_creation'),
-      toolType: 'document_creation' as const
+      availableCredentials: [],
+      toolType: 'document_creation' as const,
+      usesSystemKey: false
     },
     {
       id: 'ocr_processing_enabled' as keyof ToolSettings,
@@ -637,9 +650,10 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       description: 'Enable text extraction from PDFs and images',
       icon: ScanText,
       enabled: settings.ocr_processing_enabled,
-      requiresApi: 'OCR API (OCR.space or Mistral AI)',
-      availableCredentials: getAvailableCredentials('ocr_processing'),
-      toolType: 'ocr_processing' as const
+      requiresApi: 'System API Key (Mistral AI)',
+      availableCredentials: [],
+      toolType: 'ocr_processing' as const,
+      usesSystemKey: true
     },
     {
       id: 'temporary_chat_links_enabled' as keyof ToolSettings,
@@ -648,8 +662,9 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
       icon: MessageCircle,
       enabled: settings.temporary_chat_links_enabled,
       requiresApi: 'Built-in (No API required)',
-      availableCredentials: getAvailableCredentials('temporary_chat_links'),
-      toolType: 'temporary_chat_links' as const
+      availableCredentials: [],
+      toolType: 'temporary_chat_links' as const,
+      usesSystemKey: false
     }
   ];
 
@@ -716,11 +731,8 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-medium">{tool.name}</h4>
                         </div>
-                        <p className="text-sm text-muted-foreground mb-2">
+                        <p className="text-sm text-muted-foreground">
                           {tool.description}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Requires: {tool.requiresApi}
                         </p>
                       </div>
                     </div>
@@ -753,8 +765,8 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
                     </div>
                   )}
 
-                  {/* Credential Selection */}
-                  {tool.enabled && hasCredentials && (
+                  {/* Credential Selection - Only show for non-system-key tools */}
+                  {tool.enabled && hasCredentials && !tool.usesSystemKey && (
                     <div className="pl-16">
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Select Credentials</Label>
@@ -785,7 +797,7 @@ export const ToolsTab = forwardRef<TabRef, ToolsTabProps>(({ agentId, agentData,
                               toast.success(`Credentials updated for ${tool.name}`, { duration: 2000 });
 
                               if (onAgentUpdated) {
-                                onAgentUpdated({ ...agentData, metadata: updatedMetadata });
+                                onAgentUpdated({ ...agentData, id: agentId, metadata: updatedMetadata });
                               }
                             } catch (error: any) {
                               console.error('Error updating credentials:', error);

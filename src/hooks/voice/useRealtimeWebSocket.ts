@@ -56,19 +56,18 @@ export function useRealtimeWebSocket(options: UseRealtimeWebSocketOptions) {
         throw new Error('Not authenticated');
       }
 
-      // Build WebSocket URL with auth token
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const wsUrl = supabaseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+      // Build WebSocket URL for DigitalOcean server
+      const wsBaseUrl = import.meta.env.VITE_VOICE_WEBSOCKET_URL || 'wss://voice.agentopia.ai';
       const params = new URLSearchParams({
+        token: session.access_token,
         agent_id: agentId,
         voice: voice,
-        token: session.access_token, // Pass auth token as query param
         ...(state.conversationId ? { conversation_id: state.conversationId } : {})
       });
 
-      const url = `${wsUrl}/functions/v1/realtime-voice?${params}`;
+      const url = `${wsBaseUrl}?${params}`;
 
-      console.log('[RealtimeWebSocket] Connecting to:', url);
+      console.log('[RealtimeWebSocket] Connecting to DigitalOcean WebSocket server:', url);
 
       // Create WebSocket connection
       const ws = new WebSocket(url);
@@ -115,7 +114,9 @@ export function useRealtimeWebSocket(options: UseRealtimeWebSocketOptions) {
     console.log('[RealtimeWebSocket] Server event:', event.type);
 
     switch (event.type) {
-      case 'conversation_created':
+      case 'conversation.created':
+        // New conversation created by server
+        console.log('[RealtimeWebSocket] Conversation created:', event.conversation_id);
         setState(prev => ({ ...prev, conversationId: event.conversation_id }));
         break;
 

@@ -710,3 +710,4 @@ export function SimpleTokenBar({ label, value, max, color }: Props) {
 **Bundle Impact**: +65KB gzipped (acceptable)  
 **Implementation Complexity**: Low (2-3 hours)
 
+

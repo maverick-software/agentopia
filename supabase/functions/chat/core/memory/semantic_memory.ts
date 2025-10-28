@@ -3,7 +3,7 @@
 
 import { SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { Pinecone } from 'npm:@pinecone-database/pinecone@2.0.0';
-import OpenAI from 'npm:openai@4.28.0';
+import OpenAI from 'npm:openai@6.1.0';
 import {
   SemanticMemory,
   AgentMemory,

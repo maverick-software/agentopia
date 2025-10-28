@@ -275,7 +275,10 @@ export function AdminSystemAPIKeysPage() {
             <div className="space-y-1">
               <strong className="text-white">Note:</strong>
               <p className="text-white ml-2">
-                Services requiring additional configuration (SMTP, ClickSend SMS, OAuth providers) should be configured in the <strong>Integrations</strong> tab, not here. This page is for simple API key-only services.
+                This page is for <strong>simple API key-only services</strong> that don't require per-account configuration.
+              </p>
+              <p className="text-white ml-2 mt-2">
+                Services like <strong>SMTP, ClickSend SMS, and OAuth providers</strong> that need per-user sender identities or phone numbers should be configured at the <strong>user/account level</strong> in the Integrations page, not here.
               </p>
             </div>
           </AlertDescription>

@@ -3,7 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
-import OpenAI from 'npm:openai@4.28.0';
+import OpenAI from 'npm:openai@6.1.0';
 
 // Import components
 import { MessageProcessor } from './processor/index.ts';
@@ -74,20 +74,39 @@ const messageProcessor = new MessageProcessor(
 const validator = new SchemaValidator();
 
 // Utility: Generate a short conversation title from initial user text
-async function generateConversationTitleFromText(text: string): Promise<string> {
+async function generateConversationTitleFromText(text: string, agentId?: string): Promise<string> {
   try {
+    // Resolve model - use fast model for title generation
+    let model = 'gpt-4o-mini'; // Default
+    if (agentId) {
+      try {
+        const { ModelResolver } = await import('./processor/utils/model-resolver.ts');
+        const resolver = new ModelResolver(supabase);
+        const resolved = await resolver.getAgentModel(agentId, 'fast');
+        model = resolved.model;
+      } catch (_) {
+        // Fallback to default if resolution fails
+      }
+    }
+    
     const prompt = `Create a concise 3-6 word title for a chat based on the user's first message. 
 Rules: Title Case, no quotes, no trailing punctuation.
 User message: "${text.slice(0, 500)}"`;
-    const resp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+
+    // Import model adapter for proper API formatting
+    const { adaptLLMParams } = await import('./processor/utils/model-api-adapter.ts');
+    
+    const adaptedParams = adaptLLMParams({
+      model,
       messages: [
         { role: 'system', content: 'You generate short, informative chat titles.' },
         { role: 'user', content: prompt },
       ],
       temperature: 0.3,
-      max_tokens: 24,
+      maxTokens: 24
     });
+
+    const resp = await openai.chat.completions.create(adaptedParams);
     const out = (resp.choices?.[0]?.message?.content || '').trim();
     // Basic sanitation fallback
     return out.replace(/^"|"$/g, '').replace(/[.!?\s]+$/g, '').slice(0, 80) ||
@@ -102,8 +121,21 @@ User message: "${text.slice(0, 500)}"`;
 }
 
 // Utility: Generate an improved conversation title from first 3 messages with better context
-async function generateImprovedConversationTitle(messages: Array<{role: string, content: string}>): Promise<string> {
+async function generateImprovedConversationTitle(messages: Array<{role: string, content: string}>, agentId?: string): Promise<string> {
   try {
+    // Resolve model - use fast model for title generation
+    let model = 'gpt-4o-mini'; // Default
+    if (agentId) {
+      try {
+        const { ModelResolver } = await import('./processor/utils/model-resolver.ts');
+        const resolver = new ModelResolver(supabase);
+        const resolved = await resolver.getAgentModel(agentId, 'fast');
+        model = resolved.model;
+      } catch (_) {
+        // Fallback to default if resolution fails
+      }
+    }
+    
     // Build a concise summary of the conversation
     const conversationSummary = messages
       .map((msg, idx) => `${idx + 1}. ${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content.slice(0, 200)}`)
@@ -115,15 +147,20 @@ Rules: Title Case, no quotes, no trailing punctuation.
 Conversation:
 ${conversationSummary}`;
     
-    const resp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    // Import model adapter for proper API formatting
+    const { adaptLLMParams } = await import('./processor/utils/model-api-adapter.ts');
+    
+    const adaptedParams = adaptLLMParams({
+      model,
       messages: [
         { role: 'system', content: 'You generate accurate, informative chat titles based on conversation context.' },
         { role: 'user', content: prompt },
       ],
       temperature: 0.3,
-      max_tokens: 30,
+      maxTokens: 30
     });
+
+    const resp = await openai.chat.completions.create(adaptedParams);
     const out = (resp.choices?.[0]?.message?.content || '').trim();
     // Basic sanitation
     return out.replace(/^"|"$/g, '').replace(/[.!?\s]+$/g, '').slice(0, 80) || 'Conversation';
@@ -151,7 +188,7 @@ async function ensureConversationSession(convId: string, agentId: string, userId
     };
 
     if (!existing || isGeneric(existing.title)) {
-      const title = firstUserText ? await generateConversationTitleFromText(firstUserText) : 'New Conversation';
+      const title = firstUserText ? await generateConversationTitleFromText(firstUserText, agentId) : 'New Conversation';
       await supabase
         .from('conversation_sessions')
         .upsert({
@@ -170,7 +207,7 @@ async function ensureConversationSession(convId: string, agentId: string, userId
 }
 
 // Update conversation title after 3rd message for better context
-async function updateConversationTitleAfterThirdMessage(convId: string) {
+async function updateConversationTitleAfterThirdMessage(convId: string, agentId?: string) {
   try {
     // Count total user messages in this conversation
     const { data: messages, error: countError } = await supabase
@@ -198,7 +235,7 @@ async function updateConversationTitleAfterThirdMessage(convId: string) {
       }));
       
       // Generate improved title with conversation context
-      const improvedTitle = await generateImprovedConversationTitle(firstExchanges);
+      const improvedTitle = await generateImprovedConversationTitle(firstExchanges, agentId);
       
       // Update the conversation session with the new title
       const { error: updateError } = await supabase
@@ -402,8 +439,10 @@ async function handler(req: Request): Promise<Response> {
     
     // Update conversation title after 3rd message (non-blocking)
     if (conversationId) {
+      // Extract agent_id for title generation
+      const agentId = body?.context?.agent_id || body?.message?.context?.agent_id;
       // Run asynchronously without waiting
-      updateConversationTitleAfterThirdMessage(conversationId).catch(err => {
+      updateConversationTitleAfterThirdMessage(conversationId, agentId).catch(err => {
         log.warn('Title update after 3rd message failed (non-fatal)', err as Error);
       });
     }

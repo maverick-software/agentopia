@@ -234,64 +234,96 @@ serve(async (req) => {
     }
 
     // ============================================
-    // SYSTEM-LEVEL API KEY RETRIEVAL (NO USER KEYS)
+    // ACCOUNT-LEVEL CREDENTIAL RETRIEVAL
     // ============================================
-    console.log(`[ClickSend] Fetching system-level API key for ClickSend SMS`);
+    console.log(`[ClickSend] Fetching account-level credentials for user ${user.id}`);
     
-    const { data: systemKey, error: systemKeyError } = await supabase
-      .from('system_api_keys')
-      .select('vault_secret_id, is_active')
-      .eq('provider_name', 'clicksend_sms')
-      .eq('is_active', true)
+    // Get the account_id from the user
+    const { data: accountData, error: accountError } = await supabase
+      .from('user_accounts')
+      .select('account_id')
+      .eq('user_id', user.id)
       .single();
 
-    console.log(`[ClickSend] System key query result - Error: ${systemKeyError?.message}, Key found: ${!!systemKey}`);
-    
-    if (systemKeyError || !systemKey || !systemKey.vault_secret_id) {
-      console.error(`[ClickSend] System API key not configured`);
+    if (accountError || !accountData) {
+      console.error(`[ClickSend] Failed to get account for user:`, accountError);
+      throw new Error('Failed to retrieve user account information');
+    }
+
+    const accountId = accountData.account_id;
+    console.log(`[ClickSend] Account ID: ${accountId}`);
+
+    // Check if user has ClickSend integration enabled
+    const { data: permission, error: permissionError } = await supabase
+      .from('agent_integration_permissions')
+      .select('is_enabled')
+      .eq('agent_id', agent_id)
+      .eq('provider_name', 'clicksend')
+      .single();
+
+    if (permissionError || !permission || !permission.is_enabled) {
+      console.error(`[ClickSend] Integration not enabled for agent ${agent_id}`);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'ClickSend SMS system API key is not configured. Please contact your administrator to set up this service in the Admin Settings.',
+          error: 'ClickSend SMS is not enabled for this agent. Please enable it in the Integrations page.',
           metadata: { execution_time_ms: Date.now() - startTime }
         }),
         { 
-          status: 503, // Service Unavailable
+          status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
 
-    // Decrypt system credentials from Supabase Vault
-    console.log(`[ClickSend] Decrypting system credentials - Vault ID: ${systemKey.vault_secret_id}`);
-    
-    const { data: credentialsData, error: credentialsError } = await supabase.rpc(
-      'vault_decrypt',
-      { vault_id: systemKey.vault_secret_id }
-    );
+    // Get user's ClickSend credentials
+    const { data: credentials, error: credentialsError } = await supabase
+      .from('user_integration_credentials')
+      .select('vault_secret_id, scopes')
+      .eq('account_id', accountId)
+      .eq('provider_name', 'clicksend')
+      .single();
 
-    console.log(`[ClickSend] Vault decryption result - Credentials: ${credentialsData ? 'SUCCESS' : 'FAILED'}`);
-    if (credentialsError) {
-      console.error(`[ClickSend] Credentials decryption error:`, credentialsError);
+    if (credentialsError || !credentials || !credentials.vault_secret_id) {
+      console.error(`[ClickSend] No credentials found for account ${accountId}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ClickSend SMS credentials not configured for your account. Please set up ClickSend in the Integrations page.',
+          metadata: { execution_time_ms: Date.now() - startTime }
+        }),
+        { 
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
-    if (credentialsError || !credentialsData) {
-      console.error(`[ClickSend] System credential decryption failed`);
-      throw new Error('Failed to decrypt ClickSend system credentials. Please contact your administrator.');
+    // Decrypt credentials from Supabase Vault
+    console.log(`[ClickSend] Decrypting account credentials - Vault ID: ${credentials.vault_secret_id}`);
+    
+    const { data: credentialsData, error: decryptError } = await supabase.rpc(
+      'vault_decrypt',
+      { vault_id: credentials.vault_secret_id }
+    );
+
+    if (decryptError || !credentialsData) {
+      console.error(`[ClickSend] Failed to decrypt credentials:`, decryptError);
+      throw new Error('Failed to decrypt ClickSend credentials');
     }
 
     // Parse username:apikey format
-    const credentials = credentialsData.split(':');
-    if (credentials.length !== 2) {
+    const credentialParts = credentialsData.split(':');
+    if (credentialParts.length !== 2) {
       console.error(`[ClickSend] Invalid credential format - expected username:apikey`);
-      throw new Error('Invalid ClickSend system credentials format. Please contact your administrator.');
+      throw new Error('Invalid ClickSend credentials format');
     }
 
-    const [username, apiKey] = credentials;
-    console.log(`[ClickSend] Successfully parsed system credentials - Username: ${username ? 'present' : 'missing'}, API Key: ${apiKey ? 'present' : 'missing'}`);
+    const [username, apiKey] = credentialParts;
+    console.log(`[ClickSend] Successfully parsed account credentials - Username: ${username ? 'present' : 'missing'}, API Key: ${apiKey ? 'present' : 'missing'}`);
 
-    // Initialize ClickSend client with system credentials
-    console.log(`[ClickSend] Initializing ClickSend client with system credentials`);
+    // Initialize ClickSend client with account credentials
+    console.log(`[ClickSend] Initializing ClickSend client with account credentials`);
     const clicksendClient = new ClickSendClient(username, apiKey);
 
     // Execute the requested action
@@ -616,6 +648,6 @@ async function handleGetDeliveryReceipts(client: ClickSendClient, params: any): 
   return await client.getDeliveryReceipts(page, limit);
 }
 
-// System-level API key approach: No per-user scopes needed
-// All authenticated users can use ClickSend through the system API key
+// Account-level credential approach: Each account manages their own ClickSend credentials
+// This allows per-account sender identities and phone number configuration
 

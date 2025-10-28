@@ -605,3 +605,4 @@ WHERE r.raw_total != COALESCE(a.total_tokens, 0);
 **Data Source**: `chat_messages_v2.metadata.tokens` (INTEGER)  
 **Data Quality**: Good (recent implementation)
 
+

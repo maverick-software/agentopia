@@ -261,7 +261,7 @@ export class TextMessageHandler implements MessageHandler {
     }
 
     // Create LLM caller
-    const llmCaller = new LLMCaller(this.openai, router, context.agent_id);
+    const llmCaller = new LLMCaller(this.openai, router, context.agent_id, this.supabase);
 
     // STEP 6: Initial LLM call
     const normalizedTools = this.normalizeTools(availableTools).map(t => ({

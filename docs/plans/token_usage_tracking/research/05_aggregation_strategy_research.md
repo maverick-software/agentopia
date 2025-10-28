@@ -720,3 +720,4 @@ ORDER BY period_start DESC;
 **Cron Schedule**: Daily at 00:05 AM UTC  
 **Backfill Strategy**: 7-day batches via PowerShell script
 
+

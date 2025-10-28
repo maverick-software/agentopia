@@ -39,6 +39,7 @@ Production deployment and operations:
 - **[Design System](design-system.md)** - Theme management, CSS variables, color systems, and accessibility
 - **[Chat Experience](chat-experience.md)** - Enhanced chat UI, AI process transparency, and debugging features
 - **[Intelligent Chat System](intelligent-chat-system.md)** - 🆕 Contextual awareness, intent classification, LLM debugging, and multi-stage processing pipeline
+- **[OpenAI Responses API Migration](openai-responses-api-migration.md)** - 🆕 Complete Responses API implementation for GPT-4o, GPT-5, o1, o3 models
 
 ### 🏗️ Core Architecture
 - **[Database Schema](database-schema.md)** - PostgreSQL schema, tables, relationships, and RLS policies
@@ -162,6 +163,6 @@ Production deployment and operations:
 
 This documentation system represents a comprehensive knowledge base for Gofr Agents, designed to support users, developers, and administrators at every level. Each document provides deep, actionable information while maintaining clear organization and cross-references to related topics.
 
-**Last Updated**: October 22, 2025  
-**Documentation Version**: 2.3 (Intelligent Chat System)  
-**Total Documents**: 22+ topic-specific guides
+**Last Updated**: October 27, 2025  
+**Documentation Version**: 2.4 (OpenAI Responses API Migration)  
+**Total Documents**: 23+ topic-specific guides

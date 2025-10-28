@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { AIQuickSetup } from './agent-wizard/AIQuickSetup';
 
 interface CreateAgentWizardProps {
   open: boolean;
@@ -162,6 +163,7 @@ export function CreateAgentWizard({ open, onOpenChange }: CreateAgentWizardProps
   const [creating, setCreating] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [showAIWizard, setShowAIWizard] = useState(false);
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -229,6 +231,29 @@ export function CreateAgentWizard({ open, onOpenChange }: CreateAgentWizardProps
 
   const updateAgentData = (updates: Partial<AgentData>) => {
     setAgentData(prev => ({ ...prev, ...updates }));
+  };
+
+  // Handle AI-generated configuration
+  const handleAIConfig = (config: any) => {
+    setAgentData({
+      name: config.name,
+      purpose: config.purpose || '',
+      description: config.description,
+      theme: config.theme,
+      customInstructions: config.behavior?.role || '',
+      mbtiType: config.mbtiType || '',
+      gender: config.gender,
+      selectedTools: Object.entries(config.suggested_tools || {})
+        .filter(([_, enabled]) => enabled)
+        .map(([tool]) => tool.replace('_enabled', ''))
+    });
+    
+    // Store full behavior config in metadata for later use
+    (window as any).__aiGeneratedBehavior = config.behavior;
+    (window as any).__aiGeneratedLLMPrefs = config.llm_preferences;
+    
+    setStep(5); // Jump to final step
+    toast.success('✨ AI configuration applied! Review and create your agent.');
   };
 
   const handleNext = async () => {

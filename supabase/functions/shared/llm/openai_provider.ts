@@ -96,7 +96,7 @@ export class OpenAIProvider implements LLMProvider {
 
 		// Temperature is not supported for reasoning models (GPT-5, GPT-4.1, etc.)
 		// Only add temperature for non-reasoning models
-		const isReasoningModel = model.startsWith('gpt-5') || model.startsWith('gpt-4.1');
+		const isReasoningModel = model.startsWith('gpt-5') || model.startsWith('gpt-4.1') || model.startsWith('o1-') || model.startsWith('o3-');
 		if (options.temperature !== undefined && !isReasoningModel) {
 			requestBody.temperature = options.temperature;
 		}
@@ -128,23 +128,15 @@ export class OpenAIProvider implements LLMProvider {
 			requestBody.previous_response_id = options.previousResponseId;
 		}
 
-		// Call Responses API directly via fetch (responses.create may not be available in all SDK versions)
-		const response = await fetch(`${this.baseURL}/responses`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${this.apiKey}`,
-			},
-			body: JSON.stringify(requestBody),
+		console.log('[OpenAI Responses API] Calling with:', {
+			model: requestBody.model,
+			hasInstructions: !!requestBody.instructions,
+			hasTools: !!requestBody.tools,
+			maxOutputTokens: requestBody.max_output_tokens
 		});
 
-		if (!response.ok) {
-			const errorBody = await response.text();
-			console.error('[OpenAI Responses API Error]', { status: response.status, body: errorBody });
-			throw new Error(`OpenAI Responses API error: ${response.status} - ${errorBody}`);
-		}
-
-		const res = await response.json();
+		// Call Responses API using SDK method
+		const res = await this.client.responses.create(requestBody);
 
 		// Parse output items
 		let text: string | undefined;

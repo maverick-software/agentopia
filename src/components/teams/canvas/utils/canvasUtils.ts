@@ -94,7 +94,21 @@ export function connectionsToEdges(
 ): Edge<ConnectionEdgeData>[] {
   const teamsMap = new Map(teams.map(team => [team.id, team]));
   
-  return connections.map(connection => {
+  // Filter out invalid connections before mapping
+  const validConnections = connections.filter(connection => {
+    // Source handles should not end with '-target' (except for valid targets like 'left-target')
+    const isValidHandle = !connection.sourceHandle?.endsWith('-target') || 
+                         connection.sourceHandle === 'left-target' || 
+                         connection.sourceHandle === 'right-target';
+    
+    if (!isValidHandle) {
+      console.warn(`⚠️ Skipping invalid connection ${connection.id} with sourceHandle: ${connection.sourceHandle}`);
+    }
+    
+    return isValidHandle;
+  });
+  
+  return validConnections.map(connection => {
     const fromTeam = teamsMap.get(connection.fromTeamId);
     const toTeam = teamsMap.get(connection.toTeamId);
     

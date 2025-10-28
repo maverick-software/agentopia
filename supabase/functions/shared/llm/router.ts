@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
-import OpenAI from 'npm:openai@4.28.0';
+import OpenAI from 'npm:openai@6.1.0';
 import type { LLMRouter as IRouter, LLMMessage, LLMChatOptions, LLMChatResponse, AgentLLMPreferences } from './interfaces.ts';
 import { OpenAIProvider } from './openai_provider.ts';
 import { AnthropicProvider } from './anthropic_provider.ts';

@@ -335,13 +335,9 @@ serve(async (req) => {
         console.log(`[GetAgentTools] Found ${systemKeys.length} active system API keys`);
         
         // Map of provider names to their tool definitions
+        // NOTE: Only includes simple API-key-only services
+        // Services requiring per-user configuration (SMTP, ClickSend) remain user-level
         const systemProviderTools: Record<string, Array<{ name: string; description: string; capability: string }>> = {
-          'clicksend_sms': [
-            { name: 'clicksend_send_sms', description: 'Send SMS message via ClickSend', capability: 'send_sms' },
-            { name: 'clicksend_send_mms', description: 'Send MMS message via ClickSend', capability: 'send_mms' },
-            { name: 'clicksend_get_balance', description: 'Get ClickSend account balance', capability: 'get_balance' },
-            { name: 'clicksend_get_sms_history', description: 'Get SMS history from ClickSend', capability: 'get_sms_history' },
-          ],
           'mistral_ai': [
             { name: 'mistral_chat_completion', description: 'Chat completion using Mistral AI', capability: 'chat_completion' },
             { name: 'mistral_text_generation', description: 'Text generation using Mistral AI', capability: 'text_generation' },
@@ -349,10 +345,6 @@ serve(async (req) => {
           'serper_api': [
             { name: 'serper_web_search', description: 'Perform web search using Serper API', capability: 'web_search' },
             { name: 'serper_news_search', description: 'Search news using Serper API', capability: 'news_search' },
-          ],
-          'smtp_com': [
-            { name: 'smtp_send_email', description: 'Send email via SMTP.com', capability: 'send_email' },
-            { name: 'smtp_test_connection', description: 'Test SMTP.com connection', capability: 'test_connection' },
           ],
         };
         
