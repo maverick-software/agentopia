@@ -2,6 +2,7 @@
   "name": "agentopia-websocket-voice-server",
   "version": "1.0.0",
   "description": "WebSocket server for Agentopia real-time voice chat with OpenAI Realtime API",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
