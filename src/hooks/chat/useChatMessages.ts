@@ -146,12 +146,17 @@ export function useChatMessages(
       return;
     }
     
-    // Clear and reload ONLY when switching to a DIFFERENT conversation
-    // NOT when going from 'none' -> 'active' (that's a fresh conversation)
-    if (current.status === 'active' && prev.status === 'active' && prev.id !== current.id) {
-      console.log('[useChatMessages] Switching to different conversation, reloading');
-      setMessages([]);
-      setIsHistoryLoading(true);
+    // Clear and reload when switching to a different conversation
+    // This includes: active->active (different ID) AND none->active
+    if (current.status === 'active') {
+      const isDifferentConversation = prev.status === 'active' && prev.id !== current.id;
+      const isLoadingFromNone = prev.status === 'none';
+      
+      if (isDifferentConversation || isLoadingFromNone) {
+        console.log('[useChatMessages] Loading conversation, clearing UI first');
+        setMessages([]);
+        setIsHistoryLoading(true);
+      }
     }
     
     prevLifecycleRef.current = current;

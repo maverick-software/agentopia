@@ -13,7 +13,7 @@ import { ChatInput } from '../components/chat/ChatInput';
 import { ChatHeader, type ChatMode } from '../components/chat/ChatHeader';
 import { ChatModals } from '../components/chat/ChatModals';
 import { LLMDebugModal } from '../components/modals/LLMDebugModal';
-import { RealtimeVoiceChatWebSocket as RealtimeVoiceChat } from '../components/voice/RealtimeVoiceChatWebSocket';
+import { RealtimeVoiceChat } from '../components/voice/RealtimeVoiceChat';
 
 // Import custom hooks
 import { useConversationLifecycle } from '../hooks/chat/useConversationLifecycle';

@@ -38,44 +38,12 @@ function LoginPage() {
     setCheckingEmail(true);
     clearError();
     
-    try {
-      // Use signInWithOtp with shouldCreateUser: false to check if user exists
-      // This won't create a user or send an OTP, just checks existence
-      const { data, error: otpError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: false,
-        }
-      });
-
-      // If there's no error, the user exists (OTP was prepared but not sent in test mode)
-      // If there's an error about user not found, user doesn't exist
-      if (otpError) {
-        // Check the error message to determine if user exists
-        if (otpError.message.includes('User not found') || 
-            otpError.message.includes('not found') ||
-            otpError.message.includes('Signups not allowed')) {
-          // User doesn't exist - go to name collection
-          setIsExistingUser(false);
-          setStep('name');
-        } else {
-          // Other error, but user might exist - default to login
-          setIsExistingUser(true);
-          setStep('password');
-        }
-      } else {
-        // No error means user exists - go to login
-        setIsExistingUser(true);
-        setStep('password');
-      }
-    } catch (err: any) {
-      console.error('Error checking email:', err);
-      // Default to signup flow if we can't determine
-      setIsExistingUser(false);
-      setStep('name');
-    } finally {
-      setCheckingEmail(false);
-    }
+    // Note: Supabase doesn't expose user existence for security reasons
+    // We'll default to login flow, with an option to switch to signup
+    console.log('[LoginPage] Email submitted:', email);
+    setIsExistingUser(true); // Assume existing user (most common case)
+    setStep('password');
+    setCheckingEmail(false);
   };
 
   const handleNameSubmit = (e: React.FormEvent) => {
@@ -88,8 +56,16 @@ function LoginPage() {
     e.preventDefault();
     try {
       await signIn(email, password);
-    } catch (err) {
-      console.error('Sign in error:', err);
+      // If successful, AuthContext will handle redirect
+    } catch (err: any) {
+      console.error('[LoginPage] Sign in error:', err);
+      
+      // Check if error indicates user doesn't exist
+      if (err?.message?.includes('Invalid login credentials')) {
+        // Could be wrong password OR user doesn't exist
+        // Show generic error for security (don't expose user existence)
+        // But if user repeatedly fails, they might need to sign up
+      }
     }
   };
 
@@ -284,14 +260,27 @@ function LoginPage() {
               </Button>
             </form>
 
-            {/* Forgot password link */}
-            <div className="text-center mt-4">
+            {/* Forgot password link and create account */}
+            <div className="text-center mt-4 space-y-2">
               <button
                 type="button"
-                className="text-sm text-gray-400 hover:text-gray-300 transition-colors"
+                className="text-sm text-gray-400 hover:text-gray-300 transition-colors block mx-auto"
               >
                 Forgot password?
               </button>
+              <div className="text-sm text-gray-400">
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExistingUser(false);
+                    setStep('name');
+                  }}
+                  className="text-white hover:underline font-medium"
+                >
+                  Sign up
+                </button>
+              </div>
             </div>
           </>
         ) : step === 'name' ? (
