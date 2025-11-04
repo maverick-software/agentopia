@@ -38,12 +38,43 @@ function LoginPage() {
     setCheckingEmail(true);
     clearError();
     
-    // Note: Supabase doesn't expose user existence for security reasons
-    // We'll default to login flow, with an option to switch to signup
-    console.log('[LoginPage] Email submitted:', email);
-    setIsExistingUser(true); // Assume existing user (most common case)
-    setStep('password');
-    setCheckingEmail(false);
+    try {
+      console.log('[LoginPage] Checking if email exists:', email);
+      
+      // Call edge function to check if email exists
+      const { data, error } = await supabase.functions.invoke('check-email-exists', {
+        body: { email }
+      });
+
+      if (error) {
+        console.error('[LoginPage] Error checking email:', error);
+        // On error, default to login flow
+        setIsExistingUser(true);
+        setStep('password');
+        return;
+      }
+
+      console.log('[LoginPage] Email check result:', data);
+
+      if (data.exists) {
+        // User exists - go to login
+        console.log('[LoginPage] User exists, showing password login');
+        setIsExistingUser(true);
+        setStep('password');
+      } else {
+        // User doesn't exist - go to signup
+        console.log('[LoginPage] New user, showing signup flow');
+        setIsExistingUser(false);
+        setStep('name');
+      }
+    } catch (err: any) {
+      console.error('[LoginPage] Error checking email:', err);
+      // Default to login flow on error
+      setIsExistingUser(true);
+      setStep('password');
+    } finally {
+      setCheckingEmail(false);
+    }
   };
 
   const handleNameSubmit = (e: React.FormEvent) => {

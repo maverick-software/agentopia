@@ -144,3 +144,8 @@ import_map = "functions/import_map.json"
 [functions.get-agent-tool-credentials]
 verify_jwt = false # Set to false
 import_map = "functions/import_map.json"
+
+[functions.check-email-exists]
+enabled = true
+verify_jwt = false # Public endpoint for checking email existence during login/signup
+entrypoint = "./functions/check-email-exists/index.ts"
