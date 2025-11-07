@@ -4,7 +4,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 console.log("Function 'admin-set-user-status' started.");
 
-// --- Helper Functions (reuse or import from _shared) ---
+// --- Helper Functions ---
 async function getUserIdFromRequest(req: Request, supabaseClient: SupabaseClient): Promise<string | null> {
   const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
   return userError ? null : user?.id ?? null;
@@ -25,15 +25,9 @@ async function checkAdminRole(userId: string, supabaseClient: SupabaseClient): P
 
 // --- Main Handler ---
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response("ok", { headers: corsHeaders });
-  }
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-        status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  // Handle CORS preflight & check method is POST
+  if (req.method === 'OPTIONS') { return new Response("ok", { headers: corsHeaders }); }
+  if (req.method !== 'POST') { return new Response(JSON.stringify({ error: "Method Not Allowed" }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
 
   try {
     // --- Auth and Admin Check ---
@@ -43,22 +37,18 @@ serve(async (req) => {
     );
     const adminUserId = await getUserIdFromRequest(req, supabaseClient);
     const isAdmin = await checkAdminRole(adminUserId!, supabaseClient);
-
-    if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Forbidden: Requires admin role" }), {
-        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    if (!isAdmin) { return new Response(JSON.stringify({ error: "Forbidden: Requires admin role" }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
 
     // --- Get Data from Request Body ---
-    const { userIdToUpdate, action } = await req.json(); // action: 'suspend' or 'reactivate'
+    const { userIdToUpdate, action } = await req.json();
 
     if (!userIdToUpdate || (action !== 'suspend' && action !== 'reactivate')) {
         return new Response(JSON.stringify({ error: "Bad Request: Missing userIdToUpdate or invalid action" }), {
             status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
-     // Prevent admin from suspending themselves
+
+    // Prevent admin from suspending themselves
     if (userIdToUpdate === adminUserId && action === 'suspend') {
          return new Response(JSON.stringify({ error: "Bad Request: Cannot suspend your own account" }), {
             status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -67,26 +57,29 @@ serve(async (req) => {
 
     console.log(`Admin ${adminUserId} attempting to ${action} user ${userIdToUpdate}`);
 
-    // --- Perform Update using Auth Admin API ---
+    // --- Perform Update using RPC functions ---
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const banDuration = action === 'suspend' ? '999y' : 'none'; // Use a long duration for suspend
-
-    const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      userIdToUpdate,
-      { ban_duration: banDuration }
-    );
+    const rpcFunction = action === 'suspend' ? 'admin_suspend_user' : 'admin_reactivate_user';
+    const { data: success, error: updateError } = await supabaseAdmin.rpc(rpcFunction, {
+        target_user_id: userIdToUpdate
+    });
 
     if (updateError) {
         console.error(`Error ${action}ing user ${userIdToUpdate}:`, updateError);
         throw new Error(`Failed to ${action} user: ${updateError.message}`);
     }
 
-    console.log(`Successfully ${action}ed user ${userIdToUpdate}. Ban duration set to: ${updatedUser?.user?.ban_duration}`);
+    if (!success) {
+        console.error(`User ${userIdToUpdate} not found or update failed`);
+        return new Response(JSON.stringify({ error: "User not found" }), {
+           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404
+       });
+    }
 
-    // --- End Update ---
+    console.log(`Successfully ${action}ed user ${userIdToUpdate}`);
 
     return new Response(JSON.stringify({ message: `User ${action}ed successfully` }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -95,15 +88,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Error in admin-set-user-status:", error);
-     // Check for specific Supabase errors if needed (e.g., user not found)
-     if (error.message?.includes('User not found')) {
-        return new Response(JSON.stringify({ error: "User not found" }), {
-           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404
-       });
-     }
     return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
   }
-}); 
+});

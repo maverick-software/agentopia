@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { AlertCircle, Users, ChevronLeft, ChevronRight, Search, Edit, PlayCircle, PauseCircle, Ban, Zap } from 'lucide-react';
+import { AlertCircle, Users, ChevronLeft, ChevronRight, Search, Edit, PlayCircle, PauseCircle, Ban, Zap, UserPlus, UserX } from 'lucide-react';
 import { EditUserRolesModal } from '../components/modals/EditUserRolesModal';
 import { ConfirmationModal } from '../components/modals/ConfirmationModal';
 import { TokenUsageModal } from '../components/modals/TokenUsageModal';
@@ -12,9 +12,12 @@ interface AdminUser {
     created_at: string;
     last_sign_in_at?: string;
     username?: string;
-    full_name?: string;
+    first_name?: string;
+    last_name?: string;
     avatar_url?: string;
     roles: { id: string; name: string }[];
+    is_banned?: boolean;
+    banned_until?: string;
 }
 
 interface FetchResponse {
@@ -33,6 +36,10 @@ export function AdminUserManagement() {
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    
+    // Signup toggle state
+    const [signupEnabled, setSignupEnabled] = useState<boolean | null>(null);
+    const [signupToggleLoading, setSignupToggleLoading] = useState(false);
 
     // --- State for Modal ---
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -50,6 +57,22 @@ export function AdminUserManagement() {
     const [isTokenUsageModalOpen, setIsTokenUsageModalOpen] = useState(false);
     const [selectedUserForUsage, setSelectedUserForUsage] = useState<AdminUser | null>(null);
     // --- End Token Usage Modal State ---
+
+    // Fetch signup status
+    const fetchSignupStatus = useCallback(async () => {
+        try {
+            const { data, error: functionError } = await supabase.functions.invoke('get-signup-status');
+            
+            if (functionError) {
+                console.error('Error fetching signup status:', functionError);
+                return;
+            }
+            
+            setSignupEnabled(data.enabled);
+        } catch (err: any) {
+            console.error('Failed to fetch signup status:', err);
+        }
+    }, []);
 
     const fetchUsers = useCallback(async (page: number, search: string) => {
         setLoading(true);
@@ -83,6 +106,11 @@ export function AdminUserManagement() {
             setLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        // Fetch signup status on mount
+        fetchSignupStatus();
+    }, [fetchSignupStatus]);
 
     useEffect(() => {
         if (debounceTimeoutRef.current) {
@@ -195,6 +223,34 @@ export function AdminUserManagement() {
     };
     // --- End Token Usage Modal Handlers ---
 
+    // --- Signup Toggle Handlers ---
+    const handleSignupToggle = async () => {
+        if (signupEnabled === null) return;
+        
+        setSignupToggleLoading(true);
+        setError(null);
+        
+        try {
+            const { data, error: functionError } = await supabase.functions.invoke(
+                'admin-toggle-signup',
+                {
+                    body: { enabled: !signupEnabled }
+                }
+            );
+
+            if (functionError) throw new Error(functionError.message || 'Failed to toggle signup status');
+            
+            setSignupEnabled(!signupEnabled);
+            console.log(`Signup ${!signupEnabled ? 'enabled' : 'disabled'} successfully`);
+        } catch (err: any) {
+            console.error('Error toggling signup status:', err);
+            setError(err.message || 'Failed to toggle signup status');
+        } finally {
+            setSignupToggleLoading(false);
+        }
+    };
+    // --- End Signup Toggle Handlers ---
+
     const formatDate = (dateString?: string) => {
         if (!dateString) return 'N/A';
         try {
@@ -232,10 +288,70 @@ export function AdminUserManagement() {
                     </div>
                 </div>
 
+                {/* Signup Toggle Card */}
+                <div className="mb-6 bg-card border border-border shadow-sm rounded-lg p-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                                {signupEnabled ? (
+                                    <UserPlus className="w-6 h-6 text-green-500" />
+                                ) : (
+                                    <UserX className="w-6 h-6 text-destructive" />
+                                )}
+                                <h3 className="text-lg font-semibold text-foreground">
+                                    New User Registrations
+                                </h3>
+                            </div>
+                            <p className="text-sm text-muted-foreground ml-9">
+                                {signupEnabled === null ? (
+                                    'Loading signup status...'
+                                ) : signupEnabled ? (
+                                    'New users can currently sign up for accounts via the registration page.'
+                                ) : (
+                                    'New user registrations are currently disabled. Only existing users can log in.'
+                                )}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-end">
+                                <span className="text-xs font-medium text-muted-foreground mb-1">
+                                    Status
+                                </span>
+                                <span className={`text-sm font-semibold ${signupEnabled ? 'text-green-500' : 'text-destructive'}`}>
+                                    {signupEnabled === null ? '...' : signupEnabled ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+                            <button
+                                onClick={handleSignupToggle}
+                                disabled={signupToggleLoading || signupEnabled === null}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    signupEnabled ? 'bg-green-500' : 'bg-gray-600'
+                                }`}
+                                role="switch"
+                                aria-checked={signupEnabled || false}
+                                title={signupEnabled ? 'Click to disable signups' : 'Click to enable signups'}
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                        signupEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    }`}
+                                >
+                                    {signupToggleLoading && (
+                                        <div className="flex h-full w-full items-center justify-center">
+                                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
+                                        </div>
+                                    )}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 {error && (
                     <div className="mb-6 bg-destructive/10 border border-destructive/50 text-destructive p-4 rounded-lg flex items-center">
                         <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
-                        <span>Error loading users: {error}</span>
+                        <span>Error: {error}</span>
                     </div>
                 )}
 
@@ -272,15 +388,20 @@ export function AdminUserManagement() {
                                     users.map((user) => (
                                         <tr key={user.id} className="hover:bg-muted/30 transition-colors">
                                             <td className="px-6 py-4 text-sm font-medium text-foreground" title={user.email}>{user.email}</td>
-                                            <td className="px-6 py-4 text-sm text-foreground">{user.full_name || user.username || '---'}</td>
+                                            <td className="px-6 py-4 text-sm text-foreground">{user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.username || '---'}</td>
                                             <td className="px-6 py-4 text-sm">
                                                 <div className="flex flex-wrap gap-1">
+                                                    {user.is_banned && (
+                                                        <span className="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                                                            Suspended
+                                                        </span>
+                                                    )}
                                                     {user.roles.map(role => (
                                                         <span key={role.id} className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${role.name === 'admin' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground border border-border'}`}>
                                                             {role.name}
                                                         </span>
                                                     ))}
-                                                    {user.roles.length === 0 && <span className="text-muted-foreground italic">No roles</span>}
+                                                    {!user.is_banned && user.roles.length === 0 && <span className="text-muted-foreground italic">No roles</span>}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">{formatDate(user.created_at)}</td>
@@ -301,13 +422,23 @@ export function AdminUserManagement() {
                                                                     >
                                                                         <Edit size={16} />
                                                                     </button>
-                                                                    <button 
-                                                                        onClick={() => handleStatusActionClick(user, 'suspend')} 
-                                                                        className="text-destructive hover:text-destructive/80 p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
-                                                                        title="Suspend User"
-                                                                    >
-                                                                        <Ban size={16} />
-                                                                    </button>
+                                                                    {user.is_banned ? (
+                                                                        <button 
+                                                                            onClick={() => handleStatusActionClick(user, 'reactivate')} 
+                                                                            className="text-success hover:text-success/80 p-1.5 rounded-md hover:bg-success/10 transition-colors"
+                                                                            title="Reactivate User"
+                                                                        >
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button 
+                                                                            onClick={() => handleStatusActionClick(user, 'suspend')} 
+                                                                            className="text-destructive hover:text-destructive/80 p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
+                                                                            title="Suspend User"
+                                                                        >
+                                                                            <Ban size={16} />
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                         </tr>
@@ -376,7 +507,7 @@ export function AdminUserManagement() {
                         onClose={handleCloseTokenUsageModal}
                         userId={selectedUserForUsage.id}
                         userEmail={selectedUserForUsage.email}
-                        userName={selectedUserForUsage.full_name}
+                        userName={selectedUserForUsage.first_name && selectedUserForUsage.last_name ? `${selectedUserForUsage.first_name} ${selectedUserForUsage.last_name}` : selectedUserForUsage.username}
                     />
                 )}
             </div>

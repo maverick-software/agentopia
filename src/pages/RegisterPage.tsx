@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Bot, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Bot, ArrowRight, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 // Define the structure for form data
 interface FormData {
@@ -28,11 +29,34 @@ export function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signupEnabled, setSignupEnabled] = useState<boolean | null>(null); // null = checking
   const navigate = useNavigate();
   const { user, loading: authLoading, signUp, updateProfile } = useAuth();
   const initialCheckDoneRef = useRef(false); // Ref to track initial check
 
   console.log(`[RegisterPage Render] Current Step: ${currentStep}, User: ${user ? user.id : 'null'}, AuthLoading: ${authLoading}, InitialCheckDone: ${initialCheckDoneRef.current}`);
+
+  // Effect 0: Check if signup is enabled
+  useEffect(() => {
+    const checkSignupStatus = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('get-signup-status');
+        
+        if (error) {
+          console.error('Error checking signup status:', error);
+          setSignupEnabled(true); // Default to enabled on error
+          return;
+        }
+
+        setSignupEnabled(data.enabled);
+      } catch (err) {
+        console.error('Failed to check signup status:', err);
+        setSignupEnabled(true); // Default to enabled on error
+      }
+    };
+
+    checkSignupStatus();
+  }, []);
 
   // Effect 1: Check on mount if user is *already* logged in
   useEffect(() => {
@@ -155,6 +179,54 @@ export function RegisterPage() {
   // Input field styles
   const inputClasses = "appearance-none relative block w-full px-3 py-2 border border-gray-700 placeholder-gray-500 text-white bg-gray-800 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm";
   const radioLabelClasses = "ml-2 block text-sm font-medium text-gray-300";
+
+  // Show loading state while checking signup status
+  if (signupEnabled === null) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-lg w-full space-y-8 p-10 bg-gray-850 rounded-xl shadow-lg">
+          <div className="flex flex-col items-center">
+            <Bot className="w-12 h-12 text-indigo-500 mb-4" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-2"></div>
+            <p className="text-gray-400">Checking registration status...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show disabled message if signup is disabled
+  if (signupEnabled === false) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-lg w-full space-y-8 p-10 bg-gray-850 rounded-xl shadow-lg">
+          <div className="flex flex-col items-center mb-8">
+            <Bot className="w-12 h-12 text-indigo-500 mb-4" />
+            <h2 className="text-center text-3xl font-extrabold text-white mb-4">
+              Registration Unavailable
+            </h2>
+          </div>
+          
+          <div className="bg-yellow-500/10 border border-yellow-500 text-yellow-400 p-4 rounded-md flex items-start">
+            <AlertCircle className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-semibold mb-2">New user registrations are currently disabled.</p>
+              <p className="text-sm">Please contact the system administrator if you need access to the platform.</p>
+            </div>
+          </div>
+
+          <div className="text-center mt-6">
+            <button
+              onClick={() => navigate('/login')}
+              className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+            >
+              ← Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">

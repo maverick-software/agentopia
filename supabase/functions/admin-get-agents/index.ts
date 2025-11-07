@@ -104,14 +104,14 @@ serve(async (req) => {
         
         // Fetch profiles based on userIds from agents for additional info
         userIds.length > 0 ? supabaseAdmin
-            .from('user_profiles')
-            .select(`id, username, full_name`)
+            .from('profiles')
+            .select(`id, username, first_name, last_name`)
             .in('id', userIds) : Promise.resolve({ data: [], error: null }),
         
-        // Fetch connections based on agentIds
+        // Fetch MCP connections based on agentIds
         supabaseAdmin
-            .from('agent_discord_connections')
-            .select(`id, agent_id, guild_id, worker_status, is_enabled`)
+            .from('agent_mcp_connections')
+            .select(`id, agent_id, connection_status, is_enabled`)
             .in('agent_id', agentIds)
     ]);
 
@@ -158,7 +158,8 @@ serve(async (req) => {
                 id: agent.user_id,
                 email: userEmail || null,
                 username: userProfile?.username || null,
-                full_name: userProfile?.full_name || null
+                first_name: userProfile?.first_name || null,
+                last_name: userProfile?.last_name || null
              } : null,
             discord_status: discord_status,
             enabled_guild_count: enabled_guild_count,

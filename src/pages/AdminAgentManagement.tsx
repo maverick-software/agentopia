@@ -8,7 +8,8 @@ interface AgentOwner {
     id: string;
     email?: string;
     username?: string;
-    full_name?: string;
+    first_name?: string;
+    last_name?: string;
 }
 
 interface AdminAgent {
@@ -157,7 +158,7 @@ export function AdminAgentManagement() {
                                         return (
                                             <tr key={agent.id} className="hover:bg-muted/30 transition-colors">
                                                 <td className="px-6 py-4 text-sm font-medium text-foreground w-full" title={agent.description || agent.name}>{agent.name}</td>
-                                                <td className="px-6 py-4 text-sm text-foreground text-right whitespace-nowrap border-l border-border" title={agent.owner?.email}>{agent.owner?.full_name || agent.owner?.username || agent.owner?.email || 'Unknown'}</td>
+                                                <td className="px-6 py-4 text-sm text-foreground text-right whitespace-nowrap border-l border-border" title={agent.owner?.email}>{agent.owner?.first_name && agent.owner?.last_name ? `${agent.owner.first_name} ${agent.owner.last_name}` : agent.owner?.username || agent.owner?.email || 'Unknown'}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border-l border-border">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button 
