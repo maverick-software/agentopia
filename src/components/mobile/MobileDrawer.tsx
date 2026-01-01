@@ -125,14 +125,15 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   };
 
   // Main navigation items (top section)
+  // NOTE: "New Chat" removed - users should create and chat with their own agents
   const mainNavItems = [
-    {
-      id: 'new-chat',
-      label: 'New Chat',
-      icon: Plus,
-      path: '/chat',
-      divider: false
-    },
+    // {
+    //   id: 'new-chat',
+    //   label: 'New Chat',
+    //   icon: Plus,
+    //   path: '/chat',
+    //   divider: false
+    // },
     {
       id: 'agents',
       label: 'My Agents',

@@ -9,7 +9,7 @@ interface UseTeamsReturn {
   error: PostgrestError | null;
   fetchTeams: () => Promise<void>;
   fetchTeamById: (teamId: string) => Promise<Team | null>;
-  createTeam: (name: string, description?: string) => Promise<Team | null>;
+  createTeam: (name: string, description?: string, parentTeamId?: string) => Promise<Team | null>;
   updateTeam: (teamId: string, updates: Partial<Omit<Team, 'id' | 'owner_user_id' | 'created_at' | 'updated_at'>>) => Promise<Team | null>;
   deleteTeam: (teamId: string) => Promise<boolean>;
 }
@@ -71,14 +71,14 @@ export function useTeams(): UseTeamsReturn {
   }, []);
 
   // Create a new team
-  const createTeam = useCallback(async (name: string, description?: string): Promise<Team | null> => {
+  const createTeam = useCallback(async (name: string, description?: string, parentTeamId?: string): Promise<Team | null> => {
     setLoading(true);
     setError(null);
     try {
       // RLS/Trigger handles setting owner_user_id
       const { data, error: insertError } = await supabase
         .from('teams')
-        .insert([{ name, description }])
+        .insert([{ name, description, parent_team_id: parentTeamId || null }])
         .select()
         .single();
 

@@ -9,7 +9,7 @@ import {
   Server, Key, Zap, Plus,
   MoreVertical, Pencil, Archive, Trash2,
   Network, FileText, HelpCircle, Crown, CreditCard, Shield,
-  MessageCircle, SquarePen, Brain
+  MessageCircle, Brain
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -62,12 +62,14 @@ const getIconColorClass = (route: string, label: string): string => {
 
 // Updated navigation structure with organized hierarchical nesting
 const navItems: NavItem[] = [
-  { 
-    to: '/chat', 
-    icon: SquarePen, 
-    label: 'New chat',
-    isCustom: false
-  },
+  // NOTE: "New chat" removed - users should create and chat with their own agents
+  // The system agent (Gofr) is not exposed via the main navigation
+  // { 
+  //   to: '/chat', 
+  //   icon: SquarePen, 
+  //   label: 'New chat',
+  //   isCustom: false
+  // },
   { 
     to: '/agents', 
     icon: Users, 

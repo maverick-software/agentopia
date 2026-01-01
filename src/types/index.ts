@@ -9,6 +9,13 @@ export type TeamMember = Database['public']['Tables']['team_members']['Row'] & {
   agent?: Agent;
 };
 
+// Extended team type with hierarchy information
+export type TeamWithHierarchy = Team & {
+  child_teams?: TeamWithHierarchy[];
+  parent_team?: Team;
+  child_count?: number;
+};
+
 // Keep existing Message type if needed
 export interface Message {
   role: 'user' | 'assistant' | 'thinking';

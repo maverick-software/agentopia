@@ -92,6 +92,7 @@ teams {
   id: uuid,
   name: text,
   description: text,
+  parent_team_id: uuid,        -- NEW: Hierarchical organization (references teams.id)
   owner_user_id: uuid,
   created_at: timestamptz,
   updated_at: timestamptz
@@ -107,7 +108,7 @@ team_members {
   created_at: timestamptz
 }
 
--- Visual team organization
+-- Visual team organization (DEPRECATED - removed from UI as of Dec 31, 2025)
 team_canvas_layouts {
   id: uuid,
   user_id: uuid,

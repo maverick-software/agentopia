@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTeams } from '../../hooks/useTeams';
 import { Save, Loader2, AlertCircle, X } from 'lucide-react';
 import {
@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CreateTeamModalProps {
   isOpen: boolean;
@@ -24,10 +31,18 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   onClose,
   onTeamCreated
 }) => {
-  const { createTeam, loading: saving, error: saveError } = useTeams();
+  const { createTeam, loading: saving, error: saveError, teams, fetchTeams } = useTeams();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [parentTeamId, setParentTeamId] = useState<string>('');
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Fetch teams when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchTeams();
+    }
+  }, [isOpen, fetchTeams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,12 +54,17 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
     }
 
     try {
-      const newTeam = await createTeam(name.trim(), description.trim());
+      const newTeam = await createTeam(
+        name.trim(), 
+        description.trim(), 
+        parentTeamId || undefined
+      );
       if (newTeam) {
         console.log(`Team created successfully: ${newTeam.id}`);
         // Reset form
         setName('');
         setDescription('');
+        setParentTeamId('');
         setValidationError(null);
         // Close modal
         onClose();
@@ -64,6 +84,7 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
     // Reset form when closing
     setName('');
     setDescription('');
+    setParentTeamId('');
     setValidationError(null);
     onClose();
   };
@@ -111,6 +132,30 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               disabled={saving}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="parent-team">Parent Team (Optional)</Label>
+            <Select
+              value={parentTeamId}
+              onValueChange={setParentTeamId}
+              disabled={saving}
+            >
+              <SelectTrigger id="parent-team">
+                <SelectValue placeholder="Select a parent team (or leave as root)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None (Root Team)</SelectItem>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Create this team as a sub-team of another team, or leave as a root team.
+            </p>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

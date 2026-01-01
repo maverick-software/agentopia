@@ -6,6 +6,7 @@ import { supabase, isSupabaseConnected } from '../lib/supabase';
 import type { Agent } from '../types';
 import { CreateAgentWizard } from '../components/CreateAgentWizard';
 import { useTeamsWithAgentCounts } from '../hooks/useTeamsWithAgentCounts';
+import { VisualTeamCanvas } from '../components/teams/canvas/VisualTeamCanvas';
 import { CreateTeamModal } from '../components/modals/CreateTeamModal';
 import { useMediaLibraryUrl } from '../hooks/useMediaLibraryUrl';
 import { MobileHeader } from '../components/mobile/MobileHeader';
@@ -27,6 +28,7 @@ export function AgentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const [showTeamsCanvas, setShowTeamsCanvas] = useState(false);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const totalFetchAttempts = useRef(0);
   const MAX_TOTAL_FETCH_ATTEMPTS = 5;
@@ -343,6 +345,13 @@ export function AgentsPage() {
               </div>
               <div className="flex items-center space-x-3 flex-shrink-0">
                 <button
+                  onClick={() => setShowTeamsCanvas(true)}
+                  className="flex items-center px-5 py-2.5 bg-card/50 text-foreground border border-border/50 hover:bg-card hover:border-border transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                >
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Teams
+                </button>
+                <button
                   onClick={() => setShowCreateModal(true)}
                   className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
                 >
@@ -584,6 +593,54 @@ export function AgentsPage() {
         open={showCreateModal} 
         onOpenChange={setShowCreateModal} 
       />
+
+      {/* Teams Canvas Modal - 95% full page */}
+      {user && showTeamsCanvas && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
+          <div className="fixed inset-[2.5%] bg-background border border-border rounded-xl shadow-2xl overflow-hidden">
+            <VisualTeamCanvas
+              isOpen={showTeamsCanvas}
+              onClose={() => setShowTeamsCanvas(false)}
+              teams={teams.map(team => ({
+                id: team.id,
+                name: team.name,
+                description: team.description,
+                created_at: team.created_at,
+                updated_at: team.updated_at,
+                owner_user_id: team.owner_user_id
+              }))}
+              teamMembers={new Map()} // TODO: Implement team members fetching
+              userId={user.id}
+              workspaceId={undefined} // TODO: Implement workspace support
+              onTeamCreate={() => {
+                setShowCreateTeamModal(true);
+              }}
+              onTeamUpdate={async (teamId, updates) => {
+                // TODO: Implement team update
+                console.log('Update team:', teamId, updates);
+                await refetchTeams();
+              }}
+              onTeamDelete={async (teamId) => {
+                // TODO: Implement team delete
+                console.log('Delete team:', teamId);
+                await refetchTeams();
+              }}
+              onLayoutSave={async (layout) => {
+                // Layout persistence is handled by the canvas component
+                console.log('Layout saved:', layout);
+              }}
+              onConnectionCreate={(connection) => {
+                console.log('Connection created:', connection);
+              }}
+              onConnectionDelete={(connectionId) => {
+                console.log('Connection deleted:', connectionId);
+              }}
+              showToolbar={true}
+              defaultViewMode="canvas"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Create Team Modal */}
       <CreateTeamModal

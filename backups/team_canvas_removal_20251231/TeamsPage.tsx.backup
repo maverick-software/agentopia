@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Loader2, AlertCircle, Building2, UserCheck, Target, Workflow, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Users, Loader2, AlertCircle, Building2, UserCheck, Target, Workflow, Network, Grid } from 'lucide-react';
 import { useTeams } from '../hooks/useTeams';
 import { useAuth } from '../contexts/AuthContext';
 import TeamCard from '../components/teams/TeamCard'; // Import the actual component
 import { CreateTeamModal } from '../components/modals/CreateTeamModal';
+import { VisualTeamCanvas } from '../components/teams/canvas/VisualTeamCanvas';
 import { MobileHeader } from '../components/mobile/MobileHeader';
 import { ResponsiveGrid } from '../components/mobile/ResponsiveGrid';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { getPagePadding } from '../lib/pwaTheme';
-import type { Team, TeamWithHierarchy } from '../types';
+import type { Team } from '../types';
+import type { ViewMode } from '../components/teams/canvas/types/canvas';
 
-// Note: Canvas view removed - December 31, 2025
 // Placeholder for TeamCard until it's created
 const TeamCardPlaceholder: React.FC<{ team: Team }> = ({ team }) => (
   <div className="bg-card border border-border p-4 rounded-lg shadow animate-pulse">
@@ -21,68 +22,12 @@ const TeamCardPlaceholder: React.FC<{ team: Team }> = ({ team }) => (
   </div>
 );
 
-// Hierarchical Team Display Component
-const HierarchicalTeamDisplay: React.FC<{
-  team: TeamWithHierarchy;
-  level: number;
-  isExpanded: boolean;
-  onToggle: (teamId: string) => void;
-}> = ({ team, level, isExpanded, onToggle }) => {
-  const hasChildren = team.child_teams && team.child_teams.length > 0;
-  const indentClass = level > 0 ? `ml-${level * 6}` : '';
-
-  return (
-    <div className="mb-4">
-      <div className={`${level > 0 ? 'ml-8' : ''}`} style={{ marginLeft: level > 0 ? `${level * 2}rem` : '0' }}>
-        <div className="flex items-start gap-2">
-          {hasChildren && (
-            <button
-              onClick={() => onToggle(team.id)}
-              className="mt-4 p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? (
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              )}
-            </button>
-          )}
-          {!hasChildren && <div className="w-6" />}
-          
-          <div className="flex-1">
-            <TeamCard team={team} />
-            {level === 0 && hasChildren && (
-              <div className="mt-1 ml-2 text-xs text-muted-foreground">
-                {team.child_teams!.length} sub-team{team.child_teams!.length !== 1 ? 's' : ''}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {hasChildren && isExpanded && (
-        <div className="mt-2">
-          {team.child_teams!.map(childTeam => (
-            <HierarchicalTeamDisplay
-              key={childTeam.id}
-              team={childTeam}
-              level={level + 1}
-              isExpanded={isExpanded}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
 // Assuming named export based on other pages
 export const TeamsPage: React.FC = () => {
   const { teams, loading, error, fetchTeams } = useTeams();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [showCanvasModal, setShowCanvasModal] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const { user } = useAuth();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -91,56 +36,15 @@ export const TeamsPage: React.FC = () => {
     fetchTeams();
   }, [fetchTeams]);
 
-  // Build hierarchical team structure
-  const hierarchicalTeams = useMemo(() => {
-    const teamMap = new Map<string, TeamWithHierarchy>();
-    const rootTeams: TeamWithHierarchy[] = [];
-
-    // First pass: create map of all teams
-    teams.forEach(team => {
-      teamMap.set(team.id, { ...team, child_teams: [] });
-    });
-
-    // Second pass: build parent-child relationships
-    teams.forEach(team => {
-      const teamWithHierarchy = teamMap.get(team.id)!;
-      if (team.parent_team_id) {
-        const parent = teamMap.get(team.parent_team_id);
-        if (parent) {
-          parent.child_teams = parent.child_teams || [];
-          parent.child_teams.push(teamWithHierarchy);
-          teamWithHierarchy.parent_team = teams.find(t => t.id === team.parent_team_id);
-        } else {
-          // Parent not found, treat as root
-          rootTeams.push(teamWithHierarchy);
-        }
-      } else {
-        // Root team
-        rootTeams.push(teamWithHierarchy);
-      }
-    });
-
-    return rootTeams;
-  }, [teams]);
-
-  const toggleTeamExpansion = (teamId: string) => {
-    setExpandedTeams(prev => {
-      const next = new Set(prev);
-      if (next.has(teamId)) {
-        next.delete(teamId);
-      } else {
-        next.add(teamId);
-      }
-      return next;
-    });
-  };
-
   const handleTeamCreated = (teamId: string) => {
     // Refresh teams list
     fetchTeams();
     // Navigate to the new team's detail page
     navigate(`/teams/${teamId}`);
   };
+  
+  // Memoize teams to prevent unnecessary re-renders
+  const memoizedTeams = useMemo(() => teams, [teams]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -167,6 +71,34 @@ export const TeamsPage: React.FC = () => {
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center space-x-4">
               <h1 className="text-2xl font-semibold text-foreground">Teams</h1>
+              
+              {/* View Toggle - only show if we have teams */}
+              {teams.length > 0 && (
+                <div className="flex items-center border rounded-md overflow-hidden">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`flex items-center px-3 py-2 text-sm font-medium transition-colors ${
+                      viewMode === 'grid'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                  >
+                    <Grid className="h-4 w-4 mr-1" />
+                    Grid
+                  </button>
+                  <button
+                    onClick={() => setShowCanvasModal(true)}
+                    className={`flex items-center px-3 py-2 text-sm font-medium transition-colors border-l ${
+                      showCanvasModal
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
+                  >
+                    <Network className="h-4 w-4 mr-1" />
+                    Canvas
+                  </button>
+                </div>
+              )}
             </div>
             
             <button
@@ -272,17 +204,12 @@ export const TeamsPage: React.FC = () => {
       )}
 
       {!loading && !error && teams.length > 0 && (
-        <div className="space-y-4">
-          {hierarchicalTeams.map((team) => (
-            <HierarchicalTeamDisplay
-              key={team.id}
-              team={team}
-              level={0}
-              isExpanded={expandedTeams.has(team.id)}
-              onToggle={toggleTeamExpansion}
-            />
+        <ResponsiveGrid type="teams" gap="md">
+          {teams.map((team) => (
+            // Use the actual TeamCard component
+            <TeamCard key={team.id} team={team} /> 
           ))}
-        </div>
+        </ResponsiveGrid>
       )}
       </div>
 
@@ -291,6 +218,41 @@ export const TeamsPage: React.FC = () => {
         onClose={() => setShowCreateModal(false)}
         onTeamCreated={handleTeamCreated}
       />
+      
+      {/* Visual Team Canvas Modal */}
+      {user && showCanvasModal && (
+        <VisualTeamCanvas
+          isOpen={showCanvasModal}
+          onClose={() => setShowCanvasModal(false)}
+          teams={memoizedTeams}
+          teamMembers={new Map()} // TODO: Implement team members fetching
+          userId={user.id}
+          workspaceId={undefined} // TODO: Implement workspace support
+          onTeamCreate={() => {
+            setShowCreateModal(true);
+          }}
+          onTeamUpdate={(teamId, updates) => {
+            // TODO: Implement team update
+            console.log('Update team:', teamId, updates);
+          }}
+          onTeamDelete={(teamId) => {
+            // TODO: Implement team delete
+            console.log('Delete team:', teamId);
+          }}
+          onLayoutSave={async (layout) => {
+            // Layout persistence is handled by the canvas component
+            console.log('Layout saved:', layout);
+          }}
+          onConnectionCreate={(connection) => {
+            console.log('Connection created:', connection);
+          }}
+          onConnectionDelete={(connectionId) => {
+            console.log('Connection deleted:', connectionId);
+          }}
+          showToolbar={true}
+          defaultViewMode="canvas"
+        />
+      )}
     </div>
   );
 }; 
