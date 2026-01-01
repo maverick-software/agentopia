@@ -7,11 +7,12 @@ import { Team } from '../types';
 export const EditTeamPage: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
   const navigate = useNavigate();
-  const { fetchTeamById, updateTeam, loading, error } = useTeams();
+  const { fetchTeamById, updateTeam, fetchTeams, teams, loading, error } = useTeams();
 
   const [team, setTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
   const [description, setDescription] = useState('');
+  const [parentTeamId, setParentTeamId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -33,6 +34,7 @@ export const EditTeamPage: React.FC = () => {
           setTeam(fetchedTeam);
           setTeamName(fetchedTeam.name || '');
           setDescription(fetchedTeam.description || '');
+          setParentTeamId(fetchedTeam.parent_team_id || '');
         } else {
           setFetchError('Team not found');
         }
@@ -45,7 +47,8 @@ export const EditTeamPage: React.FC = () => {
     };
 
     loadTeam();
-  }, [teamId, fetchTeamById]);
+    fetchTeams(); // Load all teams for parent selector
+  }, [teamId, fetchTeamById, fetchTeams]);
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -56,6 +59,7 @@ export const EditTeamPage: React.FC = () => {
       const updatedTeam = await updateTeam(teamId, {
         name: teamName.trim(),
         description: description.trim() || null,
+        parent_team_id: parentTeamId || null,
       });
 
       if (updatedTeam) {
@@ -67,6 +71,12 @@ export const EditTeamPage: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  // Filter out current team and its descendants to prevent circular references
+  const availableParentTeams = teams.filter(t => 
+    t.id !== teamId && // Can't be parent of itself
+    t.parent_team_id !== teamId // Can't select a child as parent
+  );
 
   if (isLoading) {
     return (
@@ -162,6 +172,30 @@ export const EditTeamPage: React.FC = () => {
             />
             <p className="text-sm text-muted-foreground">
               Provide a brief description to help team members understand the team's purpose.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="parentTeam" className="text-sm font-medium text-foreground">
+              Parent Team (Optional)
+            </label>
+            <select
+              id="parentTeam"
+              name="parentTeam"
+              value={parentTeamId}
+              onChange={(e) => setParentTeamId(e.target.value)}
+              disabled={isSaving}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">None (Root Team)</option>
+              {availableParentTeams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-muted-foreground">
+              Place this team under another team in your organizational hierarchy.
             </p>
           </div>
 

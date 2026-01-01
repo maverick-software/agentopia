@@ -27,49 +27,86 @@ const HierarchicalTeamDisplay: React.FC<{
   level: number;
   isExpanded: boolean;
   onToggle: (teamId: string) => void;
-}> = ({ team, level, isExpanded, onToggle }) => {
+  expandedTeams: Set<string>;
+  isLast?: boolean;
+}> = ({ team, level, isExpanded, onToggle, expandedTeams, isLast = false }) => {
   const hasChildren = team.child_teams && team.child_teams.length > 0;
-  const indentClass = level > 0 ? `ml-${level * 6}` : '';
+  const navigate = useNavigate();
 
   return (
-    <div className="mb-4">
-      <div className={`${level > 0 ? 'ml-8' : ''}`} style={{ marginLeft: level > 0 ? `${level * 2}rem` : '0' }}>
-        <div className="flex items-start gap-2">
-          {hasChildren && (
-            <button
-              onClick={() => onToggle(team.id)}
-              className="mt-4 p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? (
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              )}
-            </button>
-          )}
-          {!hasChildren && <div className="w-6" />}
+    <div className="relative">
+      <div className={`flex items-center gap-2 ${level > 0 ? 'ml-6' : ''}`}>
+        {/* Tree lines for hierarchy visualization */}
+        {level > 0 && (
+          <div className="absolute left-0 top-0 h-full w-6">
+            {/* Vertical line */}
+            {!isLast && (
+              <div className="absolute top-0 bottom-0 left-3 w-px bg-border/50" />
+            )}
+            {/* Horizontal line */}
+            <div className="absolute top-1/2 left-3 w-3 h-px bg-border/50" />
+          </div>
+        )}
+
+        {/* Expand/Collapse button */}
+        {hasChildren ? (
+          <button
+            onClick={() => onToggle(team.id)}
+            className="flex-shrink-0 w-5 h-5 rounded hover:bg-accent flex items-center justify-center transition-colors"
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+        ) : (
+          <div className="w-5 h-5 flex-shrink-0" />
+        )}
+        
+        {/* Compact Team Row */}
+        <div 
+          onClick={() => navigate(`/teams/${team.id}`)}
+          className={`flex-1 flex items-center gap-3 py-2.5 px-4 rounded-lg border border-border bg-card hover:bg-accent/50 cursor-pointer transition-colors group ${
+            level > 0 ? 'border-l-2 border-l-primary/30' : ''
+          }`}
+        >
+          <Building2 className={`w-4 h-4 flex-shrink-0 ${level === 0 ? 'text-primary' : 'text-muted-foreground'}`} />
           
-          <div className="flex-1">
-            <TeamCard team={team} />
-            {level === 0 && hasChildren && (
-              <div className="mt-1 ml-2 text-xs text-muted-foreground">
-                {team.child_teams!.length} sub-team{team.child_teams!.length !== 1 ? 's' : ''}
-              </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-medium text-foreground truncate">{team.name}</h3>
+            {team.description && (
+              <p className="text-xs text-muted-foreground truncate">{team.description}</p>
             )}
           </div>
+          
+          {hasChildren && (
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {team.child_teams!.length} sub-team{team.child_teams!.length !== 1 ? 's' : ''}
+            </span>
+          )}
+          
+          {level > 0 && (
+            <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+              Level {level}
+            </span>
+          )}
         </div>
       </div>
 
+      {/* Child teams */}
       {hasChildren && isExpanded && (
-        <div className="mt-2">
-          {team.child_teams!.map(childTeam => (
+        <div className="mt-1">
+          {team.child_teams!.map((childTeam, index) => (
             <HierarchicalTeamDisplay
               key={childTeam.id}
               team={childTeam}
               level={level + 1}
-              isExpanded={isExpanded}
+              isExpanded={expandedTeams.has(childTeam.id)}
               onToggle={onToggle}
+              expandedTeams={expandedTeams}
+              isLast={index === team.child_teams!.length - 1}
             />
           ))}
         </div>
@@ -181,53 +218,12 @@ export const TeamsPage: React.FC = () => {
 
       {/* Teams Information Section - Hidden on Mobile */}
       {!isMobile && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-8">
-          <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-primary" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-foreground mb-2">Organize Your Agents Like Your Company</h2>
-              <p className="text-muted-foreground mb-4">
-                Teams in Gofr Agents mirror your organizational structure, allowing you to group agents based on departments, 
-                projects, or functional areas. This alignment helps maintain clear responsibilities and streamlined workflows 
-                that match how your company operates.
-              </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                    <UserCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">Department Structure</h3>
-                    <p className="text-xs text-muted-foreground">Group agents by HR, Marketing, Sales, Engineering, etc.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                    <Target className="w-4 h-4 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">Project Focus</h3>
-                    <p className="text-xs text-muted-foreground">Organize agents around specific projects or initiatives.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                    <Workflow className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">Clear Workflows</h3>
-                    <p className="text-xs text-muted-foreground">Establish reporting structures and collaboration patterns.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div className="bg-card/50 border border-border/50 rounded-lg p-4 mb-6">
+          <div className="flex items-center gap-3">
+            <Building2 className="w-5 h-5 text-primary flex-shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Organize your agents into teams that mirror your company structure
+            </p>
           </div>
         </div>
       )}
@@ -272,7 +268,7 @@ export const TeamsPage: React.FC = () => {
       )}
 
       {!loading && !error && teams.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-1">
           {hierarchicalTeams.map((team) => (
             <HierarchicalTeamDisplay
               key={team.id}
@@ -280,6 +276,7 @@ export const TeamsPage: React.FC = () => {
               level={0}
               isExpanded={expandedTeams.has(team.id)}
               onToggle={toggleTeamExpansion}
+              expandedTeams={expandedTeams}
             />
           ))}
         </div>

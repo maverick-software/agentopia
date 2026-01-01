@@ -10,13 +10,27 @@ export const TeamDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const { fetchTeamById, loading, error } = useTeams();
   const [team, setTeam] = useState<Team | null>(null);
+  const [parentTeam, setParentTeam] = useState<Team | null>(null);
 
   useEffect(() => {
     if (teamId) {
       console.log(`[TeamDetailsPage] Fetching team details for ID: ${teamId}`);
       fetchTeamById(teamId).then(fetchedTeam => {
         if (fetchedTeam) {
+            console.log('[TeamDetailsPage] Fetched team:', fetchedTeam);
+            console.log('[TeamDetailsPage] parent_team_id:', fetchedTeam.parent_team_id);
             setTeam(fetchedTeam);
+            // Fetch parent team if it exists
+            if (fetchedTeam.parent_team_id) {
+              console.log('[TeamDetailsPage] Fetching parent team:', fetchedTeam.parent_team_id);
+              fetchTeamById(fetchedTeam.parent_team_id).then(parent => {
+                console.log('[TeamDetailsPage] Parent team:', parent);
+                setParentTeam(parent);
+              });
+            } else {
+              console.log('[TeamDetailsPage] No parent team for this team');
+              setParentTeam(null);
+            }
         } else {
             // Handle case where team is not found or error occurred during fetch
             // The useTeams hook should set the error state, which is displayed below
@@ -109,6 +123,23 @@ export const TeamDetailsPage: React.FC = () => {
             <div>
               <h3 className="text-sm font-medium text-muted-foreground mb-2">Team Information</h3>
               <div className="space-y-3">
+                <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
+                  <span className="text-sm text-muted-foreground">Parent Team</span>
+                  {team.parent_team_id ? (
+                    parentTeam ? (
+                      <Link 
+                        to={`/teams/${parentTeam.id}`}
+                        className="text-sm text-primary hover:text-primary/80 hover:underline font-medium"
+                      >
+                        {parentTeam.name}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-foreground">Loading...</span>
+                    )
+                  ) : (
+                    <span className="text-sm text-muted-foreground italic">None (Root Team)</span>
+                  )}
+                </div>
                 <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
                   <span className="text-sm text-muted-foreground">Team ID</span>
                   <span className="text-sm font-mono text-foreground">{team.id}</span>

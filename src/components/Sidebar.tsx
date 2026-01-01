@@ -9,7 +9,7 @@ import {
   Server, Key, Zap, Plus,
   MoreVertical, Pencil, Archive, Trash2,
   Network, FileText, HelpCircle, Crown, CreditCard, Shield,
-  MessageCircle, Brain
+  MessageCircle, Brain, Building2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAgents } from '../hooks/useAgents';
@@ -75,6 +75,12 @@ const navItems: NavItem[] = [
     icon: Users, 
     label: 'Agents',
     isCustom: true
+  },
+  { 
+    to: '/teams', 
+    icon: Building2, 
+    label: 'Teams',
+    isCustom: false
   },
   { 
     to: '/media', 
