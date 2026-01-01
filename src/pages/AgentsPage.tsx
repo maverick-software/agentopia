@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, RefreshCw, Search, ArrowUpRight, Building2, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, Search, ArrowUpRight, Building2, ChevronDown, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConnected } from '../lib/supabase';
@@ -10,9 +10,6 @@ import { CreateTeamModal } from '../components/modals/CreateTeamModal';
 import { useMediaLibraryUrl } from '../hooks/useMediaLibraryUrl';
 import { MobileHeader } from '../components/mobile/MobileHeader';
 import { useIsMobile } from '../hooks/useMediaQuery';
-
-// Maximum number of team tabs to show before creating dropdown
-const MAX_VISIBLE_TEAMS = 5;
 
 export function AgentsPage() {
   const { user } = useAuth();
@@ -34,6 +31,45 @@ export function AgentsPage() {
 
   // Fetch teams with agent counts
   const { teams, loading: teamsLoading, refetch: refetchTeams } = useTeamsWithAgentCounts();
+
+  // Build hierarchical team structure
+  const hierarchicalTeams = useMemo(() => {
+    const teamMap = new Map();
+    const rootTeams: any[] = [];
+
+    // First pass: create map of all teams
+    teams.forEach(team => {
+      teamMap.set(team.id, { ...team, children: [] });
+    });
+
+    // Second pass: build parent-child relationships
+    teams.forEach(team => {
+      const teamWithHierarchy = teamMap.get(team.id);
+      if (team.parent_team_id) {
+        const parent = teamMap.get(team.parent_team_id);
+        if (parent) {
+          parent.children.push(teamWithHierarchy);
+        } else {
+          rootTeams.push(teamWithHierarchy);
+        }
+      } else {
+        rootTeams.push(teamWithHierarchy);
+      }
+    });
+
+    // Flatten for dropdown display with level information
+    const flattenTeams = (teams: any[], level = 0): any[] => {
+      return teams.reduce((acc, team) => {
+        acc.push({ ...team, level });
+        if (team.children && team.children.length > 0) {
+          acc.push(...flattenTeams(team.children, level + 1));
+        }
+        return acc;
+      }, []);
+    };
+
+    return flattenTeams(rootTeams);
+  }, [teams]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -336,12 +372,113 @@ export function AgentsPage() {
         <div className="border-b border-border/50 bg-background/95 backdrop-blur-sm sticky top-0 z-40 shadow-sm">
           <div className="max-w-7xl mx-auto px-6 py-6">
             {/* Title and Action Buttons */}
-              <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center justify-between">
               <div className="flex-1 pr-8">
                 <h1 className="text-2xl font-bold text-foreground mb-2">Meet Your AI Team</h1>
                 <p className="text-muted-foreground">Manage and organize your AI agents by teams</p>
               </div>
+              
               <div className="flex items-center space-x-3 flex-shrink-0">
+                {/* Team Filter Dropdown */}
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowTeamDropdown(!showTeamDropdown);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-card border border-border hover:border-primary/50 rounded-lg text-sm font-medium text-foreground transition-all duration-200 min-w-[180px]"
+                  >
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="flex-1 text-left truncate">
+                      {selectedTeam === 'all' ? 'All Teams' : teams.find(t => t.id === selectedTeam)?.name || 'Select Team'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${showTeamDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {showTeamDropdown && (
+                    <div 
+                      className="absolute top-full mt-2 right-0 bg-card border border-border rounded-lg shadow-xl z-50 min-w-[280px] max-h-[400px] overflow-y-auto"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* All Teams Option */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedTeam('all');
+                          setShowTeamDropdown(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
+                          selectedTeam === 'all'
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'text-foreground hover:bg-accent'
+                        }`}
+                      >
+                        <span>All Teams</span>
+                        {selectedTeam === 'all' && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        )}
+                      </button>
+                      
+                      <div className="border-t border-border my-1" />
+                      
+                      {/* Hierarchical Team Options */}
+                      {hierarchicalTeams.map((team, index) => {
+                        const hasChildren = team.children && team.children.length > 0;
+                        const isLast = index === hierarchicalTeams.length - 1 || 
+                                      (hierarchicalTeams[index + 1]?.level || 0) <= team.level;
+                        
+                        return (
+                          <button
+                            key={team.id}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedTeam(team.id);
+                              setShowTeamDropdown(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
+                              selectedTeam === team.id
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-foreground hover:bg-accent'
+                            }`}
+                            style={{ 
+                              paddingLeft: `${1 + team.level * 1.5}rem`
+                            }}
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0 relative">
+                              {/* Tree line indicators */}
+                              {team.level > 0 && (
+                                <div className="absolute left-0 top-0 h-full flex items-center" style={{ left: `${-0.75 * team.level}rem` }}>
+                                  {/* Horizontal line */}
+                                  <div className="w-3 h-px bg-border/50" />
+                                </div>
+                              )}
+                              
+                              <Building2 className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                team.level === 0 ? 'text-primary' : 'text-muted-foreground'
+                              }`} />
+                              <span className="truncate">{team.name}</span>
+                              {team.level > 0 && (
+                                <span className="text-xs text-muted-foreground">└</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                              <span className="text-xs text-muted-foreground">
+                                {team.agent_count}
+                              </span>
+                              {selectedTeam === team.id && (
+                                <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                
                 <button
                   onClick={() => setShowCreateModal(true)}
                   className="flex items-center px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md"
@@ -351,116 +488,7 @@ export function AgentsPage() {
                 </button>
               </div>
             </div>
-
-          {/* Team Tabs */}
-          <div className="flex items-center space-x-2">
-            {/* All tab */}
-            <button
-              onClick={() => setSelectedTeam('all')}
-              className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                selectedTeam === 'all'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-              }`}
-            >
-              All
-            </button>
-            
-            {/* Visible team tabs (up to MAX_VISIBLE_TEAMS) */}
-            {teams.slice(0, MAX_VISIBLE_TEAMS).map((team) => (
-              <button
-                key={team.id}
-                onClick={() => setSelectedTeam(team.id)}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                  selectedTeam === team.id
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                }`}
-              >
-                {team.name}
-              </button>
-            ))}
-            
-            {/* Mega menu for additional teams if there are more than MAX_VISIBLE_TEAMS */}
-            {teams.length > MAX_VISIBLE_TEAMS && (
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowTeamDropdown(!showTeamDropdown);
-                  }}
-                  className="flex items-center space-x-1 px-4 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-all duration-200"
-                >
-                  <span>More</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showTeamDropdown ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {/* Mega menu */}
-                {showTeamDropdown && (
-                  <div 
-                    className="absolute top-full mt-1 right-0 bg-card border border-border rounded-xl shadow-xl z-50 p-4 min-w-[400px] max-w-[600px]"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="mb-3">
-                      <h3 className="text-sm font-medium text-foreground">More Teams</h3>
-                      <p className="text-xs text-muted-foreground">Select a team to view its agents</p>
-                    </div>
-                    
-                    {/* Grid layout for teams */}
-                    <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-                      {teams.slice(MAX_VISIBLE_TEAMS).map((team) => (
-                        <button
-                          key={team.id}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setSelectedTeam(team.id);
-                            setShowTeamDropdown(false);
-                          }}
-                          className={`group flex flex-col items-center p-3 rounded-lg transition-all duration-200 text-center ${
-                            selectedTeam === team.id
-                              ? 'bg-primary text-primary-foreground shadow-sm'
-                              : 'hover:bg-accent text-foreground'
-                          }`}
-                        >
-                          {/* Team icon/avatar */}
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
-                            selectedTeam === team.id
-                              ? 'bg-primary-foreground/20'
-                              : 'bg-gradient-to-br from-primary/20 to-primary/40'
-                          }`}>
-                            <span className={`text-sm font-semibold ${
-                              selectedTeam === team.id
-                                ? 'text-primary-foreground'
-                                : 'text-primary'
-                            }`}>
-                              {team.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          
-                          {/* Team name */}
-                          <span className="text-xs font-medium leading-tight line-clamp-2">
-                            {team.name}
-                          </span>
-                          
-                          {/* Agent count */}
-                          <span className={`text-xs mt-1 ${
-                            selectedTeam === team.id
-                              ? 'text-primary-foreground/70'
-                              : 'text-muted-foreground'
-                          }`}>
-                            {team.agent_count} agent{team.agent_count !== 1 ? 's' : ''}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        </div>
         </div>
       )}
 

@@ -163,7 +163,7 @@ export function CreateAgentWizard({ open, onOpenChange }: CreateAgentWizardProps
   const [creating, setCreating] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
-  const [showAIWizard, setShowAIWizard] = useState(false);
+  const [showAIWizard, setShowAIWizard] = useState(true); // Changed to true - AI first
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -233,27 +233,107 @@ export function CreateAgentWizard({ open, onOpenChange }: CreateAgentWizardProps
     setAgentData(prev => ({ ...prev, ...updates }));
   };
 
-  // Handle AI-generated configuration
-  const handleAIConfig = (config: any) => {
-    setAgentData({
-      name: config.name,
-      purpose: config.purpose || '',
-      description: config.description,
-      theme: config.theme,
-      customInstructions: config.behavior?.role || '',
-      mbtiType: config.mbtiType || '',
-      gender: config.gender,
-      selectedTools: Object.entries(config.suggested_tools || {})
-        .filter(([_, enabled]) => enabled)
-        .map(([tool]) => tool.replace('_enabled', ''))
-    });
+  // Handle AI-generated configuration - FULLY AUTOMATED
+  const handleAIConfig = async (config: any) => {
+    console.log('AI Config received:', config);
     
-    // Store full behavior config in metadata for later use
-    (window as any).__aiGeneratedBehavior = config.behavior;
-    (window as any).__aiGeneratedLLMPrefs = config.llm_preferences;
+    // Show loading state
+    setCreating(true);
+    setGeneratingImage(true);
     
-    setStep(5); // Jump to final step
-    toast.success('✨ AI configuration applied! Review and create your agent.');
+    try {
+      const agentConfig = {
+        name: config.name || '',
+        purpose: config.purpose || '',
+        description: config.description || '',
+        theme: config.theme || 'professional',
+        customInstructions: config.customInstructions || '',
+        mbtiType: config.mbtiType || '',
+        gender: config.gender,
+        hairColor: config.hairColor,
+        eyeColor: config.eyeColor,
+        selectedTools: config.selectedTools || []
+      };
+      
+      // Generate agent image automatically
+      toast.success('✨ Configuration generated! Creating agent...');
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('No valid session found');
+      }
+
+      // Generate image
+      const { data: imageData, error: imageError } = await supabase.functions.invoke('generate-agent-image', {
+        body: {
+          theme: agentConfig.theme,
+          gender: agentConfig.gender,
+          hairColor: agentConfig.hairColor,
+          eyeColor: agentConfig.eyeColor,
+          customInstructions: agentConfig.customInstructions,
+          agentName: agentConfig.name
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      let avatarUrl = 'https://via.placeholder.com/400x400/6366f1/ffffff?text=AI+Agent';
+      if (!imageError && imageData?.success) {
+        avatarUrl = imageData.imageUrl;
+      }
+
+      // Create the agent directly
+      const { data, error } = await supabase.functions.invoke('create-agent', {
+        body: {
+          name: agentConfig.name.trim(),
+          description: agentConfig.description,
+          avatar_url: avatarUrl,
+          personality: agentConfig.mbtiType || 'helpful',
+          metadata: {
+            purpose: agentConfig.purpose,
+            theme: agentConfig.theme,
+            gender: agentConfig.gender,
+            hairColor: agentConfig.hairColor,
+            eyeColor: agentConfig.eyeColor,
+            mbtiType: agentConfig.mbtiType,
+            customInstructions: agentConfig.customInstructions,
+            aiGenerated: true
+          }
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to create agent');
+      }
+
+      const newAgent = data.agent;
+      
+      toast.success(`🎉 ${agentConfig.name} created successfully!`);
+      
+      if (data.reasoning_permissions_granted) {
+        toast.success('Advanced reasoning capabilities enabled!', { duration: 3000 });
+      }
+      
+      // Close modal and navigate to the new agent's chat page
+      onOpenChange(false);
+      resetWizard();
+      navigate(`/agents/${newAgent.id}/chat`);
+
+    } catch (error: any) {
+      console.error('Error creating agent:', error);
+      toast.error(`Failed to create agent: ${error.message}`);
+    } finally {
+      setCreating(false);
+      setGeneratingImage(false);
+    }
   };
 
   const handleNext = async () => {
@@ -450,6 +530,7 @@ export function CreateAgentWizard({ open, onOpenChange }: CreateAgentWizardProps
 
   const resetWizard = () => {
     setStep(1);
+    setShowAIWizard(true); // Reset to AI wizard for next time
     setAgentData({
       name: '',
       purpose: '',
@@ -819,6 +900,100 @@ export function CreateAgentWizard({ open, onOpenChange }: CreateAgentWizardProps
     );
   };
 
+  // Show AI wizard first, or manual wizard after user switches
+  if (showAIWizard) {
+    return (
+      <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-50 flex flex-col w-full max-w-[800px] translate-x-[-50%] translate-y-[-50%] border bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] rounded-xl border-border dark:border-border max-h-[90vh] h-[90vh]">
+            
+            {/* Accessibility - Hidden title and description for screen readers */}
+            <VisuallyHidden.Root>
+              <DialogPrimitive.Title>Create New Agent with AI</DialogPrimitive.Title>
+              <DialogPrimitive.Description>
+                Use AI to generate your agent configuration by describing what you want in natural language.
+              </DialogPrimitive.Description>
+            </VisuallyHidden.Root>
+
+            {/* Header with switch to manual option */}
+            <div className="flex-shrink-0 px-8 py-6 border-b border-border/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                  <h2 className="text-xl font-semibold">AI Agent Wizard</h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAIWizard(false)}
+                    disabled={creating || generatingImage}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Manual Setup
+                  </Button>
+                  <DialogPrimitive.Close 
+                    className="rounded-md p-2 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-muted"
+                    onClick={handleClose}
+                    disabled={creating || generatingImage}
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                  </DialogPrimitive.Close>
+                </div>
+              </div>
+            </div>
+            
+            {/* AI Wizard Content with Loading Overlay */}
+            <div className="flex-1 overflow-hidden relative">
+              {(creating || generatingImage) && (
+                <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex items-center justify-center">
+                  <div className="text-center space-y-6 max-w-md px-6">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+                    <div className="space-y-3">
+                      <p className="text-lg font-semibold">
+                        {generatingImage ? 'Generating avatar...' : 'Creating your agent...'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        This may take a few moments
+                      </p>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="h-full bg-primary rounded-full transition-all duration-1000 ease-out animate-pulse"
+                          style={{ 
+                            width: generatingImage ? '66%' : '90%',
+                            animation: 'progress 2s ease-in-out infinite'
+                          }}
+                        />
+                      </div>
+                      
+                      <style>{`
+                        @keyframes progress {
+                          0% { width: 10%; }
+                          50% { width: ${generatingImage ? '66%' : '90%'}; }
+                          100% { width: 10%; }
+                        }
+                      `}</style>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <AIQuickSetup 
+                onConfigGenerated={handleAIConfig}
+                onClose={handleClose}
+              />
+            </div>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+    );
+  }
+
+  // Manual wizard flow
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>

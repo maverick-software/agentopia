@@ -168,7 +168,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        imageUrl: mediaEntry?.id ? `media-library:${mediaEntry.id}` : publicUrl,
+        imageUrl: publicUrl, // Always return the actual public URL
         mediaLibraryId: mediaEntry?.id,
         storagePath: storagePath,
         fileName: fileName
