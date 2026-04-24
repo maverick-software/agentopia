@@ -39,10 +39,8 @@ export function WhatIKnowTabs(props: WhatIKnowModalProps) {
             <KnowledgeSourcesSection
               loadingDatastores={state.loadingDatastores}
               connectedDatastores={state.connectedDatastores}
-              graphEnabled={state.graphEnabled}
               getDatastoresByType={state.getDatastoresByType}
               onSelectVectorDatastore={state.handleSelectVectorDatastore}
-              onSelectKnowledgeDatastore={state.handleSelectKnowledgeDatastore}
             />
 
             <MemoryPreferencesSection
@@ -99,14 +97,10 @@ export function WhatIKnowTabs(props: WhatIKnowModalProps) {
       <DatastoreSelectionDialogs
         showVectorSelection={state.showVectorSelection}
         setShowVectorSelection={state.setShowVectorSelection}
-        showKnowledgeSelection={state.showKnowledgeSelection}
-        setShowKnowledgeSelection={state.setShowKnowledgeSelection}
         getDatastoresByType={state.getDatastoresByType}
         onVectorSelect={state.handleVectorDatastoreSelect}
-        onKnowledgeSelect={state.handleKnowledgeDatastoreSelect}
         onNavigateToMemory={() => {
           state.setShowVectorSelection(false);
-          state.setShowKnowledgeSelection(false);
           onClose();
           navigate('/memory');
         }}

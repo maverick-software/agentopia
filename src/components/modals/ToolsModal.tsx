@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Loader2, 
   Check, 
-  Wrench,
   Mail,
   MessageSquare,
   BarChart3,
@@ -27,8 +26,7 @@ import {
   Brain,
   Zap,
   Settings,
-  AlertCircle,
-  ExternalLink
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIntegrationsByClassification } from '@/integrations/_shared';
@@ -52,7 +50,7 @@ const CAPABILITY_CATEGORIES = {
     icon: Mail,
     gradient: 'from-blue-500 to-cyan-500',
     capabilities: [
-      { id: 'gmail', name: 'Send emails and manage inbox', icon: Mail, popular: true },
+      { id: 'email', name: 'Send emails via SMTP', icon: Mail, popular: true },
       { id: 'slack', name: 'Send messages and notifications', icon: MessageSquare, popular: true },
       { id: 'discord', name: 'Chat and community management', icon: MessageSquare, popular: false },
       { id: 'sms', name: 'Send text messages', icon: MessageSquare, popular: false }
@@ -156,7 +154,7 @@ export function ToolsModal({
     if (isOpen && agentData) {
       // This would load the agent's current tool configurations
       // For now, we'll start with some common defaults
-      setEnabledCapabilities(['gmail', 'web_search', 'content_writing']);
+      setEnabledCapabilities(['web_search', 'content_writing']);
       setPermissionLevel('ask_permission');
       setSaved(false);
     }

@@ -125,58 +125,22 @@ export function EmailRelaySetupModal({
         provider_name: selectedProvider.name
       };
 
-      // Handle different provider configurations
-      switch (formData.selected_provider) {
-        case 'smtp':
-          const smtpSecretName = `smtp_password_${user.id}_${Date.now()}`;
-          vaultKeyId = await vaultService.createSecret(
-            smtpSecretName,
-            formData.password,
-            `SMTP password for ${formData.connection_name || 'SMTP Connection'} - Created: ${new Date().toISOString()}`
-          );
-          metadata = {
-            ...metadata,
-            host: formData.host,
-            port: parseInt(formData.port),
-            secure: formData.secure,
-            from_email: formData.from_email,
-            from_name: formData.from_name,
-            reply_to_email: formData.reply_to_email,
-            provider_preset: selectedSMTPPreset?.name || 'custom'
-          };
-          break;
-
-        case 'sendgrid':
-          const sendgridSecretName = `sendgrid_api_key_${user.id}_${Date.now()}`;
-          vaultKeyId = await vaultService.createSecret(
-            sendgridSecretName,
-            formData.api_key,
-            `SendGrid API key for ${formData.connection_name || 'SendGrid Connection'} - Created: ${new Date().toISOString()}`
-          );
-          metadata = {
-            ...metadata,
-            from_email: formData.from_email,
-            from_name: formData.from_name
-          };
-          break;
-
-        case 'mailgun':
-          const mailgunSecretName = `mailgun_api_key_${user.id}_${Date.now()}`;
-          vaultKeyId = await vaultService.createSecret(
-            mailgunSecretName,
-            formData.api_key,
-            `Mailgun API key for ${formData.connection_name || 'Mailgun Connection'} - Created: ${new Date().toISOString()}`
-          );
-          metadata = {
-            ...metadata,
-            domain: formData.domain,
-            region: formData.region
-          };
-          break;
-
-        default:
-          throw new Error('Invalid provider configuration');
-      }
+      const smtpSecretName = `smtp_password_${user.id}_${Date.now()}`;
+      vaultKeyId = await vaultService.createSecret(
+        smtpSecretName,
+        formData.password,
+        `SMTP password for ${formData.connection_name || 'SMTP Connection'} - Created: ${new Date().toISOString()}`
+      );
+      metadata = {
+        ...metadata,
+        host: formData.host,
+        port: parseInt(formData.port),
+        secure: formData.secure,
+        from_email: formData.from_email,
+        from_name: formData.from_name,
+        reply_to_email: formData.reply_to_email,
+        provider_preset: selectedSMTPPreset?.name || 'custom'
+      };
 
       console.log(`✅ ${selectedProvider.name} credentials securely stored in vault: ${vaultKeyId}`);
 
@@ -187,9 +151,7 @@ export function EmailRelaySetupModal({
           user_id: user.id,
           oauth_provider_id: providerData.id,
           external_user_id: user.id,
-          external_username: formData.selected_provider === 'smtp' ? formData.username : 
-                             formData.selected_provider === 'sendgrid' ? formData.from_email : 
-                             formData.domain,
+          external_username: formData.username,
           connection_name: formData.connection_name || `${selectedProvider.name} Connection`,
           encrypted_access_token: null, // Credentials are in vault
           vault_access_token_id: vaultKeyId,

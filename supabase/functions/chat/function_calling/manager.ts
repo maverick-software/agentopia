@@ -168,69 +168,6 @@ export class FunctionCallingManager {
     const tools: OpenAIFunction[] = [];
 
     switch (providerName.toLowerCase()) {
-      case 'gmail':
-        // Gmail OAuth scopes to tools
-        if (allowedScopes.includes('https://www.googleapis.com/auth/gmail.readonly')) {
-          tools.push({
-            name: 'gmail_read_emails',
-            description: 'Read emails from Gmail inbox',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: { type: 'string', description: 'Search query for emails' },
-                max_results: { type: 'number', description: 'Maximum number of emails to return', default: 10 }
-              },
-              required: ['query']
-            }
-          });
-          tools.push({
-            name: 'gmail_search_emails', 
-            description: 'Search emails in Gmail',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: { type: 'string', description: 'Gmail search query' },
-                max_results: { type: 'number', description: 'Maximum results', default: 10 }
-              },
-              required: ['query']
-            }
-          });
-        }
-        
-        if (allowedScopes.includes('https://www.googleapis.com/auth/gmail.send')) {
-          tools.push({
-            name: 'gmail_send_email',
-            description: 'Send email via Gmail',
-            parameters: {
-              type: 'object', 
-              properties: {
-                to: { type: 'string', description: 'Recipient email address' },
-                subject: { type: 'string', description: 'Email subject' },
-                body: { type: 'string', description: 'Email body content' },
-                cc: { type: 'string', description: 'CC recipients (optional)' },
-                bcc: { type: 'string', description: 'BCC recipients (optional)' }
-              },
-              required: ['to', 'subject', 'body']
-            }
-          });
-        }
-        
-        if (allowedScopes.includes('https://www.googleapis.com/auth/gmail.modify')) {
-          tools.push({
-            name: 'gmail_email_actions',
-            description: 'Perform actions on Gmail emails (mark read, archive, etc.)',
-            parameters: {
-              type: 'object',
-              properties: {
-                message_id: { type: 'string', description: 'Gmail message ID' },
-                action: { type: 'string', enum: ['mark_read', 'mark_unread', 'archive', 'delete'], description: 'Action to perform' }
-              },
-              required: ['message_id', 'action']
-            }
-          });
-        }
-        break;
-
       case 'serper_api':
         // Serper API web search tools
         if (allowedScopes.includes('web_search')) {
@@ -607,48 +544,6 @@ export class FunctionCallingManager {
         return finalResult;
       }
       
-      // Special handling for Outlook/Zapier MCP email tools
-      if (functionName.includes('microsoft_outlook') || functionName.includes('find_emails')) {
-        // Parse the MCP result content
-        const content = result.data?.content || result.data;
-        
-        if (Array.isArray(content)) {
-          // Handle array of content items (MCP protocol format)
-          let formattedResult = '';
-          for (const item of content) {
-            if (item.type === 'text' && item.text) {
-              // Try to parse JSON from text
-              try {
-                const emailData = JSON.parse(item.text);
-                if (emailData.emails && Array.isArray(emailData.emails)) {
-                  formattedResult += `Found ${emailData.emails.length} email(s):\n\n`;
-                  for (const email of emailData.emails.slice(0, 20)) { // Limit to 20 emails max
-                    formattedResult += `📧 **${email.subject || '(No subject)'}**\n`;
-                    formattedResult += `   From: ${email.from || 'Unknown'}\n`;
-                    if (email.receivedDateTime) {
-                      formattedResult += `   Received: ${email.receivedDateTime}\n`;
-                    }
-                    if (email.bodyPreview) {
-                      const preview = email.bodyPreview.substring(0, 150);
-                      formattedResult += `   Preview: ${preview}${email.bodyPreview.length > 150 ? '...' : ''}\n`;
-                    }
-                    formattedResult += `\n`;
-                  }
-                  if (emailData.emails.length > 20) {
-                    formattedResult += `\n... and ${emailData.emails.length - 20} more email(s)\n`;
-                  }
-                  return formattedResult;
-                }
-              } catch {
-                // Not JSON or different format, return as-is (truncated)
-                const textContent = item.text.substring(0, 2000);
-                return textContent + (item.text.length > 2000 ? '\n\n[Content truncated for brevity]' : '');
-              }
-            }
-          }
-        }
-      }
-      
       // Format successful result (generic)
       let formattedResult = `✅ Successfully executed ${functionName}`;
       
@@ -697,10 +592,8 @@ export class FunctionCallingManager {
    * Clear all provider caches for an agent
    */
   clearCaches(agentId: string, userId: string): void {
-    this.gmailProvider.clearCache(agentId, userId);
-    this.smtpProvider.clearCache(agentId, userId);
-    this.webSearchProvider.clearCache(agentId, userId);
-    this.mcpProvider.clearCache(agentId);
+    const cacheKey = `${agentId}:${userId}`;
+    this.toolsCache.delete(cacheKey);
   }
 
   /**
@@ -708,15 +601,14 @@ export class FunctionCallingManager {
    */
   getExecutionStats(): {
     activeExecutions: number;
-    gmail: { size: number; entries: string[] };
-    smtp: { size: number; entries: string[] };
-    webSearch: { size: number; entries: string[] };
+    cache: { size: number; entries: string[] };
   } {
     return {
       activeExecutions: this.executionTracker.size,
-      gmail: this.gmailProvider.getCacheStats(),
-      smtp: this.smtpProvider.getCacheStats(),
-      webSearch: this.webSearchProvider.getCacheStats(),
+      cache: {
+        size: this.toolsCache.size,
+        entries: Array.from(this.toolsCache.keys())
+      },
     };
   }
 }

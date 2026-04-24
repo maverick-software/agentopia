@@ -133,9 +133,7 @@ export class ModelResolver {
       
       if (slowModels.includes(agentModel)) {
         // Use provider-appropriate fast model
-        if (provider === 'anthropic') {
-          return 'claude-3-haiku-20240307'; // Fast Claude model
-        } else if (provider === 'google') {
+        if (provider === 'google') {
           return 'gemini-1.5-flash';
         } else {
           return 'gpt-4o-mini'; // Fast OpenAI model

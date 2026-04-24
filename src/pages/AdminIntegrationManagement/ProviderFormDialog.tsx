@@ -48,7 +48,7 @@ export function ProviderFormDialog({
                 onChange={(event) =>
                   onFormDataChange((prev) => ({ ...prev, name: event.target.value }))
                 }
-                placeholder="e.g., gmail, serper_api"
+                placeholder="e.g., smtp, serper_api"
                 required
               />
             </div>
@@ -60,7 +60,7 @@ export function ProviderFormDialog({
                 onChange={(event) =>
                   onFormDataChange((prev) => ({ ...prev, display_name: event.target.value }))
                 }
-                placeholder="e.g., Gmail, Serper API"
+                placeholder="e.g., SMTP, Serper API"
                 required
               />
             </div>

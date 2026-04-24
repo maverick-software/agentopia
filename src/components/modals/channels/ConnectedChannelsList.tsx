@@ -51,9 +51,6 @@ export function ConnectedChannelsList({
     
     const matchedIntegration = integrations.find(i => 
       i.name.toLowerCase().includes(providerName?.toLowerCase() || '') ||
-      providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
-      providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
-      providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
       providerName === 'smtp' && i.name.toLowerCase().includes('smtp')
     );
     

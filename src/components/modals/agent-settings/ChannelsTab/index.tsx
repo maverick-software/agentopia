@@ -89,7 +89,7 @@ export function ChannelsTab({ agentId, onAgentUpdated }: ChannelsTabProps) {
 
   const openProviderModal = async (channelType: 'email' | 'sms') => {
     try {
-      const providerNames = channelType === 'email' ? ['smtp', 'sendgrid', 'mailgun', 'gmail', 'microsoft-outlook'] : ['twilio', 'aws_sns', 'clicksend_sms'];
+      const providerNames = channelType === 'email' ? ['smtp'] : ['twilio', 'aws_sns'];
       const providerOptions = channelType === 'email' ? EMAIL_PROVIDERS : SMS_PROVIDERS;
       const { data: credentials } = await supabase
         .from('user_integration_credentials')
@@ -190,10 +190,6 @@ export function ChannelsTab({ agentId, onAgentUpdated }: ChannelsTabProps) {
     try {
       if (provider.authType === 'oauth') {
         setCredentialModal((prev) => ({ ...prev, isOpen: false }));
-        if (provider.id === 'microsoft-outlook') {
-          window.location.href = '/integrations?provider=microsoft-outlook';
-          return;
-        }
         toast(`Please set up ${provider.name} in the Integrations page first. OAuth providers require proper authentication flow.`, { icon: 'ℹ️', duration: 4000 });
         return;
       }

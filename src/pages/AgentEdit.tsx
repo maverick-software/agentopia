@@ -56,7 +56,6 @@ export function AgentEdit() {
   const [datastores, setDatastores] = useState<Datastore[]>([]);
   const [selectedDatastores, setSelectedDatastores] = useState<{
     vector?: string;
-    knowledge?: string;
   }>({});
   const [loadingDatastores, setLoadingDatastores] = useState(false);
   const [connectingDatastores, setConnectingDatastores] = useState(false);
@@ -113,11 +112,8 @@ export function AgentEdit() {
 
       if (connections) {
         const vectorStore = connections.find(c => c.datastores?.type === 'pinecone');
-        const knowledgeStore = connections.find(c => c.datastores?.type === 'getzep');
-
         setSelectedDatastores({
           vector: vectorStore?.datastore_id,
-          knowledge: knowledgeStore?.datastore_id
         });
       }
     } catch (err) {
@@ -172,13 +168,6 @@ export function AgentEdit() {
           datastore_id: selectedDatastores.vector
         });
       }
-      if (selectedDatastores.knowledge) {
-        connections.push({
-          agent_id: id,
-          datastore_id: selectedDatastores.knowledge
-        });
-      }
-
       if (connections.length > 0) {
         const { error: insertError } = await supabase
           .from('agent_datastores')
@@ -492,29 +481,6 @@ export function AgentEdit() {
                     <option value="">Select a vector datastore</option>
                     {datastores
                       .filter(ds => ds.type === 'pinecone')
-                      .map(ds => (
-                        <option key={ds.id} value={ds.id}>{ds.name}</option>
-                      ))
-                    }
-                  </select>
-                </div>
-
-                {/* Knowledge Graph Datastore Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Knowledge Graph
-                  </label>
-                  <select
-                    value={selectedDatastores.knowledge || ''}
-                    onChange={(e) => setSelectedDatastores({
-                      ...selectedDatastores,
-                      knowledge: e.target.value || undefined
-                    })}
-                    className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Select a knowledge graph datastore</option>
-                    {datastores
-                      .filter(ds => ds.type === 'getzep')
                       .map(ds => (
                         <option key={ds.id} value={ds.id}>{ds.name}</option>
                       ))

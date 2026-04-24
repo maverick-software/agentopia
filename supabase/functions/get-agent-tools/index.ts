@@ -156,18 +156,12 @@ serve(async (req) => {
         const mappedCapabilities = mapScopeToCapability(scope, providerName);
         
         for (const capability of mappedCapabilities) {
-          // Create provider-prefixed tool name (e.g., gmail_send_email)
-          // But don't double-prefix if capability already has provider prefix
-          // Special case for outlook which uses different prefix than provider name
-          const providerPrefixedName = (providerName === 'microsoft-outlook' && capability.startsWith('outlook_'))
-            ? capability  // Already has outlook_ prefix, use as-is
-            : (providerName === 'clicksend_sms' && capability.startsWith('clicksend_'))
-              ? capability  // ClickSend capabilities already have clicksend_ prefix
-            : (providerName === 'contact_management')
-              ? capability  // Contact management tools don't need prefix (search_contacts, get_contact_details)
-            : capability.includes('_') && capability.startsWith(providerName.split('-')[0]) 
-              ? capability  // Already has provider prefix
-              : `${providerName}_${capability}`;  // Add provider prefix
+          // Create provider-prefixed tool name while avoiding double-prefixing.
+          const providerPrefixedName = (providerName === 'contact_management')
+            ? capability
+            : capability.includes('_') && capability.startsWith(providerName.split('-')[0])
+              ? capability
+              : `${providerName}_${capability}`;
           
           // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
           const normalizedToolName = normalizeToolName(providerPrefixedName);

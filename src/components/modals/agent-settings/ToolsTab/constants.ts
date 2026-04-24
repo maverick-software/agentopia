@@ -12,13 +12,6 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig[]> = {
   ocr_processing: [
     {
-      id: 'azure-document-intelligence',
-      name: 'Azure Document Intelligence',
-      description: "Microsoft's enterprise-grade document analysis and text extraction service",
-      requiresApiKey: true,
-      requiresOAuth: false,
-    },
-    {
       id: 'mistral-ocr',
       name: 'Mistral OCR',
       description: 'Advanced AI-powered OCR and document processing with structured output',
@@ -50,7 +43,7 @@ export const PROVIDERS_BY_TOOL: Record<string, string[]> = {
   web_search: ['serper_api', 'serpapi', 'brave_search'],
   voice: ['elevenlabs'],
   document_creation: ['google_docs', 'microsoft_office', 'notion'],
-  ocr_processing: ['mistral_ai', 'azure-document-intelligence'],
+  ocr_processing: ['mistral_ai'],
   temporary_chat_links: ['temporary_chat_internal'],
 };
 

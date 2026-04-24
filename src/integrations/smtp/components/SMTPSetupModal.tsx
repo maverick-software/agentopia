@@ -277,7 +277,7 @@ export function SMTPSetupModal({
                 id="host"
                 value={formData.host}
                 onChange={(e) => handleInputChange('host', e.target.value)}
-                placeholder="smtp.gmail.com"
+                placeholder="smtp.your-provider.com"
                 className="mt-1"
               />
             </div>

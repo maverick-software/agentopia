@@ -18,7 +18,6 @@ import { generateMemoryId, generateTimestamp } from '../../types/utils.ts';
 import { EpisodicMemoryManager } from './episodic_memory.ts';
 import { MemoryConsolidationManager } from './memory_consolidation.ts';
 import { MemoryFactory } from './memory_factory.ts';
-import { GetZepSemanticManager } from './getzep_semantic_manager.ts';
 
 // ============================
 // Interfaces
@@ -77,7 +76,6 @@ export class MemoryManager {
   private consolidator: MemoryConsolidator;
   public episodicManager: EpisodicMemoryManager;
   public semanticManager: SemanticMemoryManager | null;
-  public getzepManager: GetZepSemanticManager | null = null;
   public consolidationManager: MemoryConsolidationManager;
   
   constructor(
@@ -493,11 +491,6 @@ export class MemoryManager {
     const agent_id = messages[0]?.context?.agent_id || '';
     let resolvedUserId: string | null = messages[0]?.context?.user_id || null;
     
-    // Initialize GetZep manager for this agent if not already done
-    if (!this.getzepManager && agent_id) {
-      this.getzepManager = new GetZepSemanticManager(this.supabase, agent_id);
-    }
-    
     // Resolve user_id from agents table if not present on the message
     if (!resolvedUserId && agent_id) {
       try {
@@ -526,30 +519,8 @@ export class MemoryManager {
       return [];
     });
     
-    // OPERATION 2: Semantic memories (GetZep/graph) - runs independently
-    const semanticPromise = (async () => {
-      if (this.getzepManager) {
-        try {
-          const content = messages.map((m: any) => {
-            const text = m?.content?.text || m?.content || '';
-            const role = m?.role || 'user';
-            return `${role}: ${text}`;
-          }).join('\n');
-          
-          if (content) {
-            await this.getzepManager.ingest(content, {
-              agent_id,
-              conversation_id: messages[0]?.context?.conversation_id,
-              timestamp: new Date().toISOString()
-            });
-            console.log('[MemoryManager] ✅ GetZep semantic ingestion completed');
-          }
-        } catch (error) {
-          console.error('[MemoryManager] GetZep semantic ingestion failed:', error);
-        }
-      }
-      return [];
-    })();
+    // OPERATION 2: Semantic graph ingestion was removed in Phase 4.
+    const semanticPromise = Promise.resolve([]);
 
     // OPERATION 3: Pinecone vector upserts for episodic retrieval (if configured)
     const pineconeUpsertPromise = (async () => {
@@ -755,28 +726,8 @@ export class MemoryManager {
       hasPinecone = false;
     }
     
-    // Check #2: Does agent have GetZep enabled?
-    let hasGetZep = false;
-    
-    try {
-      const { data: agent } = await this.supabase
-        .from('agents')
-        .select('metadata, user_id')
-        .eq('id', agent_id)
-        .maybeSingle();
-      
-      hasGetZep = agent?.metadata?.settings?.use_account_graph === true;
-    } catch {
-      hasGetZep = false;
-    }
-    
     // Log feature status ONCE
-    console.log(`[MemoryManager] Features for agent ${agent_id}: Pinecone=${hasPinecone}, GetZep=${hasGetZep}`);
-    
-    // Initialize GetZep manager if needed and enabled
-    if (hasGetZep && !this.getzepManager && agent_id) {
-      this.getzepManager = new GetZepSemanticManager(this.supabase, agent_id);
-    }
+    console.log(`[MemoryManager] Features for agent ${agent_id}: Pinecone=${hasPinecone}, Graph=false`);
     
     // ========================================
     // PARALLEL RETRIEVAL - USE RESULTS FROM CHECKS
@@ -862,24 +813,8 @@ export class MemoryManager {
       }
     })();
     
-    // OPERATION 2: Semantic retrieval (GetZep/graph)
-    const semanticPromise = (async () => {
-      // GUARD CLAUSE: Skip if GetZep not enabled (already checked above)
-      if (!hasGetZep || !this.getzepManager) {
-        return [];
-      }
-      
-      try {
-        const results = await this.getzepManager.retrieve(query, 10);
-        if (results.length > 0) {
-          console.log(`[MemoryManager] ✅ GetZep retrieved ${results.length} results`);
-        }
-        return results;
-      } catch (error) {
-        console.error('[MemoryManager] GetZep retrieval failed:', error);
-        return [];
-      }
-    })();
+    // OPERATION 2: Semantic graph retrieval was removed in Phase 4.
+    const semanticPromise = Promise.resolve([]);
     
     // No legacy semantic - GetZep handles all semantic memory now
     
@@ -909,7 +844,7 @@ export class MemoryManager {
     
     return {
       episodic,
-      semantic, // Only GetZep semantic memory now
+      semantic,
       procedural,
       relevance_scores: [],
       external

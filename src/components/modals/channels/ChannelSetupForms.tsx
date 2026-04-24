@@ -2,10 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { MessageSquare, AlertCircle, ExternalLink, Key, Mail } from 'lucide-react';
-import { GmailOAuthSetupForm } from './GmailOAuthSetupForm';
-import { SendGridSetupForm } from './SendGridSetupForm';
-import { MailgunSetupForm } from './MailgunSetupForm';
+import { MessageSquare, AlertCircle, ExternalLink } from 'lucide-react';
 import { SMTPSetupForm } from './SMTPSetupForm';
 import { toast } from 'react-hot-toast';
 
@@ -25,7 +22,6 @@ interface ChannelSetupFormsProps {
   apiKey: string;
   fromEmail: string;
   fromName: string;
-  mailgunDomain: string;
   // SMTP form state
   smtpHost: string;
   smtpPort: string;
@@ -38,7 +34,6 @@ interface ChannelSetupFormsProps {
   onApiKeyChange: (value: string) => void;
   onFromEmailChange: (value: string) => void;
   onFromNameChange: (value: string) => void;
-  onMailgunDomainChange: (value: string) => void;
   // SMTP form handlers
   onSMTPHostChange: (value: string) => void;
   onSMTPPortChange: (value: string) => void;
@@ -46,9 +41,6 @@ interface ChannelSetupFormsProps {
   onSMTPUsernameChange: (value: string) => void;
   onSMTPPasswordChange: (value: string) => void;
   // Setup handlers
-  onOAuthSetup: (serviceId: string) => void;
-  onSendGridSetup: () => void;
-  onMailgunSetup: () => void;
   onSMTPSetup: () => void;
   onSetupCancel: () => void;
   onSetupService: (serviceId: string) => void;
@@ -61,7 +53,6 @@ export function ChannelSetupForms({
   apiKey,
   fromEmail,
   fromName,
-  mailgunDomain,
   smtpHost,
   smtpPort,
   smtpSecure,
@@ -72,15 +63,11 @@ export function ChannelSetupForms({
   onApiKeyChange,
   onFromEmailChange,
   onFromNameChange,
-  onMailgunDomainChange,
   onSMTPHostChange,
   onSMTPPortChange,
   onSMTPSecureChange,
   onSMTPUsernameChange,
   onSMTPPasswordChange,
-  onOAuthSetup,
-  onSendGridSetup,
-  onMailgunSetup,
   onSMTPSetup,
   onSetupCancel,
   onSetupService
@@ -160,57 +147,6 @@ export function ChannelSetupForms({
         onFromEmailChange={onFromEmailChange}
         onFromNameChange={onFromNameChange}
         onSMTPSetup={onSMTPSetup}
-      />
-    );
-  }
-
-  // OAuth flow (Gmail)
-  if (service.type === 'oauth') {
-    return (
-      <GmailOAuthSetupForm
-        service={service}
-        connectionName={connectionName}
-        isConnecting={isConnecting}
-        onConnectionNameChange={onConnectionNameChange}
-        onConnect={onOAuthSetup}
-      />
-    );
-  }
-
-  // SendGrid API key setup
-  if (service.type === 'api_key' && service.id === 'sendgrid') {
-    return (
-      <SendGridSetupForm
-        service={service}
-        apiKey={apiKey}
-        fromEmail={fromEmail}
-        fromName={fromName}
-        connectionName={connectionName}
-        error={error}
-        isConnecting={isConnecting}
-        onApiKeyChange={onApiKeyChange}
-        onFromEmailChange={onFromEmailChange}
-        onFromNameChange={onFromNameChange}
-        onConnectionNameChange={onConnectionNameChange}
-        onConnect={onSendGridSetup}
-      />
-    );
-  }
-
-  // Mailgun API key setup
-  if (service.type === 'api_key' && service.id === 'mailgun') {
-    return (
-      <MailgunSetupForm
-        service={service}
-        apiKey={apiKey}
-        mailgunDomain={mailgunDomain}
-        connectionName={connectionName}
-        error={error}
-        isConnecting={isConnecting}
-        onApiKeyChange={onApiKeyChange}
-        onDomainChange={onMailgunDomainChange}
-        onConnectionNameChange={onConnectionNameChange}
-        onConnect={onMailgunSetup}
       />
     );
   }

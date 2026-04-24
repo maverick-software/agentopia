@@ -43,7 +43,7 @@ For detailed setup instructions, see the **[Getting Started Guide](README/gettin
 ### ✅ Production-Ready Features
 - Complete agent management and workspace collaboration
 - Enterprise-grade security with Supabase Vault integration
-- Comprehensive email integrations (Gmail, Outlook, SMTP, SendGrid, Mailgun)
+- Core communication integrations (SMTP, Discord)
 - **Universal MCP Platform**: Connect to ANY MCP-compliant server (Zapier, Retell AI, Anthropic, OpenAI, custom)
 - **MCP Tool Infrastructure**: Scalable Model Context Protocol implementation with auto-detection
 - Contact management system with agent-based permissions
@@ -59,7 +59,7 @@ For detailed setup instructions, see the **[Getting Started Guide](README/gettin
 - **Advanced Reasoning**: Production-ready with dynamic enable/disable functionality
 
 ### 🔄 Active Development
-- Enhanced Microsoft 365 integration (Teams, OneDrive)
+- Expanded MCP server integrations and tooling
 - MCP Management Interface completion
 - Performance optimizations and scaling improvements
 

@@ -87,17 +87,6 @@ export function AvailableToolsList({
       } else {
         onSetupClick(provider);
       }
-    } else if (provider === 'digitalocean' || integration.name.toLowerCase() === 'digitalocean') {
-      // For DigitalOcean, check existing connections first
-      const existingDigitalOceanConnections = connections.filter(c => 
-        c.provider_name === 'digitalocean' && c.connection_status === 'active'
-      );
-      
-      if (existingDigitalOceanConnections.length > 0) {
-        onSelectCredentialClick(provider);
-      } else {
-        onSetupClick(provider);
-      }
     } else {
       // For other integrations, use credential selection
       onSelectCredentialClick(provider);
@@ -119,26 +108,6 @@ export function AvailableToolsList({
           
           // Setup mode for Web Search
           if (isSetupMode && (provider === 'web search' || provider === 'web_search' || integration.name.toLowerCase() === 'web search')) {
-            return (
-              <div key={integration.id} className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-medium">{integration.name}</h4>
-                      <Badge variant="outline" className="text-xs">Setting up...</Badge>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={onCancelSetup}>
-                    Cancel
-                  </Button>
-                </div>
-                {renderSetupFlow?.(integration)}
-              </div>
-            );
-          }
-
-          // Setup mode for DigitalOcean
-          if (isSetupMode && (provider === 'digitalocean' || integration.name.toLowerCase() === 'digitalocean')) {
             return (
               <div key={integration.id} className="space-y-4">
                 <div className="flex items-center justify-between">

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react'
 import { useConnections } from '../hooks/useConnections'
 
 interface Props {
-  providerName: 'pinecone' | 'getzep'
+  providerName: 'pinecone'
   value: string
   onChange: (id: string) => void
   disabled?: boolean

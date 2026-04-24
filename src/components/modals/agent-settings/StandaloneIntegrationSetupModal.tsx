@@ -27,7 +27,7 @@ interface StandaloneIntegrationSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: (connection: any) => void;
-  providerName: string; // e.g., 'microsoft-outlook', 'gmail', 'smtp'
+  providerName: string; // e.g., 'smtp', 'discord', 'pinecone'
   channelType?: 'email' | 'sms'; // Optional context for the setup
 }
 
@@ -65,24 +65,14 @@ export function StandaloneIntegrationSetupModal({
   // Provider name mapping for the registry
   const getIntegrationName = (providerName: string): string => {
     const mapping: Record<string, string> = {
-      'microsoft-outlook': 'Microsoft Outlook',
-      'gmail': 'Gmail',
       'smtp': 'SMTP',
-      'sendgrid': 'SendGrid',
-      'mailgun': 'Mailgun',
       'discord': 'Discord',
-      'digitalocean': 'DigitalOcean',
       'web-search': 'Web Search',
       'serper-api': 'Serper API',
       'serpapi': 'SerpAPI',
       'brave-search': 'Brave Search API',
-      'microsoft-teams': 'Microsoft Teams',
-      'microsoft-onedrive': 'Microsoft OneDrive',
       'pinecone': 'Pinecone',
-      'getzep': 'GetZep',
-      'mistral-ai': 'Mistral AI',
-      'azure-document-intelligence': 'Azure Document Intelligence',
-      'clicksend': 'ClickSend SMS'
+      'mistral-ai': 'Mistral AI'
     };
     
     return mapping[providerName] || providerName;

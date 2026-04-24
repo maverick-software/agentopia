@@ -20,19 +20,6 @@ export function normalizeToolName(scope: string): string {
  * Maps OAuth scopes to integration capabilities for different providers
  */
 export function mapScopeToCapability(scope: string, providerName: string): string[] {
-  // Gmail scope mappings
-  if (providerName === 'gmail') {
-    const gmailMappings: Record<string, string[]> = {
-      'email.send': ['send_email'],
-      'email.read': ['read_emails', 'search_emails'],
-      'email.modify': ['email_actions'],
-      'https://www.googleapis.com/auth/gmail.send': ['send_email'],
-      'https://www.googleapis.com/auth/gmail.readonly': ['read_emails', 'search_emails'],
-      'https://www.googleapis.com/auth/gmail.modify': ['email_actions']
-    };
-    return gmailMappings[scope] || [scope];
-  }
-  
   // SMTP scope mappings
   if (providerName === 'smtp') {
     const smtpMappings: Record<string, string[]> = {
@@ -43,46 +30,6 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
     return smtpMappings[scope] || [scope];
   }
   
-  // Microsoft Outlook scope mappings
-  if (providerName === 'microsoft-outlook') {
-    const outlookMappings: Record<string, string[]> = {
-      'https://graph.microsoft.com/Mail.Send': ['outlook_send_email'],
-      'https://graph.microsoft.com/Mail.Read': ['outlook_read_emails'],
-      'https://graph.microsoft.com/Mail.ReadWrite': ['outlook_read_emails', 'outlook_search_emails'],
-      'https://graph.microsoft.com/Calendars.Read': ['outlook_get_events'],
-      'https://graph.microsoft.com/Calendars.ReadWrite': ['outlook_create_event', 'outlook_get_events'],
-      'https://graph.microsoft.com/Contacts.Read': ['outlook_get_contacts', 'outlook_search_contacts'],
-      'https://graph.microsoft.com/User.Read': ['outlook_get_user_info']
-    };
-    return outlookMappings[scope] || [normalizeToolName(scope)];
-  }
-
-  // Microsoft OneDrive scope mappings
-  if (providerName === 'microsoft-onedrive') {
-    const onedriveMappings: Record<string, string[]> = {
-      'files.read': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'files.write': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'sites.read': ['onedrive_list_files', 'onedrive_search_files'],
-      'sites.write': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'Files.Read': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'Files.ReadWrite': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'Files.Read.All': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'Files.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
-      'Sites.Read.All': ['onedrive_list_files', 'onedrive_search_files'],
-      'Sites.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
-      'User.Read': ['onedrive_get_user_info'],
-      // Full URL scopes (these are what's actually being passed)
-      'https://graph.microsoft.com/Files.Read': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'https://graph.microsoft.com/Files.ReadWrite': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'https://graph.microsoft.com/Files.Read.All': ['onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files'],
-      'https://graph.microsoft.com/Files.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
-      'https://graph.microsoft.com/Sites.Read.All': ['onedrive_list_files', 'onedrive_search_files'],
-      'https://graph.microsoft.com/Sites.ReadWrite.All': ['onedrive_upload_file', 'onedrive_list_files', 'onedrive_download_file', 'onedrive_search_files', 'onedrive_share_file'],
-      'https://graph.microsoft.com/User.Read': ['onedrive_get_user_info']
-    };
-    return onedriveMappings[scope] || [normalizeToolName(scope)];
-  }
-
   // Serper API scope mappings
   if (providerName === 'serper_api') {
     const serperMappings: Record<string, string[]> = {
@@ -92,23 +39,6 @@ export function mapScopeToCapability(scope: string, providerName: string): strin
       'local_search': ['local_search']
     };
     return serperMappings[scope] || [scope];
-  }
-
-  // ClickSend SMS/MMS scope mappings
-  if (providerName === 'clicksend_sms') {
-    const clicksendMappings: Record<string, string[]> = {
-      'sms': ['clicksend_send_sms'],
-      'mms': ['clicksend_send_mms'],
-      'balance': ['clicksend_get_balance'],
-      'history': ['clicksend_get_sms_history'],
-      'delivery_receipts': ['clicksend_get_delivery_receipts'],
-      'sms.send': ['clicksend_send_sms'],
-      'mms.send': ['clicksend_send_mms'],
-      'account.balance': ['clicksend_get_balance'],
-      'sms.history': ['clicksend_get_sms_history'],
-      'sms.delivery': ['clicksend_get_delivery_receipts']
-    };
-    return clicksendMappings[scope] || [scope];
   }
 
   // Internal System scope mappings

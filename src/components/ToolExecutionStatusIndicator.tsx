@@ -9,7 +9,6 @@ import {
   Clock,
   Send,
   Database,
-  Mail,
   MessageSquare,
   FileText,
   Search,
@@ -40,7 +39,7 @@ interface ToolExecutionStatusIndicatorProps {
 }
 
 const providerIcons: Record<string, React.ComponentType<any>> = {
-  gmail: Mail,
+  smtp: Send,
   slack: MessageSquare,
   notion: FileText,
   search: Search,

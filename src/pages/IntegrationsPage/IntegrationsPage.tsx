@@ -6,7 +6,6 @@ import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useConnections, useIntegrationCategories, useIntegrationsByCategory } from '@/integrations/_shared';
-import { useGmailConnection } from '@/integrations/gmail';
 import { IntegrationsListPanel } from './IntegrationsListPanel';
 import { IntegrationDetailsPanel } from './IntegrationDetailsPanel';
 import {
@@ -36,7 +35,6 @@ export function IntegrationsPage() {
     refetch: refetchConnections,
   } = useConnections({ includeRevoked: false });
 
-  useGmailConnection();
   const processedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {

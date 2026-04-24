@@ -29,23 +29,6 @@ interface ChannelConnectionItemProps {
 
 // Static capability catalog per provider for display
 const CAPABILITIES: Record<string, { id: string; label: string }[]> = {
-  gmail: [
-    { id: 'send_email', label: 'Send Email' },
-    { id: 'read_emails', label: 'Read Emails' },
-    { id: 'modify_emails', label: 'Modify Labels' }
-  ],
-  sendgrid: [
-    { id: 'send_email', label: 'Send Email' },
-    { id: 'inbound', label: 'Inbound Routing' },
-    { id: 'templates', label: 'Templates' },
-    { id: 'analytics', label: 'Analytics' }
-  ],
-  mailgun: [
-    { id: 'send_email', label: 'Send Email' },
-    { id: 'validate', label: 'Validate Email' },
-    { id: 'stats', label: 'Stats' },
-    { id: 'suppressions', label: 'Suppressions' }
-  ],
   smtp: [
     { id: 'smtp_send_email', label: 'Send Email' },
     { id: 'smtp_configuration', label: 'SMTP Configuration' }
@@ -87,9 +70,6 @@ export function ChannelConnectionItem({
   // Find the matching channel integration for proper display info
   const matchedIntegration = integrations.find(i => 
     i.name.toLowerCase().includes(providerName?.toLowerCase() || '') ||
-    providerName === 'gmail' && i.name.toLowerCase() === 'gmail' ||
-    providerName === 'sendgrid' && i.name.toLowerCase().includes('sendgrid') ||
-    providerName === 'mailgun' && i.name.toLowerCase().includes('mailgun') ||
     providerName === 'smtp' && i.name.toLowerCase().includes('smtp')
   );
   
@@ -97,16 +77,7 @@ export function ChannelConnectionItem({
   let name = matchedIntegration?.name || providerName;
   let gradient = 'from-zinc-500 to-zinc-600'; // default
   
-  if (providerName === 'gmail') {
-    name = 'Gmail';
-    gradient = 'from-red-500 to-orange-500';
-  } else if (providerName === 'sendgrid') {
-    name = 'SendGrid';
-    gradient = 'from-blue-500 to-indigo-500';
-  } else if (providerName === 'mailgun') {
-    name = 'Mailgun';
-    gradient = 'from-rose-500 to-pink-500';
-  } else if (providerName === 'smtp') {
+  if (providerName === 'smtp') {
     name = matchedIntegration?.name || 'SMTP Server';
     gradient = 'from-green-500 to-emerald-500';
   } else if (matchedIntegration) {

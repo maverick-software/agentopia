@@ -98,7 +98,7 @@ export function AddIntegrationModal({
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  No new integrations available. Gmail is currently the only supported integration.
+                  No new integrations available.
                 </AlertDescription>
               </Alert>
             )}
@@ -312,18 +312,8 @@ export function PermissionsModal({
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.readonly')}
-                      onChange={(event) => toggleScope('https://www.googleapis.com/auth/gmail.readonly', event.target.checked)}
-                      className="rounded border-border"
-                    />
-                    <Mail className="h-4 w-4" />
-                    Read emails
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.send')}
-                      onChange={(event) => toggleScope('https://www.googleapis.com/auth/gmail.send', event.target.checked)}
+                      checked={selectedScopes.includes('smtp_send_email')}
+                      onChange={(event) => toggleScope('smtp_send_email', event.target.checked)}
                       className="rounded border-border"
                     />
                     <Mail className="h-4 w-4" />
@@ -332,12 +322,22 @@ export function PermissionsModal({
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={selectedScopes.includes('https://www.googleapis.com/auth/gmail.modify')}
-                      onChange={(event) => toggleScope('https://www.googleapis.com/auth/gmail.modify', event.target.checked)}
+                      checked={selectedScopes.includes('smtp_email_templates')}
+                      onChange={(event) => toggleScope('smtp_email_templates', event.target.checked)}
                       className="rounded border-border"
                     />
                     <Settings className="h-4 w-4" />
-                    Modify emails (archive, labels, etc.)
+                    Use templates
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedScopes.includes('smtp_email_stats')}
+                      onChange={(event) => toggleScope('smtp_email_stats', event.target.checked)}
+                      className="rounded border-border"
+                    />
+                    <Settings className="h-4 w-4" />
+                    Read delivery stats
                   </label>
                 </>
               )}
@@ -410,9 +410,9 @@ export function CredentialsDetailModal({
               <span className="text-sm font-medium">Current Permissions</span>
             </div>
             <div className="space-y-1 text-sm text-muted-foreground">
-              {scopes.includes('https://www.googleapis.com/auth/gmail.readonly') && <div>- Read emails</div>}
-              {scopes.includes('https://www.googleapis.com/auth/gmail.send') && <div>- Send emails</div>}
-              {scopes.includes('https://www.googleapis.com/auth/gmail.modify') && <div>- Modify emails (archive, labels, etc.)</div>}
+              {scopes.includes('smtp_send_email') && <div>- Send emails</div>}
+              {scopes.includes('smtp_email_templates') && <div>- Use templates</div>}
+              {scopes.includes('smtp_email_stats') && <div>- Read delivery stats</div>}
               {scopes.length === 0 && <div>- No permissions granted</div>}
             </div>
           </div>

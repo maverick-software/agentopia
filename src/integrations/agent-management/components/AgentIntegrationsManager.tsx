@@ -10,7 +10,6 @@ import {
   Search
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useGmailConnection } from '@/integrations/gmail';
 import { useConnections, useIntegrationsByClassification, getAgentIntegrationPermissions } from '@/integrations/_shared';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
@@ -42,12 +41,6 @@ interface AgentIntegrationsManagerProps {
   description?: string;
 }
 
-const DEFAULT_GMAIL_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.modify'
-];
-
 const DEFAULT_SEARCH_API_SCOPES = [
   'web_search',
   'news_search', 
@@ -63,7 +56,6 @@ export function AgentIntegrationsManager({
 }: AgentIntegrationsManagerProps) {
   const { user } = useAuth();
   const supabase = useSupabaseClient();
-  const { connections: gmailConnections } = useGmailConnection();
   const { connections: unifiedConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification(category as 'tool' | 'channel');
   
@@ -90,7 +82,7 @@ export function AgentIntegrationsManager({
     if (agentId && user) {
       fetchAgentPermissions();
     }
-  }, [agentId, user, unifiedConnections, gmailConnections]);
+  }, [agentId, user, unifiedConnections]);
 
   useEffect(() => {
     // Load capability catalog for current classification integrations
@@ -160,12 +152,11 @@ export function AgentIntegrationsManager({
     
     // Set default scopes based on integration type
     const integrationId = integration.id || integration.name.toLowerCase();
-    const defaultScopes = integrationId === 'gmail' ? DEFAULT_GMAIL_SCOPES :
-                         (integrationId.includes('serper') || 
+    const defaultScopes = (integrationId.includes('serper') || 
                           integrationId.includes('serpapi') || 
                           integrationId.includes('brave') || 
                           integrationId.includes('search')) ? DEFAULT_SEARCH_API_SCOPES :
-                         integrationId.includes('mailgun') ? ['send_email','validate','stats','suppressions'] : [];
+                         [];
     
     setSelectedScopes(defaultScopes);
     setShowAddModal(false);
@@ -257,8 +248,7 @@ export function AgentIntegrationsManager({
     // Find the integration type and set up for viewing
     setWorkflowMode('view');
     const providerName = permission.connection?.provider_name || 'Integration';
-    const iconName = providerName.toLowerCase() === 'gmail' ? 'Mail' : 
-                     providerName.toLowerCase().includes('search') ? 'Search' : 'Settings';
+    const iconName = providerName.toLowerCase().includes('search') ? 'Search' : 'Settings';
     setSelectedIntegration({ name: providerName, icon_name: iconName });
     setSelectedCredential(permission.connection);
     setShowViewModal(true);
@@ -272,8 +262,7 @@ export function AgentIntegrationsManager({
     
     // Set default scopes based on provider type if no existing scopes
     const providerName = permission.connection?.provider_name?.toLowerCase();
-    const defaultScopes = providerName === 'gmail' ? DEFAULT_GMAIL_SCOPES :
-                         (providerName?.includes('search') || 
+    const defaultScopes = (providerName?.includes('search') || 
                           providerName?.includes('serper') || 
                           providerName?.includes('serpapi') || 
                           providerName?.includes('brave')) ? DEFAULT_SEARCH_API_SCOPES : [];
@@ -314,10 +303,6 @@ export function AgentIntegrationsManager({
       const intName = int.name.toLowerCase();
       // Direct match
       if (intName === providerName) return true;
-      // Gmail special cases: "gmail" provider should match "email" or "gmail" integration
-      if (providerName === 'gmail' && (intName === 'email' || intName === 'gmail')) return true;
-      // Email special case: "email" integration should match "gmail" or "sendgrid" providers
-      if (intName === 'email' && (providerName === 'gmail' || providerName === 'sendgrid')) return true;
       // Search provider matching
       if ((providerName?.includes('search') || providerName?.includes('serper') || providerName?.includes('serpapi') || providerName?.includes('brave')) &&
           (intName.includes('search') || intName.includes('web'))) return true;
@@ -330,10 +315,6 @@ export function AgentIntegrationsManager({
     }
     
     // If no integration found, default based on provider name patterns
-    // Gmail/SendGrid should be channels, Web Search should be tools
-    if (providerName === 'gmail' || providerName === 'sendgrid') {
-      return category === 'channel';
-    }
     if (providerName?.includes('search') || 
         providerName?.includes('serper') || 
         providerName?.includes('serpapi') || 
@@ -353,7 +334,6 @@ export function AgentIntegrationsManager({
     const integrationId = selectedIntegration.id || selectedIntegration.name?.toLowerCase();
     // Centralized: unify from useConnections
     const providerMap: Record<string, string | null> = {
-      'gmail': 'gmail',
       'serper-api': 'serper_api',
       'serper api': 'serper_api',
       'serpapi': 'serpapi',
@@ -381,8 +361,6 @@ export function AgentIntegrationsManager({
   const getIntegrationIcon = (providerName?: string) => {
     const provider = providerName?.toLowerCase();
     switch (provider) {
-      case 'gmail':
-        return <Mail className="h-5 w-5 text-blue-500" />;
       case 'serper api':
       case 'serpapi':
       case 'brave search api':
@@ -435,8 +413,6 @@ export function AgentIntegrationsManager({
                         {(() => {
                           const providerName = permission.connection?.provider_name || permission.integration_name || 'Integration';
                           // Capitalize provider names for better display
-                          if (providerName.toLowerCase() === 'gmail') return 'Gmail';
-                          if (providerName.toLowerCase() === 'sendgrid') return 'SendGrid';
                           if (providerName.toLowerCase() === 'slack') return 'Slack';
                           if (providerName.toLowerCase() === 'discord') return 'Discord';
                           if (providerName.toLowerCase().includes('serper')) return 'Serper API';

@@ -2,7 +2,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, ExternalLink } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { SMTP_PROVIDER_PRESETS } from '../../../smtp/types/smtp';
 import { EmailRelayFormData } from './constants';
 
@@ -64,7 +64,7 @@ export function ProviderConfigurationFields({
               id="host"
               value={formData.host}
               onChange={(event) => onInputChange('host', event.target.value)}
-              placeholder="smtp.gmail.com"
+              placeholder="smtp.your-provider.com"
               className="mt-1"
             />
           </div>
@@ -150,123 +150,5 @@ export function ProviderConfigurationFields({
       </>
     );
   }
-
-  if (formData.selected_provider === 'sendgrid') {
-    return (
-      <>
-        <div>
-          <Label htmlFor="api_key">
-            SendGrid API Key <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="api_key"
-            type="password"
-            value={formData.api_key}
-            onChange={(event) => onInputChange('api_key', event.target.value)}
-            placeholder="SG.xxxxxxxxxxxxxxxxxxxxxx"
-            className="mt-1"
-          />
-          <p className="text-xs text-muted-foreground mt-1">Your API key with mail.send permissions</p>
-        </div>
-
-        <div>
-          <Label htmlFor="from_email">
-            From Email <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="from_email"
-            type="email"
-            value={formData.from_email}
-            onChange={(event) => onInputChange('from_email', event.target.value)}
-            placeholder="noreply@yourdomain.com"
-            className="mt-1"
-          />
-          <p className="text-xs text-muted-foreground mt-1">Your verified sender email address</p>
-        </div>
-
-        <div>
-          <Label htmlFor="from_name">From Name (Optional)</Label>
-          <Input
-            id="from_name"
-            value={formData.from_name}
-            onChange={(event) => onInputChange('from_name', event.target.value)}
-            placeholder="Your App Name"
-            className="mt-1"
-          />
-          <p className="text-xs text-muted-foreground mt-1">Display name for your emails</p>
-        </div>
-
-        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <ExternalLink className="h-4 w-4" />
-          <a
-            href="https://app.sendgrid.com/settings/api_keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground underline"
-          >
-            Get your SendGrid API key
-          </a>
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div>
-        <Label htmlFor="domain">
-          Mailgun Domain <span className="text-red-500">*</span>
-        </Label>
-        <Input
-          id="domain"
-          value={formData.domain}
-          onChange={(event) => onInputChange('domain', event.target.value)}
-          placeholder="mail.yourdomain.com"
-          className="mt-1"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Your verified Mailgun sending domain</p>
-      </div>
-
-      <div>
-        <Label htmlFor="api_key">
-          Mailgun API Key <span className="text-red-500">*</span>
-        </Label>
-        <Input
-          id="api_key"
-          type="password"
-          value={formData.api_key}
-          onChange={(event) => onInputChange('api_key', event.target.value)}
-          placeholder="key-xxxxxxxxxxxxxxxxxxxxxx"
-          className="mt-1"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Your private API key from Mailgun dashboard</p>
-      </div>
-
-      <div>
-        <Label htmlFor="region">Region</Label>
-        <select
-          id="region"
-          value={formData.region}
-          onChange={(event) => onInputChange('region', event.target.value)}
-          className="w-full p-2 mt-1 bg-card border border-border rounded-md text-foreground"
-        >
-          <option value="US">US (api.mailgun.net)</option>
-          <option value="EU">EU (api.eu.mailgun.net)</option>
-        </select>
-        <p className="text-xs text-muted-foreground mt-1">Select your Mailgun account region</p>
-      </div>
-
-      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-        <ExternalLink className="h-4 w-4" />
-        <a
-          href="https://app.mailgun.com/app/account/security/api_keys"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-foreground underline"
-        >
-          Get your Mailgun API key
-        </a>
-      </div>
-    </>
-  );
+  return null;
 }

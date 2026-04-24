@@ -2,7 +2,7 @@
  * MCP Server Detection and Type Utilities
  * 
  * Provides intelligent detection of MCP server types and their capabilities.
- * Supports Zapier, Retell AI, Anthropic, OpenAI, and custom MCP servers.
+ * Supports Zapier, Retell AI, OpenAI, and custom MCP servers.
  */
 
 export interface MCPServerType {
@@ -48,9 +48,6 @@ export function detectServerType(
   if (serverName.includes('retell') || vendor.includes('retell')) {
     return 'retell';
   }
-  if (serverName.includes('anthropic') || vendor.includes('anthropic')) {
-    return 'anthropic';
-  }
   if (serverName.includes('openai') || vendor.includes('openai')) {
     return 'openai';
   }
@@ -65,9 +62,6 @@ export function detectServerType(
     }
     if (hostname.includes('retellai.com') || hostname.includes('retell')) {
       return 'retell';
-    }
-    if (hostname.includes('anthropic.com')) {
-      return 'anthropic';
     }
     if (hostname.includes('openai.com')) {
       return 'openai';
@@ -85,10 +79,6 @@ export function detectServerType(
   if (experimental['retell-telephony'] !== undefined) {
     return 'retell';
   }
-  if (experimental['anthropic-tools'] !== undefined) {
-    return 'anthropic';
-  }
-  
   // Priority 4: If server info exists but didn't match known types, use the name
   if (initResponse.serverInfo?.name) {
     // Sanitize the name to create a valid type identifier
@@ -125,15 +115,6 @@ export function getServerTypeMetadata(type: string): MCPServerType {
       supportsSSE: true,
       defaultTransport: 'http',
       knownCapabilities: ['tools', 'experimental.retell-telephony']
-    },
-    anthropic: {
-      type: 'anthropic',
-      name: 'Anthropic MCP Server',
-      vendor: 'Anthropic',
-      requiresInstructions: false,
-      supportsSSE: false,
-      defaultTransport: 'http',
-      knownCapabilities: ['tools', 'prompts', 'resources']
     },
     openai: {
       type: 'openai',

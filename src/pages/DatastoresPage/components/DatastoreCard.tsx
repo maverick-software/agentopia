@@ -54,18 +54,6 @@ export function DatastoreCard({ datastore, onEdit, onDelete }: DatastoreCardProp
             </div>
           </>
         )}
-        {datastore.type === 'getzep' && (
-          <>
-            <div className="flex justify-between text-sm mt-2">
-              <span className="text-muted-foreground">Collection:</span>
-              <span className="text-foreground">{datastore.config.collectionName}</span>
-            </div>
-            <div className="flex justify-between text-sm mt-2">
-              <span className="text-muted-foreground">Project:</span>
-              <span className="text-foreground">{datastore.config.projectId}</span>
-            </div>
-          </>
-        )}
       </div>
 
       {datastore.agent_datastores && datastore.agent_datastores.length > 0 && (

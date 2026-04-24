@@ -12,7 +12,7 @@ import { toast } from 'react-hot-toast';
 interface CreateDatastoreModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  type: 'pinecone' | 'getzep' | null;
+  type: 'pinecone' | null;
   onSuccess?: () => void;
 }
 
@@ -39,15 +39,10 @@ export const CreateDatastoreModal: React.FC<CreateDatastoreModalProps> = ({
 
     setIsSaving(true);
     try {
-      const configData = type === 'pinecone' ? {
+      const configData = {
         apiKey: formData.apiKey,
         environment: 'gcp-starter',
         indexName: formData.indexName
-      } : {
-        apiKey: formData.apiKey,
-        url: 'https://getzep.example.com',
-        collectionName: formData.collectionName || 'default',
-        dimensions: formData.dimensions
       };
 
       const { error } = await supabase
@@ -62,7 +57,7 @@ export const CreateDatastoreModal: React.FC<CreateDatastoreModalProps> = ({
 
       if (error) throw error;
 
-      toast.success(`${type === 'pinecone' ? 'Vector store' : 'Knowledge graph'} created successfully!`);
+      toast.success('Vector store created successfully!');
       
       // Reset form
       setFormData({
@@ -105,12 +100,10 @@ export const CreateDatastoreModal: React.FC<CreateDatastoreModalProps> = ({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>
-              Create New {type === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}
+              Create New Vector Store
             </DialogTitle>
             <DialogDescription>
-              {type === 'pinecone' 
-                ? 'Create a new vector datastore for similarity search.'
-                : 'Create a new knowledge graph datastore.'}
+              Create a new vector datastore for similarity search.
             </DialogDescription>
           </DialogHeader>
           
@@ -121,7 +114,7 @@ export const CreateDatastoreModal: React.FC<CreateDatastoreModalProps> = ({
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={`My ${type === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}`}
+                placeholder="My Vector Store"
                 required
                 disabled={isSaving}
               />
@@ -146,49 +139,23 @@ export const CreateDatastoreModal: React.FC<CreateDatastoreModalProps> = ({
                 type="password"
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder={`Enter ${type === 'pinecone' ? 'Pinecone' : 'GetZep'} API key`}
+                placeholder="Enter Pinecone API key"
                 required
                 disabled={isSaving}
               />
             </div>
 
-            {type === 'pinecone' ? (
-              <div className="space-y-2">
-                <Label htmlFor="indexName">Index Name</Label>
-                <Input
-                  id="indexName"
-                  value={formData.indexName}
-                  onChange={(e) => setFormData({ ...formData, indexName: e.target.value })}
-                  placeholder="my-index"
-                  required
-                  disabled={isSaving}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="collectionName">Collection Name</Label>
-                  <Input
-                    id="collectionName"
-                    value={formData.collectionName}
-                    onChange={(e) => setFormData({ ...formData, collectionName: e.target.value })}
-                    placeholder="default"
-                    disabled={isSaving}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dimensions">Dimensions</Label>
-                  <Input
-                    id="dimensions"
-                    type="number"
-                    value={formData.dimensions}
-                    onChange={(e) => setFormData({ ...formData, dimensions: parseInt(e.target.value) || 1536 })}
-                    placeholder="1536"
-                    disabled={isSaving}
-                  />
-                </div>
-              </>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="indexName">Index Name</Label>
+              <Input
+                id="indexName"
+                value={formData.indexName}
+                onChange={(e) => setFormData({ ...formData, indexName: e.target.value })}
+                placeholder="my-index"
+                required
+                disabled={isSaving}
+              />
+            </div>
           </div>
           
           <DialogFooter>

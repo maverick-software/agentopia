@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
-  Mail, 
   CheckCircle, 
   XCircle, 
   Clock, 
@@ -31,8 +30,8 @@ interface ToolCallIndicatorProps {
 
 const getProviderIcon = (provider: string) => {
   switch (provider) {
-    case 'gmail':
-      return <Mail className="w-4 h-4" />;
+    case 'smtp':
+      return <Settings className="w-4 h-4" />;
     case 'slack':
       return <Settings className="w-4 h-4" />;
     default:

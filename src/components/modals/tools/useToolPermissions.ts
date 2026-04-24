@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAgentIntegrationPermissions } from '@/integrations/_shared';
 
 interface AgentPermission {
@@ -19,7 +18,6 @@ interface ToolPermissionsHook {
 }
 
 export function useToolPermissions(agentId: string): ToolPermissionsHook {
-  const supabase = useSupabaseClient();
   const [agentPermissions, setAgentPermissions] = useState<AgentPermission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,23 +54,13 @@ export function useToolPermissions(agentId: string): ToolPermissionsHook {
 
   // Default scopes for different providers
   const defaultScopesForProvider = useCallback((provider: string): string[] => {
-    // For Gmail OAuth provider
-    if (provider === 'gmail') {
-      return ['gmail_send_email','gmail_read_emails','gmail_search_emails','gmail_email_actions'];
-    }
     // For unified web search or individual search providers
     if (['serper_api','serpapi','brave_search','web_search'].includes(provider)) {
       return ['web_search','news_search','image_search','local_search'];
     }
-    // For email providers - using unique tool names now
+    // SMTP tools
     if (provider === 'smtp') {
       return ['smtp_send_email','smtp_email_templates','smtp_email_stats'];
-    }
-    if (provider === 'sendgrid') {
-      return ['sendgrid_send_email','sendgrid_email_templates','sendgrid_email_stats'];
-    }
-    if (provider === 'mailgun') {
-      return ['mailgun_send_email','mailgun_email_templates','mailgun_email_stats','mailgun_email_validation','mailgun_suppression_management'];
     }
     return [];
   }, []);

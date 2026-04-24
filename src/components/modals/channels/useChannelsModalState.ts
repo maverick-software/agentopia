@@ -28,7 +28,6 @@ interface ChannelFormState {
   apiKey: string;
   fromEmail: string;
   fromName: string;
-  mailgunDomain: string;
   
   // SMTP form fields
   smtpHost: string;
@@ -52,7 +51,6 @@ const initialState: ChannelFormState = {
   apiKey: '',
   fromEmail: '',
   fromName: '',
-  mailgunDomain: '',
   smtpHost: '',
   smtpPort: '587',
   smtpSecure: 'tls',
@@ -96,7 +94,6 @@ export function useChannelsModalState() {
   const setApiKey = (key: string) => updateState({ apiKey: key });
   const setFromEmail = (email: string) => updateState({ fromEmail: email });
   const setFromName = (name: string) => updateState({ fromName: name });
-  const setMailgunDomain = (domain: string) => updateState({ mailgunDomain: domain });
   
   // SMTP form fields
   const setSMTPHost = (host: string) => updateState({ smtpHost: host });
@@ -112,7 +109,6 @@ export function useChannelsModalState() {
       apiKey: '',
       fromEmail: '',
       fromName: '',
-      mailgunDomain: '',
       smtpHost: '',
       smtpPort: '587',
       smtpSecure: 'tls',
@@ -140,7 +136,6 @@ export function useChannelsModalState() {
     setApiKey,
     setFromEmail,
     setFromName,
-    setMailgunDomain,
     setSMTPHost,
     setSMTPPort,
     setSMTPSecure,

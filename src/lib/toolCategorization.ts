@@ -101,10 +101,7 @@ export class ToolCategorizer {
     if (
       lowerTool.includes('email') ||
       lowerTool.includes('mail') ||
-      lowerTool.includes('send') && (lowerTool.includes('message') || lowerProvider.includes('gmail') || lowerProvider.includes('smtp')) ||
-      lowerProvider.includes('gmail') ||
-      lowerProvider.includes('sendgrid') ||
-      lowerProvider.includes('mailgun') ||
+      (lowerTool.includes('send') && (lowerTool.includes('message') || lowerProvider.includes('smtp'))) ||
       lowerProvider.includes('smtp')
     ) {
       categories.push(TOOL_CATEGORIES.email);
@@ -133,8 +130,7 @@ export class ToolCategorizer {
       lowerTool.includes('pdf') ||
       lowerTool.includes('file') ||
       lowerProvider.includes('google') && (lowerTool.includes('doc') || lowerTool.includes('drive')) ||
-      lowerProvider.includes('dropbox') ||
-      lowerProvider.includes('onedrive')
+      lowerProvider.includes('dropbox')
     ) {
       categories.push(TOOL_CATEGORIES.docs);
     }
@@ -145,7 +141,6 @@ export class ToolCategorizer {
       lowerTool.includes('server') ||
       lowerTool.includes('deploy') ||
       lowerTool.includes('infrastructure') ||
-      lowerProvider.includes('digitalocean') ||
       lowerProvider.includes('aws') ||
       lowerProvider.includes('azure') ||
       lowerProvider.includes('gcp')
@@ -159,8 +154,7 @@ export class ToolCategorizer {
       lowerTool.includes('message') && !lowerTool.includes('email') ||
       lowerTool.includes('channel') ||
       lowerProvider.includes('slack') ||
-      lowerProvider.includes('discord') ||
-      lowerProvider.includes('teams')
+      lowerProvider.includes('discord')
     ) {
       categories.push(TOOL_CATEGORIES.communication);
     }
@@ -193,7 +187,6 @@ export class ToolCategorizer {
       lowerTool.includes('query') ||
       lowerTool.includes('table') ||
       lowerProvider.includes('pinecone') ||
-      lowerProvider.includes('getzep') ||
       lowerProvider.includes('supabase')
     ) {
       categories.push(TOOL_CATEGORIES.database);

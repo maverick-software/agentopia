@@ -329,10 +329,9 @@ export const GeneralTab = forwardRef<TabRef, GeneralTabProps>(({ agentId, agentD
                       <SelectValue placeholder="Select a provider..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {getAllProviders().map((prov) => (
+                      {getAllProviders().filter((prov) => ['openai', 'google', 'mistral', 'groq', 'openrouter'].includes(prov)).map((prov) => (
                         <SelectItem key={prov} value={prov}>
                           {prov === 'openai' && 'OpenAI'}
-                          {prov === 'anthropic' && 'Anthropic'}
                           {prov === 'google' && 'Google (Gemini)'}
                           {prov === 'mistral' && 'Mistral AI'}
                           {prov === 'groq' && 'Groq'}

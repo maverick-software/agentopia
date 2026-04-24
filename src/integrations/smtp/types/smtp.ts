@@ -376,26 +376,6 @@ export interface SMTPProviderPreset {
 
 export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
   {
-    name: 'gmail',
-    displayName: 'Gmail',
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    description: 'Google Gmail SMTP',
-    authType: 'app_password',
-    setupInstructions: 'Use your Gmail address and an App Password (not your regular password). Enable 2FA and generate an App Password in Google Account settings.'
-  },
-  {
-    name: 'outlook',
-    displayName: 'Outlook/Hotmail',
-    host: 'smtp-mail.outlook.com',
-    port: 587,
-    secure: false,
-    description: 'Microsoft Outlook/Hotmail SMTP',
-    authType: 'password',
-    setupInstructions: 'Use your full email address and password. Modern authentication may be required.'
-  },
-  {
     name: 'yahoo',
     displayName: 'Yahoo Mail',
     host: 'smtp.mail.yahoo.com',
@@ -444,16 +424,6 @@ export const SMTP_PROVIDER_PRESETS: SMTPProviderPreset[] = [
     description: 'Amazon Simple Email Service',
     authType: 'password',
     setupInstructions: 'Use your SES SMTP username and password. Update host to your region (e.g., email-smtp.eu-west-1.amazonaws.com). Verify your domain/email in AWS SES console first.'
-  },
-  {
-    name: 'sendgrid',
-    displayName: 'SendGrid SMTP',
-    host: 'smtp.sendgrid.net',
-    port: 587,
-    secure: false,
-    description: 'SendGrid SMTP API',
-    authType: 'password',
-    setupInstructions: 'Username is "apikey", password is your SendGrid API key.'
   },
   {
     name: 'mailjet',

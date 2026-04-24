@@ -19,7 +19,7 @@ interface DatastoreFormProps {
   onSubmit: (data: Partial<Datastore>) => Promise<void>;
   onCancel: () => void;
   isSaving: boolean;
-  datastoreType: 'pinecone' | 'getzep'; // Pre-determined type
+  datastoreType: 'pinecone'; // Pre-determined type
 }
 
 function DatastoreForm({ datastore, onSubmit, onCancel, isSaving, datastoreType }: DatastoreFormProps) {
@@ -58,7 +58,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving, datastoreType 
           required
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder={`Enter ${datastoreType === 'pinecone' ? 'vector store' : 'knowledge graph'} name`}
+          placeholder="Enter vector store name"
           disabled={isSaving}
         />
       </div>
@@ -70,7 +70,7 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving, datastoreType 
           required
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          placeholder={`Describe this ${datastoreType === 'pinecone' ? 'vector store' : 'knowledge graph'}`}
+          placeholder="Describe this vector store"
           rows={3}
           disabled={isSaving}
         />
@@ -139,53 +139,6 @@ function DatastoreForm({ datastore, onSubmit, onCancel, isSaving, datastoreType 
         </div>
       )}
 
-      {formData.type === 'getzep' && (
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="getzep-api-key">API Key</Label>
-            <Input
-              id="getzep-api-key"
-              type="password"
-              required
-              value={formData.config?.apiKey || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                config: { ...formData.config, apiKey: e.target.value }
-              })}
-              placeholder="Enter GetZep API key"
-              disabled={isSaving}
-            />
-          </div>
-          <div>
-            <Label htmlFor="getzep-collection">Collection Name</Label>
-            <Input
-              id="getzep-collection"
-              required
-              value={formData.config?.collectionName || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                config: { ...formData.config, collectionName: e.target.value }
-              })}
-              placeholder="Enter collection name"
-              disabled={isSaving}
-            />
-          </div>
-          <div>
-            <Label htmlFor="getzep-project">Project ID</Label>
-            <Input
-              id="getzep-project"
-              required
-              value={formData.config?.projectId || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                config: { ...formData.config, projectId: e.target.value }
-              })}
-              placeholder="Enter project ID"
-              disabled={isSaving}
-            />
-          </div>
-        </div>
-      )}
 
       <div className="flex justify-end space-x-3 pt-4">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
@@ -231,7 +184,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
   const { user } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createModalType, setCreateModalType] = useState<'pinecone' | 'getzep'>('pinecone');
+  const [createModalType] = useState<'pinecone'>('pinecone');
   const [editingDatastore, setEditingDatastore] = useState<Datastore | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -377,14 +330,14 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
             <DialogHeader>
               <DialogTitle>
                 {editingDatastore 
-                  ? `Edit ${editingDatastore.type === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}`
-                  : `Create New ${createModalType === 'pinecone' ? 'Vector Store' : 'Knowledge Graph'}`
+                  ? 'Edit Vector Store'
+                  : 'Create New Vector Store'
                 }
               </DialogTitle>
               <DialogDescription>
                 {editingDatastore 
-                  ? `Update your ${editingDatastore.type === 'pinecone' ? 'Pinecone vector database' : 'GetZep knowledge graph'} configuration`
-                  : `Set up a new ${createModalType === 'pinecone' ? 'Pinecone vector database for semantic search' : 'GetZep knowledge graph for entity relationships'}`
+                  ? 'Update your Pinecone vector database configuration'
+                  : 'Set up a new Pinecone vector database for semantic search'
                 }
               </DialogDescription>
             </DialogHeader>
@@ -396,7 +349,7 @@ export const AgentDatastoreSelector: React.FC<AgentDatastoreSelectorProps> = ({
                 setEditingDatastore(null);
               }}
               isSaving={isSaving}
-              datastoreType={editingDatastore?.type || createModalType}
+              datastoreType={createModalType}
             />
           </DialogContent>
         </Dialog>

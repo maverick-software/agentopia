@@ -75,18 +75,6 @@ export function getDummyIntegrationsByClassification(
 ): Integration[] {
   const channelIntegrations: Integration[] = [
     {
-      id: 'gmail',
-      category_id: 'messaging',
-      name: 'Gmail',
-      description:
-        'Send, receive, and manage Gmail emails with comprehensive tools for email automation',
-      icon_name: 'MessageSquare',
-      status: 'available',
-      is_popular: true,
-      display_order: 1,
-      documentation_url: 'https://developers.google.com/gmail/api',
-    },
-    {
       id: 'slack',
       category_id: 'messaging',
       name: 'Slack',
@@ -195,18 +183,6 @@ export function getDummyIntegrations(categoryId: string): Integration[] {
     ],
     messaging: [
       {
-        id: 'gmail',
-        category_id: 'messaging',
-        name: 'Gmail',
-        description:
-          'Send, receive, and manage Gmail emails with comprehensive tools for email automation',
-        icon_name: 'MessageSquare',
-        status: 'available',
-        is_popular: true,
-        display_order: 1,
-        documentation_url: 'https://developers.google.com/gmail/api',
-      },
-      {
         id: 'discord',
         category_id: 'messaging',
         name: 'Discord',
@@ -214,7 +190,7 @@ export function getDummyIntegrations(categoryId: string): Integration[] {
         icon_name: 'MessageSquare',
         status: 'available',
         is_popular: true,
-        display_order: 2,
+        display_order: 1,
       },
     ],
   };

@@ -31,13 +31,11 @@ export default function AgentEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [availableDatastores, setAvailableDatastores] = useState<Datastore[]>([]);
   const [selectedVectorStore, setSelectedVectorStore] = useState<string | undefined>(undefined);
-  const [selectedKnowledgeStore, setSelectedKnowledgeStore] = useState<string | undefined>(undefined);
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
   const [showDatastoreModal, setShowDatastoreModal] = useState(false);
   const [showVectorModal, setShowVectorModal] = useState(false);
-  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [showCreateDatastoreModal, setShowCreateDatastoreModal] = useState(false);
-  const [createDatastoreType, setCreateDatastoreType] = useState<'pinecone' | 'getzep' | null>(null);
+  const [createDatastoreType, setCreateDatastoreType] = useState<'pinecone' | null>(null);
   const [connecting] = useState(false);
   const [loadingAvailableDatastores] = useState(false);
   const [showProfileImageModal, setShowProfileImageModal] = useState(false);
@@ -107,12 +105,7 @@ export default function AgentEditPage() {
             const vectorStore = stores.find(
               (store) => store.type === 'pinecone' && connectedDatastoreIds.includes(store.id)
             );
-            const knowledgeStore = stores.find(
-              (store) => store.type === 'getzep' && connectedDatastoreIds.includes(store.id)
-            );
-
             if (vectorStore) setSelectedVectorStore(vectorStore.id);
-            if (knowledgeStore) setSelectedKnowledgeStore(knowledgeStore.id);
           }
         }
       } catch (err: any) {
@@ -166,16 +159,13 @@ export default function AgentEditPage() {
   }, [agentId, supabase, user?.id]);
 
   const saveDatastoreConnections = useCallback(
-    async (vectorStore?: string, knowledgeStore?: string) => {
+    async (vectorStore?: string) => {
       if (!agentId) return;
       await supabase.from('agent_datastores').delete().eq('agent_id', agentId);
 
       const connections = [];
       if (vectorStore) {
         connections.push({ agent_id: agentId, datastore_id: vectorStore });
-      }
-      if (knowledgeStore) {
-        connections.push({ agent_id: agentId, datastore_id: knowledgeStore });
       }
 
       if (connections.length > 0) {
@@ -230,13 +220,12 @@ export default function AgentEditPage() {
 
   const handleDatastoreSelect = async (type: 'vector' | 'knowledge', value?: string) => {
     if (type === 'vector') setSelectedVectorStore(value);
-    if (type === 'knowledge') setSelectedKnowledgeStore(value);
+    if (type === 'knowledge') return;
     if (!agentId || !user?.id) return;
 
     try {
       const currentVector = type === 'vector' ? value : selectedVectorStore;
-      const currentKnowledge = type === 'knowledge' ? value : selectedKnowledgeStore;
-      await saveDatastoreConnections(currentVector, currentKnowledge);
+      await saveDatastoreConnections(currentVector);
       toast.success('Datastore connection updated!');
       await refreshAgentData();
     } catch (err) {
@@ -248,24 +237,12 @@ export default function AgentEditPage() {
   const handleVectorStoreSave = async (value?: string) => {
     if (!agentId || !user?.id) return;
     try {
-      await saveDatastoreConnections(value, selectedKnowledgeStore);
+      await saveDatastoreConnections(value);
       setSelectedVectorStore(value);
       toast.success('Vector store connection updated!');
       await refreshAgentData();
     } catch {
       toast.error('Failed to update vector store connection');
-    }
-  };
-
-  const handleKnowledgeStoreSave = async (value?: string) => {
-    if (!agentId || !user?.id) return;
-    try {
-      await saveDatastoreConnections(selectedVectorStore, value);
-      setSelectedKnowledgeStore(value);
-      toast.success('Knowledge graph connection updated!');
-      await refreshAgentData();
-    } catch {
-      toast.error('Failed to update knowledge graph connection');
     }
   };
 
@@ -386,7 +363,6 @@ export default function AgentEditPage() {
             availableDatastores={availableDatastores}
             onOpenDatastoreModal={() => setShowDatastoreModal(true)}
             onOpenVectorModal={() => setShowVectorModal(true)}
-            onOpenKnowledgeModal={() => setShowKnowledgeModal(true)}
           />
         </div>
       </div>
@@ -430,26 +406,22 @@ export default function AgentEditPage() {
         connecting={connecting}
         loadingAvailableDatastores={loadingAvailableDatastores}
         selectedVectorStore={selectedVectorStore}
-        selectedKnowledgeStore={selectedKnowledgeStore}
         showProfileImageModal={showProfileImageModal}
         showInstructionsModal={showInstructionsModal}
         showDatastoreModal={showDatastoreModal}
         showVectorModal={showVectorModal}
-        showKnowledgeModal={showKnowledgeModal}
         showCreateDatastoreModal={showCreateDatastoreModal}
         createDatastoreType={createDatastoreType}
         setShowProfileImageModal={setShowProfileImageModal}
         setShowInstructionsModal={setShowInstructionsModal}
         setShowDatastoreModal={setShowDatastoreModal}
         setShowVectorModal={setShowVectorModal}
-        setShowKnowledgeModal={setShowKnowledgeModal}
         setShowCreateDatastoreModal={setShowCreateDatastoreModal}
         setCreateDatastoreType={setCreateDatastoreType}
         onEditorChange={handleEditorChange}
         onSelectDatastore={handleDatastoreSelect}
         onDatastoresUpdated={refreshAvailableDatastores}
         onSaveVectorStore={handleVectorStoreSave}
-        onSaveKnowledgeStore={handleKnowledgeStoreSave}
         onDatastoreCreated={refreshAvailableDatastores}
       />
     </div>

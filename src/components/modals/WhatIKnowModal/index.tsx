@@ -47,7 +47,17 @@ export function WhatIKnowModal(props: WhatIKnowModalProps) {
         assignmentType="training_data"
       />
 
-      <DatastoreSelectionDialogs state={state} onCloseParent={props.onClose} />
+      <DatastoreSelectionDialogs
+        showVectorSelection={state.showVectorSelection}
+        setShowVectorSelection={state.setShowVectorSelection}
+        getDatastoresByType={state.getDatastoresByType}
+        onVectorSelect={state.handleVectorDatastoreSelect}
+        onNavigateToMemory={() => {
+          state.setShowVectorSelection(false);
+          props.onClose();
+          state.navigate('/memory');
+        }}
+      />
     </>
   );
 }

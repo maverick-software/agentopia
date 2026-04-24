@@ -27,23 +27,6 @@ const TOOL_ROUTING_MAP: Record<string, {
   actionMapping: (toolName: string) => string;
   parameterMapping?: (params: Record<string, any>, context?: any) => Record<string, any>;
 }> = {
-  // Gmail tools
-  'gmail_': {
-    edgeFunction: 'gmail-api',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'gmail_send_email': 'send_email',
-        'gmail_read_emails': 'list_messages',
-        'gmail_search_emails': 'search_messages',
-        'gmail_email_actions': 'modify_message'
-      };
-      return actionMap[toolName] || 'unknown_action';
-    },
-    parameterMapping: (params: Record<string, any>) => ({
-      params: params  // Gmail API expects "params" not "parameters"
-    })
-  },
-  
   // SMTP tools
   'smtp_': {
     edgeFunction: 'smtp-api',
@@ -73,136 +56,6 @@ const TOOL_ROUTING_MAP: Record<string, {
     }
   },
   
-  // SendGrid tools
-  'sendgrid_': {
-    edgeFunction: 'sendgrid-api',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'sendgrid_send_email': 'send_email',
-        'sendgrid_email_templates': 'email_templates',
-        'sendgrid_email_stats': 'email_stats'
-      };
-      return actionMap[toolName] || 'send_email';
-    },
-    parameterMapping: (params: Record<string, any>, context: any) => {
-      const actionMap: Record<string, string> = {
-        'sendgrid_send_email': 'send_email',
-        'sendgrid_email_templates': 'email_templates',
-        'sendgrid_email_stats': 'email_stats'
-      };
-      const action = actionMap[context.toolName] || 'send_email';
-      
-      return {
-        action: action,
-        agent_id: context.agentId,
-        user_id: context.userId, 
-        params: params
-      };
-    }
-  },
-  
-  // Mailgun tools
-  'mailgun_': {
-    edgeFunction: 'mailgun-service',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'mailgun_send_email': 'send_email',
-        'mailgun_email_templates': 'email_templates',
-        'mailgun_email_stats': 'email_stats',
-        'mailgun_email_validation': 'email_validation',
-        'mailgun_suppression_management': 'suppression_management'
-      };
-      return actionMap[toolName] || 'send_email';
-    },
-    parameterMapping: (params: Record<string, any>, context: any) => {
-      const actionMap: Record<string, string> = {
-        'mailgun_send_email': 'send_email',
-        'mailgun_email_templates': 'email_templates',
-        'mailgun_email_stats': 'email_stats',
-        'mailgun_email_validation': 'email_validation',
-        'mailgun_suppression_management': 'suppression_management'
-      };
-      const action = actionMap[context.toolName] || 'send_email';
-      
-      return {
-        action: action,
-        agent_id: context.agentId,
-        user_id: context.userId, 
-        params: params
-      };
-    }
-  },
-  
-  // ClickSend SMS/MMS tools
-  'clicksend_': {
-    edgeFunction: 'clicksend-api',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'clicksend_send_sms': 'send_sms',
-        'clicksend_send_mms': 'send_mms',
-        'clicksend_get_balance': 'get_balance',
-        'clicksend_get_sms_history': 'get_sms_history',
-        'clicksend_get_delivery_receipts': 'get_delivery_receipts',
-        'clicksend_validate_number': 'validate_number'
-      };
-      return actionMap[toolName] || 'send_sms';
-    },
-    parameterMapping: (params: Record<string, any>, context: any) => {
-      const actionMap: Record<string, string> = {
-        'clicksend_send_sms': 'send_sms',
-        'clicksend_send_mms': 'send_mms',
-        'clicksend_get_balance': 'get_balance',
-        'clicksend_get_sms_history': 'get_sms_history',
-        'clicksend_get_delivery_receipts': 'get_delivery_receipts',
-        'clicksend_validate_number': 'validate_number'
-      };
-      const action = actionMap[context.toolName] || 'send_sms';
-      
-      return {
-        action: action,
-        agent_id: context.agentId,
-        user_id: context.userId, 
-        params: params
-      };
-    }
-  },
-  
-  // Microsoft Outlook tools
-  'outlook_': {
-    edgeFunction: 'microsoft-outlook-api',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'outlook_send_email': 'send_email',
-        'outlook_read_emails': 'get_emails',
-        'outlook_search_emails': 'search_emails',
-        'outlook_create_event': 'create_calendar_event',
-        'outlook_get_events': 'get_calendar_events',
-        'outlook_get_contacts': 'get_contacts',
-        'outlook_search_contacts': 'search_contacts'
-      };
-      return actionMap[toolName] || 'unknown_action';
-    },
-    parameterMapping: (params: Record<string, any>, context: any) => {
-      const actionMap: Record<string, string> = {
-        'outlook_send_email': 'send_email',
-        'outlook_read_emails': 'get_emails',
-        'outlook_search_emails': 'search_emails',
-        'outlook_create_event': 'create_calendar_event',
-        'outlook_get_events': 'get_calendar_events',
-        'outlook_get_contacts': 'get_contacts',
-        'outlook_search_contacts': 'search_contacts'
-      };
-      const action = actionMap[context.toolName] || 'unknown_action';
-      
-      return {
-        action: action,
-        agent_id: context.agentId,
-        user_id: context.userId,
-        params: params
-      };
-    }
-  },
-  
   // Web search tools (using web-search-api)
   'web_search': {
     edgeFunction: 'web-search-api',
@@ -225,28 +78,6 @@ const TOOL_ROUTING_MAP: Record<string, {
     actionMapping: () => 'news_search',
     parameterMapping: (params: Record<string, any>) => ({
       parameters: params
-    })
-  },
-  
-  // OneDrive tools
-  'onedrive_': {
-    edgeFunction: 'microsoft-onedrive-api',
-    actionMapping: (toolName: string) => {
-      const actionMap: Record<string, string> = {
-        'onedrive_list_files': 'list_files',
-        'onedrive_download_file': 'download_file',
-        'onedrive_upload_file': 'upload_file',
-        'onedrive_search_files': 'search_files',
-        'onedrive_share_file': 'share_file',
-        'onedrive_get_user_info': 'get_user_info'
-      };
-      return actionMap[toolName] || 'list_files';
-    },
-    parameterMapping: (params: Record<string, any>, context: any) => ({
-      action: context.toolName.replace('onedrive_', ''),
-      agent_id: context.agentId,
-      user_id: context.userId,
-      params: params
     })
   },
   
@@ -640,35 +471,17 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
   
   // Convert common technical errors to interactive questions based on tool type
   const lowerError = error.toLowerCase();
-  const isEmailTool = toolName.startsWith('gmail_') || toolName.startsWith('smtp_') || toolName.startsWith('microsoft_outlook_');
+  const isEmailTool = toolName.startsWith('smtp_');
   const isSearchTool = toolName.startsWith('web_search') || toolName.startsWith('news_') || toolName.startsWith('scrape_');
-  const isSMSTool = toolName.startsWith('clicksend_');
   const isContactTool = toolName === 'search_contacts' || toolName === 'get_contact_details';
-  const isOutlookTool = toolName.startsWith('microsoft_outlook_');
   
   // Missing parameters errors
   if (lowerError.includes('missing') && (lowerError.includes('parameter') || lowerError.includes('field') || lowerError.includes('required'))) {
-    if (isOutlookTool) {
-      // Specific handling for Outlook/Zapier MCP tools
-      if (lowerError.includes('searchvalue') || lowerError.includes('search value')) {
-        if (toolName === 'microsoft_outlook_find_emails') {
-          return 'Question: To find emails, I need a search value. Please provide:\n' +
-                 '• A search term (e.g., "project update", "meeting notes")\n' +
-                 '• A sender email address\n' +
-                 '• Or leave it empty (use "") to get the most recent emails\n\n' +
-                 'Use the "searchValue" parameter, not "instructions".';
-        }
-      }
-      return 'Question: What Outlook information is missing? Please check the required parameters for this tool.';
-    }
     if (isEmailTool) {
       return 'Question: What email details are missing? Please provide the recipient email address, subject line, and message content.';
     }
     if (isSearchTool) {
       return 'Question: What would you like me to search for? Please provide a search query or topic.';
-    }
-    if (isSMSTool) {
-      return 'Question: What SMS details are missing? Please provide the recipient phone number (in international format like +1234567890) and the message text you want to send.';
     }
     if (isContactTool) {
       if (toolName === 'search_contacts') {
@@ -697,9 +510,6 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
     if (isSearchTool) {
       return 'Question: The search service needs to be configured. Please add your web search API key in the integration settings.';
     }
-    if (isSMSTool) {
-      return 'Question: The ClickSend SMS service needs to be set up. Please go to the Integrations page to configure your ClickSend credentials, then try again.';
-    }
     if (isContactTool) {
       return 'Question: There seems to be an issue accessing your contacts. Please ensure you have contacts in your contact list and the agent has permission to access them.';
     }
@@ -714,12 +524,6 @@ function enhanceErrorForRetry(toolName: string, error: string): string {
   if (lowerError.includes('invalid') || lowerError.includes('malformed')) {
     if (isEmailTool) {
       return 'Question: There seems to be an issue with the email parameters. Please check that the recipient email address is valid and all required fields are provided.';
-    }
-    if (isSMSTool) {
-      if (lowerError.includes('phone') || lowerError.includes('number')) {
-        return 'Question: The phone number format is invalid. Please provide the phone number in international format (e.g., +1234567890 for US numbers).';
-      }
-      return 'Question: There seems to be an issue with the SMS parameters. Please check that the phone number is in international format and the message text is provided.';
     }
     if (isSearchTool) {
       return 'Question: There seems to be an issue with the search parameters. Please provide a clear search query or valid URLs to scrape.';

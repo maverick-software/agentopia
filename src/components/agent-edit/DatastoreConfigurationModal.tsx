@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Database, Brain, Plus, ExternalLink, Check, Loader2, X } from 'lucide-react';
+import { Database, Plus, Check, Loader2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -16,7 +16,7 @@ import { CredentialSelector } from '@/integrations/_shared';
 interface Datastore {
   id: string;
   name: string;
-  type: 'pinecone' | 'getzep';
+  type: string;
   description?: string;
   config?: any;
 }

@@ -110,7 +110,7 @@ export class MCPProvider implements ToolProvider {
    * Check if a tool is an email-related tool that should be filtered out
    */
   private isEmailTool(toolName: string): boolean {
-    const emailKeywords = ['email', 'mail', 'message', 'send', 'gmail', 'smtp', 'sendgrid', 'mailgun'];
+    const emailKeywords = ['email', 'mail', 'message', 'send', 'smtp'];
     const lowerName = toolName.toLowerCase();
     return emailKeywords.some(keyword => lowerName.includes(keyword));
   }

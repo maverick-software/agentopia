@@ -61,7 +61,7 @@ export function EnhancedToolsModalRefactored({
   } = useToolPermissions(agentId);
 
   // Setup handlers
-  const { handleApiKeySetup, handleDigitalOceanSetup } = useToolSetupHandlers({
+  const { handleApiKeySetup } = useToolSetupHandlers({
     agentId,
     modalState,
     refetchIntegrationPermissions,
@@ -218,7 +218,6 @@ export function EnhancedToolsModalRefactored({
                       onApiKeyChange={modalState.setApiKey}
                       onConnectionNameChange={modalState.setConnectionName}
                       onWebSearchSetup={() => handleApiKeySetup('web_search')}
-                      onDigitalOceanSetup={handleDigitalOceanSetup}
                     />
                   )}
                   renderCredentialSelector={(provider, integrationId) => (

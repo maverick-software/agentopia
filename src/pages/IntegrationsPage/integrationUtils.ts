@@ -88,8 +88,6 @@ export function getIconComponent(iconName: string) {
 
 export function providerNameForIntegration(name: string): string | null {
   switch (name) {
-    case 'Gmail':
-      return 'gmail';
     case 'SMTP':
       return 'smtp';
     case 'Web Search':
@@ -102,18 +100,8 @@ export function providerNameForIntegration(name: string): string | null {
       return 'brave_search';
     case 'Pinecone':
       return 'pinecone';
-    case 'GetZep':
-      return 'getzep';
-    case 'DigitalOcean':
-      return 'digitalocean';
     case 'Discord':
       return 'discord';
-    case 'Microsoft Teams':
-      return 'microsoft-teams';
-    case 'Microsoft Outlook':
-      return 'microsoft-outlook';
-    case 'Microsoft OneDrive':
-      return 'microsoft-onedrive';
     default:
       return null;
   }
