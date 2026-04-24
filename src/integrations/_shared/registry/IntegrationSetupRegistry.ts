@@ -8,12 +8,25 @@ import { SerperAPISetupModal } from '../../serper-api/components/SerperAPISetupM
 import { SerpAPISetupModal } from '../../serpapi/components/SerpAPISetupModal';
 import { BraveSearchSetupModal } from '../../brave-search/components/BraveSearchSetupModal';
 import { MistralOCRSetupModal } from '../../mistral-ocr/components/MistralOCRSetupModal';
+import { PipedreamSetupModal } from '../../pipedream/components/PipedreamSetupModal';
 
 /**
  * Registry of all integration setup components
  * Each integration should register its setup component here
  */
 export const integrationSetupRegistry: IntegrationSetupRegistry = {
+  // Pipedream Connect - primary MCP provider for 3,000+ apps
+  'Pipedream': {
+    component: PipedreamSetupModal,
+    credentialType: 'oauth',
+    defaultScopes: ['pipedream_mcp'],
+    capabilities: [
+      { key: 'pipedream_mcp', label: 'Expose connected app actions as MCP tools' },
+      { key: 'managed_auth', label: 'Managed OAuth and API key credential refresh' },
+      { key: 'app_catalog', label: 'Search 3,000+ Pipedream-supported apps' }
+    ]
+  },
+
   // Web Search - API key-based search integration  
   'Web Search': {
     component: WebSearchSetupModal,

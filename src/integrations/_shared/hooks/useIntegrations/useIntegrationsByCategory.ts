@@ -10,6 +10,7 @@ import {
   getProviderDocumentationUrl,
   getProviderIcon,
   isPopularProvider,
+  isRemovedProvider,
 } from './helpers/providerMetadata';
 import { Integration } from './types';
 
@@ -43,6 +44,10 @@ export function useIntegrationsByCategory(categoryId?: string) {
 
         const categoryMap = new Map(categoriesData?.map((cat) => [cat.name, cat.id]) || []);
         const transformed = (providers || [])
+          .filter((provider: any) => (
+            !isRemovedProvider(provider.name) &&
+            !isRemovedProvider(provider.display_name)
+          ))
           .map((provider: any, index: number) => {
             const categoryName = getProviderCategoryName(provider.name);
             const actualCategoryId = categoryMap.get(categoryName);

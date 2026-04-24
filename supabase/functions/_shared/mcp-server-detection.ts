@@ -51,6 +51,9 @@ export function detectServerType(
   if (serverName.includes('openai') || vendor.includes('openai')) {
     return 'openai';
   }
+  if (serverName.includes('pipedream') || vendor.includes('pipedream')) {
+    return 'pipedream';
+  }
   
   // Priority 2: Check URL patterns
   try {
@@ -65,6 +68,9 @@ export function detectServerType(
     }
     if (hostname.includes('openai.com')) {
       return 'openai';
+    }
+    if (hostname.includes('mcp.pipedream.net') || hostname.includes('pipedream.com')) {
+      return 'pipedream';
     }
   } catch (e) {
     // Invalid URL, continue to capabilities check
@@ -124,6 +130,15 @@ export function getServerTypeMetadata(type: string): MCPServerType {
       supportsSSE: true,
       defaultTransport: 'http',
       knownCapabilities: ['tools', 'sampling']
+    },
+    pipedream: {
+      type: 'pipedream',
+      name: 'Pipedream MCP Server',
+      vendor: 'Pipedream',
+      requiresInstructions: false,
+      supportsSSE: true,
+      defaultTransport: 'http-sse',
+      knownCapabilities: ['tools']
     },
     generic: {
       type: 'generic',

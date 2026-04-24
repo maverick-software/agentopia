@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import { corsHeaders } from '../_shared/cors.ts'
 import { detectServerType, getServerTypeMetadata, extractCapabilities, formatServerInfo } from '../_shared/mcp-server-detection.ts'
+import { buildPipedreamMcpHeaders } from '../_shared/pipedream.ts'
 
 interface CreateConnectionRequest {
   agentId: string;
@@ -62,12 +63,18 @@ Deno.serve(async (req) => {
     let initResult: any = {}
     
     try {
+      const mcpHeaders = authConfig?.provider === 'pipedream'
+        ? await buildPipedreamMcpHeaders(authConfig)
+        : {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2024-11-05'
+        };
+
       // Initialize connection
       const initResponse = await fetch(serverUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: mcpHeaders,
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -125,9 +132,7 @@ Deno.serve(async (req) => {
       try {
         await fetch(serverUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: mcpHeaders,
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: 'notifications/initialized'
@@ -140,11 +145,7 @@ Deno.serve(async (req) => {
       // Test tools listing - this is the critical test
       const toolsResponse = await fetch(serverUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': '2024-11-05'
-        },
+        headers: mcpHeaders,
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 2,

@@ -374,8 +374,8 @@ serve(async (req) => {
       console.warn(`[GetAgentTools] Error checking for system API keys:`, systemKeysError);
     }
 
-    // Check for Zapier MCP tools
-    console.log(`[GetAgentTools] Checking for Zapier MCP tools...`);
+    // Check for remote MCP tools
+    console.log(`[GetAgentTools] Checking for remote MCP tools...`);
     
     try {
       const { data: mcpTools, error: mcpError } = await supabase
@@ -507,7 +507,11 @@ Only use this API Request tool if the specific operation is not available as a d
               description: enhancedDescription,
               parameters: enhancedParameters,
               status: 'active',
-              provider_name: 'Zapier MCP',
+              provider_name: mcpTool.provider_name === 'pipedream'
+                ? 'Pipedream MCP'
+                : mcpTool.provider_name === 'zapier'
+                  ? 'Zapier MCP'
+                  : (mcpTool.connection_type ? `${mcpTool.connection_type} MCP` : 'MCP Server'),
               connection_name: mcpTool.connection_name || 'MCP Server',
               requires_user_input: requiresUserInput,
               _mcp_metadata: {
@@ -519,9 +523,9 @@ Only use this API Request tool if the specific operation is not available as a d
           }
         }
 
-        console.log(`[GetAgentTools] Added ${mcpTools.length} Zapier MCP tools`);
+        console.log(`[GetAgentTools] Added ${mcpTools.length} remote MCP tools`);
         console.log(`[GetAgentTools] MCP Tools: ${mcpTools.map(t => t.tool_name).join(', ')}`);
-        providersProcessed.add('Zapier MCP');
+        providersProcessed.add('Remote MCP');
       } else {
         console.log(`[GetAgentTools] No MCP tools found for agent ${agent_id}`);
       }

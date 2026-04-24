@@ -1,3 +1,30 @@
+const normalizeProviderName = (providerName: string) =>
+  providerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+const REMOVED_PROVIDER_NAMES = new Set([
+  'anthropic',
+  'azure-document-intelligence',
+  'clicksend',
+  'clicksend-sms',
+  'clicksend-sms-mms',
+  'digitalocean',
+  'getzep',
+  'gmail',
+  'mailgun',
+  'microsoft-onedrive',
+  'microsoft-outlook',
+  'microsoft-teams',
+  'onedrive',
+  'outlook',
+  'sendgrid',
+  'teams',
+]);
+
+export function isRemovedProvider(providerName?: string | null): boolean {
+  if (!providerName) return false;
+  return REMOVED_PROVIDER_NAMES.has(normalizeProviderName(providerName));
+}
+
 export function getProviderCategoryName(providerName: string): string {
   const categoryMap: Record<string, string> = {
     smtp: 'Messaging & Communication',
@@ -7,6 +34,7 @@ export function getProviderCategoryName(providerName: string): string {
     pinecone: 'Database Connectors',
     discord: 'Messaging & Communication',
     zapier: 'Automation & Workflows',
+    pipedream: 'Automation & Workflows',
   };
 
   return categoryMap[providerName] || 'API Integrations';
@@ -27,6 +55,8 @@ export function getProviderDescription(providerName: string): string {
     discord: 'Interact with Discord servers and manage bot communications',
     zapier:
       'Connect with Zapier workflows to automate tasks across thousands of apps',
+    pipedream:
+      'Primary MCP tool provider with managed auth and 10,000+ tools across 3,000+ apps',
   };
 
   return descriptionMap[providerName] || `Integration for ${providerName}`;
@@ -41,6 +71,7 @@ export function getProviderIcon(providerName: string): string {
     pinecone: 'Database',
     discord: 'MessageSquare',
     zapier: 'Zap',
+    pipedream: 'Zap',
   };
 
   return iconMap[providerName] || 'Globe';
@@ -53,6 +84,7 @@ export function isPopularProvider(providerName: string): boolean {
     'serpapi',
     'discord',
     'zapier',
+    'pipedream',
   ];
   return popularProviders.includes(providerName);
 }
@@ -65,6 +97,7 @@ export function getProviderDocumentationUrl(providerName: string): string | unde
     pinecone: 'https://docs.pinecone.io/',
     discord: 'https://discord.com/developers/docs',
     zapier: 'https://zapier.com/developer',
+    pipedream: 'https://pipedream.com/docs/connect/mcp/developers/',
   };
 
   return docMap[providerName];

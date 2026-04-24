@@ -12,6 +12,20 @@ import {
 } from 'lucide-react';
 
 export const HIDDEN_INTEGRATIONS = [
+  'Anthropic',
+  'Azure Document Intelligence',
+  'ClickSend SMS',
+  'DigitalOcean',
+  'GetZep',
+  'Gmail',
+  'Mailgun',
+  'Microsoft OneDrive',
+  'Microsoft Outlook',
+  'Microsoft Teams',
+  'OneDrive',
+  'Outlook',
+  'SendGrid',
+  'Teams',
   'OpenAI',
   'Mistral AI',
   'Serper API',
@@ -102,6 +116,8 @@ export function providerNameForIntegration(name: string): string | null {
       return 'pinecone';
     case 'Discord':
       return 'discord';
+    case 'Pipedream':
+      return 'pipedream';
     default:
       return null;
   }

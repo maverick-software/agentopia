@@ -67,7 +67,7 @@ export function IntegrationsListPanel({
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All ({integrations.length})</SelectItem>
+              <SelectItem value="all">All ({filteredIntegrations.length})</SelectItem>
               {categories.map((category: any) => {
                 const CategoryIcon = getIconComponent(category.icon_name);
                 return (

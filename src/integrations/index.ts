@@ -18,6 +18,9 @@ export * from './discord';
 // Email Relay Integration (Unified SMTP, SendGrid, Mailgun)
 export * from './email-relay';
 
+// Pipedream Connect + MCP
+export * from './pipedream';
+
 // Agent Integration Management
 export * from './agent-management';
 

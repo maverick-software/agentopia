@@ -1,10 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import { corsHeaders } from '../_shared/cors.ts'
 import { getServerTypeMetadata } from '../_shared/mcp-server-detection.ts'
+import { buildPipedreamMcpHeaders } from '../_shared/pipedream.ts'
 
 interface MCPExecuteRequest {
   connection_id: string;
   tool_name: string;
+  remote_tool_name?: string;
   parameters: Record<string, any>;
   agent_id: string;
 }
@@ -54,6 +56,7 @@ Deno.serve(async (req) => {
     }
     
     const { connection_id, tool_name, parameters, agent_id } = parsedBody
+    let remoteToolName = parsedBody.remote_tool_name || tool_name
     console.log(`[MCP Execute] Parsed request - connection_id: ${connection_id}, tool_name: ${tool_name}, agent_id: ${agent_id}, parameters:`, parameters)
 
     if (!connection_id || !tool_name || !agent_id) {
@@ -141,6 +144,21 @@ Deno.serve(async (req) => {
 
     console.log(`[MCP Execute] ✅ Server URL retrieved successfully, preparing MCP request...`)
 
+    try {
+      const { data: cachedTool } = await supabase
+        .from('mcp_tools_cache')
+        .select('remote_tool_name')
+        .eq('connection_id', connection_id)
+        .eq('tool_name', tool_name)
+        .maybeSingle()
+
+      if (cachedTool?.remote_tool_name) {
+        remoteToolName = cachedTool.remote_tool_name
+      }
+    } catch (cacheLookupError) {
+      console.warn(`[MCP Execute] Could not resolve remote tool name for ${tool_name}:`, cacheLookupError)
+    }
+
     // Execute the tool via MCP protocol
     try {
       console.log(`[MCP Execute] Calling MCP server for tool: ${tool_name}`)
@@ -156,20 +174,25 @@ Deno.serve(async (req) => {
         id: Date.now(),
         method: 'tools/call',
         params: {
-          name: tool_name,
+          name: remoteToolName,
           arguments: transformedParameters
         }
       }
       
       console.log(`[MCP Execute] MCP request body:`, JSON.stringify(mcpRequestBody, null, 2))
       
-      const response = await fetch(serverUrl, {
-        method: 'POST',
-        headers: {
+      const authConfig = connection.auth_config || {}
+      const mcpHeaders = connection.connection_type === 'pipedream' || authConfig.provider === 'pipedream'
+        ? await buildPipedreamMcpHeaders(authConfig)
+        : {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
           'MCP-Protocol-Version': '2024-11-05'
-        },
+        }
+
+      const response = await fetch(serverUrl, {
+        method: 'POST',
+        headers: mcpHeaders,
         body: JSON.stringify(mcpRequestBody)
       })
 
@@ -303,6 +326,34 @@ Deno.serve(async (req) => {
       const result = mcpResponse.result
       console.log(`[MCP Execute] Tool ${tool_name} executed successfully, result type: ${typeof result}`)
       console.log(`[MCP Execute] Result preview:`, JSON.stringify(result).substring(0, 200))
+
+      if (connection.connection_type === 'pipedream') {
+        const resultText = JSON.stringify(result)
+        const connectUrlMatch = resultText.match(/https:\/\/pipedream\.com\/_static\/connect\.html[^"\\\s]+/)
+        if (connectUrlMatch) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'This Pipedream tool requires the user to connect the target app account before it can run.',
+              requires_user_action: true,
+              action: {
+                type: 'connect_account',
+                url: connectUrlMatch[0],
+                provider: 'pipedream'
+              },
+              metadata: {
+                tool_name,
+                remote_tool_name: remoteToolName,
+                provider: 'pipedream'
+              }
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          )
+        }
+      }
 
       // Check if Zapier MCP returned an error in the result (they use isError flag)
       if (result && result.isError === true) {
