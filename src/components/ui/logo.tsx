@@ -1,7 +1,5 @@
 import React from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from '../../lib/utils';
-import gopherLogo from './logo-light.png'; // Gopher logo for all themes
 
 interface LogoProps {
   className?: string;
@@ -25,10 +23,8 @@ export function Logo({
   showText = false,
   textClassName 
 }: LogoProps) {
-  const { theme } = useTheme();
-  
-  // Use the same gopher logo for all themes
-  const logoSrc = gopherLogo;
+  // Use optimized logo from public assets.
+  const logoSrc = '/mcp-light.png';
 
   return (
     <div className={cn("flex items-center", className)}>

@@ -133,3 +133,11 @@ backups/
 /DEPLOY_THIS_TO_SERVER.js
 /README_INTEGRATION_DEPLOYMENT.md
 /DEPLOYMENT_SUMMARY_*.md
+
+# Bolt size optimization
+package-lock.json
+
+# Backup/scratch artifacts
+*.bak
+*.backup
+*.backup_*
