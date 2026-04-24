@@ -53,6 +53,10 @@ export class FunctionCallingManager {
     console.log('[FunctionCalling] Initialized with unified MCP architecture and universal tool execution');
   }
 
+  getSupabaseClient(): SupabaseClient {
+    return this.supabase;
+  }
+
   /**
    * Get the universal tool executor (lazy-loaded)
    */

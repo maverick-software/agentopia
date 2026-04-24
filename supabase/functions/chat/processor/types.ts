@@ -133,6 +133,12 @@ export interface ProcessingMetrics {
     timestamp?: string;
     duration_ms?: number;
   }>;
+  agent_runtime?: {
+    execution_contract: string;
+    liveness: string;
+    retry_counters: Record<string, number>;
+    final_reason: string;
+  };
 }
 
 export interface ProcessingOptions {

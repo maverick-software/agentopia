@@ -173,6 +173,10 @@ export function useAgentChatSubmit(deps: SubmitDependencies) {
                 session_id: sessId,
               },
               options: {
+                agent_runtime: {
+                  enabled: true,
+                  execution_contract: 'strict-agentic',
+                },
                 context: {
                   max_messages: 25,
                 },
@@ -201,6 +205,17 @@ export function useAgentChatSubmit(deps: SubmitDependencies) {
 
         const responseMetadata = responseData?.data?.message?.metadata || {};
         responseMetadata.processingDetails = processingDetails;
+        try {
+          const { data: runtimeEvents } = await supabase
+            .from('agent_run_events')
+            .select('stream,event_type,payload,created_at')
+            .eq('session_id', sessId)
+            .order('created_at', { ascending: true })
+            .limit(100);
+          responseMetadata.agentRuntimeEvents = runtimeEvents || [];
+        } catch {
+          responseMetadata.agentRuntimeEvents = [];
+        }
 
         await aiHook.completeAIProcessingWithResponse(
           assistantReply,

@@ -6,6 +6,8 @@
 import type { FunctionCallingManager } from '../../function_calling/manager.ts';
 import type { ToolDetail, ToolCall, ToolExecutionContext } from './tool-execution-types.ts';
 import { createLogger } from '../../../shared/utils/logger.ts';
+import { validateUpdatePlanArgs, formatPlanBlock } from '../../agent_runtime/update-plan-tool.ts';
+import { buildReplayMetadata } from '../../agent_runtime/replay-safety.ts';
 
 const logger = createLogger('BasicToolExecutor');
 
@@ -29,6 +31,28 @@ export class BasicToolExecutor {
         } else if (typeof toolCall.function.arguments === 'object') {
           args = toolCall.function.arguments;
         }
+      }
+
+      if (toolCall.function.name === 'update_plan') {
+        const planArgs = validateUpdatePlanArgs(args);
+        const replay = buildReplayMetadata([]);
+        return {
+          name: 'update_plan',
+          execution_time_ms: Date.now() - started,
+          success: true,
+          input_params: args,
+          output_result: {
+            plan: planArgs.plan,
+            explanation: planArgs.explanation,
+            plan_block: formatPlanBlock(planArgs),
+          },
+          requires_retry: false,
+          runtime: {
+            had_potential_side_effects: replay.hadPotentialSideEffects,
+            replay_safe: replay.replaySafe,
+            risk_level: 'low',
+          },
+        };
       }
       
       const result = await fcm.executeFunction(
@@ -66,7 +90,23 @@ export class BasicToolExecutor {
         input_params: args,
         output_result: result.data || null,
         error: result.success ? undefined : result.error,
-        requires_retry: needsRetry
+        requires_retry: needsRetry,
+        runtime: {
+          had_potential_side_effects: buildReplayMetadata([{
+            name: toolCall.function.name,
+            success: !!result.success,
+            input_params: args,
+            output_result: result.data || null,
+            error: result.success ? undefined : result.error,
+          }]).hadPotentialSideEffects,
+          replay_safe: buildReplayMetadata([{
+            name: toolCall.function.name,
+            success: !!result.success,
+            input_params: args,
+            output_result: result.data || null,
+            error: result.success ? undefined : result.error,
+          }]).replaySafe,
+        }
       };
       
     } catch (err: any) {

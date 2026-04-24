@@ -15,6 +15,9 @@ import { BasicToolExecutor } from './basic-tool-executor.ts';
 import { RetryCoordinator } from './retry-coordinator.ts';
 import { ConversationHandler } from './conversation-handler.ts';
 import { createLogger } from '../../../shared/utils/logger.ts';
+import { AgentRuntimeEventBus } from '../../agent_runtime/event-bus.ts';
+import { classifyRisk, requestApprovalIfNeeded } from '../../agent_runtime/approval-gate.ts';
+import type { RuntimeContext } from '../../agent_runtime/types.ts';
 
 const logger = createLogger('ToolExecutionOrchestrator');
 
@@ -48,8 +51,89 @@ export class ToolExecutionOrchestrator {
     // Add assistant message with tool calls to conversation
     ConversationHandler.addAssistantToolCallMessage(msgs, toolCalls);
 
-    // Execute all tool calls
-    const toolDetails = await BasicToolExecutor.executeToolCalls(toolCalls, fcm, context);
+    const supabase = typeof (fcm as any).getSupabaseClient === 'function'
+      ? (fcm as any).getSupabaseClient()
+      : null;
+    const runtimeContext: RuntimeContext = {
+      requestId: crypto.randomUUID(),
+      agentId: context.agent_id,
+      userId: context.user_id,
+      conversationId: context.conversation_id,
+      sessionId: context.session_id,
+      workspaceId: context.workspace_id,
+    };
+    const eventBus = supabase ? new AgentRuntimeEventBus(supabase, runtimeContext) : null;
+
+    const toolDetails: any[] = [];
+    for (const toolCall of toolCalls) {
+      const risk = classifyRisk(toolCall);
+      await eventBus?.emit({
+        stream: 'tool',
+        eventType: 'start',
+        payload: { tool: toolCall.function?.name || toolCall.name, risk },
+      });
+
+      const approval = supabase
+        ? await requestApprovalIfNeeded(supabase, runtimeContext, undefined, toolCall)
+        : { proceed: true, status: 'approved' as const, reason: risk.reason };
+
+      if (!approval.proceed) {
+        toolDetails.push({
+          name: toolCall.function?.name || toolCall.name,
+          execution_time_ms: 0,
+          success: false,
+          input_params: toolCall.function?.arguments || {},
+          output_result: null,
+          error: approval.status === 'pending'
+            ? 'Tool execution is waiting for user approval.'
+            : approval.reason,
+          requires_user_input: approval.status === 'pending',
+          user_input_request: approval.status === 'pending'
+            ? {
+                approval_id: approval.approvalId,
+                tool_name: toolCall.function?.name || toolCall.name,
+                reason: approval.reason,
+                required_fields: [
+                  {
+                    name: 'decision',
+                    label: 'Approve this tool call?',
+                    type: 'select',
+                    options: ['approved', 'denied'],
+                    required: true,
+                  },
+                ],
+              }
+            : undefined,
+          runtime: {
+            risk_level: risk.level,
+            approval_id: approval.approvalId,
+          },
+        });
+        await eventBus?.emit({
+          stream: 'approval',
+          eventType: approval.status === 'pending' ? 'requested' : 'blocked',
+          payload: {
+            tool: toolCall.function?.name || toolCall.name,
+            approvalId: approval.approvalId,
+            reason: approval.reason,
+          },
+        });
+        continue;
+      }
+
+      const detail = await BasicToolExecutor.executeSingleTool(toolCall, fcm, context);
+      toolDetails.push(detail);
+      await eventBus?.emit({
+        stream: 'tool',
+        eventType: 'end',
+        payload: {
+          tool: detail.name,
+          success: detail.success,
+          executionTimeMs: detail.execution_time_ms,
+          error: detail.error,
+        },
+      });
+    }
 
     // Add tool results to conversation
     await ConversationHandler.addToolResults(msgs, toolDetails, toolCalls, fcm);

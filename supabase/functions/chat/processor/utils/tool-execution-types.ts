@@ -22,11 +22,22 @@ export interface ToolDetail {
   retry_attempt?: number;
   retry_error?: string;
   retry_method?: string;
+  requires_user_input?: boolean;
+  user_input_request?: any;
+  runtime?: {
+    had_potential_side_effects?: boolean;
+    replay_safe?: boolean;
+    risk_level?: 'low' | 'medium' | 'high' | 'critical';
+    approval_id?: string;
+  };
 }
 
 export interface ToolExecutionContext {
   agent_id?: string;
   user_id?: string;
+  conversation_id?: string;
+  session_id?: string;
+  workspace_id?: string;
   originalUserMessage?: string; // User's original request for parameter inference
   availableTools?: any[]; // Available tools for looking up descriptions
 }
