@@ -28,7 +28,7 @@ export async function fetchPipedreamApps(
     after?: string;
     has_actions?: boolean;
   } = {},
-): Promise<{ apps: PipedreamApp[]; pageInfo?: any }> {
+): Promise<{ apps: PipedreamApp[]; pageInfo?: unknown }> {
   const { data, error } = await supabase.functions.invoke('pipedream-apps', {
     body: {
       q: options.q,

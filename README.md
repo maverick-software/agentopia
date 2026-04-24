@@ -32,6 +32,20 @@ cp .env.example .env
 npm run dev
 ```
 
+### Pipedream Connect Configuration
+
+Pipedream is the primary MCP provider for app-tool integrations. Configure these server-side environment variables for Supabase Edge Functions:
+
+```bash
+PIPEDREAM_CLIENT_ID=your_client_id
+PIPEDREAM_CLIENT_SECRET=your_client_secret
+PIPEDREAM_PROJECT_ID=proj_xxxxxxx
+PIPEDREAM_ENVIRONMENT=development
+PIPEDREAM_ALLOWED_ORIGINS=http://localhost:5173,https://your-app.example
+```
+
+For the embedded frontend SDK, set `VITE_PIPEDREAM_ENVIRONMENT` to the same environment value. Do not expose the Pipedream client secret in client-side code.
+
 For detailed setup instructions, see the **[Getting Started Guide](README/getting-started.md)**.
 
 ## 📊 Project Status

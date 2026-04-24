@@ -15,6 +15,7 @@ export function IntegrationDetailsPanel({
   selectedIntegration,
   setSelectedIntegration,
   unifiedConnections,
+  pipedreamAccounts = [],
   isIntegrationConnected,
   getConnectionCount,
   onAddCredentials,
@@ -62,12 +63,19 @@ export function IntegrationDetailsPanel({
               Connected Accounts ({getConnectionCount(selectedIntegration.name)})
             </h4>
             <div className="space-y-2">
-              {unifiedConnections
-                .filter(
+              {(selectedIntegration.is_pipedream_app
+                ? pipedreamAccounts
+                  .filter((account: any) => account.app_slug === selectedIntegration.pipedream_app_slug)
+                  .map((account: any) => ({
+                    account_identifier: account.account_name || account.account_id,
+                    provider_name: 'pipedream',
+                    connection_status: account.healthy && !account.dead ? 'active' : 'error',
+                  }))
+                : unifiedConnections.filter(
                   (connection: any) =>
                     connection.provider_name === providerNameForIntegration(selectedIntegration.name),
                 )
-                .map((connection: any, idx: number) => (
+              ).map((connection: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-green-600" />
@@ -91,7 +99,7 @@ export function IntegrationDetailsPanel({
                 <Plus className="h-4 w-4 mr-2" />
                 {isIntegrationConnected(selectedIntegration.name)
                   ? 'Add Another Account'
-                  : 'Add Credentials'}
+                  : selectedIntegration.is_pipedream_app ? 'Connect Account' : 'Add Credentials'}
               </Button>
 
               {isIntegrationConnected(selectedIntegration.name) && (

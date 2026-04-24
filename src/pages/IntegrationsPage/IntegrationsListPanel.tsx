@@ -15,6 +15,7 @@ export function IntegrationsListPanel({
   categories,
   integrations,
   filteredIntegrations,
+  pipedreamLoading,
   selectedIntegration,
   onSelectIntegration,
 }: any) {
@@ -109,11 +110,24 @@ export function IntegrationsListPanel({
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-foreground">{integration.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="truncate text-sm font-medium text-foreground">{integration.name}</h3>
+                    {integration.is_pipedream_app && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        Pipedream
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
+
+          {pipedreamLoading && (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              Loading Pipedream catalog...
+            </div>
+          )}
 
           {filteredIntegrations.length === 0 && (
             <div className="text-center py-12">

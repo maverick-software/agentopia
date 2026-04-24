@@ -10,34 +10,55 @@ import {
   syncPipedreamAccounts,
 } from '../services/pipedreamService';
 
+interface PipedreamIntegrationMetadata {
+  pipedream_app_slug?: string;
+  pipedream_app_name?: string;
+}
+
+interface PipedreamConnectedAccount {
+  id?: string;
+  name?: string;
+  external_id?: string;
+}
+
+interface PipedreamClientWithConnect {
+  connectAccount: (options: {
+    app: string;
+    onSuccess: (account: PipedreamConnectedAccount) => void | Promise<void>;
+    onError: (error: Error) => void;
+  }) => Promise<void>;
+}
+
 export function PipedreamSetupModal({
   integration,
+  user,
   supabase,
   onSuccess,
   onError,
   onClose,
 }: IntegrationSetupProps) {
   const [connecting, setConnecting] = useState(false);
-  const appSlug = (integration as any).pipedream_app_slug || 'app_discovery';
-  const appName = (integration as any).pipedream_app_name || integration.name;
+  const pipedreamIntegration = integration as IntegrationSetupProps['integration'] & PipedreamIntegrationMetadata;
+  const appSlug = pipedreamIntegration.pipedream_app_slug || 'app_discovery';
+  const appName = pipedreamIntegration.pipedream_app_name || integration.name;
 
   const client = useMemo(() => {
     return new PipedreamClient({
-      projectEnvironment: 'production',
-      externalUserId: 'pending',
+      projectEnvironment: import.meta.env.VITE_PIPEDREAM_ENVIRONMENT || 'development',
+      externalUserId: user?.id || 'pending',
       tokenCallback: async () => {
         const tokenResponse = await createPipedreamConnectToken(supabase);
         return tokenResponse.token;
       },
-    } as any);
-  }, [supabase]);
+    } as ConstructorParameters<typeof PipedreamClient>[0]) as PipedreamClientWithConnect;
+  }, [supabase, user?.id]);
 
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      await (client as any).connectAccount({
+      await client.connectAccount({
         app: appSlug,
-        onSuccess: async (account: any) => {
+        onSuccess: async (account) => {
           await syncPipedreamAccounts(supabase, appSlug);
           onSuccess({
             connection_id: account?.id || appSlug,

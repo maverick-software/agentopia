@@ -71,6 +71,25 @@ export function useIntegrationsByCategory(categoryId?: string) {
           })
           .filter(Boolean) as Integration[];
 
+        const pipedreamCategoryId = categoryMap.get('Automation & Workflows') || categoryMap.get('API Integrations') || 'unknown';
+        if (!categoryId || categoryId === pipedreamCategoryId) {
+          const hasPipedream = transformed.some((integration) => integration.name === 'Pipedream');
+          if (!hasPipedream) {
+            transformed.unshift({
+              id: 'pipedream',
+              category_id: pipedreamCategoryId,
+              name: 'Pipedream',
+              description: getProviderDescription('pipedream'),
+              icon_name: getProviderIcon('pipedream'),
+              status: 'available',
+              agent_classification: 'tool',
+              is_popular: true,
+              documentation_url: getProviderDocumentationUrl('pipedream'),
+              display_order: 0,
+            });
+          }
+        }
+
         setIntegrations(transformed);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch integrations');

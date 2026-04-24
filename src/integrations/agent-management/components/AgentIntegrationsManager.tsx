@@ -14,6 +14,11 @@ import { useConnections, useIntegrationsByClassification, getAgentIntegrationPer
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
 import {
+  createPipedreamMcpConnection,
+  syncPipedreamAccounts,
+  type PipedreamAccount,
+} from '@/integrations/pipedream';
+import {
   AddIntegrationModal,
   CredentialsDetailModal,
   PermissionsModal,
@@ -75,14 +80,25 @@ export function AgentIntegrationsManager({
   
   // Data state
   const [permissions, setPermissions] = useState<AgentPermission[]>([]);
+  const [pipedreamAccounts, setPipedreamAccounts] = useState<PipedreamAccount[]>([]);
+  const [pipedreamConnections, setPipedreamConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (agentId && user) {
       fetchAgentPermissions();
+      fetchPipedreamAgentState();
     }
   }, [agentId, user, unifiedConnections]);
+
+  useEffect(() => {
+    if (category === 'tool' && user?.id) {
+      syncPipedreamAccounts(supabase)
+        .then(setPipedreamAccounts)
+        .catch((error) => console.warn('Pipedream account sync skipped', error));
+    }
+  }, [category, supabase, user?.id]);
 
   useEffect(() => {
     // Load capability catalog for current classification integrations
@@ -140,6 +156,24 @@ export function AgentIntegrationsManager({
     }
   };
 
+  const fetchPipedreamAgentState = async () => {
+    if (category !== 'tool') return;
+
+    const { data, error } = await supabase
+      .from('agent_mcp_connections')
+      .select('id, connection_name, auth_config, is_active, mcp_tools_cache(count)')
+      .eq('agent_id', agentId)
+      .eq('connection_type', 'pipedream')
+      .order('connection_name');
+
+    if (error) {
+      console.warn('Failed to load Pipedream MCP connections', error);
+      return;
+    }
+
+    setPipedreamConnections(data || []);
+  };
+
   // Step 1: Show available integrations (only Gmail for now)
   const handleAddIntegration = () => {
     setWorkflowMode('add');
@@ -152,7 +186,8 @@ export function AgentIntegrationsManager({
     
     // Set default scopes based on integration type
     const integrationId = integration.id || integration.name.toLowerCase();
-    const defaultScopes = (integrationId.includes('serper') || 
+    const defaultScopes = integrationId.includes('pipedream') ? ['pipedream_mcp'] :
+                         (integrationId.includes('serper') || 
                           integrationId.includes('serpapi') || 
                           integrationId.includes('brave') || 
                           integrationId.includes('search')) ? DEFAULT_SEARCH_API_SCOPES :
@@ -179,6 +214,19 @@ export function AgentIntegrationsManager({
 
     try {
       setSaving(true);
+      if (selectedCredential.provider_name === 'pipedream') {
+        await createPipedreamMcpConnection(supabase, {
+          agentId,
+          appSlug: selectedCredential.app_slug,
+          accountId: selectedCredential.id,
+          connectionName: `${selectedCredential.provider_display_name} via Pipedream`,
+        });
+        toast.success('Pipedream MCP tools assigned successfully');
+        resetModals();
+        fetchPipedreamAgentState();
+        return;
+      }
+
       const { data, error } = await supabase.rpc('grant_agent_integration_permission', {
         p_agent_id: agentId,
         p_connection_id: selectedCredential.id,
@@ -287,6 +335,21 @@ export function AgentIntegrationsManager({
     }
   };
 
+  const handleRemovePipedreamConnection = async (connectionId: string) => {
+    const { error } = await supabase
+      .from('agent_mcp_connections')
+      .delete()
+      .eq('id', connectionId);
+
+    if (error) {
+      toast.error('Failed to remove Pipedream MCP tools');
+      return;
+    }
+
+    toast.success('Pipedream MCP tools removed');
+    fetchPipedreamAgentState();
+  };
+
   // Get available integrations for this classification
   const availableIntegrations = integrations.filter(integration => 
     integration.status === 'available' && 
@@ -332,6 +395,23 @@ export function AgentIntegrationsManager({
     if (!selectedIntegration) return [];
     
     const integrationId = selectedIntegration.id || selectedIntegration.name?.toLowerCase();
+    if (integrationId === 'pipedream' || selectedIntegration.name?.toLowerCase() === 'pipedream') {
+      return pipedreamAccounts
+        .filter((account) => account.healthy && !account.dead)
+        .filter((account) => !pipedreamConnections.some((connection) =>
+          connection.auth_config?.account_id === account.account_id &&
+          connection.auth_config?.app_slug === account.app_slug
+        ))
+        .map((account) => ({
+          id: account.account_id,
+          external_username: account.account_name || account.account_id,
+          provider_display_name: account.app_name,
+          provider_name: 'pipedream',
+          app_slug: account.app_slug,
+          connection_metadata: {},
+        }));
+    }
+
     // Centralized: unify from useConnections
     const providerMap: Record<string, string | null> = {
       'serper-api': 'serper_api',
@@ -367,6 +447,8 @@ export function AgentIntegrationsManager({
       case 'web search':
       case 'websearch':
         return <Search className="h-5 w-5 text-green-500" />;
+      case 'pipedream':
+        return <Settings className="h-5 w-5 text-purple-500" />;
       default:
         return <Settings className="h-5 w-5 text-gray-500" />;
     }
@@ -400,8 +482,35 @@ export function AgentIntegrationsManager({
           </Button>
         </CardHeader>
         <CardContent>
-          {filteredPermissions.length > 0 ? (
+          {filteredPermissions.length > 0 || pipedreamConnections.length > 0 ? (
             <div className="space-y-3">
+              {pipedreamConnections.map((connection) => (
+                <div key={connection.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-background rounded">
+                      <Settings className="h-5 w-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <div className="font-medium">{connection.connection_name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Pipedream MCP · {connection.auth_config?.app_slug || 'app'} · {connection.is_active ? 'Active' : 'Inactive'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={connection.is_active ? "default" : "secondary"}>
+                      {connection.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemovePipedreamConnection(connection.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
               {filteredPermissions.map(permission => (
                 <div key={permission.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                   <div className="flex items-center gap-3">

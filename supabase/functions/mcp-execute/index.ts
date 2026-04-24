@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const rawBody = await req.text()
-    console.log(`[MCP Execute] Raw request body: ${rawBody}`)
+    console.log(`[MCP Execute] Request body received (${rawBody.length} bytes)`)
     
     let parsedBody: MCPExecuteRequest
     try {
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     
     const { connection_id, tool_name, parameters, agent_id } = parsedBody
     let remoteToolName = parsedBody.remote_tool_name || tool_name
-    console.log(`[MCP Execute] Parsed request - connection_id: ${connection_id}, tool_name: ${tool_name}, agent_id: ${agent_id}, parameters:`, parameters)
+    console.log(`[MCP Execute] Parsed request - connection_id: ${connection_id}, tool_name: ${tool_name}, agent_id: ${agent_id}, parameter_keys:`, Object.keys(parameters || {}))
 
     if (!connection_id || !tool_name || !agent_id) {
       console.error(`[MCP Execute] Missing required parameters - connection_id: ${!!connection_id}, tool_name: ${!!tool_name}, agent_id: ${!!agent_id}`)
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       // The intelligent retry mechanism will handle missing parameters
       let transformedParameters = { ...parameters };
       
-      console.log(`[MCP Execute] Parameters being sent to MCP server:`, transformedParameters)
+      console.log(`[MCP Execute] Sending parameters to MCP server with keys:`, Object.keys(transformedParameters || {}))
       
       const mcpRequestBody = {
         jsonrpc: '2.0',
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
         }
       }
       
-      console.log(`[MCP Execute] MCP request body:`, JSON.stringify(mcpRequestBody, null, 2))
+      console.log(`[MCP Execute] MCP request prepared for remote tool: ${remoteToolName}`)
       
       const authConfig = connection.auth_config || {}
       const mcpHeaders = connection.connection_type === 'pipedream' || authConfig.provider === 'pipedream'
@@ -208,7 +208,7 @@ Deno.serve(async (req) => {
         // Handle Server-Sent Events format (Zapier MCP uses this)
         const responseText = await response.text()
         console.log(`[MCP Execute] SSE Response received for tool ${tool_name}, length: ${responseText.length} chars`)
-        console.log(`[MCP Execute] SSE Response (first 500 chars): ${responseText.substring(0, 500)}`)
+        console.log(`[MCP Execute] SSE response received and will be parsed without logging payload contents`)
         
         // Parse SSE format: look for "data: " lines
         const lines = responseText.split('\n')
@@ -244,7 +244,7 @@ Deno.serve(async (req) => {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
         const responseText = await response.text()
-        console.log(`[MCP Execute] JSON response text (first 500 chars): ${responseText.substring(0, 500)}`)
+        console.log(`[MCP Execute] JSON response received (${responseText.length} bytes)`)
         try {
           mcpResponse = JSON.parse(responseText)
           console.log(`[MCP Execute] Successfully parsed JSON response`)
@@ -325,7 +325,7 @@ Deno.serve(async (req) => {
       // Extract the result
       const result = mcpResponse.result
       console.log(`[MCP Execute] Tool ${tool_name} executed successfully, result type: ${typeof result}`)
-      console.log(`[MCP Execute] Result preview:`, JSON.stringify(result).substring(0, 200))
+      console.log(`[MCP Execute] Result received for ${tool_name}`)
 
       if (connection.connection_type === 'pipedream') {
         const resultText = JSON.stringify(result)
@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
       console.log(`[MCP Execute] Updating tool usage and connection health...`)
       try {
         // Record successful tool execution with parameters for learning
-        console.log(`[MCP Execute] Recording successful parameters:`, JSON.stringify(parameters).substring(0, 200))
+        console.log(`[MCP Execute] Recording successful parameter keys:`, Object.keys(parameters || {}))
         await supabase.rpc('record_mcp_tool_execution', {
           p_connection_id: connection_id,
           p_tool_name: tool_name,
