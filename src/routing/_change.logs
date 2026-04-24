@@ -1,0 +1,8 @@
+## 2025-04-26 (AI Assistant)
+
+- **Refactor:** Moved all routing logic from `src/router/` to a dedicated `src/routing/` directory.
+  - Created separate files for `AppRouter`, `ProtectedRoute`, `AdminRoute`, `routeConfig`, and `lazyComponents`.
+  - Centralized route definitions in `routeConfig.tsx`.
+  - Updated `AppRouter` to generate routes dynamically from the configuration.
+  - Updated imports in `src/App.tsx`.
+  - Removed the old `src/router/` directory and its contents. 

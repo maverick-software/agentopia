@@ -1,0 +1,135 @@
+#debugging logs
+logs.txt
+
+#do not commit the image, too large
+agentopia-dtma.tar
+
+# Ignore environment files in service directories
+services/**/.env
+
+# Ignore all environment files
+.env
+**/.env
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+build/
+dist/
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Supabase
+.supabase/
+
+# Logs
+logs
+*.log
+
+pnpm-debug.log*
+lerna-debug.log*
+
+dist-ssr
+*.local
+
+# Editor directories and files
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Log files
+./logs/
+
+# Context documents to keep (most recent 5)
+!docs/context/ai_context_07192025_173118.md
+!docs/context/ai_context_07172025_080438.md
+!docs/context/ai_context_06072025_062148.md
+!docs/context/ai_context_2025-05-08_14-13-22.md
+!docs/context/ai_context_2025-05-05_19-59-58.md
+
+# Older context documents to ignore (this will ignore all not explicitly kept above)
+docs/context/ai_context_*.md
+
+# Investor Relations - Exclude all investor relations documents from Git
+docs/investor_relations/
+
+# Gmail API Credentials and OAuth files
+**/client_secret*.json
+**/credentials*.json
+**/token*.json
+**/*oauth*.json
+**/google-credentials.json
+**/gmail-credentials.json
+
+# Google OAuth configuration files
+docs/setup/configure_google_oauth_credentials.md
+
+# Any files containing API keys or secrets
+**/*secret*.txt
+**/*key*.txt
+**/*token*.txt
+
+# Temporary credential files
+*.pem
+*.key
+*.cert
+*.crt
+# Build/PWA artifacts
+dev-dist/
+
+# Chat & local-only summaries
+.chats/
+
+# Local backups (use git history instead)
+backups/
+
+# Root-level scratch SQL/MD/scripts
+/EXECUTE_*.sql
+/FIX_*_NOW.sql
+/FINAL_MAILGUN_*.sql
+/fix_migration_history.sql
+/fix_integration_permissions.sql
+/add_mailgun_to_catalog.sql
+/complete_mailgun_integration.sql
+/debug_agent_*.sql
+/debug_agent_*.js
+/deploy_debug_*.ps1
+/temp_*.sql
+/temp_*.txt
+/schema_dump.sql
+/*_FIXED.md
+/DOCUMENT_KNOWLEDGE_IMPLEMENTATION.md
+/MULTI_STEP_DATASTORE_MODAL.md
+/TEST_DATASTORE_SELECTION.md
+/test_document_knowledge.txt
+/DEPLOY_THIS_TO_SERVER.js
+/README_INTEGRATION_DEPLOYMENT.md
+/DEPLOYMENT_SUMMARY_*.md

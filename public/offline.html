@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - Gofr Agents</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: white;
+      padding: 1rem;
+    }
+
+    .container {
+      text-align: center;
+      max-width: 450px;
+      padding: 2rem;
+    }
+
+    .icon {
+      font-size: 5rem;
+      margin-bottom: 1.5rem;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+      }
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      font-weight: 700;
+    }
+
+    p {
+      font-size: 1.125rem;
+      line-height: 1.6;
+      opacity: 0.95;
+      margin-bottom: 2rem;
+    }
+
+    button {
+      padding: 0.875rem 2.5rem;
+      font-size: 1.125rem;
+      background: white;
+      color: #667eea;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .tips {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .tips h2 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+
+    .tips ul {
+      text-align: left;
+      list-style: none;
+      padding: 0;
+    }
+
+    .tips li {
+      padding: 0.5rem 0;
+      opacity: 0.9;
+      font-size: 0.95rem;
+    }
+
+    .tips li:before {
+      content: "✓ ";
+      margin-right: 0.5rem;
+      font-weight: bold;
+    }
+
+    @media (max-width: 640px) {
+      .icon {
+        font-size: 4rem;
+      }
+
+      h1 {
+        font-size: 2rem;
+      }
+
+      p {
+        font-size: 1rem;
+      }
+
+      button {
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>You're Offline</h1>
+    <p>It looks like you've lost your internet connection. Don't worry, some features may still be available from your cached data.</p>
+    <button onclick="window.location.reload()">Try Again</button>
+    
+    <div class="tips">
+      <h2>While You Wait</h2>
+      <ul>
+        <li>Check your Wi-Fi or mobile data connection</li>
+        <li>Make sure airplane mode is turned off</li>
+        <li>Try moving to an area with better signal</li>
+        <li>Some cached content may still be available</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // Listen for online event and auto-reload
+    window.addEventListener('online', () => {
+      console.log('[Offline Page] Connection restored, reloading...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    });
+
+    // Check connection periodically
+    setInterval(() => {
+      if (navigator.onLine) {
+        window.location.reload();
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
+
