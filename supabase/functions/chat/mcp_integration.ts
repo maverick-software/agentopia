@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2.39.7';
 import { MCPManager } from './manager.ts';
 import { MCPServerConfig, AgentopiaContextData, AggregatedMCPResults } from './types.ts';
 import { ChatMessage } from './context_builder.ts';
+import { getPlatformSetting } from '../_shared/platform_settings.ts';
 
 // MCP-related interfaces
 interface MCPVaultResponse {
@@ -290,10 +291,12 @@ export async function processMCPContextWithAccessControl(
     }
 
     // Create enhanced MCP manager with DTMA integration
+    const dtmaEndpoint = await getPlatformSetting(supabaseClient, 'dtma_endpoint', 'http://localhost:30000');
+    const dtmaAuthToken = await getPlatformSetting(supabaseClient, 'dtma_auth_token');
     const mcpManager = new MCPManager({
       enableDTMAIntegration: true,
-      dtmaEndpoint: Deno.env.get('DTMA_ENDPOINT') || 'http://localhost:30000',
-      dtmaAuthToken: Deno.env.get('DTMA_AUTH_TOKEN'),
+      dtmaEndpoint,
+      dtmaAuthToken: dtmaAuthToken || undefined,
       maxConcurrentConnections: 5,
       timeoutMs: 30000,
       enableCredentialInjection: true

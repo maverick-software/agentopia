@@ -2,19 +2,21 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { Database } from '../_shared/database.types.ts';
+import { getPlatformSetting } from '../_shared/platform_settings.ts';
 
-const NODE_BACKEND_URL = Deno.env.get('NODE_BACKEND_URL'); // e.g., http://localhost:8080 or your deployed backend service URL
 const INTERNAL_API_SECRET = Deno.env.get('INTERNAL_API_SECRET');
 
-async function callInternalNodeService(agentId: string, method: 'POST' | 'DELETE') {
-  if (!NODE_BACKEND_URL || !INTERNAL_API_SECRET) {
-    console.error('NODE_BACKEND_URL or INTERNAL_API_SECRET is not configured.');
+async function callInternalNodeService(supabase: any, agentId: string, method: 'POST' | 'DELETE') {
+  const nodeBackendUrl = await getPlatformSetting(supabase, 'node_backend_url');
+
+  if (!nodeBackendUrl || !INTERNAL_API_SECRET) {
+    console.error('Internal service URL or internal API secret is not configured.');
     return { success: false, error: 'Internal service communication not configured.', status: 500 };
   }
 
   const internalEndpoint = method === 'POST' 
-    ? `${NODE_BACKEND_URL}/internal/agents/${agentId}/ensure-tool-environment` 
-    : `${NODE_BACKEND_URL}/internal/agents/${agentId}/tool-environment`;
+    ? `${nodeBackendUrl}/internal/agents/${agentId}/ensure-tool-environment` 
+    : `${nodeBackendUrl}/internal/agents/${agentId}/tool-environment`;
 
   try {
     const response = await fetch(internalEndpoint, {
@@ -105,10 +107,10 @@ serve(async (req) => {
     let result;
     if (req.method === 'POST') {
       console.log(`Calling internal service to ensure tool environment for agent ${agentId}`);
-      result = await callInternalNodeService(agentId, 'POST');
+      result = await callInternalNodeService(supabaseAdminForCheck, agentId, 'POST');
     } else if (req.method === 'DELETE') {
       console.log(`Calling internal service to deprovision tool environment for agent ${agentId}`);
-      result = await callInternalNodeService(agentId, 'DELETE');
+      result = await callInternalNodeService(supabaseAdminForCheck, agentId, 'DELETE');
     } else {
       return new Response(JSON.stringify({ error: 'Method not supported' }), {
         status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

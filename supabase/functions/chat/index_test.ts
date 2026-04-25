@@ -242,8 +242,7 @@ if (SERVICE_ROLE_KEY === "your_local_service_role_key") {
 
 Deno.test({ 
     name: "Integration - Chat function with successful MCP processing", 
-    // Use ignore flag if local supabase isn't running or configured
-    // ignore: !Deno.env.get("RUN_INTEGRATION_TESTS"), 
+    // Use Deno's --ignore flag manually if local Supabase isn't running or configured.
     async fn() {
         resetMocks();
         const mockServer = new MockMCPServer({ port: 8081 });
@@ -351,7 +350,7 @@ Deno.test({
 // Placeholder for utility function tests
 Deno.test({ 
     name: "Integration - Util function /test success", 
-    // ignore: !Deno.env.get("RUN_INTEGRATION_TESTS"), 
+    // Use Deno's --ignore flag manually if local Supabase isn't running or configured.
     async fn() {
          resetMocks();
         const mockServer = new MockMCPServer({ port: 8082 }); // Use different port

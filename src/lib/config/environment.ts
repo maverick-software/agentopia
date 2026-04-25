@@ -180,7 +180,7 @@ function buildConfig(): AppConfig {
     dev: {
       debugMode: getEnvBool('VITE_DEBUG_MODE', environment === 'development'),
       mockApiEnabled: getEnvBool('VITE_MOCK_API_ENABLED', environment === 'development'),
-      logLevel: (getEnvVar('VITE_LOG_LEVEL', 'info') as any) || 'info',
+      logLevel: (getEnvVar('VITE_APP_LOG_VERBOSITY', 'info') as any) || 'info',
     },
     
     // Monitoring configuration

@@ -9,8 +9,8 @@
  *   logger.warn('Warning message');
  *   logger.error('Error occurred', error);
  * 
- * Environment Variables:
- *   LOG_LEVEL=DEBUG|INFO|WARN|ERROR (default: INFO)
+ * Log level defaults to INFO. Runtime logging configuration should be stored
+ * in application settings, not Edge Function secrets.
  */
 
 export enum LogLevel {
@@ -85,25 +85,10 @@ export class Logger {
 }
 
 /**
- * Get current log level from environment
+ * Get current log level.
  */
 export function getLogLevel(): LogLevel {
-  const envLevel = (typeof Deno !== 'undefined' && Deno.env) 
-    ? Deno.env.get('LOG_LEVEL')?.toUpperCase() 
-    : 'INFO';
-  
-  switch (envLevel) {
-    case 'DEBUG':
-      return LogLevel.DEBUG;
-    case 'INFO':
-      return LogLevel.INFO;
-    case 'WARN':
-      return LogLevel.WARN;
-    case 'ERROR':
-      return LogLevel.ERROR;
-    default:
-      return LogLevel.INFO; // Default to INFO
-  }
+  return LogLevel.INFO;
 }
 
 /**

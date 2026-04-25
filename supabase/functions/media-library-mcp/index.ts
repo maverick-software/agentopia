@@ -798,19 +798,7 @@ async function extractTextFromDocument(
         console.error('[MediaLibrary MCP] Mistral OCR fallback failed:', mistralError);
       }
       
-      // For PDFs, PPTX, or if other OCR methods failed, try OCR.space
-      if (Deno.env.get('OCR_SPACE_API_KEY')) {
-        console.log(`[MediaLibrary MCP] Trying OCR.space fallback`);
-        try {
-          const ocrText = await extractTextWithOCR(fileData, fileName, Deno.env.get('OCR_SPACE_API_KEY'));
-          if (ocrText.length > 10) {
-            console.log(`[MediaLibrary MCP] OCR.space fallback successful: ${ocrText.length} characters`);
-            return `${ocrText}\n\n[Note: This content was extracted using external OCR service due to document format limitations]`;
-          }
-        } catch (ocrError) {
-          console.error('[MediaLibrary MCP] OCR.space fallback also failed:', ocrError);
-        }
-      }
+      console.log('[MediaLibrary MCP] OCR.space fallback removed; use local OCR or configured Mistral OCR.');
     }
     
     // Return the best result we got, even if it's not ideal

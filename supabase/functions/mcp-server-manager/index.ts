@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
+import { getPlatformSetting } from '../_shared/platform_settings.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,10 +17,6 @@ const logPrefix = '[mcp-server-manager]';
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// DTMA Configuration
-const DTMA_ENDPOINT = Deno.env.get('DTMA_ENDPOINT') || 'http://localhost:30000';
-const DTMA_AUTH_TOKEN = Deno.env.get('DTMA_AUTH_TOKEN');
 
 interface MCPServerDeploymentRequest {
   agentId: string;
@@ -38,6 +35,15 @@ interface MCPServerDeploymentRequest {
   };
   grantAccess?: boolean;
   permissionScope?: string;
+}
+
+async function getDTMAConfig(): Promise<{ endpoint: string; headers: Record<string, string> }> {
+  const endpoint = await getPlatformSetting(supabase, 'dtma_endpoint', 'http://localhost:30000');
+  const token = await getPlatformSetting(supabase, 'dtma_auth_token');
+  return {
+    endpoint,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  };
 }
 
 interface MCPServerManagerResponse {
@@ -89,6 +95,7 @@ async function authenticateUser(authHeader: string | null): Promise<{ userId: st
 async function deployMCPServer(deployment: MCPServerDeploymentRequest): Promise<MCPServerManagerResponse> {
   try {
     console.log(`${logPrefix} Deploying MCP server for agent ${deployment.agentId}`);
+    const dtma = await getDTMAConfig();
 
     // Create account_tool_instance record
     const { data: toolInstance, error: dbError } = await supabase
@@ -117,11 +124,11 @@ async function deployMCPServer(deployment: MCPServerDeploymentRequest): Promise<
     }
 
     // Deploy to DTMA
-    const dtmaResponse = await fetch(`${DTMA_ENDPOINT}/mcp/groups`, {
+    const dtmaResponse = await fetch(`${dtma.endpoint}/mcp/groups`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DTMA_AUTH_TOKEN}`
+        ...dtma.headers,
       },
       body: JSON.stringify({
         groupId: `agent-${deployment.agentId}-mcp`,
@@ -207,6 +214,7 @@ async function deployMCPServer(deployment: MCPServerDeploymentRequest): Promise<
 async function removeMCPServer(instanceId: string, agentId: string): Promise<MCPServerManagerResponse> {
   try {
     console.log(`${logPrefix} Removing MCP server ${instanceId} for agent ${agentId}`);
+    const dtma = await getDTMAConfig();
 
     // Get server details
     const { data: server, error: fetchError } = await supabase
@@ -224,11 +232,9 @@ async function removeMCPServer(instanceId: string, agentId: string): Promise<MCP
     }
 
     // Remove from DTMA
-    const dtmaResponse = await fetch(`${DTMA_ENDPOINT}/mcp/groups/agent-${agentId}-mcp`, {
+    const dtmaResponse = await fetch(`${dtma.endpoint}/mcp/groups/agent-${agentId}-mcp`, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${DTMA_AUTH_TOKEN}`
-      }
+      headers: dtma.headers,
     });
 
     if (!dtmaResponse.ok) {
@@ -281,6 +287,7 @@ async function removeMCPServer(instanceId: string, agentId: string): Promise<MCP
 async function getMCPServerStatus(agentId?: string): Promise<MCPServerManagerResponse> {
   try {
     console.log(`${logPrefix} Getting MCP server status${agentId ? ` for agent ${agentId}` : ''}`);
+    const dtma = await getDTMAConfig();
 
     let query = supabase
       .from('account_tool_instances')
@@ -322,10 +329,8 @@ async function getMCPServerStatus(agentId?: string): Promise<MCPServerManagerRes
 
     if (activeServers.length > 0) {
       try {
-        const dtmaResponse = await fetch(`${DTMA_ENDPOINT}/mcp/status`, {
-          headers: {
-            'Authorization': `Bearer ${DTMA_AUTH_TOKEN}`
-          }
+        const dtmaResponse = await fetch(`${dtma.endpoint}/mcp/status`, {
+          headers: dtma.headers,
         });
 
         if (dtmaResponse.ok) {

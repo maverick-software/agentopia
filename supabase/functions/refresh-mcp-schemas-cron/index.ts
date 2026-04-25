@@ -31,14 +31,11 @@ Deno.serve(async (req) => {
 
     // Verify this is a cron request or service role request
     const authHeader = req.headers.get('Authorization')
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    
-    // Allow if: 1) Valid cron secret, 2) Service role key, or 3) Manual trigger with proper auth
+    // Allow if: 1) Supabase cron header, or 2) service role key.
     const isCronRequest = req.headers.get('x-supabase-cron') === 'true'
-    const hasValidSecret = cronSecret && authHeader?.includes(cronSecret)
     const hasServiceRole = authHeader?.includes(supabaseServiceKey)
     
-    if (!isCronRequest && !hasValidSecret && !hasServiceRole) {
+    if (!isCronRequest && !hasServiceRole) {
       console.warn(`[MCP Schema Cron] Unauthorized request`)
       return new Response(
         JSON.stringify({ 

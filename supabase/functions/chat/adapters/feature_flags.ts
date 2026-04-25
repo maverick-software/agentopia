@@ -61,85 +61,14 @@ const DEFAULT_FLAGS: FeatureFlags = {
 };
 
 /**
- * Get feature flags from environment or defaults
+ * Get feature flags from code defaults.
+ *
+ * Runtime/admin overrides live in the `platform_settings.chat_feature_flags`
+ * database row. This synchronous adapter intentionally does not read Edge
+ * Function secrets for non-secret rollout values.
  */
 export function getFeatureFlags(): FeatureFlags {
-  const flags: FeatureFlags = { ...DEFAULT_FLAGS };
-  
-  // Override from environment variables
-  if (Deno.env.get('USE_ADVANCED_MESSAGES') === 'true') {
-    flags.use_advanced_messages = true;
-  }
-  
-  if (Deno.env.get('ENABLE_MEMORY_SYSTEM') === 'true') {
-    flags.enable_memory_system = true;
-  }
-  
-  if (Deno.env.get('ENABLE_STATE_MANAGEMENT') === 'true') {
-    flags.enable_state_management = true;
-  }
-  
-  if (Deno.env.get('USE_NEW_TOOL_FRAMEWORK') === 'true') {
-    flags.use_new_tool_framework = true;
-  }
-  
-  if (Deno.env.get('ENABLE_STREAMING') === 'true') {
-    flags.enable_streaming_responses = true;
-  }
-  
-  if (Deno.env.get('DISABLE_DUAL_WRITE') === 'true') {
-    flags.maintain_dual_write = false;
-  }
-  
-  if (Deno.env.get('DISABLE_AUTO_MIGRATE') === 'true') {
-    flags.auto_migrate_messages = false;
-  }
-  
-  if (Deno.env.get('DISABLE_COMPATIBILITY') === 'true') {
-    flags.enable_compatibility_mode = false;
-  }
-  
-  // Rollout percentage
-  const rolloutPct = Deno.env.get('ROLLOUT_PERCENTAGE');
-  if (rolloutPct) {
-    flags.rollout_percentage = parseInt(rolloutPct, 10);
-  }
-  
-  // Enabled agent IDs (comma-separated)
-  const enabledAgents = Deno.env.get('ENABLED_AGENT_IDS');
-  if (enabledAgents) {
-    flags.enabled_agent_ids = enabledAgents.split(',').map(id => id.trim());
-  }
-  
-  // Enabled user IDs (comma-separated)
-  const enabledUsers = Deno.env.get('ENABLED_USER_IDS');
-  if (enabledUsers) {
-    flags.enabled_user_ids = enabledUsers.split(',').map(id => id.trim());
-  }
-  
-  // Performance flags
-  if (Deno.env.get('ENABLE_CACHING') === 'true') {
-    flags.enable_caching = true;
-  }
-  
-  if (Deno.env.get('ENABLE_PARALLEL_TOOLS') === 'true') {
-    flags.enable_parallel_tools = true;
-  }
-  
-  if (Deno.env.get('ENABLE_CONTEXT_COMPRESSION') === 'true') {
-    flags.enable_context_compression = true;
-  }
-  
-  // Debug flags
-  if (Deno.env.get('VERBOSE_LOGGING') === 'false') {
-    flags.verbose_logging = false;
-  }
-  
-  if (Deno.env.get('CAPTURE_METRICS') === 'false') {
-    flags.capture_metrics = false;
-  }
-  
-  return flags;
+  return { ...DEFAULT_FLAGS };
 }
 
 /**
