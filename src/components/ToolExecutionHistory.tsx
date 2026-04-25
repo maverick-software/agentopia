@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Download,
   Eye,
+  Mail,
   Settings,
   MoreHorizontal
 } from 'lucide-react';
@@ -49,8 +50,8 @@ interface ToolExecutionHistoryProps {
 
 const getProviderIcon = (provider: string) => {
   switch (provider) {
-    case 'smtp':
-      return <Settings className="w-4 h-4" />;
+    case 'gmail':
+      return <Mail className="w-4 h-4" />;
     case 'slack':
       return <Settings className="w-4 h-4" />;
     default:

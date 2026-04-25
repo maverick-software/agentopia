@@ -74,7 +74,7 @@ export function SMTPSetupForm({
             type="text" 
             value={smtpHost} 
             onChange={(e) => onSMTPHostChange(e.target.value)} 
-            placeholder="smtp.your-provider.com" 
+            placeholder="smtp.gmail.com" 
             className="mt-1" 
           />
         </div>

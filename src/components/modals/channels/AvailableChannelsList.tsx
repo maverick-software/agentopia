@@ -58,7 +58,19 @@ function mapIntegrationToService(integration: Integration): ChannelService {
   let gradient = 'from-zinc-500 to-zinc-600';
   let type: 'oauth' | 'api_key' | 'coming_soon' = 'coming_soon';
 
-  if (lower.includes('smtp')) {
+  if (lower.includes('gmail')) {
+    id = 'gmail';
+    gradient = 'from-red-500 to-orange-500';
+    type = 'oauth';
+  } else if (lower.includes('sendgrid')) {
+    id = 'sendgrid';
+    gradient = 'from-blue-500 to-indigo-500';
+    type = 'api_key';
+  } else if (lower.includes('mailgun')) {
+    id = 'mailgun';
+    gradient = 'from-rose-500 to-pink-500';
+    type = 'api_key';
+  } else if (lower.includes('smtp')) {
     id = 'smtp';
     gradient = 'from-green-500 to-emerald-500';
     type = 'api_key';
@@ -75,7 +87,21 @@ function mapIntegrationToService(integration: Integration): ChannelService {
 }
 
 function providerNameForServiceId(serviceId: string): string {
-  return serviceId;
+  const result = (() => {
+    switch (serviceId) {
+      case 'gmail':
+        return 'gmail';
+      case 'sendgrid':
+        return 'sendgrid';
+      case 'mailgun':
+        return 'mailgun';
+      default:
+        return serviceId;
+    }
+  })();
+  
+  console.log('[providerNameForServiceId] Input:', serviceId, 'Output:', result);
+  return result;
 }
 
 export function AvailableChannelsList({

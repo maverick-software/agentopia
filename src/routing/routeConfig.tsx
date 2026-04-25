@@ -69,7 +69,11 @@ import { WorkflowsPage } from '../pages/WorkflowsPage';
 import { AutomationsPage } from '../pages/AutomationsPage';
 import { ProjectsPage } from '../pages/ProjectsPage';
 import SystemPromptsPage from '../pages/admin/SystemPromptsPage';
+import { GmailCallbackPage } from '@/integrations/gmail';
 import { SMTPIntegrationsPage } from '@/integrations/smtp';
+import { MicrosoftTeamsCallbackPage } from '../pages/integrations/MicrosoftTeamsCallbackPage';
+import { MicrosoftOneDriveCallbackPage } from '../pages/integrations/MicrosoftOneDriveCallbackPage';
+import { MicrosoftOutlookCallbackPage } from '../pages/integrations/MicrosoftOutlookCallbackPage';
 import GraphSettingsPage from '../pages/GraphSettingsPage';
 import { ChatsPage } from '../pages/ChatsPage';
 import ContactsPage from '../pages/ContactsPage';
@@ -121,6 +125,10 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workflows/automations', element: AutomationsPage, protection: 'protected', layout: true },
   { path: '/projects', element: ProjectsPage, protection: 'protected', layout: true },
   { path: '/more', element: MorePage, protection: 'protected', layout: true },
+  { path: '/integrations/gmail/callback', element: GmailCallbackPage, protection: 'public', layout: false },
+  { path: '/integrations/microsoft-teams/callback', element: MicrosoftTeamsCallbackPage, protection: 'public', layout: false },
+  { path: '/integrations/microsoft-onedrive/callback', element: MicrosoftOneDriveCallbackPage, protection: 'public', layout: false },
+  { path: '/integrations/microsoft-outlook/callback', element: MicrosoftOutlookCallbackPage, protection: 'public', layout: false },
   // { path: 'agent-store', element: AgentStorePage, protection: 'protected', layout: true }, // Commented out
   // { path: 'dataset-store', element: DatasetStorePage, protection: 'protected', layout: true }, // Commented out
   

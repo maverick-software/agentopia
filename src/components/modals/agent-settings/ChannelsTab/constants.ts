@@ -2,8 +2,8 @@ import { Mail, MessageSquare, Phone } from 'lucide-react';
 import type { ChannelSettings, ProviderOption } from './types';
 
 export const CHANNEL_PROVIDER_MAP: Record<string, string[]> = {
-  email: ['smtp', 'smtp_server'],
-  sms: ['twilio', 'aws_sns'],
+  email: ['gmail', 'smtp', 'smtp_server', 'sendgrid', 'mailgun', 'microsoft-outlook'],
+  sms: ['twilio', 'aws_sns', 'clicksend_sms'],
   slack: ['slack'],
   discord: ['discord'],
   telegram: ['telegram'],
@@ -11,8 +11,8 @@ export const CHANNEL_PROVIDER_MAP: Record<string, string[]> = {
 };
 
 export const CHANNEL_DISABLE_PROVIDER_MAP: Record<string, string[]> = {
-  email: ['smtp'],
-  sms: ['twilio', 'aws_sns'],
+  email: ['gmail', 'smtp', 'sendgrid', 'mailgun', 'microsoft-outlook'],
+  sms: ['twilio', 'aws_sns', 'clicksend_sms'],
   slack: ['slack'],
   discord: ['discord'],
   telegram: ['telegram'],
@@ -21,9 +21,14 @@ export const CHANNEL_DISABLE_PROVIDER_MAP: Record<string, string[]> = {
 
 export const EMAIL_PROVIDERS: ProviderOption[] = [
   { id: 'smtp', name: 'SMTP', description: 'Generic SMTP server', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
+  { id: 'gmail', name: 'Gmail', description: 'Google Gmail', requiresApiKey: false, requiresOAuth: true, authType: 'oauth' },
+  { id: 'microsoft-outlook', name: 'Microsoft Outlook', description: 'Microsoft Outlook/Office 365', requiresApiKey: false, requiresOAuth: true, authType: 'oauth' },
+  { id: 'sendgrid', name: 'SendGrid', description: 'SendGrid email service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
+  { id: 'mailgun', name: 'Mailgun', description: 'Mailgun email service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
 ];
 
 export const SMS_PROVIDERS: ProviderOption[] = [
+  { id: 'clicksend_sms', name: 'ClickSend SMS', description: 'ClickSend SMS/MMS service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
   { id: 'twilio', name: 'Twilio', description: 'Twilio SMS service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
   { id: 'aws_sns', name: 'AWS SNS', description: 'Amazon Simple Notification Service', requiresApiKey: true, requiresOAuth: false, authType: 'api_key' },
 ];

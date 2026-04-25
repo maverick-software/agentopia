@@ -12,7 +12,7 @@ export function generateParametersForCapability(toolName: string) {
     required: [] as string[]
   };
 
-  // Handle email sending tools (smtp_send_email)
+  // Handle email sending tools (smtp_send_email, sendgrid_send_email, mailgun_send_email)
   if (toolName.includes('_send_email')) {
       return {
         ...baseSchema,
@@ -86,6 +86,91 @@ export function generateParametersForCapability(toolName: string) {
         num_results: { type: 'number', description: 'Number of results to return', default: 10 }
       },
       required: ['query']
+    };
+  }
+
+  // Handle OneDrive file operations
+  if (toolName.includes('list_files') || toolName.includes('search_files')) {
+    return {
+      ...baseSchema,
+      properties: {
+        path: { type: 'string', description: 'Folder path to search in (optional)' },
+        query: { type: 'string', description: 'Search query for files (optional)' },
+        limit: { type: 'number', description: 'Maximum number of files to return', default: 50 }
+      },
+      required: []
+    };
+  }
+
+  if (toolName.includes('download_file')) {
+    return {
+      ...baseSchema,
+      properties: {
+        file_id: { type: 'string', description: 'OneDrive file ID' },
+        file_path: { type: 'string', description: 'File path in OneDrive' }
+      },
+      required: ['file_id']
+    };
+  }
+
+  if (toolName.includes('upload_file')) {
+    return {
+      ...baseSchema,
+      properties: {
+        file_name: { type: 'string', description: 'Name of the file to upload' },
+        file_content: { type: 'string', description: 'Base64 encoded file content' },
+        folder_path: { type: 'string', description: 'Destination folder path (optional)' }
+      },
+      required: ['file_name', 'file_content']
+    };
+  }
+
+  if (toolName.includes('share_file')) {
+    return {
+      ...baseSchema,
+      properties: {
+        file_id: { type: 'string', description: 'OneDrive file ID' },
+        permission_type: { type: 'string', enum: ['view', 'edit'], description: 'Permission level' },
+        recipient_email: { type: 'string', description: 'Email of the person to share with (optional)' }
+      },
+      required: ['file_id', 'permission_type']
+    };
+  }
+
+  // Handle Gmail-specific capabilities
+  if (toolName.includes('gmail') || toolName.includes('https://www.googleapis.com/auth/gmail')) {
+    if (toolName.includes('readonly') || toolName.includes('read') || toolName.includes('search')) {
+      return {
+        ...baseSchema,
+        properties: {
+          query: { type: 'string', description: 'Search query for emails' },
+          max_results: { type: 'number', description: 'Maximum number of emails to return', default: 10 }
+        },
+        required: ['query']
+      };
+    }
+    
+    if (toolName.includes('send')) {
+      return {
+        ...baseSchema,
+        properties: {
+          to: { type: 'string', description: 'Recipient email address' },
+          subject: { type: 'string', description: 'Email subject' },
+          body: { type: 'string', description: 'Email body content' },
+          cc: { type: 'string', description: 'CC recipients (optional)' },
+          bcc: { type: 'string', description: 'BCC recipients (optional)' }
+        },
+        required: ['to', 'subject', 'body']
+      };
+    }
+    
+    // Default Gmail tool parameters
+    return {
+      ...baseSchema,
+      properties: {
+        input: { type: 'string', description: `Gmail tool: ${toolName}` }
+      },
+      required: []
     };
   }
 
@@ -313,6 +398,63 @@ export function generateParametersForCapability(toolName: string) {
         contact_id: { type: 'string', description: 'Contact ID to retrieve details for' }
       },
       required: ['contact_id']
+    };
+  }
+
+  // ClickSend SMS tools
+  if (toolName === 'clicksend_send_sms') {
+    return {
+      ...baseSchema,
+      properties: {
+        to: { type: 'string', description: 'Recipient phone number in international format (e.g., +1234567890)' },
+        body: { type: 'string', description: 'SMS message text content (up to 1600 characters)' },
+        from: { type: 'string', description: 'Sender phone number or short code (optional)' }
+      },
+      required: ['to', 'body']
+    };
+  }
+
+  if (toolName === 'clicksend_send_mms') {
+    return {
+      ...baseSchema,
+      properties: {
+        to: { type: 'string', description: 'Recipient phone number in international format (e.g., +1234567890)' },
+        body: { type: 'string', description: 'MMS message text content' },
+        media_url: { type: 'string', description: 'URL of media file to attach (image, video, etc.)' },
+        subject: { type: 'string', description: 'MMS subject line (optional)' },
+        from: { type: 'string', description: 'Sender phone number or short code (optional)' }
+      },
+      required: ['to', 'body', 'media_url']
+    };
+  }
+
+  if (toolName === 'clicksend_get_balance') {
+    return {
+      ...baseSchema,
+      properties: {},
+      required: []
+    };
+  }
+
+  if (toolName === 'clicksend_get_sms_history') {
+    return {
+      ...baseSchema,
+      properties: {
+        page: { type: 'number', description: 'Page number for pagination (default: 1)', default: 1 },
+        limit: { type: 'number', description: 'Number of records per page (1-1000, default: 50)', default: 50 }
+      },
+      required: []
+    };
+  }
+
+  if (toolName === 'clicksend_get_delivery_receipts') {
+    return {
+      ...baseSchema,
+      properties: {
+        page: { type: 'number', description: 'Page number for pagination (default: 1)', default: 1 },
+        limit: { type: 'number', description: 'Number of records per page (1-1000, default: 50)', default: 50 }
+      },
+      required: []
     };
   }
 

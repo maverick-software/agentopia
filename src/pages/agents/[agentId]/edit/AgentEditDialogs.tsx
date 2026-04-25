@@ -11,6 +11,7 @@ import {
 import { AgentDatastoreSelector } from '@/components/agent-edit/AgentDatastoreSelector';
 import { AgentFormInstructions } from '@/components/agent-edit/AgentFormInstructions';
 import { CreateDatastoreModal } from '@/components/agent-edit/CreateDatastoreModal';
+import { KnowledgeGraphModal } from '@/components/agent-edit/KnowledgeGraphModal';
 import { VectorStoreModal } from '@/components/agent-edit/VectorStoreModal';
 import type { Datastore } from '@/types';
 
@@ -22,22 +23,26 @@ interface AgentEditDialogsProps {
   connecting: boolean;
   loadingAvailableDatastores: boolean;
   selectedVectorStore?: string;
+  selectedKnowledgeStore?: string;
   showProfileImageModal: boolean;
   showInstructionsModal: boolean;
   showDatastoreModal: boolean;
   showVectorModal: boolean;
+  showKnowledgeModal: boolean;
   showCreateDatastoreModal: boolean;
-  createDatastoreType: 'pinecone' | null;
+  createDatastoreType: 'pinecone' | 'getzep' | null;
   setShowProfileImageModal: (open: boolean) => void;
   setShowInstructionsModal: (open: boolean) => void;
   setShowDatastoreModal: (open: boolean) => void;
   setShowVectorModal: (open: boolean) => void;
+  setShowKnowledgeModal: (open: boolean) => void;
   setShowCreateDatastoreModal: (open: boolean) => void;
-  setCreateDatastoreType: (type: 'pinecone' | null) => void;
+  setCreateDatastoreType: (type: 'pinecone' | 'getzep' | null) => void;
   onEditorChange: (fieldName: string, value: string) => void;
   onSelectDatastore: (type: 'vector' | 'knowledge', value?: string) => Promise<void>;
   onDatastoresUpdated: () => Promise<void>;
   onSaveVectorStore: (value?: string) => Promise<void>;
+  onSaveKnowledgeStore: (value?: string) => Promise<void>;
   onDatastoreCreated: () => Promise<void>;
 }
 
@@ -49,22 +54,26 @@ export function AgentEditDialogs({
   connecting,
   loadingAvailableDatastores,
   selectedVectorStore,
+  selectedKnowledgeStore,
   showProfileImageModal,
   showInstructionsModal,
   showDatastoreModal,
   showVectorModal,
+  showKnowledgeModal,
   showCreateDatastoreModal,
   createDatastoreType,
   setShowProfileImageModal,
   setShowInstructionsModal,
   setShowDatastoreModal,
   setShowVectorModal,
+  setShowKnowledgeModal,
   setShowCreateDatastoreModal,
   setCreateDatastoreType,
   onEditorChange,
   onSelectDatastore,
   onDatastoresUpdated,
   onSaveVectorStore,
+  onSaveKnowledgeStore,
   onDatastoreCreated,
 }: AgentEditDialogsProps) {
   return (
@@ -149,6 +158,7 @@ export function AgentEditDialogs({
               agentId={agentId}
               availableDatastores={availableDatastores}
               selectedVectorStore={selectedVectorStore}
+              selectedKnowledgeStore={selectedKnowledgeStore}
               onSelectDatastore={onSelectDatastore}
               onConnectDatastores={async () => {}}
               loadingAvailable={loading}
@@ -180,13 +190,33 @@ export function AgentEditDialogs({
         loadingAvailable={loadingAvailableDatastores}
       />
 
+      <KnowledgeGraphModal
+        isOpen={showKnowledgeModal}
+        onOpenChange={setShowKnowledgeModal}
+        knowledgeStores={availableDatastores.filter((store) => store.type === 'getzep')}
+        selectedKnowledgeStore={selectedKnowledgeStore}
+        onSelectDatastore={onSaveKnowledgeStore}
+        onCreateNew={() => {
+          setCreateDatastoreType('getzep');
+          setShowCreateDatastoreModal(true);
+          setShowKnowledgeModal(false);
+        }}
+        connecting={connecting}
+        loadingAvailable={loadingAvailableDatastores}
+      />
+
       <CreateDatastoreModal
         isOpen={showCreateDatastoreModal}
         onOpenChange={setShowCreateDatastoreModal}
         type={createDatastoreType}
         onSuccess={async () => {
           await onDatastoreCreated();
-          if (createDatastoreType === 'pinecone') setShowVectorModal(true);
+
+          if (createDatastoreType === 'pinecone') {
+            setShowVectorModal(true);
+          } else if (createDatastoreType === 'getzep') {
+            setShowKnowledgeModal(true);
+          }
           setCreateDatastoreType(null);
         }}
       />

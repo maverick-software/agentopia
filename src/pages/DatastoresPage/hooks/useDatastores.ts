@@ -137,6 +137,12 @@ export function useDatastores() {
           }
         }
 
+        if (formData.type === 'getzep') {
+          if (!formData.config?.connectionId) throw new Error('API Key Connection is required');
+          if (!formData.config?.projectId) throw new Error('Project ID is required');
+          if (!formData.config?.collectionName) throw new Error('Collection Name is required');
+        }
+
         const datastoreData = {
           ...formData,
           user_id: user.id,

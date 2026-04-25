@@ -1,12 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import { corsHeaders } from '../_shared/cors.ts'
 import { getServerTypeMetadata } from '../_shared/mcp-server-detection.ts'
-import { buildPipedreamMcpHeaders } from '../_shared/pipedream.ts'
 
 interface MCPExecuteRequest {
   connection_id: string;
   tool_name: string;
-  remote_tool_name?: string;
   parameters: Record<string, any>;
   agent_id: string;
 }
@@ -36,7 +34,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const rawBody = await req.text()
-    console.log(`[MCP Execute] Request body received (${rawBody.length} bytes)`)
+    console.log(`[MCP Execute] Raw request body: ${rawBody}`)
     
     let parsedBody: MCPExecuteRequest
     try {
@@ -56,8 +54,7 @@ Deno.serve(async (req) => {
     }
     
     const { connection_id, tool_name, parameters, agent_id } = parsedBody
-    let remoteToolName = parsedBody.remote_tool_name || tool_name
-    console.log(`[MCP Execute] Parsed request - connection_id: ${connection_id}, tool_name: ${tool_name}, agent_id: ${agent_id}, parameter_keys:`, Object.keys(parameters || {}))
+    console.log(`[MCP Execute] Parsed request - connection_id: ${connection_id}, tool_name: ${tool_name}, agent_id: ${agent_id}, parameters:`, parameters)
 
     if (!connection_id || !tool_name || !agent_id) {
       console.error(`[MCP Execute] Missing required parameters - connection_id: ${!!connection_id}, tool_name: ${!!tool_name}, agent_id: ${!!agent_id}`)
@@ -144,21 +141,6 @@ Deno.serve(async (req) => {
 
     console.log(`[MCP Execute] ✅ Server URL retrieved successfully, preparing MCP request...`)
 
-    try {
-      const { data: cachedTool } = await supabase
-        .from('mcp_tools_cache')
-        .select('remote_tool_name')
-        .eq('connection_id', connection_id)
-        .eq('tool_name', tool_name)
-        .maybeSingle()
-
-      if (cachedTool?.remote_tool_name) {
-        remoteToolName = cachedTool.remote_tool_name
-      }
-    } catch (cacheLookupError) {
-      console.warn(`[MCP Execute] Could not resolve remote tool name for ${tool_name}:`, cacheLookupError)
-    }
-
     // Execute the tool via MCP protocol
     try {
       console.log(`[MCP Execute] Calling MCP server for tool: ${tool_name}`)
@@ -167,32 +149,27 @@ Deno.serve(async (req) => {
       // The intelligent retry mechanism will handle missing parameters
       let transformedParameters = { ...parameters };
       
-      console.log(`[MCP Execute] Sending parameters to MCP server with keys:`, Object.keys(transformedParameters || {}))
+      console.log(`[MCP Execute] Parameters being sent to MCP server:`, transformedParameters)
       
       const mcpRequestBody = {
         jsonrpc: '2.0',
         id: Date.now(),
         method: 'tools/call',
         params: {
-          name: remoteToolName,
+          name: tool_name,
           arguments: transformedParameters
         }
       }
       
-      console.log(`[MCP Execute] MCP request prepared for remote tool: ${remoteToolName}`)
+      console.log(`[MCP Execute] MCP request body:`, JSON.stringify(mcpRequestBody, null, 2))
       
-      const authConfig = connection.auth_config || {}
-      const mcpHeaders = connection.connection_type === 'pipedream' || authConfig.provider === 'pipedream'
-        ? await buildPipedreamMcpHeaders(authConfig)
-        : {
+      const response = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
           'MCP-Protocol-Version': '2024-11-05'
-        }
-
-      const response = await fetch(serverUrl, {
-        method: 'POST',
-        headers: mcpHeaders,
+        },
         body: JSON.stringify(mcpRequestBody)
       })
 
@@ -208,7 +185,7 @@ Deno.serve(async (req) => {
         // Handle Server-Sent Events format (Zapier MCP uses this)
         const responseText = await response.text()
         console.log(`[MCP Execute] SSE Response received for tool ${tool_name}, length: ${responseText.length} chars`)
-        console.log(`[MCP Execute] SSE response received and will be parsed without logging payload contents`)
+        console.log(`[MCP Execute] SSE Response (first 500 chars): ${responseText.substring(0, 500)}`)
         
         // Parse SSE format: look for "data: " lines
         const lines = responseText.split('\n')
@@ -244,7 +221,7 @@ Deno.serve(async (req) => {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
         const responseText = await response.text()
-        console.log(`[MCP Execute] JSON response received (${responseText.length} bytes)`)
+        console.log(`[MCP Execute] JSON response text (first 500 chars): ${responseText.substring(0, 500)}`)
         try {
           mcpResponse = JSON.parse(responseText)
           console.log(`[MCP Execute] Successfully parsed JSON response`)
@@ -325,35 +302,7 @@ Deno.serve(async (req) => {
       // Extract the result
       const result = mcpResponse.result
       console.log(`[MCP Execute] Tool ${tool_name} executed successfully, result type: ${typeof result}`)
-      console.log(`[MCP Execute] Result received for ${tool_name}`)
-
-      if (connection.connection_type === 'pipedream') {
-        const resultText = JSON.stringify(result)
-        const connectUrlMatch = resultText.match(/https:\/\/pipedream\.com\/_static\/connect\.html[^"\\\s]+/)
-        if (connectUrlMatch) {
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: 'This Pipedream tool requires the user to connect the target app account before it can run.',
-              requires_user_action: true,
-              action: {
-                type: 'connect_account',
-                url: connectUrlMatch[0],
-                provider: 'pipedream'
-              },
-              metadata: {
-                tool_name,
-                remote_tool_name: remoteToolName,
-                provider: 'pipedream'
-              }
-            }),
-            {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            }
-          )
-        }
-      }
+      console.log(`[MCP Execute] Result preview:`, JSON.stringify(result).substring(0, 200))
 
       // Check if Zapier MCP returned an error in the result (they use isError flag)
       if (result && result.isError === true) {
@@ -396,7 +345,7 @@ Deno.serve(async (req) => {
       console.log(`[MCP Execute] Updating tool usage and connection health...`)
       try {
         // Record successful tool execution with parameters for learning
-        console.log(`[MCP Execute] Recording successful parameter keys:`, Object.keys(parameters || {}))
+        console.log(`[MCP Execute] Recording successful parameters:`, JSON.stringify(parameters).substring(0, 200))
         await supabase.rpc('record_mcp_tool_execution', {
           p_connection_id: connection_id,
           p_tool_name: tool_name,

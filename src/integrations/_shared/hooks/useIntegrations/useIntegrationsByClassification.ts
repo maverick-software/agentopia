@@ -62,21 +62,6 @@ export function useIntegrationsByClassification(classification: 'tool' | 'channe
           })
           .filter(Boolean) as Integration[];
 
-        if (classification === 'tool' && !transformed.some((integration) => integration.name === 'Pipedream')) {
-          transformed.unshift({
-            id: 'pipedream',
-            category_id: categoryMap.get('Automation & Workflows') || categoryMap.get('API Integrations') || 'unknown',
-            name: 'Pipedream',
-            description: getProviderDescription('pipedream'),
-            icon_name: getProviderIcon('pipedream'),
-            status: 'available',
-            agent_classification: 'tool',
-            is_popular: true,
-            documentation_url: getProviderDocumentationUrl('pipedream'),
-            display_order: 0,
-          });
-        }
-
         setIntegrations(transformed);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch integrations');

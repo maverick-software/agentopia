@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.39.7';
 import OpenAI from 'npm:openai@6.1.0';
 import type { LLMRouter as IRouter, LLMMessage, LLMChatOptions, LLMChatResponse, AgentLLMPreferences } from './interfaces.ts';
 import { OpenAIProvider } from './openai_provider.ts';
+import { AnthropicProvider } from './anthropic_provider.ts';
 
 export class LLMRouter implements IRouter {
 	private supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -54,10 +55,19 @@ export class LLMRouter implements IRouter {
 			return { provider: new OpenAIProvider(openai, { model: prefs.model }), prefs };
 		}
 		
+		// Anthropic Provider (Claude)
+		if (prefs.provider === 'anthropic') {
+			const apiKey = await this.getSystemAPIKey('anthropic');
+			if (!apiKey) {
+				throw new Error('Anthropic API key not configured. Admin: Please add it in Admin > System API Keys.');
+			}
+			return { provider: new AnthropicProvider(apiKey, { model: prefs.model }), prefs };
+		}
+		
 		// Future: add other providers (Google, Mistral, Groq, OpenRouter)
 		
 		// Unknown provider - throw error
-		throw new Error(`Unknown LLM provider: ${prefs.provider}. Supported providers: openai`);
+		throw new Error(`Unknown LLM provider: ${prefs.provider}. Supported providers: openai, anthropic`);
 	}
 
 	async chat(agentId: string, messages: LLMMessage[], options: LLMChatOptions = {}): Promise<LLMChatResponse> {

@@ -37,6 +37,14 @@ const API_KEY_CONFIGS: APIKeyConfig[] = [
     getKeyUrl: 'https://platform.openai.com/api-keys'
   },
   {
+    provider: 'anthropic',
+    displayName: 'Anthropic',
+    keyPrefix: 'sk-ant-',
+    description: 'Platform-wide Anthropic API key for Claude models. All users will use this key.',
+    docsUrl: 'https://docs.anthropic.com',
+    getKeyUrl: 'https://console.anthropic.com/settings/keys'
+  },
+  {
     provider: 'mistral_ai',
     displayName: 'Mistral AI',
     keyPrefix: '', // Mistral uses various formats
@@ -270,7 +278,7 @@ export function AdminSystemAPIKeysPage() {
                 This page is for <strong>simple API key-only services</strong> that don't require per-account configuration.
               </p>
               <p className="text-white ml-2 mt-2">
-                Services like <strong>SMTP and OAuth providers</strong> that need per-user sender identities or phone numbers should be configured at the <strong>user/account level</strong> in the Integrations page, not here.
+                Services like <strong>SMTP, ClickSend SMS, and OAuth providers</strong> that need per-user sender identities or phone numbers should be configured at the <strong>user/account level</strong> in the Integrations page, not here.
               </p>
             </div>
           </AlertDescription>

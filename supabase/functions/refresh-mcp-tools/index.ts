@@ -1,6 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import { corsHeaders } from '../_shared/cors.ts'
-import { buildPipedreamMcpHeaders, namespacePipedreamToolName } from '../_shared/pipedream.ts'
 
 interface RefreshToolsRequest {
   connectionId: string;
@@ -91,18 +90,13 @@ Deno.serve(async (req) => {
 
     // Test the MCP connection and discover tools
     try {
-      const authConfig = connection.auth_config || {};
-      const mcpHeaders = connection.connection_type === 'pipedream' || authConfig.provider === 'pipedream'
-        ? await buildPipedreamMcpHeaders(authConfig)
-        : {
+      const response = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/event-stream',
           'MCP-Protocol-Version': '2024-11-05'
-        };
-
-      const response = await fetch(serverUrl, {
-        method: 'POST',
-        headers: mcpHeaders,
+        },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -190,27 +184,15 @@ Deno.serve(async (req) => {
         }
 
         const toolsToInsert = uniqueTools.map((tool: any) => {
-          const appSlug = authConfig.app_slug || tool.app_slug || null
-          const exposedToolName = connection.connection_type === 'pipedream' && appSlug
-            ? namespacePipedreamToolName(appSlug, tool.name)
-            : tool.name
           const openaiSchema = {
-            name: exposedToolName,
+            name: tool.name,
             description: tool.description || '',
             parameters: tool.inputSchema || {}
           }
           
           return {
             connection_id: connectionId,
-            tool_name: exposedToolName,
-            remote_tool_name: tool.name,
-            provider_name: connection.connection_type || 'generic',
-            app_slug: appSlug,
-            tool_metadata: {
-              remote_name: tool.name,
-              app_slug: appSlug,
-              account_id: authConfig.account_id || null
-            },
+            tool_name: tool.name,
             tool_schema: tool,
             openai_schema: openaiSchema,
             schema_hash: generateSchemaHash(openaiSchema),

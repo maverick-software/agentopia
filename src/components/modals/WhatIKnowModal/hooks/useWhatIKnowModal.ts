@@ -25,7 +25,11 @@ export function useWhatIKnowModal(props: WhatIKnowModalProps): WhatIKnowModalSta
   const [loading, setLoading] = useState(false);
   const [loadingDatastores, setLoadingDatastores] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
+  const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
+  const [graphEnabled, setGraphEnabled] = useState(false);
   const [showVectorSelection, setShowVectorSelection] = useState(false);
+  const [showKnowledgeSelection, setShowKnowledgeSelection] = useState(false);
   const [showMediaLibrarySelector, setShowMediaLibrarySelector] = useState(false);
   const [assignedMediaCount, setAssignedMediaCount] = useState(0);
 
@@ -73,6 +77,18 @@ export function useWhatIKnowModal(props: WhatIKnowModalProps): WhatIKnowModalSta
   }, [isOpen, user, loadDatastores, loadAssignedMediaCount]);
 
   useEffect(() => {
+    if (!isOpen || !agentId) return;
+    (async () => {
+      const { data } = await supabase.from('agents').select('metadata').eq('id', agentId).maybeSingle();
+      const meta = (data?.metadata || {}) as Record<string, any>;
+      const settings = (meta.settings || {}) as Record<string, any>;
+      setAgentMetadata(meta);
+      setAgentSettings(settings);
+      setGraphEnabled(settings.use_account_graph === true);
+    })();
+  }, [agentId, isOpen, supabase]);
+
+  useEffect(() => {
     if (isOpen && agentData?.agent_datastores) {
       setConnectedDatastores(agentData.agent_datastores.map((ad) => ad.datastore_id));
       setSaved(false);
@@ -85,7 +101,46 @@ export function useWhatIKnowModal(props: WhatIKnowModalProps): WhatIKnowModalSta
     return () => clearTimeout(timer);
   }, [saved]);
 
-  const getDatastoresByType = (type: 'pinecone') => availableDatastores.filter((ds) => ds.type === type);
+  const getDatastoresByType = (type: 'pinecone' | 'getzep') => availableDatastores.filter((ds) => ds.type === type);
+
+  const ensureAccountGraph = async () => {
+    const { data: ag } = await supabase.from('account_graphs').select('id').eq('user_id', user?.id).maybeSingle();
+    if (ag?.id) return true;
+    const { data: provider } = await supabase.from('service_providers').select('id').eq('name', 'getzep').single();
+    const { data: conn } = await supabase
+      .from('user_integration_credentials')
+      .select('id')
+      .eq('oauth_provider_id', provider?.id)
+      .eq('user_id', user?.id)
+      .maybeSingle();
+    if (!conn?.id) {
+      toast.error('Connect GetZep in Integrations to enable the knowledge graph');
+      return false;
+    }
+    const { error } = await supabase
+      .from('account_graphs')
+      .insert({ user_id: user?.id, connection_id: conn.id, settings: { retrieval: { hop_depth: 2, max_results: 50 } } });
+    return !error;
+  };
+
+  const toggleGraphEnabled = async () => {
+    const prev = graphEnabled;
+    const next = !prev;
+    setGraphEnabled(next);
+    if (next && !(await ensureAccountGraph())) {
+      setGraphEnabled(prev);
+      return;
+    }
+    try {
+      const newSettings = { ...(agentSettings || {}), use_account_graph: next };
+      const mergedMetadata = { ...(agentMetadata || {}), settings: newSettings };
+      await supabase.from('agents').update({ metadata: mergedMetadata }).eq('id', agentId);
+      toast.success(next ? 'Knowledge graph enabled' : 'Knowledge graph disabled');
+    } catch {
+      setGraphEnabled(prev);
+      toast.error('Failed to update knowledge graph setting');
+    }
+  };
 
   const handleSelectVectorDatastore = () => {
     const vectorDatastores = getDatastoresByType('pinecone');
@@ -96,6 +151,10 @@ export function useWhatIKnowModal(props: WhatIKnowModalProps): WhatIKnowModalSta
       return;
     }
     setShowVectorSelection(true);
+  };
+
+  const handleSelectKnowledgeDatastore = () => {
+    void toggleGraphEnabled();
   };
 
   const handleToggleMemoryPreference = (preferenceId: string) => {
@@ -121,6 +180,12 @@ export function useWhatIKnowModal(props: WhatIKnowModalProps): WhatIKnowModalSta
     const vectorIds = getDatastoresByType('pinecone').map((ds) => ds.id);
     setConnectedDatastores((prev) => [...prev.filter((id) => !vectorIds.includes(id)), datastoreId]);
     setShowVectorSelection(false);
+  };
+
+  const handleKnowledgeDatastoreSelect = (datastoreId: string) => {
+    const knowledgeIds = getDatastoresByType('getzep').map((ds) => ds.id);
+    setConnectedDatastores((prev) => [...prev.filter((id) => !knowledgeIds.includes(id)), datastoreId]);
+    setShowKnowledgeSelection(false);
   };
 
   const hasChanges = () => {
@@ -161,16 +226,21 @@ export function useWhatIKnowModal(props: WhatIKnowModalProps): WhatIKnowModalSta
     loading,
     loadingDatastores,
     saved,
+    graphEnabled,
     assignedMediaCount,
     showMediaLibrarySelector,
     showVectorSelection,
     setShowVectorSelection,
+    showKnowledgeSelection,
+    setShowKnowledgeSelection,
     setShowMediaLibrarySelector,
     setAssignedMediaCount,
     handleSelectVectorDatastore,
+    handleSelectKnowledgeDatastore,
     handleToggleMemoryPreference,
     handleContextSizeChange,
     handleVectorDatastoreSelect,
+    handleKnowledgeDatastoreSelect,
     handleSave,
     hasChanges,
     getDatastoresByType,

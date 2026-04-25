@@ -6,9 +6,9 @@ import { useLocation } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { IntegrationSetupModal } from '@/components/integrations/IntegrationSetupModal';
 import { useConnections, useIntegrationCategories, useIntegrationsByCategory } from '@/integrations/_shared';
+import { useGmailConnection } from '@/integrations/gmail';
 import { IntegrationsListPanel } from './IntegrationsListPanel';
 import { IntegrationDetailsPanel } from './IntegrationDetailsPanel';
-import { usePipedreamApps } from '@/integrations/pipedream';
 import {
   getEffectiveStatus,
   HIDDEN_INTEGRATIONS,
@@ -35,12 +35,8 @@ export function IntegrationsPage() {
     loading: unifiedLoading,
     refetch: refetchConnections,
   } = useConnections({ includeRevoked: false });
-  const {
-    apps: pipedreamApps,
-    accounts: pipedreamAccounts,
-    loading: pipedreamLoading,
-  } = usePipedreamApps(searchTerm);
 
+  useGmailConnection();
   const processedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -102,26 +98,7 @@ export function IntegrationsPage() {
     }
   };
 
-  const pipedreamCatalogItems = selectedCategory === 'all'
-    ? pipedreamApps.map((app) => ({
-      id: `pipedream:${app.name_slug}`,
-      category_id: 'pipedream',
-      name: app.name,
-      description: app.description || `Connect ${app.name} through Pipedream MCP`,
-      icon_name: 'Zap',
-      status: 'available',
-      agent_classification: 'tool',
-      is_popular: Boolean(app.featured_weight && app.featured_weight > 0),
-      documentation_url: `https://pipedream.com/apps/${app.name_slug}`,
-      display_order: 1000 - (app.featured_weight || 0),
-      is_pipedream_app: true,
-      pipedream_app_slug: app.name_slug,
-      pipedream_app_name: app.name,
-      pipedream_app_icon_url: app.img_src,
-    }))
-    : [];
-
-  const filteredNativeIntegrations = integrations.filter((integration) => {
+  const filteredIntegrations = integrations.filter((integration) => {
     if (HIDDEN_INTEGRATIONS.includes(integration.name)) {
       return false;
     }
@@ -135,18 +112,8 @@ export function IntegrationsPage() {
 
     return matchesSearch && isNotDisabled;
   });
-  const filteredIntegrations = [...filteredNativeIntegrations, ...pipedreamCatalogItems];
 
   const isIntegrationConnected = (integrationName: string) => {
-    const pipedreamItem = selectedIntegration?.name === integrationName && selectedIntegration?.is_pipedream_app
-      ? selectedIntegration
-      : null;
-    if (pipedreamItem) {
-      return pipedreamAccounts.some(
-        (account) => account.app_slug === pipedreamItem.pipedream_app_slug && account.healthy && !account.dead,
-      );
-    }
-
     const provider = providerNameForIntegration(integrationName);
     if (!provider) return false;
 
@@ -166,15 +133,6 @@ export function IntegrationsPage() {
   };
 
   const getConnectionCount = (integrationName: string) => {
-    const pipedreamItem = selectedIntegration?.name === integrationName && selectedIntegration?.is_pipedream_app
-      ? selectedIntegration
-      : null;
-    if (pipedreamItem) {
-      return pipedreamAccounts.filter(
-        (account) => account.app_slug === pipedreamItem.pipedream_app_slug && account.healthy && !account.dead,
-      ).length;
-    }
-
     const provider = providerNameForIntegration(integrationName);
     if (!provider) return 0;
 
@@ -214,7 +172,6 @@ export function IntegrationsPage() {
             categories={categories}
             integrations={integrations}
             filteredIntegrations={filteredIntegrations}
-            pipedreamLoading={pipedreamLoading}
             selectedIntegration={selectedIntegration}
             onSelectIntegration={setSelectedIntegration}
           />
@@ -223,7 +180,6 @@ export function IntegrationsPage() {
             selectedIntegration={selectedIntegration}
             setSelectedIntegration={setSelectedIntegration}
             unifiedConnections={unifiedConnections}
-            pipedreamAccounts={pipedreamAccounts}
             isIntegrationConnected={isIntegrationConnected}
             getConnectionCount={getConnectionCount}
             onAddCredentials={(integration: any) => {

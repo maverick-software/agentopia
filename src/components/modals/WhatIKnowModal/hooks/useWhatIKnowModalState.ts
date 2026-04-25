@@ -25,11 +25,15 @@ export function useWhatIKnowModalState({ isOpen, agentId, agentData, onAgentUpda
   const [loading, setLoading] = useState(false);
   const [loadingDatastores, setLoadingDatastores] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
+  const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
+  const [graphEnabled, setGraphEnabled] = useState(false);
   const [showVectorSelection, setShowVectorSelection] = useState(false);
+  const [showKnowledgeSelection, setShowKnowledgeSelection] = useState(false);
   const [showMediaLibrarySelector, setShowMediaLibrarySelector] = useState(false);
   const [assignedMediaCount, setAssignedMediaCount] = useState(0);
 
-  const getDatastoresByType = (type: 'pinecone') => availableDatastores.filter((ds) => ds.type === type);
+  const getDatastoresByType = (type: 'pinecone' | 'getzep') => availableDatastores.filter((ds) => ds.type === type);
 
   const loadDatastores = useCallback(async () => {
     if (!user) return;
@@ -73,6 +77,31 @@ export function useWhatIKnowModalState({ isOpen, agentId, agentData, onAgentUpda
   }, [isOpen, user, loadDatastores, loadAssignedMediaCount]);
 
   useEffect(() => {
+    const loadAgentSettings = async () => {
+      if (!isOpen || !agentId) return;
+      try {
+        const { data, error } = await supabase.from('agents').select('metadata').eq('id', agentId).maybeSingle();
+        if (error) {
+          setAgentMetadata({});
+          setAgentSettings({});
+          setGraphEnabled(false);
+          return;
+        }
+        const meta = (data?.metadata || {}) as Record<string, any>;
+        const settings = (meta.settings || {}) as Record<string, any>;
+        setAgentMetadata(meta);
+        setAgentSettings(settings);
+        setGraphEnabled(settings.use_account_graph === true);
+      } catch {
+        setAgentMetadata({});
+        setAgentSettings({});
+        setGraphEnabled(false);
+      }
+    };
+    loadAgentSettings();
+  }, [isOpen, agentId, supabase]);
+
+  useEffect(() => {
     if (!isOpen || !agentData?.agent_datastores) return;
     setConnectedDatastores(agentData.agent_datastores.map((ad) => ad.datastore_id));
     setSaved(false);
@@ -83,6 +112,57 @@ export function useWhatIKnowModalState({ isOpen, agentId, agentData, onAgentUpda
     const timer = setTimeout(() => setSaved(false), 3000);
     return () => clearTimeout(timer);
   }, [saved]);
+
+  const ensureAccountGraph = async () => {
+    try {
+      const { data: ag } = await supabase.from('account_graphs').select('id').eq('user_id', user?.id).maybeSingle();
+      if (ag?.id) return true;
+      const { data: provider } = await supabase.from('service_providers').select('id').eq('name', 'getzep').single();
+      if (!provider) return false;
+      const { data: conn } = await supabase
+        .from('user_integration_credentials')
+        .select('id')
+        .eq('oauth_provider_id', provider.id)
+        .eq('user_id', user?.id)
+        .maybeSingle();
+      if (!conn?.id) return false;
+      const { error } = await supabase
+        .from('account_graphs')
+        .insert({ user_id: user?.id, connection_id: conn.id, settings: { retrieval: { hop_depth: 2, max_results: 50 } } });
+      return !error;
+    } catch {
+      return false;
+    }
+  };
+
+  const toggleGraphEnabled = async () => {
+    const prev = graphEnabled;
+    const next = !prev;
+    setGraphEnabled(next);
+    if (next) {
+      const ok = await ensureAccountGraph();
+      if (!ok) {
+        setGraphEnabled(prev);
+        toast.error('Connect GetZep in Integrations to enable the knowledge graph');
+        return;
+      }
+    }
+
+    try {
+      const newSettings = { ...(agentSettings || {}), use_account_graph: next };
+      const mergedMetadata = { ...(agentMetadata || {}), settings: newSettings };
+      const { data, error } = await supabase.from('agents').update({ metadata: mergedMetadata }).eq('id', agentId).select('metadata').single();
+      if (error) throw error;
+      if (data?.metadata) {
+        setAgentMetadata(data.metadata);
+        setAgentSettings(data.metadata.settings || {});
+      }
+      toast.success(next ? 'Knowledge graph enabled' : 'Knowledge graph disabled');
+    } catch (e: any) {
+      setGraphEnabled(prev);
+      toast.error(`Failed to update knowledge graph setting: ${e.message || 'Unknown error'}`);
+    }
+  };
 
   const handleToggleMemoryPreference = (preferenceId: string) => {
     if (preferenceId === 'forget_sessions') {
@@ -118,6 +198,14 @@ export function useWhatIKnowModalState({ isOpen, agentId, agentData, onAgentUpda
     setShowVectorSelection(false);
     const datastore = availableDatastores.find((ds) => ds.id === datastoreId);
     toast.success(`Connected to vector datastore: ${datastore?.name || 'Unknown'}`);
+  };
+
+  const handleKnowledgeDatastoreSelect = (datastoreId: string) => {
+    const knowledgeIds = getDatastoresByType('getzep').map((ds) => ds.id);
+    setConnectedDatastores((prev) => [...prev.filter((id) => !knowledgeIds.includes(id)), datastoreId]);
+    setShowKnowledgeSelection(false);
+    const datastore = availableDatastores.find((ds) => ds.id === datastoreId);
+    toast.success(`Connected to knowledge graph: ${datastore?.name || 'Unknown'}`);
   };
 
   const hasChanges = () => {
@@ -161,10 +249,13 @@ export function useWhatIKnowModalState({ isOpen, agentId, agentData, onAgentUpda
     loading,
     loadingDatastores,
     saved,
+    graphEnabled,
     showVectorSelection,
+    showKnowledgeSelection,
     showMediaLibrarySelector,
     assignedMediaCount,
     setShowVectorSelection,
+    setShowKnowledgeSelection,
     setShowMediaLibrarySelector,
     setAssignedMediaCount,
     getDatastoresByType,
@@ -173,6 +264,8 @@ export function useWhatIKnowModalState({ isOpen, agentId, agentData, onAgentUpda
     handleToggleMemoryPreference,
     handleContextSizeChange,
     handleSelectVectorDatastore,
+    toggleGraphEnabled,
     handleVectorDatastoreSelect,
+    handleKnowledgeDatastoreSelect,
   };
 }

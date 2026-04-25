@@ -1,5 +1,6 @@
 import React from 'react';
 import { WebSearchSetupForm } from './WebSearchSetupForm';
+import { DigitalOceanSetupForm } from './DigitalOceanSetupForm';
 
 interface SearchProvider {
   id: string;
@@ -25,6 +26,7 @@ interface ToolSetupFormsProps {
   onConnectionNameChange: (name: string) => void;
   // Setup handlers
   onWebSearchSetup: () => void;
+  onDigitalOceanSetup: () => void;
 }
 
 export function ToolSetupForms({
@@ -38,9 +40,10 @@ export function ToolSetupForms({
   onProviderChange,
   onApiKeyChange,
   onConnectionNameChange,
-  onWebSearchSetup
+  onWebSearchSetup,
+  onDigitalOceanSetup
 }: ToolSetupFormsProps) {
-  const isConnecting = connectingService === tool.id;
+  const isConnecting = connectingService === tool.id || connectingService === 'digitalocean';
 
   // Web Search setup
   if (tool.id === 'web_search') {
@@ -56,6 +59,21 @@ export function ToolSetupForms({
         onApiKeyChange={onApiKeyChange}
         onConnectionNameChange={onConnectionNameChange}
         onConnect={onWebSearchSetup}
+      />
+    );
+  }
+
+  // DigitalOcean setup
+  if (tool.id === 'digitalocean') {
+    return (
+      <DigitalOceanSetupForm
+        apiKey={apiKey}
+        connectionName={connectionName}
+        error={error}
+        isConnecting={isConnecting}
+        onApiKeyChange={onApiKeyChange}
+        onConnectionNameChange={onConnectionNameChange}
+        onConnect={onDigitalOceanSetup}
       />
     );
   }

@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGmailConnection } from '@/integrations/gmail';
 import {
   useConnections,
   useIntegrationsByClassification,
@@ -46,6 +47,7 @@ export function EnhancedChannelsModalCanonical({
   const supabase = useSupabaseClient();
   const vaultService = new VaultService(supabase);
 
+  const { initiateOAuth: gmailInitiateOAuth } = useGmailConnection();
   const { connections, refetch: refetchConnections } = useConnections({ includeRevoked: false });
   const { integrations } = useIntegrationsByClassification('channel');
 
@@ -75,6 +77,7 @@ export function EnhancedChannelsModalCanonical({
         credential_type: connection.credential_type,
       })),
     );
+    console.log('Gmail connection exists?', connections.some((connection) => connection.provider_name === 'gmail'));
   }, [connections]);
 
   const [capabilitiesByIntegrationId, setCapabilitiesByIntegrationId] = useState<
@@ -116,6 +119,160 @@ export function EnhancedChannelsModalCanonical({
 
     void loadCapabilities();
   }, [integrations, supabase]);
+
+  const handleOAuthSetup = async (serviceId: string) => {
+    if (serviceId === 'gmail') {
+      modalState.setConnectingService(serviceId);
+      try {
+        console.log('Initiating Gmail OAuth flow');
+        await gmailInitiateOAuth();
+
+        await refetchConnections();
+        await fetchAgentPermissions();
+
+        toast.success('Gmail connected successfully! 🎉');
+        modalState.setSaved(true);
+        modalState.setSetupService(null);
+        modalState.setActiveTab('connected');
+      } catch (error: any) {
+        console.error('OAuth setup error:', error);
+        modalState.setError(error.message || 'Failed to connect OAuth service');
+        toast.error('Failed to connect. Please try again.');
+      } finally {
+        modalState.setConnectingService(null);
+      }
+      return;
+    }
+
+    modalState.setConnectingService(null);
+    modalState.setSetupService(null);
+    toast.info(`${serviceId} integration coming soon! 🚀`);
+  };
+
+  const handleSendGridSetup = async () => {
+    if (!user) return;
+
+    modalState.setConnectingService('sendgrid');
+    modalState.setError(null);
+
+    try {
+      if (!modalState.apiKey.trim()) {
+        modalState.setError('API key is required');
+        return;
+      }
+      if (!modalState.fromEmail.trim()) {
+        modalState.setError('From email is required');
+        return;
+      }
+
+      const vaultKeyId = await vaultService.createSecret(
+        `sendgrid_api_key_${user.id}`,
+        modalState.apiKey,
+        'SendGrid API key',
+      );
+
+      const { data: sendGridProvider, error: providerError } = await supabase
+        .from('service_providers')
+        .select('id')
+        .eq('name', 'sendgrid')
+        .single();
+
+      if (providerError || !sendGridProvider) {
+        throw providerError || new Error('SendGrid provider missing');
+      }
+
+      const { error: connectionError } = await supabase.from('user_integration_credentials').insert({
+        user_id: user.id,
+        oauth_provider_id: sendGridProvider.id,
+        connection_name: modalState.connectionName || 'SendGrid Connection',
+        credential_type: 'api_key',
+        connection_status: 'active',
+        vault_access_token_id: vaultKeyId,
+        external_username: modalState.fromEmail || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (connectionError) throw connectionError;
+
+      await refetchConnections();
+
+      toast.success('SendGrid connected successfully! 📧');
+      modalState.setSaved(true);
+      modalState.setSetupService(null);
+      modalState.setActiveTab('connected');
+      modalState.resetForm();
+    } catch (error: any) {
+      console.error('SendGrid setup error:', error);
+      modalState.setError(error.message || 'Failed to connect SendGrid');
+      toast.error('Failed to connect SendGrid. Please try again.');
+    } finally {
+      modalState.setConnectingService(null);
+    }
+  };
+
+  const handleMailgunSetup = async () => {
+    if (!user) return;
+    modalState.setConnectingService('mailgun');
+    modalState.setError(null);
+
+    try {
+      if (!modalState.apiKey.trim()) {
+        modalState.setError('API key is required');
+        return;
+      }
+      if (!modalState.mailgunDomain.trim()) {
+        modalState.setError('Domain is required');
+        return;
+      }
+
+      const { data: mailgunProvider, error: providerError } = await supabase
+        .from('service_providers')
+        .select('id')
+        .eq('name', 'mailgun')
+        .single();
+
+      if (providerError || !mailgunProvider) {
+        throw providerError || new Error('Mailgun provider missing');
+      }
+
+      console.log('Securing Mailgun API key with vault encryption');
+      const secretName = `mailgun_api_key_${user.id}_${Date.now()}`;
+      const vaultKeyId = await vaultService.createSecret(
+        secretName,
+        modalState.apiKey,
+        `Mailgun API key for ${modalState.mailgunDomain} - Created: ${new Date().toISOString()}`,
+      );
+
+      console.log(`✅ Mailgun API key securely stored in vault: ${vaultKeyId}`);
+
+      const { error: connectionError } = await supabase.from('user_integration_credentials').insert({
+        user_id: user.id,
+        oauth_provider_id: mailgunProvider.id,
+        connection_name: modalState.connectionName || 'Mailgun Connection',
+        credential_type: 'api_key',
+        connection_status: 'active',
+        vault_access_token_id: vaultKeyId,
+        external_username: modalState.mailgunDomain,
+        created_at: new Date().toISOString(),
+      });
+
+      if (connectionError) throw connectionError;
+
+      await refetchConnections();
+      toast.success('Mailgun connected successfully! 🚀');
+      modalState.setSaved(true);
+      modalState.setSetupService(null);
+      modalState.setActiveTab('connected');
+      modalState.resetForm();
+    } catch (error: any) {
+      console.error('Mailgun setup error:', error);
+      modalState.setError(error.message || 'Failed to connect Mailgun');
+      toast.error('Failed to connect Mailgun. Please try again.');
+    } finally {
+      modalState.setConnectingService(null);
+    }
+  };
 
   const handleSMTPSetup = async () => {
     if (!user) return;
@@ -291,6 +448,7 @@ export function EnhancedChannelsModalCanonical({
                       apiKey={modalState.apiKey}
                       fromEmail={modalState.fromEmail}
                       fromName={modalState.fromName}
+                      mailgunDomain={modalState.mailgunDomain}
                       smtpHost={modalState.smtpHost}
                       smtpPort={modalState.smtpPort}
                       smtpSecure={modalState.smtpSecure}
@@ -301,11 +459,15 @@ export function EnhancedChannelsModalCanonical({
                       onApiKeyChange={modalState.setApiKey}
                       onFromEmailChange={modalState.setFromEmail}
                       onFromNameChange={modalState.setFromName}
+                      onMailgunDomainChange={modalState.setMailgunDomain}
                       onSMTPHostChange={modalState.setSMTPHost}
                       onSMTPPortChange={modalState.setSMTPPort}
                       onSMTPSecureChange={modalState.setSMTPSecure}
                       onSMTPUsernameChange={modalState.setSMTPUsername}
                       onSMTPPasswordChange={modalState.setSMTPPassword}
+                      onOAuthSetup={handleOAuthSetup}
+                      onSendGridSetup={handleSendGridSetup}
+                      onMailgunSetup={handleMailgunSetup}
                       onSMTPSetup={handleSMTPSetup}
                       onSetupService={modalState.setSetupService}
                       onSetupCancel={() => modalState.setSetupService(null)}

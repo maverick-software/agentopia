@@ -12,20 +12,6 @@ import {
 } from 'lucide-react';
 
 export const HIDDEN_INTEGRATIONS = [
-  'Anthropic',
-  'Azure Document Intelligence',
-  'ClickSend SMS',
-  'DigitalOcean',
-  'GetZep',
-  'Gmail',
-  'Mailgun',
-  'Microsoft OneDrive',
-  'Microsoft Outlook',
-  'Microsoft Teams',
-  'OneDrive',
-  'Outlook',
-  'SendGrid',
-  'Teams',
   'OpenAI',
   'Mistral AI',
   'Serper API',
@@ -102,6 +88,8 @@ export function getIconComponent(iconName: string) {
 
 export function providerNameForIntegration(name: string): string | null {
   switch (name) {
+    case 'Gmail':
+      return 'gmail';
     case 'SMTP':
       return 'smtp';
     case 'Web Search':
@@ -114,10 +102,18 @@ export function providerNameForIntegration(name: string): string | null {
       return 'brave_search';
     case 'Pinecone':
       return 'pinecone';
+    case 'GetZep':
+      return 'getzep';
+    case 'DigitalOcean':
+      return 'digitalocean';
     case 'Discord':
       return 'discord';
-    case 'Pipedream':
-      return 'pipedream';
+    case 'Microsoft Teams':
+      return 'microsoft-teams';
+    case 'Microsoft Outlook':
+      return 'microsoft-outlook';
+    case 'Microsoft OneDrive':
+      return 'microsoft-onedrive';
     default:
       return null;
   }

@@ -73,8 +73,7 @@ export function IntegrationSetupModal({
   const shouldShowDialog = isOpen && !!integration;
 
   // Check if we have a registered setup component for this integration
-  const registryKey = integration?.is_pipedream_app ? 'Pipedream' : integration?.name;
-  const hasRegisteredSetup = registryKey && registryKey in integrationSetupRegistry;
+  const hasRegisteredSetup = integration && integration.name in integrationSetupRegistry;
 
   // Use modal prop to prevent content unmounting when closed
   // This preserves form state when tabbing away
@@ -162,8 +161,7 @@ function RegisteredIntegrationSetup({
   onClose: () => void;
 }) {
   try {
-    const registryKey = integration?.is_pipedream_app ? 'Pipedream' : integration.name;
-    const SetupComponent = getIntegrationSetupComponent(registryKey);
+    const SetupComponent = getIntegrationSetupComponent(integration.name);
     
     return (
       <SetupComponent

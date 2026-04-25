@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Plus, Search } from 'lucide-react';
+import { Settings, Plus, Search, Mail } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { toast } from 'react-hot-toast';
 
@@ -22,6 +22,12 @@ interface ConnectedToolsListProps {
   TOOL_INTEGRATIONS: any[];
   SEARCH_PROVIDERS: any[];
 }
+
+const EMAIL_PROVIDER_NAMES = {
+  'smtp': 'SMTP Server',
+  'sendgrid': 'SendGrid',
+  'mailgun': 'Mailgun'
+} as const;
 
 export function ConnectedToolsList({
   agentPermissions,

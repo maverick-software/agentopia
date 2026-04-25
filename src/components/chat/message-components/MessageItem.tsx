@@ -32,54 +32,6 @@ const messageKey = (message: Message, index: number): string => {
   return `${message.role}-${index}-${index}`;
 };
 
-type PlanStep = { step?: string; title?: string; status?: 'pending' | 'in_progress' | 'completed' };
-
-const extractPlanBlock = (content: string): { text: string; plan: { explanation?: string; plan: PlanStep[] } | null } => {
-  const match = content.match(/\n?:::plan\n([\s\S]*?)\n:::\n?/);
-  if (!match) return { text: content, plan: null };
-
-  try {
-    const parsed = JSON.parse(match[1]);
-    const plan = Array.isArray(parsed.plan) ? parsed.plan : Array.isArray(parsed.steps) ? parsed.steps : [];
-    return {
-      text: content.replace(match[0], '').trim(),
-      plan: { explanation: parsed.explanation || parsed.goal, plan },
-    };
-  } catch {
-    return { text: content, plan: null };
-  }
-};
-
-const PlanCard: React.FC<{ plan: { explanation?: string; plan: PlanStep[] } }> = ({ plan }) => {
-  const completed = plan.plan.filter((step) => step.status === 'completed').length;
-  const total = plan.plan.length;
-  return (
-    <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="text-sm font-semibold text-foreground">Agent Plan</div>
-        <div className="text-xs text-muted-foreground">{completed}/{total} complete</div>
-      </div>
-      {plan.explanation && <div className="mb-3 text-xs text-muted-foreground">{plan.explanation}</div>}
-      <div className="space-y-2">
-        {plan.plan.map((step, idx) => {
-          const status = step.status || 'pending';
-          const marker = status === 'completed' ? '✓' : status === 'in_progress' ? '•' : '○';
-          return (
-            <div key={`${step.step || step.title || idx}-${idx}`} className="flex items-start gap-2 text-sm">
-              <span className={status === 'completed' ? 'text-green-600' : status === 'in_progress' ? 'text-primary' : 'text-muted-foreground'}>
-                {marker}
-              </span>
-              <span className={status === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground'}>
-                {step.step || step.title}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 const AssistantMarkdown: React.FC<{ content: string; formatMarkdown: (content: string) => string }> = ({
   content,
   formatMarkdown,
@@ -168,8 +120,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onShowDebugModal,
 }) => {
   const artifacts = getArtifactsFromMessage(message);
-  const assistantPlan = message.role === 'assistant' ? extractPlanBlock(message.content) : null;
-  const runtime = message.metadata?.agent_runtime || message.metadata?.processingDetails?.agent_runtime;
 
   return (
     <div
@@ -236,12 +186,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             </button>
           )}
 
-          {message.role === 'assistant' && runtime?.liveness && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              {runtime.liveness}
-            </span>
-          )}
-
           <span className="text-xs text-muted-foreground">{formatMessageTimestamp(message.timestamp)}</span>
         </div>
 
@@ -252,8 +196,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         >
           {message.role === 'assistant' ? (
             <>
-              {assistantPlan?.plan && <PlanCard plan={assistantPlan.plan} />}
-              <AssistantMarkdown content={assistantPlan?.text ?? message.content} formatMarkdown={formatMarkdown} />
+              <AssistantMarkdown content={message.content} formatMarkdown={formatMarkdown} />
 
               {artifacts.length > 0 && (
                 <div className="mt-4 space-y-2">
@@ -270,53 +213,25 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
               {message.metadata?.requires_user_input && message.metadata?.user_input_request && (
                 <div className="mt-4">
-                  {message.metadata.user_input_request.approval_id ? (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-                      <div className="text-sm font-medium">Tool approval required</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{message.metadata.user_input_request.reason}</div>
-                      <div className="mt-3 flex gap-2">
-                        {(['approved', 'denied'] as const).map((decision) => (
-                          <button
-                            key={decision}
-                            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-                            onClick={async () => {
-                              await supabase.functions.invoke('agent-runtime-approval', {
-                                body: {
-                                  approval_id: message.metadata.user_input_request.approval_id,
-                                  decision,
-                                },
-                              });
-                              window.dispatchEvent(new CustomEvent('agent-runtime-approval-resolved', {
-                                detail: { approvalId: message.metadata.user_input_request.approval_id, decision },
-                              }));
-                            }}
-                          >
-                            {decision === 'approved' ? 'Approve' : 'Deny'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <ToolUserInputCard
-                      request={{
-                        id: message.id || '',
-                        tool_name: message.metadata.user_input_request.tool_name,
-                        tool_call_id: message.metadata.tool_call_id || `tool_${Date.now()}`,
-                        reason: message.metadata.user_input_request.reason,
-                        required_fields: message.metadata.user_input_request.required_fields,
-                        status: 'pending',
-                      }}
-                      onSubmit={async (toolCallId: string, inputs: Record<string, any>) => {
-                        await supabase.functions.invoke('tool-user-input', {
-                          body: { action: 'submit_response', tool_call_id: toolCallId, user_inputs: inputs },
-                        });
-                        window.dispatchEvent(new CustomEvent('user-input-submitted', { detail: { toolCallId, inputs } }));
-                      }}
-                      onCancel={(toolCallId: string) => {
-                        console.log('[ToolUserInput] User cancelled input request:', toolCallId);
-                      }}
-                    />
-                  )}
+                  <ToolUserInputCard
+                    request={{
+                      id: message.id || '',
+                      tool_name: message.metadata.user_input_request.tool_name,
+                      tool_call_id: message.metadata.tool_call_id || `tool_${Date.now()}`,
+                      reason: message.metadata.user_input_request.reason,
+                      required_fields: message.metadata.user_input_request.required_fields,
+                      status: 'pending',
+                    }}
+                    onSubmit={async (toolCallId: string, inputs: Record<string, any>) => {
+                      await supabase.functions.invoke('tool-user-input', {
+                        body: { action: 'submit_response', tool_call_id: toolCallId, user_inputs: inputs },
+                      });
+                      window.dispatchEvent(new CustomEvent('user-input-submitted', { detail: { toolCallId, inputs } }));
+                    }}
+                    onCancel={(toolCallId: string) => {
+                      console.log('[ToolUserInput] User cancelled input request:', toolCallId);
+                    }}
+                  />
                 </div>
               )}
 

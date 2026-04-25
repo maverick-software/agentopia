@@ -26,7 +26,13 @@ interface ChannelPermissionsModalProps {
 
 // Default scopes helper function
 function getDefaultScopesForService(serviceId: string): string[] {
-  if (serviceId === 'smtp') return ['smtp_send_email', 'smtp_email_templates', 'smtp_email_stats'];
+  if (serviceId === 'gmail') return [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.modify'
+  ];
+  if (serviceId === 'sendgrid') return ['send_email'];
+  if (serviceId === 'mailgun') return ['send_email', 'validate', 'stats', 'suppressions'];
   return [];
 }
 

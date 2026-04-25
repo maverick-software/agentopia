@@ -1,4 +1,4 @@
-import { Database, FileText, Library, Lightbulb, Loader2, MessageSquare, Plus } from 'lucide-react';
+import { Brain, Database, FileText, Library, Lightbulb, Loader2, MessageSquare, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
@@ -26,7 +26,7 @@ export function WhatIKnowSections({ state, onOpenMediaLibrary }: WhatIKnowSectio
             <span className="ml-2 text-muted-foreground">Loading knowledge sources...</span>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-1">
+          <div className="grid gap-4 md:grid-cols-2">
             <div
               className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${connectedVector ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-muted-foreground/25 hover:border-blue-500/50 hover:bg-blue-50/50 dark:hover:bg-blue-950/10'}`}
               onClick={state.handleSelectVectorDatastore}
@@ -42,6 +42,25 @@ export function WhatIKnowSections({ state, onOpenMediaLibrary }: WhatIKnowSectio
                 <>
                   <p className="text-sm font-medium mb-1">Vector Datastore</p>
                   <p className="text-xs text-muted-foreground">{vectorDatastores.length > 0 ? 'Click to select a Pinecone datastore' : 'Click to create a new Pinecone datastore'}</p>
+                </>
+              )}
+            </div>
+
+            <div
+              className={`border-2 rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${state.graphEnabled ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-muted-foreground/25 hover:border-green-500/50 hover:bg-green-50/50 dark:hover:bg-green-950/10'}`}
+              onClick={state.toggleGraphEnabled}
+            >
+              <Brain className="h-8 w-8 mx-auto mb-2 text-green-500" />
+              {state.graphEnabled ? (
+                <>
+                  <p className="text-sm font-medium text-green-900 dark:text-green-100">Knowledge Graph Datastore</p>
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">Enabled (account-wide)</p>
+                  <p className="text-xs text-muted-foreground mt-1">Click to disable</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium mb-1">Knowledge Graph Datastore</p>
+                  <p className="text-xs text-muted-foreground">Disabled. Click to enable account-wide knowledge graph</p>
                 </>
               )}
             </div>

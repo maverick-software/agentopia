@@ -194,7 +194,7 @@ export class EnrichmentStage extends ProcessingStage {
             id: m.id,
             content: m.content || m,
             relevance_score: m.relevance_score,
-            source: m.source || 'semantic'
+            source: m.source || 'getzep'
           }))
         };
 

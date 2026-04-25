@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConnections } from '@/integrations/_shared/hooks/useConnections';
 import { toast } from 'react-hot-toast';
 import type { Datastore } from '@/types';
 import { AgentDatastoreSelector } from '@/components/agent-edit/AgentDatastoreSelector';
@@ -32,6 +33,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
   const supabase = useSupabaseClient();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { connections } = useConnections({ includeRevoked: false });
   
   // Data state
   const [availableDatastores, setAvailableDatastores] = useState<Datastore[]>([]);
@@ -47,6 +49,13 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
   const [loadingDatastores, setLoadingDatastores] = useState(true);
   const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
   const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
+  const [graphEnabled, setGraphEnabled] = useState<boolean>(false);
+  
+  // Check if user has GetZep credentials available
+  const hasGetZepCredentials = connections.some(c => 
+    c.provider_name === 'getzep' && 
+    c.connection_status === 'active'
+  );
   
 
 
@@ -64,12 +73,14 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
       setAgentMetadata(meta);
       const settings = (meta.settings || {}) as Record<string, any>;
       setAgentSettings(settings);
+      setGraphEnabled(settings.use_account_graph === true);
       
       console.log('[MemoryTab] Loaded settings from agentData:', { settings, meta });
     } else {
       // Fallback for initial load if agentData doesn't have metadata
       setAgentMetadata({});
       setAgentSettings({});
+      setGraphEnabled(false);
     }
   }, [agentData?.metadata]);
 
@@ -166,6 +177,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         ...agentMetadata,
         settings: {
           ...agentSettings,
+          use_account_graph: graphEnabled && hasGetZepCredentials, // Only save if credentials are available
           context_history_size: contextHistorySize
         }
       };
@@ -199,7 +211,7 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
     } finally {
       setLoading(false);
     }
-  }, [agentId, user, vectorMemoryEnabled, selectedDatastoreId, agentMetadata, agentSettings, contextHistorySize, supabase, onAgentUpdated]);
+  }, [agentId, user, vectorMemoryEnabled, selectedDatastoreId, agentMetadata, agentSettings, graphEnabled, contextHistorySize, hasGetZepCredentials, supabase, onAgentUpdated]);
 
 
   const handleVectorMemoryToggle = (enabled: boolean) => {
@@ -272,6 +284,39 @@ export function MemoryTab({ agentId, agentData, onAgentUpdated }: MemoryTabProps
         connecting={loading}
         onDatastoresUpdated={loadDatastores}
       />
+
+      {/* Account-Wide Knowledge Graph Toggle */}
+      <Card className="rounded-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <MessageSquare className="h-5 w-5" />
+            <span>Account-Wide Knowledge Graph</span>
+          </CardTitle>
+          <CardDescription>
+            Enable GetZep knowledge graph to share structured knowledge across all agents in your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className={`flex items-center justify-between p-4 rounded-xl bg-accent/30 ${!hasGetZepCredentials ? 'opacity-50' : ''}`}>
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Enable Knowledge Graph</Label>
+              <div className="text-xs text-muted-foreground">
+                {hasGetZepCredentials 
+                  ? "Shared across all agents - configure in Knowledge page"
+                  : "GetZep credentials required. Configure in Knowledge page."
+                }
+              </div>
+            </div>
+            <Switch
+              checked={graphEnabled && hasGetZepCredentials}
+              onCheckedChange={hasGetZepCredentials ? setGraphEnabled : undefined}
+              disabled={!hasGetZepCredentials}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+
 
     </div>
   );

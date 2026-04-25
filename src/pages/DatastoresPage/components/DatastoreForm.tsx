@@ -1,4 +1,4 @@
-import { Database, Loader2, X } from 'lucide-react';
+import { Brain, Database, Loader2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CredentialSelector } from '@/integrations/_shared';
 import type { DatastoreFormData, ExtendedDatastore } from '../types';
@@ -45,6 +45,9 @@ export function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: Datas
             formData.config?.indexName &&
             formData.config?.dimensions,
         );
+      }
+      if (formData.type === 'getzep') {
+        return Boolean(formData.config?.connectionId && formData.config?.projectId && formData.config?.collectionName);
       }
       return false;
     };
@@ -156,7 +159,7 @@ export function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: Datas
           )}
 
           {currentStep === 2 && (
-            <div className="grid grid-cols-1 gap-4 max-w-lg mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto">
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, type: 'pinecone', config: {} })}
@@ -168,6 +171,19 @@ export function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: Datas
                   <h4 className="font-bold text-sm">Pinecone</h4>
                 </div>
                 <p className="text-xs text-muted-foreground">Vector database for semantic search and embeddings.</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, type: 'getzep', config: {} })}
+                disabled={isSaving}
+                className={`p-4 rounded-xl border-2 text-left ${formData.type === 'getzep' ? 'border-purple-500 bg-purple-50/50' : 'border-border/50'}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Brain className="w-4 h-4 text-purple-500" />
+                  <h4 className="font-bold text-sm">GetZep</h4>
+                </div>
+                <p className="text-xs text-muted-foreground">Knowledge graph for entities, relationships, and context.</p>
               </button>
             </div>
           )}
@@ -246,6 +262,36 @@ export function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: Datas
                 </>
               )}
 
+              {formData.type === 'getzep' && (
+                <>
+                  <CredentialSelector
+                    providerName="getzep"
+                    value={formData.config?.connectionId || ''}
+                    onChange={(id) => setConfig({ connectionId: id })}
+                    disabled={isSaving}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input
+                      type="text"
+                      required
+                      value={formData.config?.projectId || ''}
+                      onChange={(event) => setConfig({ projectId: event.target.value })}
+                      className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-sm"
+                      placeholder="Project ID"
+                      disabled={isSaving}
+                    />
+                    <input
+                      type="text"
+                      required
+                      value={formData.config?.collectionName || ''}
+                      onChange={(event) => setConfig({ collectionName: event.target.value })}
+                      className="w-full px-3 py-2.5 bg-background/70 border border-border/50 rounded-lg text-sm"
+                      placeholder="Collection Name"
+                      disabled={isSaving}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -270,6 +316,12 @@ export function DatastoreForm({ datastore, onSubmit, onCancel, isSaving }: Datas
                     <span className="text-xs font-mono">{formData.config?.indexName}</span>
                   </div>
                 </>
+              )}
+              {formData.type === 'getzep' && (
+                <div className="flex items-center justify-between py-2 border-b border-border/20">
+                  <span className="text-xs text-muted-foreground">Collection</span>
+                  <span className="text-xs font-mono">{formData.config?.collectionName}</span>
+                </div>
               )}
             </div>
           )}

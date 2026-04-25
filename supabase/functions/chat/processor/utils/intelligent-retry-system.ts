@@ -148,6 +148,37 @@ If you cannot infer a reasonable value, return the text "CANNOT_INFER".`
         error.toLowerCase().includes('searchvalue'),
       transformer: (value: string) => value || ""
     },
+    {
+      from: 'query',
+      to: 'searchValue',
+      condition: (toolName, error) => 
+        toolName.includes('microsoft_outlook_find_emails') && 
+        error.toLowerCase().includes('searchvalue')
+    },
+    {
+      from: 'search',
+      to: 'searchValue',
+      condition: (toolName, error) => 
+        toolName.includes('microsoft_outlook_find_emails') && 
+        error.toLowerCase().includes('searchvalue')
+    },
+    
+    // Gmail Tools
+    {
+      from: 'instructions',
+      to: 'query',
+      condition: (toolName, error) => 
+        toolName.includes('gmail_search_emails') && 
+        error.toLowerCase().includes('query')
+    },
+    {
+      from: 'search',
+      to: 'query',
+      condition: (toolName, error) => 
+        toolName.includes('gmail_search_emails') && 
+        error.toLowerCase().includes('query')
+    },
+    
     // Contact Tools
     {
       from: 'instructions',
@@ -162,6 +193,22 @@ If you cannot infer a reasonable value, return the text "CANNOT_INFER".`
       condition: (toolName, error) => 
         toolName === 'search_contacts' && 
         error.toLowerCase().includes('query')
+    },
+    
+    // SMS Tools
+    {
+      from: 'message',
+      to: 'message_text',
+      condition: (toolName, error) => 
+        toolName.includes('clicksend_send_sms') && 
+        error.toLowerCase().includes('message_text')
+    },
+    {
+      from: 'phone',
+      to: 'to',
+      condition: (toolName, error) => 
+        toolName.includes('send_sms') && 
+        error.toLowerCase().includes('to')
     },
     
     // Web Search Tools

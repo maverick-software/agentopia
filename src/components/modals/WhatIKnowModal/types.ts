@@ -48,17 +48,22 @@ export interface WhatIKnowModalState {
   loading: boolean;
   loadingDatastores: boolean;
   saved: boolean;
+  graphEnabled: boolean;
   assignedMediaCount: number;
   showMediaLibrarySelector: boolean;
   showVectorSelection: boolean;
   setShowVectorSelection: (value: boolean) => void;
+  showKnowledgeSelection: boolean;
+  setShowKnowledgeSelection: (value: boolean) => void;
   setShowMediaLibrarySelector: (value: boolean) => void;
   setAssignedMediaCount: (updater: (prev: number) => number) => void;
   handleSelectVectorDatastore: () => void;
+  handleSelectKnowledgeDatastore: () => void;
   handleToggleMemoryPreference: (preferenceId: string) => void;
   handleContextSizeChange: (value: number[]) => void;
   handleVectorDatastoreSelect: (datastoreId: string) => void;
+  handleKnowledgeDatastoreSelect: (datastoreId: string) => void;
   handleSave: () => Promise<void>;
   hasChanges: () => boolean;
-  getDatastoresByType: (type: 'pinecone') => Datastore[];
+  getDatastoresByType: (type: 'pinecone' | 'getzep') => Datastore[];
 }

@@ -156,12 +156,18 @@ serve(async (req) => {
         const mappedCapabilities = mapScopeToCapability(scope, providerName);
         
         for (const capability of mappedCapabilities) {
-          // Create provider-prefixed tool name while avoiding double-prefixing.
-          const providerPrefixedName = (providerName === 'contact_management')
-            ? capability
-            : capability.includes('_') && capability.startsWith(providerName.split('-')[0])
-              ? capability
-              : `${providerName}_${capability}`;
+          // Create provider-prefixed tool name (e.g., gmail_send_email)
+          // But don't double-prefix if capability already has provider prefix
+          // Special case for outlook which uses different prefix than provider name
+          const providerPrefixedName = (providerName === 'microsoft-outlook' && capability.startsWith('outlook_'))
+            ? capability  // Already has outlook_ prefix, use as-is
+            : (providerName === 'clicksend_sms' && capability.startsWith('clicksend_'))
+              ? capability  // ClickSend capabilities already have clicksend_ prefix
+            : (providerName === 'contact_management')
+              ? capability  // Contact management tools don't need prefix (search_contacts, get_contact_details)
+            : capability.includes('_') && capability.startsWith(providerName.split('-')[0]) 
+              ? capability  // Already has provider prefix
+              : `${providerName}_${capability}`;  // Add provider prefix
           
           // Normalize tool name to be OpenAI-compatible (removes dots, etc.)
           const normalizedToolName = normalizeToolName(providerPrefixedName);
@@ -374,8 +380,8 @@ serve(async (req) => {
       console.warn(`[GetAgentTools] Error checking for system API keys:`, systemKeysError);
     }
 
-    // Check for remote MCP tools
-    console.log(`[GetAgentTools] Checking for remote MCP tools...`);
+    // Check for Zapier MCP tools
+    console.log(`[GetAgentTools] Checking for Zapier MCP tools...`);
     
     try {
       const { data: mcpTools, error: mcpError } = await supabase
@@ -507,11 +513,7 @@ Only use this API Request tool if the specific operation is not available as a d
               description: enhancedDescription,
               parameters: enhancedParameters,
               status: 'active',
-              provider_name: mcpTool.provider_name === 'pipedream'
-                ? 'Pipedream MCP'
-                : mcpTool.provider_name === 'zapier'
-                  ? 'Zapier MCP'
-                  : (mcpTool.connection_type ? `${mcpTool.connection_type} MCP` : 'MCP Server'),
+              provider_name: 'Zapier MCP',
               connection_name: mcpTool.connection_name || 'MCP Server',
               requires_user_input: requiresUserInput,
               _mcp_metadata: {
@@ -523,9 +525,9 @@ Only use this API Request tool if the specific operation is not available as a d
           }
         }
 
-        console.log(`[GetAgentTools] Added ${mcpTools.length} remote MCP tools`);
+        console.log(`[GetAgentTools] Added ${mcpTools.length} Zapier MCP tools`);
         console.log(`[GetAgentTools] MCP Tools: ${mcpTools.map(t => t.tool_name).join(', ')}`);
-        providersProcessed.add('Remote MCP');
+        providersProcessed.add('Zapier MCP');
       } else {
         console.log(`[GetAgentTools] No MCP tools found for agent ${agent_id}`);
       }

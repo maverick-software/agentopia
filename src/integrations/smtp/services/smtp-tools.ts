@@ -7,7 +7,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import type { MCPTool, MCPToolResult, MCPToolExecutionContext } from '@/lib/mcp/tool-types';
+import { MCPTool, MCPToolResult, MCPToolExecutionContext } from '@/integrations/gmail/services/gmail-tools';
 
 /**
  * SMTP MCP Tools Registry
@@ -78,7 +78,7 @@ export class SMTPMCPToolsService {
         .eq('agent_id', agentId)
         .eq('user_integration_credentials.user_id', userId)
         .eq('is_active', true)
-        .in('user_integration_credentials.service_providers.name', ['smtp']);
+        .in('user_integration_credentials.service_providers.name', ['smtp', 'sendgrid', 'mailgun']);
 
       if (!permissions || permissions.length === 0) {
         return [];

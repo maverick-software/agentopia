@@ -118,7 +118,7 @@ tool_name - Brief description of what this tool does
 another_tool - Brief description
 
 Rules:
-1. Group tools by their system/service (inferred from tool name patterns like "smtp_", "quickbooks_", "search_", etc.)
+1. Group tools by their system/service (inferred from tool name patterns like "gmail_", "quickbooks_", "search_", etc.)
 2. Use plain text only - no asterisks, no bold, no special formatting
 3. Be concise but clear in descriptions
 4. Use simple hyphens for separators

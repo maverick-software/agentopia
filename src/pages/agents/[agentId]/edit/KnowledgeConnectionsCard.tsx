@@ -9,6 +9,7 @@ interface KnowledgeConnectionsCardProps {
   availableDatastores: Datastore[];
   onOpenDatastoreModal: () => void;
   onOpenVectorModal: () => void;
+  onOpenKnowledgeModal: () => void;
 }
 
 export function KnowledgeConnectionsCard({
@@ -16,6 +17,7 @@ export function KnowledgeConnectionsCard({
   availableDatastores,
   onOpenDatastoreModal,
   onOpenVectorModal,
+  onOpenKnowledgeModal,
 }: KnowledgeConnectionsCardProps) {
   const agentDatastores = agentData?.agent_datastores;
   const connectedDatastoreIds = Array.isArray(agentDatastores)
@@ -24,6 +26,10 @@ export function KnowledgeConnectionsCard({
   const connectedVectorStore = availableDatastores.find(
     (store) => store.type === 'pinecone' && connectedDatastoreIds.includes(store.id)
   );
+  const connectedKnowledgeStore = availableDatastores.find(
+    (store) => store.type === 'getzep' && connectedDatastoreIds.includes(store.id)
+  );
+
   return (
     <Card>
       <CardHeader className="pb-4 flex flex-row items-center justify-between">
@@ -88,6 +94,55 @@ export function KnowledgeConnectionsCard({
             </div>
           )}
 
+          {connectedKnowledgeStore ? (
+            <div
+              className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border transition-colors hover:bg-muted cursor-pointer"
+              onClick={onOpenKnowledgeModal}
+            >
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  <Database className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">{connectedKnowledgeStore.name}</p>
+                  <p className="text-xs text-muted-foreground">Knowledge Graph</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Badge
+                  variant="secondary"
+                  className="text-xs px-3 py-1 bg-green-500/20 text-green-400 border-green-500/30"
+                >
+                  Connected
+                </Badge>
+                <div className="text-muted-foreground">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="flex items-center justify-between p-4 border-2 border-dashed border-border rounded-lg bg-muted/20 transition-colors hover:bg-muted/30 cursor-pointer"
+              onClick={onOpenKnowledgeModal}
+            >
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  <Database className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Knowledge Store</p>
+                  <p className="text-xs text-muted-foreground">Add Knowledge Graph</p>
+                </div>
+              </div>
+              <div className="text-muted-foreground">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

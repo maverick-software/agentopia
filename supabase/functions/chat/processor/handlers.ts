@@ -13,17 +13,6 @@ import { IntentClassifier } from './utils/intent-classifier.ts';
 import { MessagePreparation } from './handlers/message-preparation.ts';
 import { LLMCaller } from './handlers/llm-caller.ts';
 import { MCPRetryLoop } from './handlers/mcp-retry-loop.ts';
-import { AgentRuntimeEventBus } from '../agent_runtime/event-bus.ts';
-import { buildReplayMetadata } from '../agent_runtime/replay-safety.ts';
-import { UPDATE_PLAN_TOOL } from '../agent_runtime/update-plan-tool.ts';
-import {
-  appendExecutionContract,
-  createRuntimeState,
-  evaluateAttempt,
-  recordAttempt,
-  upsertRunState,
-} from '../agent_runtime/run-loop.ts';
-import type { RuntimeContext } from '../agent_runtime/types.ts';
 import { generateMessageId, generateTimestamp } from '../types/utils.ts';
 
 export interface MessageHandler {
@@ -75,27 +64,9 @@ export class TextMessageHandler implements MessageHandler {
       timestamp: string;
       duration_ms: number;
     }> = [];
-    const runtimeContext: RuntimeContext = {
-      requestId: context.request_id,
-      agentId: context.agent_id,
-      userId: context.user_id,
-      conversationId: context.conversation_id,
-      sessionId: context.session_id,
-      workspaceId: context.workspace_id,
-      options: context.request_options,
-    };
-    const runtimeState = createRuntimeState(runtimeContext);
-    const runStateId = await upsertRunState(this.supabase, runtimeContext, runtimeState);
-    const runtimeEvents = new AgentRuntimeEventBus(this.supabase, runtimeContext, runStateId);
-    await runtimeEvents.emit({
-      stream: 'lifecycle',
-      eventType: 'start',
-      payload: { executionContract: runtimeState.contract },
-    });
 
     // STEP 1: Prepare messages (system prompt, context, working memory, history)
     const { messages: msgs, recentMessages, summaryInfo } = await this.messagePrep.prepare(message, context);
-    appendExecutionContract(msgs, runtimeState);
 
     // STEP 1.5: CONTEXTUAL AWARENESS - Understand what the user is ACTUALLY asking for
     const userText = (message as any).content?.text || (message as any).content || '';
@@ -298,14 +269,11 @@ export class TextMessageHandler implements MessageHandler {
       description: t.description || '',
       parameters: t.parameters
     }));
-    const toolsForLLM = classification.requiresTools
-      ? [...normalizedTools, UPDATE_PLAN_TOOL]
-      : normalizedTools;
     
     const mainLLMStartTime = Date.now();
     const llmResult = await llmCaller.call({
       messages: msgs,
-      tools: toolsForLLM,
+      tools: normalizedTools,
       temperature: 0.7,
       maxTokens: 1200,
       userMessage: userText,
@@ -322,7 +290,7 @@ export class TextMessageHandler implements MessageHandler {
       request: {
         model: effectiveModel,
         messages: msgs,
-        tools: toolsForLLM.map(t => ({ name: t.name, description: t.description })),
+        tools: normalizedTools.map(t => ({ name: t.name, description: t.description })),
         temperature: 0.7,
         max_tokens: 1200,
       },
@@ -342,71 +310,6 @@ export class TextMessageHandler implements MessageHandler {
     // STEP 7: Handle tool calls + MCP retry loop
     let toolCalls = llmResult.toolCalls || [];
     let toolDetails: any[] = [];
-    let runtimeAttemptNumber = 1;
-
-    while (toolCalls.length === 0) {
-      const evaluation = evaluateAttempt(runtimeContext, runtimeState, {
-        assistantText: llmResult.text,
-        toolCalls,
-        toolResults: [],
-      });
-      await recordAttempt(this.supabase, runtimeContext, runtimeState, runtimeAttemptNumber, {
-        assistantText: llmResult.text,
-        toolCalls,
-        toolResults: [],
-      }, evaluation);
-
-      if (!evaluation.shouldRetry) {
-        if (evaluation.terminalMessage && !llmResult.text) {
-          llmResult.text = evaluation.terminalMessage;
-        }
-        break;
-      }
-
-      runtimeAttemptNumber++;
-      await runtimeEvents.emit({
-        stream: 'lifecycle',
-        eventType: 'retry',
-        payload: {
-          mode: evaluation.mode,
-          reason: evaluation.reason,
-          liveness: evaluation.liveness,
-        },
-      });
-      msgs.push({ role: 'system', content: evaluation.steeringInstruction });
-      const retryStart = Date.now();
-      const retryResult = await llmCaller.call({
-        messages: msgs,
-        tools: toolsForLLM,
-        temperature: 0.7,
-        maxTokens: 1200,
-        userMessage: userText,
-      });
-      promptTokens += retryResult.usage?.prompt || 0;
-      completionTokens += retryResult.usage?.completion || 0;
-      llmCalls.push({
-        stage: 'runtime_retry',
-        description: `Agentic Runtime Retry (${evaluation.mode})`,
-        request: {
-          messages: msgs,
-          tools: toolsForLLM.map(t => ({ name: t.name, description: t.description })),
-          steering_instruction: evaluation.steeringInstruction,
-        },
-        response: {
-          text: retryResult.text,
-          tool_calls: retryResult.toolCalls?.map(tc => ({
-            id: tc.id,
-            name: tc.function?.name,
-            arguments: tc.function?.arguments,
-          })) || [],
-          usage: retryResult.usage,
-        },
-        timestamp: new Date().toISOString(),
-        duration_ms: Date.now() - retryStart,
-      });
-      llmResult.text = retryResult.text;
-      toolCalls = retryResult.toolCalls || [];
-    }
 
     if (toolCalls.length > 0 && fcm) {
       console.log(`[TextMessageHandler] Executing ${toolCalls.length} tool calls`);
@@ -426,9 +329,6 @@ export class TextMessageHandler implements MessageHandler {
         {
           agent_id: context.agent_id,
           user_id: context.user_id,
-          conversation_id: context.conversation_id,
-          session_id: context.session_id,
-          workspace_id: context.workspace_id,
           originalUserMessage: userText,
           availableTools: normalizedTools,
         },
@@ -527,30 +427,6 @@ export class TextMessageHandler implements MessageHandler {
       llmResult.text = finalLLMResult.text || llmResult.text;
     }
 
-    const finalEvaluation = evaluateAttempt(runtimeContext, runtimeState, {
-      assistantText: llmResult.text,
-      toolCalls,
-      toolResults: toolDetails,
-      replayMetadata: buildReplayMetadata(toolDetails),
-    });
-    if (toolCalls.length > 0 || toolDetails.length > 0) {
-      await recordAttempt(this.supabase, runtimeContext, runtimeState, runtimeAttemptNumber, {
-        assistantText: llmResult.text,
-        toolCalls,
-        toolResults: toolDetails,
-        replayMetadata: buildReplayMetadata(toolDetails),
-      }, finalEvaluation);
-    }
-    await runtimeEvents.emit({
-      stream: 'lifecycle',
-      eventType: 'end',
-      payload: {
-        liveness: finalEvaluation.liveness,
-        reason: finalEvaluation.reason,
-        toolExecutionCount: toolDetails.length,
-      },
-    });
-
     // STEP 8: Finalize response
     if (!llmResult.text) {
       console.error('[TextMessageHandler] ❌ EMPTY RESPONSE from LLM!');
@@ -617,12 +493,6 @@ export class TextMessageHandler implements MessageHandler {
       } as any,
       // LLM call tracking for debug modal (temporary, in-memory only)
       llm_calls: llmCalls,
-      agent_runtime: {
-        execution_contract: runtimeState.contract,
-        liveness: finalEvaluation.liveness,
-        retry_counters: runtimeState.counters,
-        final_reason: finalEvaluation.reason,
-      } as any,
     };
 
     // Return final response - CRITICAL: Create proper V2 message with all required fields
@@ -649,7 +519,6 @@ export class TextMessageHandler implements MessageHandler {
         user_input_request: userInputRequest,
         tool_call_id: toolRequiringInput?.id,
         processingDetails: metrics, // ✨ Add full metrics including llm_calls for Debug Modal
-        agent_runtime: metrics.agent_runtime,
       },
       context: {
         conversation_id: context.conversation_id!,

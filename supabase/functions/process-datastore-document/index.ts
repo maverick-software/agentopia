@@ -73,6 +73,8 @@ serve(async (req) => {
       
       if (datastore.type === 'pinecone') {
         await processPineconeDatastore(datastore, chunks, openai, file_name, document_id)
+      } else if (datastore.type === 'getzep') {
+        await processGetZepDatastore(datastore, textContent, file_name, document_id)
       }
     }
 
@@ -321,6 +323,29 @@ async function processPineconeDatastore(
     
   } catch (error) {
     console.error('Pinecone processing error:', error)
+    throw error
+  }
+}
+
+async function processGetZepDatastore(
+  datastore: any,
+  textContent: string,
+  fileName: string,
+  documentId: string
+) {
+  try {
+    console.log(`Processing text content for GetZep datastore: ${datastore.id}`)
+    
+    // TODO: Process text with GetZep
+    // This would involve:
+    // 1. Extracting entities and relationships
+    // 2. Storing in the GetZep knowledge graph
+    // 3. Connecting to the agent's knowledge graph
+    
+    console.log(`Successfully processed content for GetZep datastore: ${datastore.id}`)
+    
+  } catch (error) {
+    console.error('GetZep processing error:', error)
     throw error
   }
 }

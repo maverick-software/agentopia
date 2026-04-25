@@ -69,7 +69,7 @@ export class VaultService {
 
   /**
    * Generate standardized secret name
-   * @param provider Service provider (e.g., 'openai', 'smtp')
+   * @param provider Service provider (e.g., 'openai', 'gmail')
    * @param type Secret type ('api_key', 'access_token', 'refresh_token')
    * @param userId User identifier
    * @returns Standardized secret name

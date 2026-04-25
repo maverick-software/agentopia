@@ -10,7 +10,6 @@ import {
   getProviderDocumentationUrl,
   getProviderIcon,
   isPopularProvider,
-  isRemovedProvider,
 } from './helpers/providerMetadata';
 import { Integration } from './types';
 
@@ -44,10 +43,6 @@ export function useIntegrationsByCategory(categoryId?: string) {
 
         const categoryMap = new Map(categoriesData?.map((cat) => [cat.name, cat.id]) || []);
         const transformed = (providers || [])
-          .filter((provider: any) => (
-            !isRemovedProvider(provider.name) &&
-            !isRemovedProvider(provider.display_name)
-          ))
           .map((provider: any, index: number) => {
             const categoryName = getProviderCategoryName(provider.name);
             const actualCategoryId = categoryMap.get(categoryName);
@@ -70,25 +65,6 @@ export function useIntegrationsByCategory(categoryId?: string) {
             } as Integration;
           })
           .filter(Boolean) as Integration[];
-
-        const pipedreamCategoryId = categoryMap.get('Automation & Workflows') || categoryMap.get('API Integrations') || 'unknown';
-        if (!categoryId || categoryId === pipedreamCategoryId) {
-          const hasPipedream = transformed.some((integration) => integration.name === 'Pipedream');
-          if (!hasPipedream) {
-            transformed.unshift({
-              id: 'pipedream',
-              category_id: pipedreamCategoryId,
-              name: 'Pipedream',
-              description: getProviderDescription('pipedream'),
-              icon_name: getProviderIcon('pipedream'),
-              status: 'available',
-              agent_classification: 'tool',
-              is_popular: true,
-              documentation_url: getProviderDocumentationUrl('pipedream'),
-              display_order: 0,
-            });
-          }
-        }
 
         setIntegrations(transformed);
       } catch (err) {

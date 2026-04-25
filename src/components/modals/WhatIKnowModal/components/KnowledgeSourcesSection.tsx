@@ -1,20 +1,24 @@
 import React from 'react';
-import { Database, Loader2 } from 'lucide-react';
+import { Brain, Database, Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import type { Datastore } from '@/types';
 
 interface KnowledgeSourcesSectionProps {
   loadingDatastores: boolean;
   connectedDatastores: string[];
-  getDatastoresByType: (type: 'pinecone') => Datastore[];
+  graphEnabled: boolean;
+  getDatastoresByType: (type: 'pinecone' | 'getzep') => Datastore[];
   onSelectVectorDatastore: () => void;
+  onSelectKnowledgeDatastore: () => void;
 }
 
 export const KnowledgeSourcesSection: React.FC<KnowledgeSourcesSectionProps> = ({
   loadingDatastores,
   connectedDatastores,
+  graphEnabled,
   getDatastoresByType,
   onSelectVectorDatastore,
+  onSelectKnowledgeDatastore,
 }) => {
   return (
     <div className="space-y-4">
@@ -31,6 +35,7 @@ export const KnowledgeSourcesSection: React.FC<KnowledgeSourcesSectionProps> = (
             getDatastoresByType={getDatastoresByType}
             onClick={onSelectVectorDatastore}
           />
+          <KnowledgeGraphCard graphEnabled={graphEnabled} onClick={onSelectKnowledgeDatastore} />
         </div>
       )}
     </div>
@@ -43,7 +48,7 @@ function VectorDatastoreCard({
   onClick,
 }: {
   connectedDatastores: string[];
-  getDatastoresByType: (type: 'pinecone') => Datastore[];
+  getDatastoresByType: (type: 'pinecone' | 'getzep') => Datastore[];
   onClick: () => void;
 }) {
   const vectorDatastores = getDatastoresByType('pinecone');
@@ -73,6 +78,33 @@ function VectorDatastoreCard({
               ? 'Click to select a Pinecone datastore'
               : 'Click to create a new Pinecone datastore'}
           </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function KnowledgeGraphCard({ graphEnabled, onClick }: { graphEnabled: boolean; onClick: () => void }) {
+  return (
+    <div
+      className={`border-2 rounded-lg p-4 text-center transition-all duration-200 cursor-pointer ${
+        graphEnabled
+          ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+          : 'border-muted-foreground/25 hover:border-green-500/50 hover:bg-green-50/50 dark:hover:bg-green-950/10'
+      }`}
+      onClick={onClick}
+    >
+      <Brain className="h-8 w-8 mx-auto mb-2 text-green-500" />
+      {graphEnabled ? (
+        <>
+          <p className="text-sm font-medium text-green-900 dark:text-green-100">Knowledge Graph Datastore</p>
+          <p className="text-xs text-green-700 dark:text-green-300 mt-1">Enabled (account-wide)</p>
+          <p className="text-xs text-muted-foreground mt-1">Click to disable</p>
+        </>
+      ) : (
+        <>
+          <p className="text-sm font-medium mb-1">Knowledge Graph Datastore</p>
+          <p className="text-xs text-muted-foreground">Disabled. Click to enable account-wide knowledge graph</p>
         </>
       )}
     </div>
