@@ -61,6 +61,7 @@ export const AdminSystemAPIKeysPage = lazy(() => import('../pages/admin/AdminSys
 export const AdminStripeConfigPage = lazy(() => import('../pages/admin/AdminStripeConfigPage').then(module => ({ default: module.default })));
 export const AdminUserBillingPage = lazy(() => import('../pages/admin/AdminUserBillingPage').then(module => ({ default: module.default })));
 export const StripeOAuthCallbackPage = lazy(() => import('../pages/admin/StripeOAuthCallbackPage').then(module => ({ default: module.default })));
+export const CodexOAuthCallbackPage = lazy(() => import('../pages/CodexOAuthCallbackPage').then(module => ({ default: module.default })));
 
 // Add IntegrationsPage
 export const IntegrationsPage = lazy(() => import('../pages/IntegrationsPage').then(module => ({ default: module.IntegrationsPage }))); 

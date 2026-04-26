@@ -9,6 +9,7 @@ import { Loader2, RefreshCw, Trash2, CheckCircle, Shield, Key, ExternalLink, Eye
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { CodexOAuthControls } from '@/integrations/openai-codex/CodexOAuthControls';
 
 // Using centralized service types via hook
 interface OAuthConnection {
@@ -247,6 +248,8 @@ export function CredentialsPage() {
           Manage your OAuth connections and API credentials stored securely in the vault
         </p>
       </div>
+
+      <CodexOAuthControls onChanged={refetch} />
 
       {connections.length === 0 ? (
         <Card className="border-dashed">

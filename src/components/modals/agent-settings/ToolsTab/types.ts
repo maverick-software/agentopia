@@ -1,10 +1,17 @@
 import type { LucideIcon } from 'lucide-react';
 import type { TabRef } from '../types';
 
+export interface AgentToolsData {
+  id?: string;
+  user_id?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface ToolsTabProps {
   agentId: string;
-  agentData?: any;
-  onAgentUpdated?: (updatedData: any) => void;
+  agentData?: AgentToolsData;
+  onAgentUpdated?: (updatedData: AgentToolsData) => void;
 }
 
 export interface ToolSettings {
@@ -13,14 +20,15 @@ export interface ToolSettings {
   document_creation_enabled: boolean;
   ocr_processing_enabled: boolean;
   temporary_chat_links_enabled: boolean;
+  codex_bridge_enabled: boolean;
 }
 
 export interface CredentialModalState {
   isOpen: boolean;
-  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links' | null;
+  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links' | 'codex_bridge' | null;
   selectedProvider: string;
   availableProviders: ProviderConfig[];
-  availableCredentials: any[];
+  availableCredentials: unknown[];
 }
 
 export interface ProviderConfig {
@@ -37,8 +45,8 @@ export interface ToolItem {
   description: string;
   icon: LucideIcon;
   enabled: boolean;
-  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links';
-  availableCredentials: any[];
+  toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links' | 'codex_bridge';
+  availableCredentials: unknown[];
   usesSystemKey: boolean;
 }
 

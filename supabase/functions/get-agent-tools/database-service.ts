@@ -192,6 +192,41 @@ export async function hasAdvancedReasoningEnabled(agentId: string, userId: strin
 }
 
 /**
+ * Check if the user has an active ChatGPT-managed Codex OAuth credential.
+ */
+export async function hasActiveCodexCredential(userId: string): Promise<boolean> {
+  console.log(`[DatabaseService] Checking Codex OAuth credential for user ${userId}`);
+
+  try {
+    const { data: provider, error: providerError } = await supabase
+      .from('service_providers')
+      .select('id')
+      .eq('name', 'openai-codex')
+      .maybeSingle();
+    if (providerError || !provider?.id) {
+      console.warn(`[DatabaseService] OpenAI Codex provider not found:`, providerError);
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from('user_integration_credentials')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('oauth_provider_id', provider.id)
+      .eq('connection_status', 'active')
+      .limit(1);
+    if (error) {
+      console.warn(`[DatabaseService] Codex credential lookup failed:`, error);
+      return false;
+    }
+    return Boolean(data && data.length > 0);
+  } catch (error) {
+    console.error(`[DatabaseService] Error checking Codex OAuth credential:`, error);
+    return false;
+  }
+}
+
+/**
  * Get all tool settings for an agent
  */
 export async function getToolSettings(agentId: string, userId: string): Promise<Record<string, boolean>> {
@@ -220,7 +255,8 @@ export async function getToolSettings(agentId: string, userId: string): Promise<
       document_creation_enabled: settings.document_creation_enabled === true,
       ocr_processing_enabled: settings.ocr_processing_enabled === true,
       temporary_chat_links_enabled: settings.temporary_chat_links_enabled === true,
-      reasoning_enabled: settings.reasoning_enabled === true
+      reasoning_enabled: settings.reasoning_enabled === true,
+      codex_bridge_enabled: settings.codex_bridge_enabled === true
     };
     
     console.log(`[DatabaseService] Tool settings:`, toolSettings);

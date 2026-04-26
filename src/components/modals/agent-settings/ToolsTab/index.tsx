@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSupabaseClient } from '@/hooks/useSupabaseClient';
@@ -24,8 +24,8 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
   const [hasChanges, setHasChanges] = useState(false);
   const [credentialModal, setCredentialModal] = useState<CredentialModalState>(DEFAULT_CREDENTIAL_MODAL);
   const [newApiKey, setNewApiKey] = useState('');
-  const [agentSettings, setAgentSettings] = useState<Record<string, any>>({});
-  const [agentMetadata, setAgentMetadata] = useState<Record<string, any>>({});
+  const [agentSettings, setAgentSettings] = useState<Record<string, unknown>>({});
+  const [agentMetadata, setAgentMetadata] = useState<Record<string, unknown>>({});
   const [hasAssignedDocuments, setHasAssignedDocuments] = useState(false);
   const [assignedDocumentsCount, setAssignedDocumentsCount] = useState(0);
   const [refreshingCache, setRefreshingCache] = useState(false);
@@ -60,6 +60,7 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
       document_creation_enabled: toolState.document_creation_enabled || false,
       ocr_processing_enabled: shouldEnableOCR,
       temporary_chat_links_enabled: toolState.temporary_chat_links_enabled || false,
+      codex_bridge_enabled: toolState.codex_bridge_enabled || false,
     });
     setSelectedCredentials({
       web_search: toolState.web_search_credential || '',
@@ -67,13 +68,14 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
       document_creation: toolState.document_creation_credential || '',
       ocr_processing: toolState.ocr_processing_credential || '',
       temporary_chat_links: toolState.temporary_chat_links_credential || '',
+      codex_bridge: toolState.codex_bridge_credential || '',
     });
   }, [agentData, hasAssignedDocuments]);
 
-  const getAvailableCredentials = (toolType: string) =>
-    connections.filter((c) => PROVIDERS_BY_TOOL[toolType]?.includes(c.provider_name) && c.connection_status === 'active');
+  const getAvailableCredentials = useCallback((toolType: string) =>
+    connections.filter((c) => PROVIDERS_BY_TOOL[toolType]?.includes(c.provider_name) && c.connection_status === 'active'), [connections]);
 
-  const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links') => {
+  const openCredentialModal = async (toolType: 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links' | 'codex_bridge') => {
     const configProviders = PROVIDER_CONFIGS[toolType] || [];
     const providerNames = configProviders.map((p) => p.id);
     let providers = configProviders;
@@ -96,8 +98,8 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
       return toast.error(`Cannot disable Read Documents while ${assignedDocumentsCount} document${assignedDocumentsCount !== 1 ? 's are' : ' is'} assigned.`, { duration: 4000 });
     }
     if (enabled) {
-      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links';
-      if (!['temporary_chat_links', 'document_creation'].includes(toolType) && getAvailableCredentials(toolType).length === 0) {
+      const toolType = tool.replace('_enabled', '') as 'voice' | 'web_search' | 'document_creation' | 'ocr_processing' | 'temporary_chat_links' | 'codex_bridge';
+      if (!['temporary_chat_links', 'document_creation', 'codex_bridge'].includes(toolType) && getAvailableCredentials(toolType).length === 0) {
         return openCredentialModal(toolType);
       }
     }
@@ -184,8 +186,9 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
       if (error) return toast.error(`Failed to refresh tool cache: ${error.message}`);
       if (data?.success) toast.success(`Tool cache refreshed successfully! (${data.tools_count || 0} tools updated)`);
       else toast.error(data?.error || 'Failed to refresh cache');
-    } catch (error: any) {
-      toast.error(`Failed to refresh tool cache: ${error.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to refresh tool cache: ${message}`);
     } finally {
       setRefreshingCache(false);
     }
@@ -201,6 +204,9 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
           voice_enabled: settings.voice_enabled,
           web_search_enabled: settings.web_search_enabled,
           document_creation_enabled: settings.document_creation_enabled,
+          ocr_processing_enabled: settings.ocr_processing_enabled,
+          temporary_chat_links_enabled: settings.temporary_chat_links_enabled,
+          codex_bridge_enabled: settings.codex_bridge_enabled,
           web_search_credential: selectedCredentials.web_search,
           voice_credential: selectedCredentials.voice,
           document_creation_credential: selectedCredentials.document_creation,
@@ -221,7 +227,7 @@ export const ToolsTab = forwardRef<ToolsTabRef, ToolsTabProps>(({ agentId, agent
     }
   }
 
-  const tools = useMemo(() => buildTools(settings, getAvailableCredentials), [settings, connections]);
+  const tools = useMemo(() => buildTools(settings, getAvailableCredentials), [settings, getAvailableCredentials]);
 
   const handleUseExisting = () => {
     const toolKey = `${credentialModal.toolType}_enabled` as keyof ToolSettings;

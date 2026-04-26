@@ -1,4 +1,4 @@
-import { FileText, MessageCircle, ScanText, Search, Volume2 } from 'lucide-react';
+import { Bot, FileText, MessageCircle, ScanText, Search, Volume2 } from 'lucide-react';
 import type { ProviderConfig, ToolItem, ToolSettings } from './types';
 
 export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
@@ -7,6 +7,7 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
   document_creation_enabled: false,
   ocr_processing_enabled: false,
   temporary_chat_links_enabled: false,
+  codex_bridge_enabled: false,
 };
 
 export const PROVIDER_CONFIGS: Record<string, ProviderConfig[]> = {
@@ -37,6 +38,9 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig[]> = {
   temporary_chat_links: [
     { id: 'temporary_chat_internal', name: 'Temporary Chat Links', description: 'Create public chat links for anonymous users', requiresApiKey: false, requiresOAuth: false },
   ],
+  codex_bridge: [
+    { id: 'codex_bridge_runner', name: 'Codex CLI Bridge', description: 'Trusted runner using Codex CLI ChatGPT OAuth', requiresApiKey: false, requiresOAuth: false },
+  ],
 };
 
 export const PROVIDERS_BY_TOOL: Record<string, string[]> = {
@@ -45,11 +49,12 @@ export const PROVIDERS_BY_TOOL: Record<string, string[]> = {
   document_creation: ['google_docs', 'microsoft_office', 'notion'],
   ocr_processing: ['mistral_ai'],
   temporary_chat_links: ['temporary_chat_internal'],
+  codex_bridge: ['codex_bridge_runner'],
 };
 
 export function buildTools(
   settings: ToolSettings,
-  getAvailableCredentials: (toolType: string) => any[],
+  getAvailableCredentials: (toolType: string) => unknown[],
 ): ToolItem[] {
   return [
     {
@@ -100,6 +105,16 @@ export function buildTools(
       enabled: settings.temporary_chat_links_enabled,
       availableCredentials: [],
       toolType: 'temporary_chat_links',
+      usesSystemKey: false,
+    },
+    {
+      id: 'codex_bridge_enabled',
+      name: 'Codex CLI Bridge',
+      description: 'Delegate coding tasks to a trusted Codex CLI runner using ChatGPT-plan OAuth',
+      icon: Bot,
+      enabled: settings.codex_bridge_enabled,
+      availableCredentials: [],
+      toolType: 'codex_bridge',
       usesSystemKey: false,
     },
   ];

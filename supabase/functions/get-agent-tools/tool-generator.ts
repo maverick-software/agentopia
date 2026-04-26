@@ -12,6 +12,45 @@ export function generateParametersForCapability(toolName: string) {
     required: [] as string[]
   };
 
+  if (toolName === 'codex_dispatch_task') {
+    return {
+      ...baseSchema,
+      properties: {
+        prompt: { type: 'string', description: 'Detailed coding task for Codex to execute.' },
+        workdir: { type: 'string', description: 'Allowed working directory on the trusted Codex runner.' },
+        model: { type: 'string', description: 'Optional Codex model hint.' },
+        approval_policy: {
+          type: 'string',
+          enum: ['manual', 'auto', 'readonly'],
+          description: 'Runner approval posture for this job. Defaults to manual.'
+        },
+        metadata: { type: 'object', description: 'Optional non-secret job metadata.' }
+      },
+      required: ['prompt', 'workdir']
+    };
+  }
+
+  if (toolName === 'codex_get_status' || toolName === 'codex_get_result' || toolName === 'codex_cancel_task') {
+    return {
+      ...baseSchema,
+      properties: {
+        job_id: { type: 'string', description: 'Codex bridge job ID.' }
+      },
+      required: ['job_id']
+    };
+  }
+
+  if (toolName === 'codex_answer_question') {
+    return {
+      ...baseSchema,
+      properties: {
+        job_id: { type: 'string', description: 'Codex bridge job ID waiting for clarification.' },
+        answer: { type: 'string', description: 'Answer to send back to the Codex bridge job.' }
+      },
+      required: ['job_id', 'answer']
+    };
+  }
+
   // Handle email sending tools (smtp_send_email)
   if (toolName.includes('_send_email')) {
       return {

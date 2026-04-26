@@ -23,6 +23,7 @@ import {
   hasAgentDocuments,
   hasTemporaryChatLinksEnabled,
   hasAdvancedReasoningEnabled,
+  hasActiveCodexCredential,
   getToolSettings,
   supabase
 } from './database-service.ts';
@@ -311,6 +312,38 @@ serve(async (req) => {
 
     // Contact Management tools are now handled through the standard integration system
     // They will be processed automatically with other integrations above
+
+    // Check for internal tools (Codex CLI Bridge)
+    console.log(`[GetAgentTools] Checking for internal tools (Codex CLI Bridge)...`);
+    
+    const codexBridgeEnabled = toolSettings['codex_bridge_enabled'] || Deno.env.get('CODEX_BRIDGE_TOOLS_ENABLED') === 'true';
+    const hasCodexCredential = codexBridgeEnabled ? await hasActiveCodexCredential(user_id) : false;
+    if (codexBridgeEnabled && hasCodexCredential) {
+      const codexBridgeTools = [
+        'codex_dispatch_task',
+        'codex_get_status',
+        'codex_answer_question',
+        'codex_get_result',
+        'codex_cancel_task'
+      ];
+
+      for (const toolName of codexBridgeTools) {
+        const parameters = generateParametersForCapability(toolName);
+        
+        tools.push({
+          name: toolName,
+          description: `${toolName} - Codex CLI Bridge`,
+          parameters,
+          status: 'active',
+          provider_name: 'Codex CLI Bridge',
+          connection_name: 'Trusted Runner'
+        });
+      }
+
+      providersProcessed.add('Codex CLI Bridge');
+    } else if (codexBridgeEnabled) {
+      console.log(`[GetAgentTools] Codex bridge enabled but no active OpenAI Codex OAuth credential found`);
+    }
 
     // ============================================
     // CHECK FOR SYSTEM-LEVEL API KEY TOOLS

@@ -490,6 +490,39 @@ async function executeTask(supabase: any, task: any, triggerType: string, trigge
     const conversationId = task.conversation_id || (task.event_trigger_config && task.event_trigger_config.conversation_id) || crypto.randomUUID()
     const sessionId = crypto.randomUUID()
 
+    if (shouldDelegateToCodexBridge(task)) {
+      const dispatch = await dispatchCodexBridgeTask(task, triggerType, triggerData)
+      const completedAt = new Date().toISOString()
+      const duration = Date.now() - startTime
+      const output = `Codex bridge job dispatched: ${dispatch.job_id}`
+
+      await supabase
+        .from('agent_task_executions')
+        .update({
+          status: 'completed',
+          completed_at: completedAt,
+          duration_ms: duration,
+          output,
+          tool_outputs: [{ tool: 'codex_dispatch_task', output: dispatch }],
+          conversation_id: conversationId,
+          metadata: {
+            ...(execution.metadata || {}),
+            codex_bridge_job_id: dispatch.job_id,
+            codex_bridge_status: dispatch.status
+          }
+        })
+        .eq('id', execution.id)
+
+      return {
+        success: true,
+        output,
+        conversation_id: conversationId,
+        execution_id: execution.id,
+        codex_bridge_job_id: dispatch.job_id,
+        duration_ms: duration
+      }
+    }
+
     // Ensure a session row exists so the sidebar can display it immediately (update-or-insert without unique constraint)
     try {
       const base = {
@@ -774,6 +807,64 @@ async function simulateAgentExecution(task: any, triggerData: any): Promise<stri
     : ''
   
   return `Task "${task.name}" executed successfully.${contextInfo}\n\nAgent completed the task: ${task.instructions}`
+}
+
+function shouldDelegateToCodexBridge(task: any): boolean {
+  const config = task.event_trigger_config?.codex_bridge;
+  if (config?.enabled === true) return true;
+
+  const selectedTools = Array.isArray(task.selected_tools) ? task.selected_tools : [];
+  return selectedTools.some((tool: any) => {
+    if (typeof tool === 'string') return tool === 'codex_dispatch_task' || tool.startsWith('codex_');
+    return tool?.name === 'codex_dispatch_task' || tool?.tool_name === 'codex_dispatch_task';
+  });
+}
+
+async function dispatchCodexBridgeTask(task: any, triggerType: string, triggerData: any) {
+  const config = task.event_trigger_config?.codex_bridge || {};
+  const workdir = config.workdir || triggerData?.workdir || Deno.env.get('CODEX_BRIDGE_DEFAULT_WORKDIR');
+
+  if (!workdir) {
+    throw new Error('Codex bridge task requires event_trigger_config.codex_bridge.workdir or CODEX_BRIDGE_DEFAULT_WORKDIR');
+  }
+
+  const bridgeUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/codex-bridge`;
+  const response = await fetch(bridgeUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'X-Agentopia-Service': 'task-executor',
+    },
+    body: JSON.stringify({
+      action: 'dispatch',
+      user_id: task.user_id,
+      agent_id: task.agent_id,
+      params: {
+        prompt: task.instructions,
+        workdir,
+        model: config.model || null,
+        approval_policy: config.approval_policy || 'manual',
+        credential_id: config.credential_id || triggerData?.credential_id || null,
+        metadata: {
+          source: 'task-executor',
+          task_id: task.id,
+          trigger_type: triggerType
+        }
+      }
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Codex bridge dispatch failed with HTTP ${response.status}`);
+  }
+
+  return {
+    job_id: data.data?.job?.id,
+    status: data.data?.job?.status || 'queued',
+    job: data.data?.job
+  };
 }
 
 function matchesEventConditions(eventConfig: any, eventData: any): boolean {

@@ -42,6 +42,7 @@ import {
     AdminStripeConfigPage,
     AdminUserBillingPage,
     StripeOAuthCallbackPage,
+    CodexOAuthCallbackPage,
     HomePage,
     LoginPage, // Now imported here
     RegisterPage, // Now imported here
@@ -112,6 +113,7 @@ export const appRoutes: RouteConfig[] = [
   { path: '/workspaces/:roomId/channels/:channelId', element: WorkspacePage, protection: 'protected', layout: false },
   { path: '/integrations', element: IntegrationsPage, protection: 'protected', layout: true },
   { path: '/integrations/smtp', element: SMTPIntegrationsPage, protection: 'protected', layout: true },
+  { path: '/integrations/openai-codex/callback', element: CodexOAuthCallbackPage, protection: 'protected', layout: true },
   { path: '/credentials', element: CredentialsPage, protection: 'protected', layout: true },
   { path: '/settings', element: SettingsPage, protection: 'protected', layout: true },
   { path: '/billing', element: BillingPage, protection: 'protected', layout: true },

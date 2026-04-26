@@ -86,6 +86,21 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/task-executor/index.ts"
 
+[functions.codex-oauth]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/codex-oauth/index.ts"
+
+[functions.codex-bridge]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/codex-bridge/index.ts"
+
+[functions.get-agent-tools]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/get-agent-tools/index.ts"
+
 [functions.update-agent-discord-token]
 enabled = true
 verify_jwt = true

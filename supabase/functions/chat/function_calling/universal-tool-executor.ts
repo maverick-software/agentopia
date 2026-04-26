@@ -100,7 +100,7 @@ const TOOL_ROUTING_MAP: Record<string, {
   'search_documents': {
     edgeFunction: 'media-library-mcp',
     actionMapping: () => 'search_documents',
-    parameterMapping: (params: Record<string, any>, context: any) => ({
+    parameterMapping: (params: Record<string, any>, context) => ({
       action: 'search_documents',
       agent_id: context.agentId,
       user_id: context.userId,
@@ -450,6 +450,33 @@ const TOOL_ROUTING_MAP: Record<string, {
     edgeFunction: 'canvas-mcp',
     actionMapping: () => 'canvas_redo',
     parameterMapping: (params: Record<string, any>) => ({ action: 'canvas_redo', params })
+  },
+
+  // Codex CLI bridge tools
+  'codex_': {
+    edgeFunction: 'codex-bridge',
+    actionMapping: (toolName: string) => {
+      const actionMap: Record<string, string> = {
+        'codex_dispatch_task': 'dispatch',
+        'codex_get_status': 'status',
+        'codex_answer_question': 'answer',
+        'codex_get_result': 'result',
+        'codex_cancel_task': 'cancel'
+      };
+      return actionMap[toolName] || 'status';
+    },
+    parameterMapping: (params: Record<string, any>, context: any) => ({
+      action: context.toolName === 'codex_dispatch_task' ? 'dispatch'
+        : context.toolName === 'codex_get_status' ? 'status'
+          : context.toolName === 'codex_answer_question' ? 'answer'
+            : context.toolName === 'codex_get_result' ? 'result'
+              : context.toolName === 'codex_cancel_task' ? 'cancel'
+                : 'status',
+      agent_id: context.agentId,
+      user_id: context.userId,
+      tool_name: context.toolName,
+      params
+    })
   }
 };
 
